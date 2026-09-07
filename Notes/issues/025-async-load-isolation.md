@@ -16,7 +16,7 @@
 - Late messages after cancellation cannot revive the UI.
 - A load completion carries a prepared buffer (decoded, mapped) so `Update` does no full-file decoding; while the decode/map phase is held by a gate, `ctrl+c`, `n`/`p`, `w`, `c`, and resize remain actionable. (The analogous contract for layout/rewrap is Issue 17.)
 
-Load-completion reveal semantics for the current file are Issue 28; failures are Issue 26.
+Load-completion reveal semantics for the current file are Issue 28; failures — including the visible re-entry retry sequence for a previously failed file — are Issue 26.
 
 See PRD *File loading, cache, reload, and selection consistency* (first three bullets) and *Testing Decisions → Asynchronous App behavior*.
 

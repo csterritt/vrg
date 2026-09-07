@@ -45,7 +45,7 @@ See PRD *Navigation, viewport, and logical anchors* (last four bullets), *Resour
 - [ ] Given user scrolling, then the anchor becomes the new top row's location.
 - [ ] Given a resize that would leave avoidable blank rows below EOF, then the top is clamped upward and the anchor updated to that top.
 - [ ] Given any resize, then the cursor selection is unchanged.
-- [ ] Given layout preparation is held by a test gate, when `ctrl+c`, `q`, `n`/`p`, `w`, or another resize arrives, then it is handled without waiting for the gate.
+- [ ] Given layout preparation is still in progress, when `ctrl+c`, `q`, `n`/`p`, `w`, or another resize arrives, then it is handled without waiting for preparation to complete.
 - [ ] Given prepared layouts complete out of order after successive resizes or wrap toggles, then only a layout matching the current (path, revision, width, mode) is installed, and the logical anchor is unaffected by discarded layouts.
 - [ ] Given navigation occurs while the current layout is pending, when a matching layout installs, then the newest stop's target is revealed per the Issue 14 rules.
 - [ ] Given a prepared layout for a file that is no longer current or for a superseded content revision, then it is discarded without touching the visible panel or saved viewport state.

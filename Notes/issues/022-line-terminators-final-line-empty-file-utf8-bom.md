@@ -13,7 +13,7 @@ FileBuffer structural line handling with raw/search/display coordinate separatio
 
 - LF and CRLF terminate lines and are not displayed, but original line bytes (including terminators) are retained for byte-coordinate mapping and later validation (Issue 29).
 - A missing final newline yields a final line; a trailing newline does not add an empty line; an empty file has zero lines and shows an empty panel. Gutter width is *digit slots + two spaces* everywhere in this project; a zero-line/placeholder view reserves one digit slot, so its gutter is **three cells** wide.
-- A standalone CR (no following LF) is not a terminator; Issue 6 escapes it as `^M`.
+- A standalone CR (no following LF) is not a terminator; the safe-presentation core (Issue 5, generalized in Issue 6) escapes it as `^M`.
 - Zero-width positions and removed terminator bytes map to the display end-of-line position (e.g. byte 4 of `hit\r\n` → display column 3). A span covering visible text plus terminator highlights the visible text only. (The end-of-line *marker* for terminator-only matches is Issue 23.)
 - A leading UTF-8 BOM is invisible in display and adjusts coordinates: ripgrep's line offsets for the first line omit the three BOM bytes, so maintain separate raw-file and rg-line views and map between them. Non-leading U+FEFF is ordinary content.
 

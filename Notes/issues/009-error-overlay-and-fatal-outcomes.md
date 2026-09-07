@@ -11,8 +11,27 @@
 
 The modal error overlay, the fatal rows of the outcome table, and the **single outcome/transition test matrix** that later issues extend.
 
-- Capture rg stderr fully, draining it concurrently with stdout so neither pipe can block the child. Include it in diagnostics regardless of exit code. If a failed process supplies no stderr, generate a diagnostic naming the exit code or signal.
+- Stderr captured by Issue 3's concurrent dual-pipe drainage is included in diagnostics regardless of exit code. If a failed process supplies no stderr, generate a diagnostic naming the exit code or signal.
 - Fatal conditions: rg exits other than 0/1, dies by signal, or **stream integrity fails** (missing summary, missing/orphaned/inconsistent `begin`/`end` pairs, lost completion metadata). Integrity and process success are assessed separately; a summary alone is a complete zero-result stream.
+- **Lifecycle validation** follows the transition matrix below. Path identity is compared on decoded raw path bytes, so `text` and `bytes` forms of the same path are the same file; a `begin`/`match`/`end` path disagreement manifests as whichever event is orphaned. Multiple files may be open simultaneously (rg may interleave events across files during parallel search); per-path state is tracked independently. `context` records participate in no lifecycle validation.
+
+| Transition | Disposition |
+|---|---|
+| `begin(P)` while P is not open | Valid — P opens |
+| `begin(P)` while P is already open | Integrity failure (duplicate `begin`) |
+| `match(P)` while P is open | Valid — indexes under P |
+| `match(P)` while P is not open (never opened, or after its `end`) | Integrity failure (orphaned/inconsistent match); P's matches are retained with incomplete metadata |
+| `end(P)` while P is open | Valid — P closes; non-null `binary_offset` → binary exclusion of P |
+| `end(P)` while P is not open | Integrity failure (orphaned/duplicate `end`) |
+| `context(P)` in any position | Ignored — no lifecycle effect |
+| P still open when the stream ends | Integrity failure (missing `end`); P's matches are retained with incomplete metadata |
+| Exactly one `summary`, as the final record | Valid — a summary alone is a complete zero-result stream |
+| `summary` missing | Integrity failure |
+| A second `summary` | Integrity failure |
+| Any record after `summary` | Integrity failure (also skipped/counted if the record is itself malformed) |
+| Trailing unterminated record | Both — counted malformed and the stream is incomplete |
+
+  Violations of Issue 3's per-record schema matrix remain skipped-and-counted malformed records; a safely skipped match record does not by itself make otherwise intact lifecycle metadata incomplete.
 - With usable results: browse with the error overlay open; `q`/`Esc` dismiss to browsing; eventual `q` exits 2.
 - Without usable results: error overlay; dismissal (`q` **or** `Esc`) exits 2. This is the one case where `Esc` leads to termination — it is dismissing the overlay, and there is no state to return to.
 - Non-fatal stderr on rg 0/1 with usable results: browse with a warning overlay, eventual exit 0.
@@ -31,9 +50,10 @@ See PRD *Outcome and exit-status contract* (table rows 4–5, 7–8 and bullets)
   3. Fake rg killed by SIGKILL mid-stream → overlay names the signal.
   4. Fake rg that writes "warn" to stderr and a summary-only stream, exit 1 → warning overlay; `Esc` → "No results found"; `q` → exit 1.
 - **Automated**:
-  - **Outcome matrix** (table-driven, App model): one row per outcome-table row, each with and without usable results where meaningful, for both rg exit 0 and 1 where the row allows it. Must include at minimum: rg 0 clean browse → 0; rg 1 with retained results and complete stream → browse, 0 (anomalous-exit-1 case); rg 1 empty → no-results, 1; fatal code with results → browse+overlay, dismiss → browse, `q` → 2; fatal code without results → overlay, `q` → 2 and separately `Esc` → 2; signal death with/without results; missing summary with valid matches → 2; orphaned `end` → 2; stderr warning + results → warning overlay, 0; stderr warning + zero results → warning overlay → no-results → 1; all-binary after warning → warning overlay → no-results with count → 1; `ctrl+c` after search completion in browse, no-results, and open-overlay states → 130. Each row asserts the initial presentation, the post-dismissal presentation (and which of `q`/`Esc` was used), and the final exit status.
+  - **Outcome matrix** (table-driven, App model): one row per outcome-table row, each with and without usable results where meaningful, for both rg exit 0 and 1 where the row allows it. Must include at minimum: rg 0 clean browse → 0; rg 1 with retained results and complete stream → browse, 0 (anomalous-exit-1 case); rg 1 empty → no-results, 1; fatal code with results → browse+overlay, dismiss → browse, `q` → 2; fatal code without results → overlay, `q` → 2 and separately `Esc` → 2; signal death with/without results; missing summary with valid matches → 2; orphaned `end` → 2; stderr warning + results → warning overlay, 0; stderr warning + zero results → warning overlay → no-results → 1; all-binary after warning → warning overlay → no-results with count → 1; `ctrl+c` after search completion in browse, no-results, and open-overlay states → 130. Each row asserts the initial presentation, the post-dismissal presentation (and which of `q`/`Esc` was used), and the final exit status. The matrix is a **single table-driven test**; later issues extend it with new rows rather than duplicating the decision.
+  - Lifecycle fixtures covering every row of the transition matrix above (duplicate `begin`, orphaned `match`/`end`, `match` after `end`, records after `summary`, second `summary`, interleaved open files with valid pairing, `text`/`bytes` path-identity agreement).
   - Overlay key routing (scroll, dismiss, ignored keys, `ctrl+c`); long unbroken diagnostic wraps within the border; hostile fixture text in the overlay passes the Issue 6 sink-safety check.
-  - **Subprocess/PTY** (Issue 4 harness): fake rg exiting non-zero after a handshake; and a **backpressure** fixture: fake rg writes ≥ 1 MiB to stderr (well over pipe capacity) interleaved with a valid stdout stream, with a handshake confirming it finished writing both before exit. Assert vrg completes without deadlock, the stream is complete, and the overlay contains the head and tail of the stderr text.
+  - **Subprocess/PTY** (Issue 4 harness): fake rg exiting non-zero after a handshake; and a **stderr-content fixture**: fake rg writes ≥ 1 MiB to stderr (well over pipe capacity) interleaved with a valid stdout stream, with a handshake confirming it finished writing both before exit. The dual-pipe drainage and deadlock-freedom assertions are owned by Issue 3; here assert that the stdout stream is complete, the captured stderr is included in diagnostics, and the overlay contains the head and tail of the stderr text.
 
 ### Acceptance criteria
 
@@ -46,8 +66,7 @@ See PRD *Outcome and exit-status contract* (table rows 4–5, 7–8 and bullets)
 - [ ] Given a failed process with empty stderr, then the overlay names the exit code or signal rather than being empty.
 - [ ] Given an error overlay, when any key other than `up`/`down`/`q`/`Esc`/`ctrl+c` is pressed, then it is ignored.
 - [ ] Given a fixed search-derived status, when `ctrl+c` is pressed later in any state, then the exit status is 130.
-- [ ] Given a fake rg that writes more than pipe capacity to stderr while streaming stdout, then vrg neither deadlocks nor loses the stream.
-- [ ] Given the outcome matrix, then it is a single table-driven test that later issues extend with new rows rather than duplicating the decision.
+- [ ] Given a fake rg that writes more than pipe capacity to stderr while streaming stdout, then the captured stderr is included in diagnostics and the overlay contains its head and tail (deadlock-freedom itself is asserted by Issue 3).
 
 ### User stories addressed
 

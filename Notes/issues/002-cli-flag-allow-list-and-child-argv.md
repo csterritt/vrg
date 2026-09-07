@@ -25,10 +25,11 @@ See PRD *Implementation Decisions → Invocation and child arguments* (bullets 2
 - **Manual**:
   1. `vrg -iw foo src` prints argv `rg --json --no-config -i -w -- foo src`.
   2. `vrg foo -i src` (option after pattern) is accepted and ordered.
-  3. `vrg -uu foo` accepted; `vrg -uuu foo` and `vrg -u -uu foo` exit 2.
+  3. `vrg -uu foo` accepted; `vrg -uuu foo` and `vrg -u -uu foo` exit 2. Combined-short unrestricted: `vrg -iu foo` accepted (one occurrence inside a combined token); `vrg -iuu foo` accepted (two); `vrg -iuuu foo` exits 2 (three).
   4. `vrg -e foo` and `vrg --type go foo` exit 2 with "unsupported flag".
   5. `vrg -- -foo` accepted with pattern `-foo`; `vrg -foo` exits 2; `vrg - .` accepted with pattern `-`.
-- **Automated**: table tests for every accepted flag (short and long), every rejected sample, combined-flag expansion order, cumulative `-u` across mixed tokens, `--` behaviour, dash-leading patterns, and the exact child argv including mandatory internal flags first.
+  6. `vrg "" .` prints argv `rg --json --no-config --  .` — the empty pattern is forwarded verbatim as an empty argv element after `--`.
+- **Automated**: table tests for every accepted flag (short and long), every rejected sample, combined-flag expansion order, cumulative `-u` across mixed tokens including the combined-short boundary cases `-iu`, `-iuu` (accepted) and `-iuuu` (rejected), `--` behaviour, dash-leading patterns, the empty pattern forwarded verbatim as an empty argv element, and the exact child argv including mandatory internal flags first.
 
 ### Acceptance criteria
 
@@ -38,6 +39,8 @@ See PRD *Implementation Decisions → Invocation and child arguments* (bullets 2
 - [ ] Given a non-allow-listed option, then exit 2 and no TUI.
 - [ ] Given `--`, then subsequent tokens are positionals even if dash-leading.
 - [ ] Given a successful parse, then the child argv is exactly `--json --no-config <user flags…> -- <pattern> <root>`.
+- [ ] Given a combined short token containing unrestricted flags such as `-iu` or `-iuu`, then the unrestricted count accumulates per occurrence within the token and the cumulative boundary rules apply (two accepted, three rejected).
+- [ ] Given an empty pattern argument, then the child argv forwards it verbatim as an empty element after `--`.
 
 ### User stories addressed
 

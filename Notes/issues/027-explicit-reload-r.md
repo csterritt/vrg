@@ -11,7 +11,7 @@
 
 - `r` rereads the current file from disk without rerunning rg. It never adds/removes cursor stops or discovers new matches. "Loading…" is shown during the reload.
 - Reload preserves the cursor and the logical viewport anchor (Issue 17), clamped to new content; reload alone does not reveal a match.
-- A failed reload replaces the old display with "(unreadable)" — stale content is never presented as refreshed.
+- A failed reload replaces the old display with "(unreadable)" and shows the current-file failure overlay (Issue 26 component) — stale content is never presented as refreshed. A second consecutive `r` failure appends exactly one new diagnostic occurrence (Issue 32 append rule; reader position preserved) rather than replacing or duplicating earlier diagnostics.
 - A duplicate `r` (or re-entry) while a load for that path is in flight is dropped, not queued; there is no cancellation. The placeholder changing from "Loading…" to content or "(unreadable)" is the completion signal, after which `r` starts a new load.
 - `r` works even with a one-stop index (the only retry route there).
 - Cached content is intentionally stable until `r`; disk edits are not observed otherwise.
