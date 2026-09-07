@@ -16,6 +16,7 @@
 - `r` works even with a one-stop index (the only retry route there).
 - Cached content is intentionally stable until `r`; disk edits are not observed otherwise.
 - Filename row still identifies the path during reload.
+- A reload produces a new **content revision**. Prepared layouts keyed to the previous revision (Issue 17) that arrive after the reload completes are discarded; add the Issue 17 revision-superseded test here now that reload exists.
 
 Validation of original matches against new content ("file changed" note) is Issue 29.
 
@@ -24,7 +25,7 @@ See PRD *File loading, cache, reload, and selection consistency* (reload bullets
 ### How to verify
 
 - **Manual**: open a file, scroll, edit it externally (append lines) → display unchanged; `r` → new content, same top position; delete the file; `r` → "(unreadable)"; restore it; `r` → content again. With a single-match search, `r` reloads.
-- **Automated**: model tests with gated loader: `r` shows "Loading…" and issues one load; second `r` while gated issues nothing; after completion `r` issues a new load; anchor preserved across reload (clamped when file shrinks); failed reload → "(unreadable)" and old content absent; one-stop index `r` works; no reload triggered by disk-change simulation without `r`.
+- **Automated**: model tests with gated loader: `r` shows "Loading…" and issues one load; second `r` while gated issues nothing; after completion `r` issues a new load; anchor preserved across reload (clamped when file shrinks); failed reload → "(unreadable)" and old content absent; one-stop index `r` works; no reload triggered by disk-change simulation without `r`; a gated pre-reload layout released after the reload completes does not replace the reloaded content or its anchor.
 
 ### Acceptance criteria
 

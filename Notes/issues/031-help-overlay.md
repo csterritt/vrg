@@ -1,7 +1,7 @@
 ## Issue 31: Help overlay (`h`/`?`) with wrapped, scrollable key bindings
 
 **Type**: AFK
-**Blocked by**: Issue 9
+**Blocked by**: Issue 6, Issue 9, Issue 15
 
 ### Parent PRD
 
@@ -14,13 +14,16 @@
 - Text wraps to the interior width, including long unbroken strings; vertical scrolling reaches every row at usable sizes. Any substituted text (e.g. paths) is sanitized.
 - At tiny sizes the overlay is clipped to the terminal without a special borderless mode; growing the terminal restores the normal layout.
 - Overlay uses Theme overlay style (base colours, single-line border). Shares the wrapped-scrollable overlay component with the error overlay from Issue 9.
+- Opening help cancels an active file-change pop-up (Issue 15); it does not return when help closes.
+- Help substitutions are routed through the Issue 6 utility; add help to the sink-safety table.
+- The key-binding list is defined once as data (binding → description) that both the help renderer and Issue 34's documentation test consume, plus a footer slot for Issue 34's scale/limits note.
 
 See PRD *Colours, overlays, and key precedence* (help bullets and clipping bullet).
 
 ### How to verify
 
 - **Manual**: press `?` → bordered help; `down` scrolls; `n` does nothing to the file behind; `Esc` closes; shrink the terminal to 25×8 → help is clipped but present; enlarge → normal.
-- **Automated**: model tests: `h` and `?` open; each close key closes; `n`/`p`/`w`/`c`/`r` ignored while open (state behind unchanged); `ctrl+c` exits 130; scroll bounds; long unbroken line wraps within width; rendering at 25×8 does not panic and is clipped; content lists every binding string.
+- **Automated**: model tests: `h` and `?` open; each close key closes; `n`/`p`/`w`/`c`/`r` ignored while open (state behind unchanged); `ctrl+c` exits 130; scroll bounds; long unbroken line wraps within width; rendering at 25×8 does not panic and is clipped; content lists every binding string from the binding table; pop-up active then `?` → pop-up gone, help open, close help → no pop-up; a hostile substitution string passes the Issue 6 sink-safety check.
 
 ### Acceptance criteria
 
@@ -29,6 +32,8 @@ See PRD *Colours, overlays, and key precedence* (help bullets and clipping bulle
 - [ ] Given help is open, when `q`, `Esc`, `h`, or `?` is pressed, then help closes and browsing resumes.
 - [ ] Given help text wider than the interior, then it wraps (including unbroken strings) and can be scrolled fully.
 - [ ] Given a tiny terminal above the 20×3 minimum, then the overlay is clipped and restored on growth.
+- [ ] Given a pop-up is visible, when help opens, then the pop-up is cancelled and does not reappear.
+- [ ] Given the help overlay, then its bindings are rendered from a single binding table exposed for documentation tests.
 
 ### User stories addressed
 

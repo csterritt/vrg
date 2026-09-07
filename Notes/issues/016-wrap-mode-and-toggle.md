@@ -15,13 +15,14 @@
 - Tabs expand to the next multiple of 8 source-display columns independent of gutter and pan.
 - One grapheme segmentation / cell-width policy is shared by FileBuffer (boundaries and widths) and Viewport (wrapping and clipping). FileBuffer exposes cluster boundary information; Viewport does not re-derive it.
 - Scroll units remain rendered rows; the target-row reveal from Issue 14 must now find the row of a wrapped line that contains the match start.
+- Wrapping produces a **prepared row model** (source line → rendered rows for the current text width and mode). `View()` renders from it; it never wraps the full buffer per frame. In this issue the row model may be built synchronously at load/toggle/resize time; **Issue 17 moves preparation off the UI update path and owns the obsolete-layout contract**. Build the row model as a value that can be swapped in, keyed by (path, content revision, text width, wrap mode), so Issue 17 does not need to restructure it.
 
 See PRD *Text, graphemes, and safe presentation* (grapheme/tab/wrap bullets) and *Layout and indicators* (content-width bullet).
 
 ### How to verify
 
 - **Manual**: open a file with a 500-character line: it wraps across rows with a blank gutter on continuation rows; `w` shows it as one clipped row; tabs align to 8-column stops; a match near the end of the long line is revealed on its own row after `n`.
-- **Automated**: Viewport tests: wrap row counts for ASCII, wide CJK at row boundary (blank cell + wrap), combining sequences kept together, tab expansion; reveal test for a match near the end of a source line taller than several screens landing at row `floor(h/3)`; `w` toggle changes row model; App rendering test for continuation gutter alignment.
+- **Automated**: Viewport tests: wrap row counts for ASCII, wide CJK at row boundary (blank cell + wrap), combining sequences kept together, tab expansion; reveal test for a match near the end of a source line taller than several screens landing at row `floor(h/3)`; `w` toggle changes row model; App rendering test for continuation gutter alignment; a render-cost guard that `View()` on a many-line buffer does not invoke the wrapper for lines outside the visible rows (counting fake).
 
 ### Acceptance criteria
 

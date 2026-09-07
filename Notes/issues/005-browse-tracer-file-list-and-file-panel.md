@@ -1,7 +1,7 @@
 ## Issue 5: Browse tracer — file list, file panel with highlights, async "Loading…"
 
 **Type**: AFK
-**Blocked by**: Issue 3
+**Blocked by**: Issue 3, Issue 4
 
 ### Parent PRD
 
@@ -15,7 +15,8 @@ Replace the interim summary screen with the real two-pane browse view for the fi
 - Right: filename embedded in a horizontal rule, then content rows with a right-justified line-number gutter (digit width of largest line number, min 1) followed by two spaces. No other borders.
 - FileBuffer loads the file asynchronously; "Loading…" placeholder until ready. Matches on matched lines render in inverse video (first-pass byte→cell mapping; grapheme/tab/terminator refinements come in Issues 21–23).
 - Show the top of the file (no reveal yet); `q` exits 0.
-- Loading runs off the UI update path; the model handles key/resize messages while a load is pending.
+- Loading runs off the UI update path; the model handles key/resize messages while a load is pending. "Loading" includes decoding and byte→cell mapping, not only the disk read: the completion message delivers a prepared buffer, and `Update` does not decode or map the full file.
+- Browse-state `q` goes through the Issue 4 cleanup/exit path (terminal restore, child reap if still running).
 
 See PRD *File list and layout* stories, *File loading, cache, reload…* (first two bullets), *Layout and indicators* (gutter bullet), *Module Design → FileBuffer / Viewport / App*.
 
@@ -27,7 +28,7 @@ See PRD *File list and layout* stories, *File loading, cache, reload…* (first 
   3. Resize the terminal; layout re-renders. `q` exits 0.
 - **Automated**:
   - FileBuffer: loads bytes, reports source-line count and gutter width, exposes highlight spans for a matched line.
-  - App model: injected search completion → browse view with "Loading…"; injected load completion → content visible with highlight span; a key message handled while load is pending (worker gate held).
+  - App model: injected search completion → browse view with "Loading…"; injected load completion → content visible with highlight span; a key message and a resize handled while the load (read **and** decode/map) is held by a worker gate; `ctrl+c` while the gate is held exits 130 (Issue 4 path).
   - Rendering test on the composed `View()` string: file list order, underline on current entry, gutter format.
 
 ### Acceptance criteria
@@ -36,7 +37,8 @@ See PRD *File list and layout* stories, *File loading, cache, reload…* (first 
 - [ ] Given the current file is not yet loaded, then the panel shows "Loading…" and input remains responsive.
 - [ ] Given the load completes, then content replaces the placeholder and each matched span is rendered in inverse video.
 - [ ] Given a loaded file, then the gutter width is the digit count of the largest line number plus two spaces, right-justified, and no left/right/bottom border is drawn.
-- [ ] Given the browse view, when `q` is pressed, then the process exits 0.
+- [ ] Given the browse view, when `q` is pressed, then the process exits 0 via the Issue 4 cleanup path.
+- [ ] Given a load whose decode/map phase is held by a test gate, when `ctrl+c` or a resize arrives, then it is handled without waiting on the gate.
 
 ### User stories addressed
 

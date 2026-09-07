@@ -1,7 +1,7 @@
 ## Issue 13: `n`/`p` circular matched-line navigation; cursor-derived current file
 
 **Type**: AFK
-**Blocked by**: Issue 12
+**Blocked by**: Issue 7, Issue 12
 
 ### Parent PRD
 

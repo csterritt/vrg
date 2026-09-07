@@ -15,14 +15,14 @@ Viewport scrolling for the current file in the (currently unwrapped) panel.
 - Clamp to valid content: top row ≥ 0 and no avoidable blank rows below EOF. Files shorter than the viewport naturally leave unused rows.
 - Scrolling a "Loading…" placeholder is a no-op.
 - Save per-file vertical viewport state so a file revisited later (Issue 13) can start from it.
-- Rendering uses prepared viewport data, not a scan of the full buffer per frame.
+- Rendering uses prepared viewport data, not a scan of the full buffer per frame. Prepared row data (the rendered-row model for the loaded buffer at the current width/mode) is built when a load completes or the layout changes — see Issue 17 for the async/obsolete-layout contract — and `View()` only slices it.
 
 See PRD *Navigation, viewport, and logical anchors* (scroll-unit bullet) and *Module Design → Viewport*.
 
 ### How to verify
 
 - **Manual**: open a long file; `down`/`up`, `d`/`u`, `pgdn`/`pgup` move by expected amounts; scrolling past EOF stops with the last row at the bottom; `up` at top does nothing.
-- **Automated**: Viewport unit tests for each scroll unit and both clamps at BOF/EOF with a file shorter than, equal to, and longer than the viewport; half-page for odd heights; App test that scroll keys on a loading placeholder change nothing; per-file state persisted in the model.
+- **Automated**: Viewport unit tests for each scroll unit and both clamps at BOF/EOF with a file shorter than, equal to, and longer than the viewport; half-page for odd heights; App test that scroll keys on a loading placeholder change nothing; per-file state persisted in the model; a render-cost guard: rendering a frame for a buffer of N lines calls the row provider only for the visible row range (assert via a counting fake), not O(N).
 
 ### Acceptance criteria
 
@@ -30,6 +30,7 @@ See PRD *Navigation, viewport, and logical anchors* (scroll-unit bullet) and *Mo
 - [ ] Given content height `h`, when `d`/`u` is pressed, then the top row moves by `max(1, floor(h/2))`; when `page down`/`page up`, by `h`.
 - [ ] Given the viewport is at EOF, when scrolling down further, then the top row does not change.
 - [ ] Given a "Loading…" placeholder, when a scroll key is pressed, then nothing changes.
+- [ ] Given a loaded buffer, when a frame is rendered, then only the visible row range is queried from prepared data.
 
 ### User stories addressed
 

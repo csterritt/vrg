@@ -1,7 +1,7 @@
 ## Issue 34: Documentation — scale examples, content assumptions, memory limits
 
 **Type**: AFK
-**Blocked by**: Issue 10
+**Blocked by**: Issue 10, Issue 31
 
 ### Parent PRD
 
@@ -14,7 +14,8 @@ A user-facing README (or `docs/` page) and the help overlay footer note document
 - Independent scale examples (~10,000 matched files, ~100,000 matched lines, individual files ~50 MB) and that they are not simultaneous capacity guarantees.
 - The ~50 MB example assumes UTF-8 with ordinary line lengths; base64 `bytes` expansion can push a single `match` record over the 64 MiB limit, which is skipped and reported (naming the path when recoverable).
 - Buffers are retained for the session; no eviction, no aggregate memory bound, no reliable OOM recovery; forced termination cannot guarantee terminal cleanup.
-- Invocation syntax, the flag allow-list, exit statuses, and key bindings (kept in sync with the help overlay).
+- Invocation syntax, the flag allow-list, exit statuses, and key bindings (kept in sync with the help overlay by consuming Issue 31's binding table).
+- Any generated README/help text that embeds runtime strings goes through the Issue 6 utility (static text needs no sanitization).
 
 Also confirm the documented ripgrep reference family (15.x) and `--no-config` behaviour.
 
@@ -23,7 +24,7 @@ See PRD *Resources and responsiveness*, *Out of Scope*, and *Further Notes*.
 ### How to verify
 
 - **Manual**: read the README; every flag listed matches Issue 2's allow-list; every key matches the help overlay; every exit status matches the outcome table.
-- **Automated**: a test that extracts the key-binding table from the help overlay source and asserts each binding appears in the README (or generates the README section from the same source); a test that the README lists each allow-listed flag.
+- **Automated**: a test that iterates Issue 31's binding table and asserts each binding appears in the README (or generates the README section from the same table and asserts the committed README is up to date); a test that the README lists each allow-listed flag from Issue 2's table; a test that the README's exit-status list matches the values produced by Issue 9's outcome function.
 
 ### Acceptance criteria
 

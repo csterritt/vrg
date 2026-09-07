@@ -1,7 +1,7 @@
 ## Issue 24: File-list layout — width formula, `…` truncation, hide/show
 
 **Type**: AFK
-**Blocked by**: Issue 20
+**Blocked by**: Issue 17, Issue 20
 
 ### Parent PRD
 
@@ -18,13 +18,14 @@ Replace the placeholder list width from Issue 5 with the specified layout.
 - File-list scrolling keeps the active entry visible.
 - The filename row embeds the safe path in a rule and makes room for buffer-status notes (Issues 26/29/30), truncating the path where possible.
 - Panel text width follows from list width, gutter and reserved column; pathological sizes never produce negative widths.
+- Every text-width change caused here — list hide/show, list width recomputed after gutter growth on load, mode/size changes — is a rewrap that goes through the Issue 17 prepared-layout path and **preserves the logical reading anchor**. The file list's own rendering uses only its visible window, not a per-frame scan of all entries.
 
 See PRD *Layout and indicators* (width bullets) and *File list and layout* stories.
 
 ### How to verify
 
-- **Manual**: in an 80-column terminal with long paths, the list is ≤ 32 columns and paths show `…prefix/basename`; load a file with 5-digit line numbers → list narrows if needed; `tab` hides the list and content widens; `shift+tab` restores it; shrink to 30 columns → list disappears but `shift+tab`/`tab` state is unchanged when widening.
-- **Automated**: layout function tests for each of the three terms winning, the 40% floor rounding, gutter growth after load, list reduced to leave 10 text cells plus indicator, zero-width allocation preserving preference; truncation tests with wide/combining characters; App tests for toggle keys and list auto-scroll to the active entry.
+- **Manual**: in an 80-column terminal with long paths, the list is ≤ 32 columns and paths show `…prefix/basename`; load a file with 5-digit line numbers → list narrows if needed; scroll partway into a wrapped line, `tab` hides the list → content widens and the same text remains at the top; `shift+tab` restores it, same text at top; shrink to 30 columns → the list is still present but narrow (with a 7-cell gutter and a reserved column the formula gives `min(longest+2, 12, 12)`, so expect a constrained, nonzero list — it does *not* disappear); widen again → list restored. Zero-width allocation is covered by the automated test with synthetic values.
+- **Automated**: layout function tests for each of the three terms winning, the 40% floor rounding, gutter growth after load, list reduced to leave 10 text cells plus indicator, zero-width allocation preserving preference (e.g. W=20, gutter=9, indicator=1 → `W − (9+10+1) = 0`); truncation tests with wide/combining characters; App tests for toggle keys and list auto-scroll to the active entry; **anchor-through-relayout** tests: top mid-way through a wrapped line, then `tab`, then `shift+tab` → the top row contains the same text location each time; a load completing with a larger gutter narrows the text width and the current file's anchor location is still at the top; a file-list item-provider counting fake proves rendering touches only visible entries.
 
 ### Acceptance criteria
 
@@ -33,6 +34,8 @@ See PRD *Layout and indicators* (width bullets) and *File list and layout* stori
 - [ ] Given `left`/`tab`, then the list hides; given `right`/`shift+tab`, then it shows; startup shows it.
 - [ ] Given a terminal size that yields zero list width, then no list cells are drawn and the visibility preference is retained.
 - [ ] Given the current file is outside the visible list rows, then the list scrolls to include it.
+- [ ] Given a text-width change from list hide/show or gutter growth, then the logical reading anchor is preserved through the resulting rewrap.
+- [ ] Given a file-list render, then only visible entries are formatted.
 
 ### User stories addressed
 

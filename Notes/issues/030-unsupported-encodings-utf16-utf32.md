@@ -14,13 +14,14 @@
 - Notification follows the current/non-current distinction from Issue 26: overlay if current, diagnostic-only otherwise.
 - No stale-match validation runs on their raw bytes.
 - rg's default BOM detection remains enabled (no forced encoding flag), so these files can still yield matches.
+- Unsupported-encoding status never changes the fixed exit status, including when every retained file is unsupported (add a row to the Issue 9 outcome matrix).
 
 See PRD *Encodings and stale-content validation* (first bullet) and *Invocation…* (no forced raw-encoding flag).
 
 ### How to verify
 
-- **Manual**: `printf '\xff\xfeh\0i\0\n\0' > u16.txt`; `vrg hi .` → the file is listed; entering it shows "(unsupported encoding)" and an overlay; `r` keeps the placeholder; `q` exits 0 and stderr includes the encoding diagnostic.
-- **Automated**: FileBuffer tests for all four BOMs including the UTF-32/UTF-16 LE overlap ordering; a UTF-8 BOM is not misclassified; App tests: current file → overlay + placeholder; non-current → diagnostic only; `r` on an unsupported file reissues a load and preserves the placeholder if unchanged; no stale validation invoked.
+- **Manual**: `printf '\xff\xfeh\0i\0\n\0' > u16.txt`; `vrg hi .` → the file is listed; entering it shows "(unsupported encoding)" and an overlay; `Esc` to dismiss the overlay (it blocks `r` while open); `r` → "Loading…" then the placeholder again and a new overlay; `Esc` to dismiss; `q` exits 0 and stderr includes each encoding diagnostic.
+- **Automated**: FileBuffer tests for all four BOMs including the UTF-32/UTF-16 LE overlap ordering; a UTF-8 BOM is not misclassified; App tests: current file → overlay + placeholder; non-current → diagnostic only; `r` on an unsupported file reissues a load and preserves the placeholder if unchanged; no stale validation invoked; outcome-matrix row: all retained files unsupported → `q` exits the fixed status (0).
 
 ### Acceptance criteria
 
@@ -29,6 +30,7 @@ See PRD *Encodings and stale-content validation* (first bullet) and *Invocation�
 - [ ] Given such a file is current, then an overlay explains it; given it is non-current, then only a diagnostic is collected.
 - [ ] Given an unsupported file, then it remains a navigation stop and `r` reloads it.
 - [ ] Given an unsupported file, then no "file changed since search" validation is applied to its bytes.
+- [ ] Given every retained file is unsupported, then the fixed exit status is unchanged.
 
 ### User stories addressed
 
