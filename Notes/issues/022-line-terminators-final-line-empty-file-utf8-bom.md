@@ -11,6 +11,7 @@
 
 FileBuffer structural line handling with raw/search/display coordinate separation.
 
+- **Scope note:** tab expansion (the eight-column-stop rule) is owned by Issue 16, not this issue. This issue covers line terminators, final-line/empty-file handling, zero-width position mapping, and the leading UTF-8 BOM only.
 - LF and CRLF terminate lines and are not displayed, but original line bytes (including terminators) are retained for byte-coordinate mapping and later validation (Issue 29).
 - A missing final newline yields a final line; a trailing newline does not add an empty line; an empty file has zero lines and shows an empty panel. Gutter width is *digit slots + two spaces* everywhere in this project; a zero-line/placeholder view reserves one digit slot, so its gutter is **three cells** wide.
 - A standalone CR (no following LF) is not a terminator; the safe-presentation core (Issue 5, generalized in Issue 6) escapes it as `^M`.

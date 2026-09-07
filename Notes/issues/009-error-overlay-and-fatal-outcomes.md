@@ -32,6 +32,7 @@ The modal error overlay, the fatal rows of the outcome table, and the **single o
 | Trailing unterminated record | Both — counted malformed and the stream is incomplete |
 
   Violations of Issue 3's per-record schema matrix remain skipped-and-counted malformed records; a safely skipped match record does not by itself make otherwise intact lifecycle metadata incomplete.
+- **Binary exclusion precedence**: a `match(P)` arriving after a binary-excluding `end(P)` (non-null `binary_offset`) is an integrity failure (orphaned match after `end`), and the late match is **not retained** — binary exclusion takes precedence over the general retention rule for orphaned matches. The file remains binary-excluded from the file list, so no retained match from it is browsable.
 - With usable results: browse with the error overlay open; `q`/`Esc` dismiss to browsing; eventual `q` exits 2.
 - Without usable results: error overlay; dismissal (`q` **or** `Esc`) exits 2. This is the one case where `Esc` leads to termination — it is dismissing the overlay, and there is no state to return to.
 - Non-fatal stderr on rg 0/1 with usable results: browse with a warning overlay, eventual exit 0.

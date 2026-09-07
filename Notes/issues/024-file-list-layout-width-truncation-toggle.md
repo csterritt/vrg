@@ -1,7 +1,7 @@
 ## Issue 24: File-list layout — width formula, `…` truncation, hide/show
 
 **Type**: AFK
-**Blocked by**: Issue 17, Issue 20
+**Blocked by**: Issue 17
 
 ### Parent PRD
 

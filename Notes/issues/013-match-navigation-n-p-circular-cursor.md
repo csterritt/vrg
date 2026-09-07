@@ -13,7 +13,7 @@ The single global matched-line cursor in SearchIndex and its App wiring.
 
 - Startup selects the first stop (path order, then line number). `n` advances, `p` retreats, both wrap circularly. Zero entries: no-op. Exactly one entry: strict no-op (no pop-up, no reload).
 - Multiple submatches on one line are one stop.
-- The current file is derived from the cursor. Crossing to another file's stop switches the panel, triggers that file's load if not cached, saves the departing file's viewport and starts the new file from its saved viewport (or top if never visited). The file list underline follows.
+- The current file is derived from the cursor. Crossing to another file's stop switches the panel, triggers that file's load if not cached, saves the departing file's viewport and starts the new file from its saved viewport (or top if never visited). The file list underline follows. If the file is cached but its installed layout is stale (e.g. after a resize that only requested a layout for the then-current file), the model requests a prepared layout for it; the navigation intent commits when the matching layout installs (Issue 17 owns this trigger and the prepared-layout contract; Issue 28 owns the two-stage commit).
 - Manual scrolling does not move the cursor; `n`/`p` continue from the last selected stop.
 - The file list is passive: no direct selection route.
 - Matches on the current matched line render with the underline style (Issue 7).
