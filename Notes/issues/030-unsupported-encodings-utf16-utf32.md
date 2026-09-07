@@ -1,7 +1,7 @@
 ## Issue 30: Unsupported encodings — UTF-16/UTF-32 BOM placeholder
 
 **Type**: AFK
-**Blocked by**: Issue 26, Issue 27
+**Blocked by**: Issue 26, Issue 27, Issue 29
 
 ### Parent PRD
 
@@ -21,7 +21,7 @@ See PRD *Encodings and stale-content validation* (first bullet) and *Invocation�
 ### How to verify
 
 - **Manual**: `printf '\xff\xfeh\0i\0\n\0' > u16.txt`; `vrg hi .` → the file is listed; entering it shows "(unsupported encoding)" and an overlay; `Esc` to dismiss the overlay (it blocks `r` while open); `r` → "Loading…" then the placeholder again and a new overlay; `Esc` to dismiss; `q` exits 0 and stderr includes each encoding diagnostic.
-- **Automated**: FileBuffer tests for all four BOMs including the UTF-32/UTF-16 LE overlap ordering; a UTF-8 BOM is not misclassified; App tests: current file → overlay + placeholder; non-current → diagnostic only; `r` on an unsupported file reissues a load and preserves the placeholder if unchanged; no stale validation invoked; outcome-matrix row: all retained files unsupported → `q` exits the fixed status (0).
+- **Automated**: FileBuffer tests for all four BOMs including the UTF-32/UTF-16 LE overlap ordering; a UTF-8 BOM is not misclassified; App tests: current file → overlay + placeholder; non-current → diagnostic only; `r` on an unsupported file reissues a load and preserves the placeholder if unchanged; no stale validation invoked (Issue 29's validator exists but is not run against these bytes); outcome-matrix row: all retained files unsupported → `q` exits the fixed status (0); composed-view test: the unsupported state with a long escaped path at ordinary and constrained widths — the filename row keeps identifying the (truncated) path, the panel shows "(unsupported encoding)", nothing overflows, and layout dimensions remain nonnegative.
 
 ### Acceptance criteria
 

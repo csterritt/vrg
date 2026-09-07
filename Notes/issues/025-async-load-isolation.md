@@ -1,7 +1,7 @@
 ## Issue 25: Asynchronous load isolation — navigate during load, late results update only their own file
 
 **Type**: AFK
-**Blocked by**: Issue 13
+**Blocked by**: Issue 13, Issue 16
 
 ### Parent PRD
 

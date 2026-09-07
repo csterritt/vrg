@@ -25,7 +25,7 @@ See PRD *Colours, overlays, and key precedence* (last bullet) and *Outcome and e
 - **Automated**:
   - Model test collecting three diagnostics (one displayed, two never displayed) and asserting the replay writer receives exactly those three, in order, once each.
   - **Shutdown-boundary model test**: a diagnostic message is delivered and processed, then `ctrl+c` in the *next* update → the diagnostic is replayed. Conversely, a gated diagnostic that has not been delivered when `ctrl+c` is processed is not waited for and not replayed.
-  - **PTY subprocess tests** (Issue 4 harness): (a) fake rg writes a stderr line, handshakes, then blocks; send `ctrl+c` → exit 130, PTY termios restored, and the stderr line appears in vrg's stderr *after* the display-restoration sequence, exactly once. (b) Normal `q` after a completed stream with a stderr warning → same ordering. (c) Injected controlled failure (Issue 4 hook) → replay still occurs. (d) A diagnostic embedding a filename with `\n` and ESC is escaped and single-lined in the replayed text.
+  - **PTY subprocess tests** (Issue 4 harness): (a) fake rg writes a stderr line, then blocks; vrg emits a **test-only application-side acknowledgement** once the diagnostic has been processed into the session collection (same mechanism family as Issue 4's reap evidence, e.g. an environment-variable-gated side channel). The test waits for that acknowledgement — not merely for a child-side write handshake, which proves only that bytes reached the pipe — and only then sends `ctrl+c` → exit 130, PTY termios restored, and the stderr line appears in vrg's stderr *after* the display-restoration sequence, exactly once. (b) Normal `q` after a completed stream with a stderr warning → same ordering (acknowledgement before the keypress). (c) Injected controlled failure (Issue 4 hook) → replay still occurs. (d) A diagnostic embedding a filename with `\n` and ESC is escaped and single-lined in the replayed text.
 
 ### Acceptance criteria
 
@@ -35,6 +35,7 @@ See PRD *Colours, overlays, and key precedence* (last bullet) and *Outcome and e
 - [ ] Given a controlled application failure, then collected diagnostics are replayed after terminal restoration.
 - [ ] Given a diagnostic embedding a filename with control bytes, then the replayed text is escaped and single-lined for the filename.
 - [ ] Given the PTY harness, then the replay bytes appear after the display-restoration sequence and the PTY input modes are already restored when they appear.
+- [ ] Given a diagnostic whose collection has been acknowledged application-side, when `ctrl+c` is processed afterwards, then that diagnostic is replayed exactly once.
 
 ### User stories addressed
 

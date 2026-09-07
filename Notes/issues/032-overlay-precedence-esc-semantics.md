@@ -1,7 +1,7 @@
 ## Issue 32: Overlay precedence — error suspends help, append preserves scroll, `Esc`/`q` dismissal semantics
 
 **Type**: AFK
-**Blocked by**: Issue 31, Issue 15
+**Blocked by**: Issue 15, Issue 26, Issue 31
 
 ### Parent PRD
 
@@ -33,7 +33,7 @@ See PRD *Colours, overlays, and key precedence* (precedence, `Esc`, error/help b
   - Error at scroll 3, second error appended → still at 3 and new text present.
   - Pop-up active, `?` → pop-up gone, help open, close help → no pop-up; pop-up active, injected error → same.
   - `Esc` no-op in browsing and no-results (searching is covered by Issue 4; too-small by Issue 33).
-  - **Dismissal-outcome table**, run for both `q` and `Esc` as the dismissal key: browse + error overlay → browsing, still running; browse + help → browsing; browse + error-over-help → help restored; empty result + warning overlay → no-results screen, still running; fatal, no results → exit 2; record-loss, no results → exit 2. Then a second `q` from each still-running state → the fixed status (0/2) or 1, and a second `Esc` → still running.
+  - **Dismissal-outcome table**, run for both `q` and `Esc` as the dismissal key: browse + error overlay → browsing, still running; browse + help → browsing; browse + error-over-help → help restored; empty result + warning overlay → no-results screen, still running; no-results with help open → help closes to the no-results screen, still running; fatal, no results → exit 2; record-loss, no results → exit 2. Then a second `q` from each still-running state → the fixed status (0/2) or 1, and a second `Esc` → still running.
   - Precedence when both help and error are open: keys route to the error.
 
 ### Acceptance criteria
