@@ -36,6 +36,7 @@ See PRD *Layout and indicators* (width bullets) and *File list and layout* stori
 - [ ] Given the current file is outside the visible list rows, then the list scrolls to include it.
 - [ ] Given a text-width change from list hide/show or gutter growth, then the logical reading anchor is preserved through the resulting rewrap.
 - [ ] Given a file-list render, then only visible entries are formatted.
+- [ ] Given the filename row and a synthetic status string, then the status note occupies the buffer-status slot and the path is truncated to make room for the note where possible; the real note texts are owned by Issues 26, 29, and 30.
 
 ### User stories addressed
 

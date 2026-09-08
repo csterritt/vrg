@@ -47,7 +47,7 @@ See PRD *Navigation, viewport, and logical anchors* (scroll-unit, visible-lines 
 - [ ] Given the widest visible line ends in a multi-cell cluster, when panning reaches the maximum, then the offset stops at that cluster's start and the cluster is painted whole — no blank-only text area and no split glyph.
 - [ ] Given a stored offset and a change to the visible line set (scroll, reveal, resize, list toggle, gutter growth), then the stored offset is clamped to the new maximum and is not restored when the wider line becomes visible again.
 - [ ] Given wrap mode, when a pan key is pressed, then nothing changes.
-- [ ] Given a nonzero offset, when `w` is pressed twice with no intervening resize, then the offset is unchanged; given the width changed in between, then the offset is the prior value clamped to the new maximum.
+- [ ] Given a nonzero offset, when `w` is pressed twice and neither the width nor the visible line set changed enough in between to require clamping, then the offset is unchanged; every re-entry into run-off-edge mode recomputes the maximum from the current visible rows and clamps the offset to it.
 - [ ] Given navigation to a different file, then the offset is reset to zero before any reveal.
 - [ ] Given a wide cluster split by the left clip edge, then blank cells are drawn for the clipped portion.
 - [ ] Given a frame, then the extent clamp is derived from the prepared layout's visible rows only, not a full-buffer scan.

@@ -35,6 +35,7 @@ See PRD *File loading, cache, reload, and selection consistency* (reload bullets
 - [ ] Given the reload fails, then the panel shows "(unreadable)" and no old content.
 - [ ] Given a one-stop index, when `r` is pressed, then the file is reloaded.
 - [ ] Given the file changes on disk, when no `r` is pressed, then the display does not change.
+- [ ] Given a reload of the current file, then the filename row still identifies the path during the reload.
 
 ### User stories addressed
 

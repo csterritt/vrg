@@ -3,7 +3,7 @@
 Parent issue: #24
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #17
-**Acceptance criteria**: AC1–AC7 → Tasks 1–2
+**Acceptance criteria**: AC1–AC8 → Tasks 1–2
 **Manual verification**: Task 4 owns the issue's manual checks.
 
 ## Tasks
