@@ -25,5 +25,6 @@ Read through the PRD, tasks, and their corresponding issues and any relevant inp
 - Logic correctness and edge case handling
 - Error handling and logging
 - Any other appropriate criteria
+- Make sure that the final program produced runs and produces the expected results
 
 Note that this is a tasks-only review, there is a separate process for generating tasks from the PRD, and another for generating code from tasks.
