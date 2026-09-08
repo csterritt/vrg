@@ -35,24 +35,24 @@ Implement the logical anchor in `internal/viewport` to satisfy Task 1: anchor re
 ### 3. Specify off-UI layout preparation and obsolete-layout isolation
 
 **Type**: RED  
-**Output**: Failing gated tests cover input during preparation, pending reveal intents, out-of-order and superseded layouts, cached-file stale-layout navigation with its fast path, and render-cost guards for rows and list entries.  
+**Output**: Failing gated tests cover every AC6 input during preparation — `ctrl+c`, `q`, `n`/`p`, `w`, and a second resize — pending reveal intents, out-of-order and superseded layouts, cached-file stale-layout navigation with its fast path, and render-cost guards for rows and list entries.  
 **Depends on**: 2
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md`.
 
-Add failing tests for the preparation half of Issue #17 and the Responsiveness boundaries decisions of `Notes/PRD-vrg.md`. With the layout worker held by a test gate after a resize, require `ctrl+c` to exit 130, `q` to exit with the fixed status, `n` to advance the cursor, and a second resize to be accepted, all without releasing the gate, and a stop selected while the gate was held to be revealed per the Issue #14 rules once a layout matching the current parameters installs — the pending intent preserved, not lost. Require prepared layouts keyed by (path, content revision, text width, wrap mode) to install only when the key equals the model's current parameters, with out-of-order completions across W1→W2→W3 resizes and rapid wrap toggles discarded and the anchor unaffected throughout; a layout for a file that is no longer current to leave the visible panel and saved per-file state untouched; navigation to a cached file whose installed layout is stale to request a prepared layout for the current parameters and carry the entry-reveal or saved-viewport intent to commit on installation, while a cached file with a matching installed layout commits immediately with no request; and counting-fake render-cost guards proving neither the row provider nor the file-list item provider is called beyond the visible range. Keep this task test-only.
+Add failing tests for the preparation half of Issue #17 and the Responsiveness boundaries decisions of `Notes/PRD-vrg.md`. With the layout worker held by a test gate after a resize, require `ctrl+c` to exit 130, `q` to exit with the fixed status, `n` to advance the cursor immediately and `p` to move to the previous stop immediately with the latest pending reveal preserved for whichever stop is newest, `w` to change wrap mode immediately and issue (or replace) the keyed layout request for the new mode without releasing the existing gate, and a second resize to be accepted, all without releasing the gate, and a stop selected while the gate was held to be revealed per the Issue #14 rules once a layout matching the current parameters installs — the pending intent preserved, not lost. Require prepared layouts keyed by (path, content revision, text width, wrap mode) to install only when the key equals the model's current parameters, with out-of-order completions across W1→W2→W3 resizes and rapid wrap toggles discarded and the anchor unaffected throughout; a layout for a file that is no longer current to leave the visible panel and saved per-file state untouched; navigation to a cached file whose installed layout is stale to request a prepared layout for the current parameters and carry the entry-reveal or saved-viewport intent to commit on installation, while a cached file with a matching installed layout commits immediately with no request; and counting-fake render-cost guards proving neither the row provider nor the file-list item provider is called beyond the visible range. Keep this task test-only.
 
 ---
 
 ### 4. Implement prepared layouts and pending intents
 
 **Type**: GREEN  
-**Output**: Gated preparation, isolation, intent, and render-cost tests pass with obsolete layouts never touching the display or consuming intents.  
+**Output**: Gated preparation, isolation, intent, and render-cost tests pass with every AC6 input actionable while a worker is held and obsolete layouts never touching the display or consuming intents.  
 **Depends on**: 3
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md`.
 
-Implement prepared-layout jobs completing via messages like file loads, keyed installation guards, the model-carried reveal intent committed with the Issue #14 rules against the installed row model, and frame rendering from installed prepared data and the list's visible window. Do not prescribe a particular goroutine or channel design — the contract is where the work happens and how late results are isolated. The revision-supersession test with a real reload lands with Issue #27, but the revision keying must be in place now.
+Implement prepared-layout jobs completing via messages like file loads, keyed installation guards, the model-carried reveal intent committed with the Issue #14 rules against the installed row model, every AC6 input — `ctrl+c`, `q`, `n`/`p`, `w`, and further resizes — handled without waiting for a held worker, and frame rendering from installed prepared data and the list's visible window. Do not prescribe a particular goroutine or channel design — the contract is where the work happens and how late results are isolated. The revision-supersession test with a real reload lands with Issue #27, but the revision keying must be in place now.
 
 ---
 

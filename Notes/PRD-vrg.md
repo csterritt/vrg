@@ -1,6 +1,6 @@
 # PRD: VRG — Terminal UI for ripgrep
 
-Revision 4. Supersedes revision 3 and incorporates the decisions made during the interview addressing critique 3. This document specifies version 1; acknowledged limitations are not promises of future features.
+Revision 5. Supersedes revision 4 and reconciles the `Esc` termination rule with the outcome table per `Notes/critiques/PRD-tasks-critique-2.md` (finding F2). This document specifies version 1; acknowledged limitations are not promises of future features.
 
 ## Problem Statement
 
@@ -117,7 +117,7 @@ Users navigate matched lines with `n`/`p`, scroll through full file contents, to
 81. As a user, I want new errors appended without moving the diagnostic reader, so that new messages do not replace or disrupt earlier ones.
 82. As a user, I want help and diagnostics wrapped, including long unbroken strings, and vertically scrollable, so that text is accessible at usable terminal sizes.
 83. As a user, I accept clipped overlays at tiny sizes, with normal layout restored on growth, so that version 1 need not introduce a separate compact overlay design.
-84. As a user, I want `q` or `Esc` to dismiss an overlay, `q` alone to quit ordinary browsing, `Esc` to do nothing when no overlay is open, and `ctrl+c` always to exit 130, so that modal and emergency exit behavior are predictable and `Esc` never quits.
+84. As a user, I want `q` or `Esc` to dismiss an overlay, `q` alone to quit ordinary browsing, `Esc` to do nothing when no overlay is open, and `ctrl+c` always to exit 130, so that modal and emergency exit behavior are predictable and `Esc` never quits from a base state.
 85. As a user, I want documented independent scale examples, their content assumptions, and memory limitations rather than an aggregate-capacity guarantee, so that I can judge whether a search is suitable for my machine.
 
 ## Implementation Decisions
@@ -169,7 +169,7 @@ Apply this table top to bottom; cancellation overrides a completed outcome when 
 - Include stderr in diagnostics regardless of rg exit code. If a failed process supplies no explanatory stderr, generate a diagnostic naming its code or signal. Include record-loss and stream-integrity notes rather than presenting an empty error overlay.
 - Safe record skipping with usable results yields exit 0 if rg and completion metadata otherwise succeeded. Unknown-type warnings alone never force exit 2, including with zero results.
 - Once searching completes, the ordinary exit status is fixed. Unreadable, stale, or unsupported files do not change it. `ctrl+c` still overrides it with 130.
-- `q`/`Esc` dismiss an error overlay; a fatal no-results overlay exits 2 on dismissal. On the ordinary no-results screen, `q` exits 1. During normal browsing, `q` without a modal overlay exits with the fixed search-derived status.
+- `q`/`Esc` dismiss an error overlay; a fatal no-results overlay exits 2 on dismissal with either key, because there is no underlying state to return to. On the ordinary no-results screen, `q` exits 1. During normal browsing, `q` without a modal overlay exits with the fixed search-derived status.
 - Cleanup applies on normal completion, cancellation, and application failures under vrg's control: restore terminal state, cancel outstanding work, terminate/reap a running child, and safely replay all collected diagnostics. OS-level forced termination or OOM cannot guarantee cleanup.
 
 ### File loading, cache, reload, and selection consistency
@@ -239,7 +239,7 @@ Apply this table top to bottom; cancellation overrides a completed outcome when 
 
 - Dark scheme is initially white on black; light is black on white. `c` toggles with no persistence. Matches use true inverse colours; current-line matches also underline. Current file-list item is underlined. Indicators use inverse style. Overlays use base colours and plain single-line borders.
 - `ctrl+c` has global precedence and exits 130. The too-small screen and searching cancellation rules follow their dedicated contracts. In ordinary browse/no-results states, modal error takes precedence over help, then pop-up, then base-state keys.
-- `Esc` is an overlay-dismissal key only. With no help or error overlay open—during searching, on the no-results screen, on the too-small screen, and in normal browsing—`Esc` is a no-op (it still dismisses a pop-up like any other key, and that is its only effect). `Esc` never exits the program.
+- `Esc` is an overlay-dismissal key only. With no help or error overlay open—during searching, on the no-results screen, on the too-small screen, and in normal browsing—`Esc` is a no-op (it still dismisses a pop-up like any other key, and that is its only effect). `Esc` never exits from a base state; dismissing a fatal no-results overlay with `Esc` terminates with status 2 because there is no underlying state.
 - Help opens with `h`/`?`. While open: `up`/`down` scroll rendered rows; `q`/`Esc`/`h`/`?` close; `ctrl+c` exits; other keys are ignored.
 - Error overlay: `up`/`down` scroll; `q`/`Esc` dismiss; `ctrl+c` exits; other keys are ignored. New errors append, preserving the reader's scroll position rather than jumping to the bottom.
 - Errors suspend help, retaining its position; closing the error restores help. Opening help or error cancels any pop-up. No suspended pop-up returns afterward.

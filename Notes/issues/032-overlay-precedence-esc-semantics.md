@@ -13,11 +13,11 @@
 - A new error while help is open suspends help, retaining its scroll position; dismissing the error restores help at that position.
 - New errors append to the error overlay without moving the reader's scroll position — generalizing the append-preserving-scroll primitive introduced by Issue 26 (proven there for reload re-entry failures) to all appended errors.
 - Opening help or an error cancels any pop-up; no suspended pop-up returns afterward.
-- **`Esc` is not a standalone quit command.** It only ever dismisses: it closes help or an error overlay; with neither open (browsing, no-results, searching, too-small) it does nothing except dismiss a pop-up like any other key. Whether dismissal *leads to* termination depends on the base state, exactly as for `q`, per the PRD outcome table:
+- **`Esc` is an overlay-dismissal key only, and it never exits from a base state.** It closes help or an error overlay; with neither open (browsing, no-results, searching, too-small) it does nothing except dismiss a pop-up like any other key. Dismissing a fatal no-results overlay with `Esc` terminates with status 2 because there is no underlying state. Per the PRD outcome table:
   - Browse-state overlay (error or help, including error-over-help) → dismiss returns to browsing (or to suspended help). `q` and `Esc` behave identically here.
   - Nonfatal warning overlay over an empty result → dismiss shows the no-results screen. `q` and `Esc` identical.
-  - **Fatal overlay with no usable results** (fatal process/integrity failure, or record-loss with zero results) → dismissal with **either** `q` or `Esc` exits 2. There is no state to return to; this is the one route by which `Esc` ends the program, and it is dismissal, not quit.
-  - No overlay: `q` quits with the fixed status (browse) or 1 (no-results); `Esc` does not request exit.
+  - **Fatal overlay with no usable results** (fatal process/integrity failure, or record-loss with zero results) → dismissal with **either** `q` or `Esc` exits 2. There is no underlying state, which is why `Esc` terminates here and never from a base state.
+  - No overlay: `q` quits with the fixed status (browse) or 1 (no-results); `Esc` is a no-op.
   - Too-small screen: Issue 33's dedicated rule takes precedence (`q` exits even if a modal overlay is logically open); `Esc` is a no-op there.
 
 See PRD *Colours, overlays, and key precedence* (precedence, `Esc`, error/help bullets) and *Outcome and exit-status contract* (table and `q`/`Esc` bullet).
@@ -50,6 +50,6 @@ See PRD *Colours, overlays, and key precedence* (precedence, `Esc`, error/help b
 
 - User story 80: errors suspend help and restore its scroll position
 - User story 81: new errors appended without moving the reader
-- User story 84: `q`/`Esc` dismissal semantics; `Esc` is never a quit command; `ctrl+c` always 130
+- User story 84: `q`/`Esc` dismissal semantics; `Esc` never quits from a base state; `ctrl+c` always 130
 
 ---

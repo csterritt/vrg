@@ -17,7 +17,7 @@ A user-facing `README.md` at the repository root (the single selected documentat
 - Invocation syntax, the flag allow-list, exit statuses, and key bindings (kept in sync with the help overlay by consuming Issue 31's binding table).
 - A complete exit-status table covering all four statuses with their state-specific triggers: 0 (successful search and browse), 1 (no results), 2 (pre-TUI usage/root/start failures and fatal search outcomes), and 130 (cancellation — `q` while searching or result preparation is incomplete, and `ctrl+c` in any state).
 - The ripgrep reference family: VRG targets ripgrep 15.x semantics, and VRG supplies `--no-config` so ripgrep configuration files are never honoured.
-- Any generated README/help text that embeds runtime strings goes through the Issue 6 utility (static text needs no sanitization).
+- Any generated README/help text that embeds runtime strings goes through the Issue 6 utility (static text needs no sanitization). Issue 34 also owns the sink-safety table row assigned to it by Issue 6: the rendered help footer — and any other generated text path that accepts runtime strings — joins the shared hostile-fixture table, substituting Issue 6's fixtures at every runtime-substitution point and asserting through the no-style composition path that no fixture control byte survives in raw output.
 
 See PRD *Resources and responsiveness*, *Out of Scope*, and *Further Notes*.
 
