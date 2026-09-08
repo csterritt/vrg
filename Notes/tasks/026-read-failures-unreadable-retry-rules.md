@@ -52,7 +52,7 @@ Add failing gated model tests for the Issue #26 re-entry sequence. Require enter
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md`.
 
-Implement the deterministic re-entry sequence in `internal/app` to satisfy Task 3, reusing the Issue #25 one-load-per-path rule when a load is somehow already in flight and the Issue #32 append rule's reader-position preservation for the second failure's single appended occurrence.
+Implement the deterministic re-entry sequence in `internal/app` to satisfy Task 3, reusing the Issue #25 one-load-per-path rule when a load is somehow already in flight and implementing the minimal error-overlay append-preserving-scroll primitive owned by this issue: appending the second failure's single new occurrence to the open overlay without moving the reader's scroll position. Issue #32 later generalizes this primitive to all appended errors; do not wait for Issue #32 or implement its help/precedence semantics here.
 
 ---
 
@@ -72,6 +72,6 @@ Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/026-06/code-walkthrough`.  
 **Depends on**: 5
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/026-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the injected-loader notification and outcome-row tests and the gated re-entry sequence tests, then, on an unprivileged shell, run the manual route: making the second matched file unreadable with `chmod 000`, startup showing file 1, `n` into file 2 showing the overlay and "(unreadable)", `Esc`, a same-file `n` with no new overlay, `p` `p` back into file 2 showing the overlay with "Loading…", dismissal, and `q` exiting 0 with the failures listed on stderr. Reference Issue #26 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/026-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the injected-loader notification and outcome-row tests and the gated re-entry sequence tests, then, on an unprivileged shell, run the manual route against a disposable temporary fixture directory — never a repository file — by copying the two matched files into it, recording the original mode, and running every step under a shell trap that restores the original mode on exit or interruption: making the second matched file unreadable with `chmod 000`, startup showing file 1, `n` into file 2 showing the overlay and "(unreadable)", `Esc`, a same-file `n` with no new overlay, `p` `p` back into file 2 showing the overlay with "Loading…", dismissal, and `q` exiting 0 with the failures listed on stderr. Completing or interrupting the walkthrough must leave no file with altered permissions, and the injected-loader model tests remain the authoritative deterministic verification. Reference Issue #26 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 
 ---

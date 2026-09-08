@@ -9,7 +9,7 @@
 
 ### What to build
 
-The two-stage completion contract for a current-file load: a load completion produces a decoded/mapped buffer, and reveal commits only when a prepared layout matching the model's current parameters installs. This issue owns the integrated transition; Issues 17 and 27 provide its pieces.
+The two-stage completion contract for a current-file load: a load completion produces a decoded/mapped buffer, and reveal commits only when a prepared layout matching the model's current parameters installs. This issue owns the integrated transition; Issues 17 and 27 provide its pieces — Issue 27 delivers the tested generic reload-anchor pending-intent seam and its installation-gated commit, which this issue generalizes to reveal intents and the full two-stage arbitration for all load completions.
 
 **Stage 1 — load completion.** When a load completes for path P:
 

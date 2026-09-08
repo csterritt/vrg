@@ -11,7 +11,7 @@
 
 - Key precedence in browse/no-results states: `ctrl+c` → modal error → help → pop-up → base keys.
 - A new error while help is open suspends help, retaining its scroll position; dismissing the error restores help at that position.
-- New errors append to the error overlay without moving the reader's scroll position.
+- New errors append to the error overlay without moving the reader's scroll position — generalizing the append-preserving-scroll primitive introduced by Issue 26 (proven there for reload re-entry failures) to all appended errors.
 - Opening help or an error cancels any pop-up; no suspended pop-up returns afterward.
 - **`Esc` is not a standalone quit command.** It only ever dismisses: it closes help or an error overlay; with neither open (browsing, no-results, searching, too-small) it does nothing except dismiss a pop-up like any other key. Whether dismissal *leads to* termination depends on the base state, exactly as for `q`, per the PRD outcome table:
   - Browse-state overlay (error or help, including error-over-help) → dismiss returns to browsing (or to suspended help). `q` and `Esc` behave identically here.

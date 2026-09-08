@@ -24,12 +24,12 @@ Begin only after Issues #26 and #17 are complete. Add failing gated model tests 
 ### 2. Implement explicit reload
 
 **Type**: GREEN  
-**Output**: Reload tests pass; reload preserves the anchor through the two-stage commit and never presents stale content as refreshed.  
+**Output**: Reload tests pass; reload preserves the anchor through the pending-intent commit owned here and never presents stale content as refreshed.  
 **Depends on**: 1
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md`.
 
-Implement `r` in `internal/app` to satisfy Task 1: the reload request with its dropped duplicates, content revisions feeding the Issue #17 layout keying, failure replacement through the Issue #26 overlay component, the one-stop route, and the reload-anchor intent — preserve the anchor, no reveal — recorded when the reload's load completes and committed only when the new revision's matching prepared layout installs through the existing installation path. Validation of original matches against new content is owned by Issue #29, and the full two-stage reveal contract by Issue #28.
+Implement `r` in `internal/app` to satisfy Task 1: the reload request with its dropped duplicates, content revisions feeding the Issue #17 layout keying, failure replacement through the Issue #26 overlay component, the one-stop route, and the generic reload-anchor pending intent — preserve the anchor, no reveal — recorded when the reload's load completes and committed only when the new revision's matching prepared layout installs through the existing Issue #17 installation path. This pending-intent seam is owned by this issue so Task 1's anchor-preservation tests pass before Issue #28 begins; Issue #28 later generalizes the same seam into the full two-stage reveal-versus-reload arbitration for all load completions. Validation of original matches against new content is owned by Issue #29.
 
 ---
 
@@ -39,7 +39,7 @@ Implement `r` in `internal/app` to satisfy Task 1: the reload request with its d
 **Output**: Wiki documentation records the reload contract, dropped duplicates, content revisions, and the reload-anchor intent.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #27 implementation and tests into the appropriate pages under `Notes/wiki`. Document `r` rereading without rerunning the search or changing stops, the dropped-not-queued duplicate rule with the placeholder as the completion signal, anchor preservation clamped to new content and asserted through the matching layout, failure replacement with "(unreadable)", the one-stop retry route, intentional cache stability until `r`, content revisions and the superseded-layout discard, and the reload-anchor intent's two-stage commit. Cross-reference Issue #27 and the File loading, cache, reload, and selection consistency section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #27 implementation and tests into the appropriate pages under `Notes/wiki`. Document `r` rereading without rerunning the search or changing stops, the dropped-not-queued duplicate rule with the placeholder as the completion signal, anchor preservation clamped to new content and asserted through the matching layout, failure replacement with "(unreadable)", the one-stop retry route, intentional cache stability until `r`, content revisions and the superseded-layout discard, and the reload-anchor pending intent recorded on load completion and committed when the new revision's matching layout installs — the seam Issue #28 later generalizes. Cross-reference Issue #27 and the File loading, cache, reload, and selection consistency section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
 
 ---
 

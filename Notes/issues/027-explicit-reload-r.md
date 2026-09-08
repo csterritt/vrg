@@ -11,12 +11,12 @@
 
 - `r` rereads the current file from disk without rerunning rg. It never adds/removes cursor stops or discovers new matches. "Loading…" is shown during the reload.
 - Reload preserves the cursor and the logical viewport anchor (Issue 17), clamped to new content; reload alone does not reveal a match.
-- A failed reload replaces the old display with "(unreadable)" and shows the current-file failure overlay (Issue 26 component) — stale content is never presented as refreshed. A second consecutive `r` failure appends exactly one new diagnostic occurrence (Issue 32 append rule; reader position preserved) rather than replacing or duplicating earlier diagnostics.
+- A failed reload replaces the old display with "(unreadable)" and shows the current-file failure overlay (Issue 26 component) — stale content is never presented as refreshed. A second consecutive `r` failure appends exactly one new diagnostic occurrence (Issue 26's append-preserving-scroll primitive; reader position preserved) rather than replacing or duplicating earlier diagnostics.
 - A duplicate `r` (or re-entry) while a load for that path is in flight is dropped, not queued; there is no cancellation. The placeholder changing from "Loading…" to content or "(unreadable)" is the completion signal, after which `r` starts a new load.
 - `r` works even with a one-stop index (the only retry route there).
 - Cached content is intentionally stable until `r`; disk edits are not observed otherwise.
 - Filename row still identifies the path during reload.
-- A reload produces a new **content revision**. Prepared layouts keyed to the previous revision (Issue 17) that arrive after the reload completes are discarded; add the Issue 17 revision-superseded test here now that reload exists. Reload-anchor intent (preserve the anchor, no reveal) is recorded when the reload's load completes and commits only when the new revision's matching prepared layout installs — the two-stage commit contract owned by Issue 28.
+- A reload produces a new **content revision**. Prepared layouts keyed to the previous revision (Issue 17) that arrive after the reload completes are discarded; add the Issue 17 revision-superseded test here now that reload exists. Reload-anchor intent (preserve the anchor, no reveal) is recorded when the reload's load completes and commits only when the new revision's matching prepared layout installs through the existing Issue 17 installation path — a generic pending-intent seam owned by this issue, which Issue 28 later generalizes into the full two-stage reveal/arbitration contract for all load completions.
 
 Validation of original matches against new content ("file changed" note) is Issue 29.
 

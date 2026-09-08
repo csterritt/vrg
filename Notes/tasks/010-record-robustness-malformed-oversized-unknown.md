@@ -11,12 +11,12 @@ Parent PRD: PRD-vrg.md
 ### 1. Specify malformed-record dispositions
 
 **Type**: RED  
-**Output**: Failing table-driven tests cover one fixture per row of the Issue #3 schema matrix and the Issue #9 lifecycle matrix, each asserting its stated disposition, plus resynchronization after a skip.  
+**Output**: Failing table-driven tests cover one fixture per row of the Issue #3 schema matrix and the Issue #9 lifecycle matrix, each asserting its stated disposition, dedicated fixtures for both composite malformed-and-integrity rows asserted in both counters, plus resynchronization after a skip.  
 **Depends on**: none
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md`.
 
-Begin only after Issue #9 is complete. Add failing table-driven tests in `internal/searchindex` asserting the deterministic disposition — skipped-and-counted malformed, stream-integrity failure, or both — for every row of the Issue #3 per-record schema matrix (each missing or wrongly typed required field, and each invalid range including `line_number` zero, negative, or non-integer, `start > end`, negative `start`, `end` beyond the decoded line bytes, negative `binary_offset`, and an empty `submatches` array) and every integrity row of the Issue #9 lifecycle matrix (duplicate `begin`, orphaned `match` and `end`, `match` after `end`, second `summary`, and a record after `summary`), plus invalid JSON, invalid base64, and missing or non-string `type`. Require a malformed record between valid ones to be skipped, counted, and followed by correct indexing of the remaining records, with lifecycle violations never inflating the malformed count and vice versa except where the matrices mark both. Keep this task test-only.
+Begin only after Issue #9 is complete. Add failing table-driven tests in `internal/searchindex` asserting the deterministic disposition — skipped-and-counted malformed, stream-integrity failure, or both — for every row of the Issue #3 per-record schema matrix (each missing or wrongly typed required field, and each invalid range including `line_number` zero, negative, or non-integer, `start > end`, negative `start`, `end` beyond the decoded line bytes, negative `binary_offset`, and an empty `submatches` array) and every integrity row of the Issue #9 lifecycle matrix (duplicate `begin`, orphaned `match` and `end`, `match` after `end`, second `summary`, and a record after `summary`), plus invalid JSON, invalid base64, and missing or non-string `type`. Require a malformed record between valid ones to be skipped, counted, and followed by correct indexing of the remaining records, with lifecycle violations never inflating the malformed count and vice versa except where the matrices mark both. Give both composite rows dedicated fixtures distinct from the oversized cases of Task 3: an ordinary, non-oversized trailing record without a terminating newline, asserted both skipped-and-counted malformed and marked stream-incomplete; and a malformed record appearing after a valid `summary`, asserted both counted malformed and an after-`summary` integrity failure — with both counters and the incomplete-stream status asserted in each. Keep this task test-only.
 
 ---
 
@@ -28,7 +28,7 @@ Begin only after Issue #9 is complete. Add failing table-driven tests in `intern
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md`.
 
-Implement per-record validation and skip/count accounting in `internal/searchindex` to satisfy Task 1, keeping malformed counts separate from integrity failures except in the two cases the matrices mark both, and keeping a safely skipped match record from by itself making otherwise intact lifecycle metadata incomplete.
+Implement per-record validation and skip/count accounting in `internal/searchindex` to satisfy Task 1, keeping malformed counts separate from integrity failures except in the two cases the matrices mark both, routing validation so after-`summary` positioning does not suppress malformed accounting and a trailing unterminated record's malformed accounting does not disappear into a generic decode failure, and keeping a safely skipped match record from by itself making otherwise intact lifecycle metadata incomplete.
 
 ---
 
