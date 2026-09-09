@@ -1,6 +1,6 @@
 # PRD: VRG — Terminal UI for ripgrep
 
-Revision 5. Supersedes revision 4 and reconciles the `Esc` termination rule with the outcome table per `Notes/critiques/PRD-tasks-critique-2.md` (finding F2). This document specifies version 1; acknowledged limitations are not promises of future features.
+Revision 6. Supersedes revision 5 and adds `github.com/jawher/mow.cli` for command-line parsing and built-in help, with help shown by default when invoked without arguments. Retains revision 5's reconciliation of the `Esc` termination rule with the outcome table per `Notes/critiques/PRD-tasks-critique-2.md` (finding F2). This document specifies version 1; acknowledged limitations are not promises of future features.
 
 ## Problem Statement
 
@@ -8,7 +8,7 @@ Developers use ripgrep (`rg`) to find text across a directory tree, then need to
 
 ## Solution
 
-A terminal application, `vrg`, invoked as `vrg [flags] pattern [root]`. The search root defaults to `.` and may be a directory or a regular file, but not stdin. VRG runs ripgrep, collects its JSON results, and then presents a file list on the left and the current file's contents on the right, with matches highlighted.
+A terminal application, `vrg`, invoked as `vrg [flags] pattern [root]`. The search root defaults to `.` and may be a directory or a regular file, but not stdin. Invoking `vrg` without arguments, or requesting `-h`/`--help`, displays command-line usage and help without starting ripgrep or entering the TUI. For a valid search invocation, VRG runs ripgrep, collects its JSON results, and then presents a file list on the left and the current file's contents on the right, with matches highlighted.
 
 Users navigate matched lines with `n`/`p`, scroll through full file contents, toggle wrapping and colour scheme, and consult modal help. Navigation reveals the first match on the destination line, even when that source line wraps across many screens. Partial results remain browsable. Unsupported encodings and unreadable files have explicit placeholders. Collected diagnostics remain recoverable through safe stderr replay after terminal restoration.
 
@@ -18,7 +18,7 @@ Users navigate matched lines with `n`/`p`, scroll through full file contents, to
 
 1. As a user, I want `vrg [flags] pattern [root]` to search a directory or regular file, so that I can browse either a tree or one file.
 2. As a user, I want the root to default to `.`, so that searching the current directory needs no extra typing.
-3. As a user, I want missing patterns, excess operands, unsupported flags, and invalid roots reported with sanitized usage diagnostics on stderr and exit status 2 before entering the TUI, so that invocation mistakes are clear.
+3. As a user, I want bare `vrg` and `-h`/`--help` to show command-line help on stdout and exit 0 without starting ripgrep or entering the TUI, while other missing-pattern invocations, excess operands, unsupported flags, and invalid roots produce sanitized usage diagnostics on stderr and exit 2, so that I can discover usage and distinguish help from invocation mistakes.
 4. As a user, I want the documented no-argument ripgrep flags and combined short flags accepted, so that familiar search controls work predictably.
 5. As a user, I want options accepted anywhere before `--` and forwarded in their original order, so that ripgrep resolves conflicting options consistently.
 6. As a user, I want `--` to end option parsing and protect dash-leading patterns in the child invocation, so that those patterns are not mistaken for flags.
@@ -124,10 +124,12 @@ Users navigate matched lines with `n`/`p`, scroll through full file contents, to
 
 ### Invocation and child arguments
 
-- Syntax: `vrg [flags] pattern [root]`; root defaults to `.`. Options may occur anywhere before `--`. The first positional is the pattern and the second is the root. Missing pattern or more than two positionals is a usage error.
-- The allow-list contains only no-argument user flags: `-i/--ignore-case`, `-S/--smart-case`, `-s/--case-sensitive`, `-w/--word-regexp`, `-x/--line-regexp`, `-F/--fixed-strings`, `--hidden`, `--no-hidden`, `--no-ignore`, `-u/--unrestricted`, and `-L/--follow`.
+- Use `github.com/jawher/mow.cli` for command-line parsing and generated usage/help. Configure or adapt its integration to preserve the option placement, ordered forwarding, combined-short-flag, and sanitization contracts below rather than relying on library defaults to match them.
+- Syntax: `vrg [flags] pattern [root]`; root defaults to `.`. Options may occur anywhere before `--`. The first positional is the pattern and the second is the root. Except for the help-only paths below, missing pattern or more than two positionals is a usage error.
+- With no command-line arguments, display the library-generated help on stdout and exit 0. Also provide built-in `-h`/`--help` as local help options before `--`; they are never forwarded to ripgrep. Help describes syntax, the required pattern, optional root and its default, and supported flags. Help-only paths do not validate a root, start ripgrep, or initialize the TUI, and work even when ripgrep is unavailable. This command-line help is separate from the TUI's `h`/`?` key-binding dialog. A nonempty invocation missing its pattern (for example, `vrg -i`) remains a usage error unless help is requested.
+- The search-flag forwarding allow-list contains only no-argument user flags: `-i/--ignore-case`, `-S/--smart-case`, `-s/--case-sensitive`, `-w/--word-regexp`, `-x/--line-regexp`, `-F/--fixed-strings`, `--hidden`, `--no-hidden`, `--no-ignore`, `-u/--unrestricted`, and `-L/--follow`.
 - Expand combined short flags in their original order. Count unrestricted occurrences across all tokens, including long forms. Zero through two are allowed; a third or later occurrence is a usage error. Thus `-uu` is allowed, while `-uuu`, `-u -uu`, and equivalent combinations are rejected.
-- Reject every other user option, including argument-taking options and `-e`. Preserve accepted option order and let ripgrep resolve interactions; vrg does not normalize contradictory settings.
+- Apart from local `-h`/`--help`, reject every other user option, including argument-taking options and `-e`. Preserve accepted option order and let ripgrep resolve interactions; vrg does not normalize contradictory settings.
 - `--` ends vrg option parsing. A dash-leading pattern other than the lone positional `-` requires `--`; otherwise it is parsed as an option and rejected if unsupported. A literal pattern `-` is valid. A root `-` is rejected as stdin; an actual file named `-` can be addressed as `./-`.
 - Validate the root as an existing directory or regular file before starting rg. Symlinks resolving to either are accepted; stdin, special-file roots, nonexistent roots, and failed root validation produce sanitized usage diagnostics and exit 2 without a TUI. Disk changes after validation remain possible and are handled as search/load errors.
 - Child argument order: mandatory internal flags, ordered user flags, `--`, pattern, root. Mandatory flags are `--json` and `--no-config`. There is **no forced raw-encoding flag**: rg's default BOM detection remains enabled.
@@ -157,6 +159,7 @@ Apply this table top to bottom; cancellation overrides a completed outcome when 
 |---|---|---|---|
 | `ctrl+c` in any state | Cancel work, terminate child, restore terminal | No further screen | 130 |
 | `q` while searching/result preparation is incomplete | Same cancellation/cleanup | No further screen | 130 |
+| No arguments or command-line help requested | Usage/help on stdout, no child or TUI | Not applicable | 0 |
 | Usage/root validation or process start failure | Sanitized stderr, no TUI | Not applicable | 2 |
 | rg exits other than 0/1, dies by signal, or stream integrity fails; usable results exist | Browse with error overlay | Browse | 2 |
 | Same fatal conditions; no usable results | Error overlay | Exit | 2 |
@@ -261,8 +264,8 @@ Exact Go signatures and internal data structures are provisional. Stable contrac
 
 ### CLI
 
-- **Responsibility**: Validate invocation and produce the protected ripgrep argument vector.
-- **Interface**: Inputs: arguments and root-validation environment. Outputs: pattern, raw root, ordered expanded user flags, child arguments, or a sanitized usage error. Enforce cumulative unrestricted count, accepted root types, option placement, and mandatory internal flags. Failures: arity, unsupported flag, excessive unrestricted flags, invalid root.
+- **Responsibility**: Own command-line parsing and generated help through `github.com/jawher/mow.cli`, validate search invocations, and produce the protected ripgrep argument vector.
+- **Interface**: Inputs: arguments and root-validation environment. Outputs: a help-only result (safe generated help for stdout, exit 0), pattern/raw root/ordered expanded user flags/child arguments for a search, or a sanitized usage error (stderr, exit 2). No arguments and local `-h`/`--help` take the help-only path without root validation, child startup, or TUI initialization. Enforce cumulative unrestricted count, accepted root types, option placement, and mandatory internal flags. Failures: arity outside help-only paths, unsupported flag, excessive unrestricted flags, invalid root.
 - **Tested**: yes.
 
 ### SearchIndex
@@ -299,7 +302,7 @@ Exact Go signatures and internal data structures are provisional. Stable contrac
 
 Tests assert external behavior and stable contracts, not private representation. Use deterministic fixture bytes/JSON and injected messages; drive timers with explicit instance IDs. No screenshot suite or sleep-based synchronization. There is no existing Go test prior art in this greenfield repository; follow Bubble Tea's message-driven model testing style.
 
-- **CLI**: optional root; directory/regular file/symlink roots; stdin and special-file rejection; literal `-` pattern; dash-leading operands and protected child argv; options after pattern; `--`; every accepted/rejected flag; combined flags; cumulative `-u` across mixed short/long tokens; preserved precedence order; invalid roots/arity and sanitized errors.
+- **CLI**: no arguments and explicit `-h`/`--help` produce usage/help on stdout and exit 0 without root validation, child startup, or TUI initialization, including when rg is unavailable; help documents syntax, root default, and supported flags; flags-only missing-pattern invocations remain stderr usage errors with exit 2; local help flags are not forwarded and are treated as operands after `--`; generated help and parser diagnostics obey output sanitization; optional root; directory/regular file/symlink roots; stdin and special-file rejection; literal `-` pattern; dash-leading operands and protected child argv; options after pattern; `--`; every accepted/rejected flag; combined flags; cumulative `-u` across mixed short/long tokens; preserved precedence order; invalid roots/arity and sanitized errors.
 - **SearchIndex**: `text`/`bytes` paths, lines, and submatches; duplicate same-line matches; raw-byte sorting and display collisions; binary exclusion after earlier matches; malformed JSON/schema/base64/ranges; unknown types versus known context; missing/orphaned/malformed end and summary; valid empty summary; death between complete records; trailing unterminated record; records at and beyond 64 MiB with resynchronization; single-stop no-op and circular navigation.
 - **SearchIndex (oversized records)**: oversized `match` record with recoverable `data.path` reports the sanitized path; oversized record with the limit hit before the path is parsed reports count only; a file whose only records were oversized is absent from the file list while its path appears in the diagnostic.
 - **FileBuffer**: LF/CRLF, no final newline, empty file, tabs, wide/combining/standalone combining clusters, partial-grapheme matches, control escapes, invalid UTF-8, leading UTF-8 BOM offset correction and invisible display, UTF-16/32 placeholders, stale out-of-bounds and same-length text replacement, surviving versus entirely dropped spans, reload clearing/preserving stale note, zero-width positions at beginning/end/empty lines and removed terminators; a `$`-only match on `hit\r\n` yields one marker cell at display column 3 with the same extent, wrap, clip, and indicator behavior as any other end-of-line marker. Verify bounds against original/search bytes rather than stripped display text.
@@ -316,7 +319,7 @@ Tests assert external behavior and stable contracts, not private representation.
 
 - Interactive pattern entry, search-as-you-type, or rerunning the search inside the TUI. `r` reloads disk content only.
 - Direct file-list selection, mouse support, editing, launching an editor, saving/exporting results.
-- User flags outside the allow-list, including argument-taking flags, multiline search, context controls, encodings, type/glob controls, count/files/quiet/invert modes, preprocessing, compressed-file searching, and a third unrestricted flag.
+- Search flags outside the forwarding allow-list (local `-h`/`--help` are supported separately), including argument-taking flags, multiline search, context controls, encodings, type/glob controls, count/files/quiet/invert modes, preprocessing, compressed-file searching, and a third unrestricted flag.
 - Reading search input from stdin or accepting a special-file search root.
 - Honouring ripgrep configuration; persistent preferences or diagnostic logs.
 - Streaming results into browsing before search completion.
@@ -337,7 +340,7 @@ Exact Go signatures, message payloads, and the grapheme-mapping representation r
 
 ## Further Notes
 
-- Greenfield Go project using Bubble Tea, Bubbles, and Lip Gloss. ripgrep 15.x is the reference family; local 15.2.0 checks confirmed default UTF-16 transcoding, UTF-8 BOM removal, CRLF end-position offsets, and cumulative unrestricted semantics.
+- Greenfield Go project using Bubble Tea, Bubbles, and Lip Gloss, with `github.com/jawher/mow.cli` for command-line parsing and generated help. ripgrep 15.x is the reference family; local 15.2.0 checks confirmed default UTF-16 transcoding, UTF-8 BOM removal, CRLF end-position offsets, and cumulative unrestricted semantics.
 - Startup defaults: dark scheme, wrapping on, file list requested visible, first matched line selected and its first match revealed, horizontal offset initially zero.
 - Retained refinements from earlier interviews: optional root; restricted flag forwarding; matched-line rather than submatch navigation; circular ordering; passive list; per-file vertical state; inverse colours and current-match underline; modal help/errors; non-streaming results.
 - Revision-3 changes include a regular-file root, explicit reload, 40% list cap with minimum-content reservation, target-row reveal, width-independent anchors with acknowledged EOF loss, complete outcomes/cancellation, async selection isolation, match-text validation, encoding placeholders, consistent marker/grapheme mapping, raw path identity, safe all-diagnostic replay, and resource qualifications.

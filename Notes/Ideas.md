@@ -2,6 +2,7 @@
 
 - TUI, using bubbletea, bubbles, lipgloss
 - invoked with a pattern and an optional directory ('.' default dir)
+- use github.com/jawher/mow.cli for command-line parsing and built-in help; invoking vrg with no command-line arguments shows help by default without starting the search or TUI
 - runs, as a subprocess, 'rg --json pattern dir'
 - collects results, sorts them on path text
 - show two panels:
