@@ -21,7 +21,7 @@ See PRD *Layout and indicators* (indicator bullets) and *Further Notes* (asymmet
 ### How to verify
 
 - **Manual**: `w` to run-off-edge in a file with several long matched lines; pan right → `_` appears on lines with hidden text, `*` on lines whose match is fully hidden; on the current matched line with a second match far right, `*` appears in the last column; pan so a match is half visible → no star for that side.
-- **Automated**: rendering tests for: `_` vs `*` per line; right `*` only on the current line; current line off-screen → no right marker; both sides hidden; partial visibility → no marker; a match in the last text cell with another farther right → right `*`; split-wide-glyph blanks not counted as visible; wrap mode draws no indicators and no reserved column.
+- **Automated**: rendering tests for: `_` vs `*` per line; right `*` only on the current line; current line off-screen → no right marker; both sides hidden; partial visibility → no marker; a match in the last text cell with another farther right → right `*`; split-wide-glyph blanks not counted as visible; a uniform-lines fixture where every visible line has hidden-left text at a nonzero offset shows `_` on every visible line — permitted, since the pan clamp's painted-cluster guarantee (Issue 18) constrains painted cells, not indicator counts; wrap mode draws no indicators and no reserved column.
 
 ### Acceptance criteria
 

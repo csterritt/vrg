@@ -19,7 +19,7 @@ See PRD *Colours, overlays, and key precedence* (first bullet) and *Module Desig
 
 ### How to verify
 
-- **Manual**: run `vrg`, press `c`; background/foreground swap, matches remain inverse, current-line matches underlined; press `c` again to return.
+- **Manual**: run a search against a fixture with matches (for example `vrg func .` in a Go repository, as in Issue 5), wait for the browse view, then press `c`; background/foreground swap, matches remain inverse, current-line matches underlined; press `c` again to return. (Bare `vrg` prints command-line help and exits; it cannot demonstrate theme switching.)
 - **Automated**: Theme tests assert both schemes' foreground/background pairs, that match style is the true inverse in each scheme, current-match style adds underline, current-file style is underlined, overlay style uses base colours. App test: `c` toggles `View()` styling between schemes.
 
 ### Acceptance criteria

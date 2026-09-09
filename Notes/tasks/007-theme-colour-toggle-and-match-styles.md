@@ -48,6 +48,6 @@ Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/007-04/code-walkthrough`.  
 **Depends on**: 3
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/007-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the Theme unit tests for both schemes and the App toggle test, then run the binary and press `c` to show the background and foreground swapping with matches still inverse and current-line matches underlined, and `c` again to return. Reference Issue #7 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/007-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the Theme unit tests for both schemes and the App toggle test, then run the binary with a search invocation against a fixture with matches — for example `vrg func .` in a Go repository, as in Issue #5 — and press `c` to show the background and foreground swapping with matches still inverse and current-line matches underlined, and `c` again to return (bare `vrg` prints command-line help and exits, so it cannot demonstrate theme switching). Reference Issue #7 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 
 ---
