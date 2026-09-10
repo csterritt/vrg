@@ -1,6 +1,6 @@
 # Wiki Agent Schema
 
-Schema and conventions for maintaining the `Sqloid` project wiki.
+Schema and conventions for maintaining the `vrg` project wiki.
 
 ## Role
 
@@ -59,4 +59,4 @@ Periodically health-check the wiki:
 
 ## Scope
 
-This wiki covers the Sqloid project: a Go terminal application for browsing and editing SQLite databases (including local Cloudflare D1 databases) using Bubble Tea/Lip Gloss for the TUI, `mow.cli` for command parsing, and the pure-Go `modernc.org/sqlite` driver.
+This wiki covers the vrg project: a Go terminal UI for browsing ripgrep results, using the Charm v2 stack (Bubble Tea/Bubbles/Lip Gloss under `charm.land/`) for the TUI and `github.com/jawher/mow.cli` for command-line parsing.
