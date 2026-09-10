@@ -13,11 +13,13 @@ CLI*, *Outcome and exit-status contract*, *Testing Decisions → CLI*.
 `cli.Parse(args, out, env)` returns a `cli.Result` with an explicit
 `Kind`: `KindHelp`, `KindSearch`, or `KindUsageError`. Callers never see
 library types. `cmd/vrg` is a thin boundary that maps kinds to streams and
-statuses: help → stdout, exit 0; search → escaped stub, exit 0; usage
-error → sanitized single-line diagnostic **followed by the generated
-usage block** (`cli.HelpText()`) on stderr, exit 2 — matching standard
-mow.cli behavior of printing usage after an error, with only module text
-on the stream.
+statuses: help → stdout, exit 0; search → escaped child-argv stub
+(`search stub: argv=rg …`), exit 0; usage error → sanitized single-line
+diagnostic **followed by the generated usage block** (`cli.HelpText()`)
+on stderr, exit 2 — matching standard mow.cli behavior of printing usage
+after an error, with only module text on the stream. Issue #2 added the
+search-flag allow-list and the child-argv contract; see
+[cli-flag-forwarding.md](cli-flag-forwarding.md).
 
 The library application is built with the fixed name `"vrg"` (never
 `os.Args[0]`) and `ErrorHandling = flag.ContinueOnError`, so `Run` returns
@@ -50,9 +52,10 @@ every call, the module prevents every emission:
 `optionDecls` and `argDecls` are one table feeding three consumers:
 mow.cli configuration (`Spec`, `BoolOptPtr`, `StringArgPtr`), raw-token
 recognition, and generated help — so the parser, the scan, and the help
-text cannot drift. Issue 2 extends the same table and the same scan to
+text cannot drift. Issue #2 extended the same table and the same scan to
 record allow-listed search-flag spellings in encounter order for child
-argv, instead of maintaining a separate allow-list.
+argv, instead of maintaining a separate allow-list; see
+[cli-flag-forwarding.md](cli-flag-forwarding.md).
 
 ## Help contract
 
@@ -63,12 +66,15 @@ argv, instead of maintaining a separate allow-list.
 - Help wins over missing-pattern, excess-operand, unsupported-option, and
   invalid-root conditions.
 - Help content: `Usage: vrg [OPTIONS] PATTERN [ROOT]`, the required
-  pattern, the optional root with `(default ".")`, and `-h, --help`.
-  This is command-line help, distinct from the TUI key-binding overlay
-  (Issue #31).
-- Assignment spellings `--help=false`/`-h=false` are **not** help
-  requests; `--help=true`/`-h=true` parse and still produce help-only via
-  the parsed-value check.
+  pattern, the optional root with `(default ".")`, and every declared
+  option — `-h, --help` plus the Issue #2 allow-listed search flags in
+  short and long form. This is command-line help, distinct from the TUI
+  key-binding overlay (Issue #31).
+- Assignment spellings are resolved lexically: `--help=true`/`-h=true`
+  pass the scan, parse into the help value, and still produce help-only;
+  falsy or invalid help assignments (`--help=false`, `-h=false`,
+  `--help=maybe`) are `ErrUnsupportedOption` usage errors under Issue
+  #2's no-argument contract.
 
 ## Positionals, `--`, and root validation
 

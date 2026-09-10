@@ -148,6 +148,11 @@ func TestGeneratedHelpStdout(t *testing.T) {
 		{"foo", "bar", "baz", "--help"},
 		{"-i", "--help"},
 		{"-ih"},
+		{"-ih", "foo"},
+		{"--ignore-case", "--help"},
+		{"foo", "src", "--help"},
+		{"-uuu", "--help"},
+		{"--ignore-case=false", "--help"},
 		{"--unsupported", "--help"},
 		{"foo", "/nonexistent", "--help"},
 	}
@@ -280,15 +285,15 @@ func TestExecutableBoundary(t *testing.T) {
 	}
 
 	res := runVrg(t, "foo")
-	if !strings.Contains(res.stdout, `root="."`) && !strings.Contains(res.stdout, "root=.") {
-		t.Fatalf("default root missing from stub output: %q", res.stdout)
+	if want := "search stub: argv=rg --json --no-config -- foo .\n"; res.stdout != want {
+		t.Fatalf("stub did not print the child argv: got %q, want %q", res.stdout, want)
 	}
 
 	errorCases := [][]string{
 		{"--"},            // missing pattern
 		{"a", "b", "c"},   // excess operands
 		{"--unsupported"}, // unsupported option
-		{"foo", "-x"},     // unsupported short option
+		{"foo", "-e"},     // unsupported short option
 		{"foo", "/nonexistent-vrg-root"},
 		{"foo", "-"}, // stdin root
 		{"foo", "/dev/null"},
@@ -322,16 +327,83 @@ func TestDashFileRootAtProcessBoundary(t *testing.T) {
 	}
 }
 
-// Help assignment spellings that disable help are not help requests: no
-// help reaches stdout. The eventual status is Issue 2's and is not pinned.
+// Help assignment spellings that disable help are not help requests:
+// Issue 2 rejects them lexically as usage errors with nothing on stdout.
 func TestHelpAssignmentSpellingsAreNotHelp(t *testing.T) {
 	for _, args := range [][]string{
 		{"foo", "--help=false"},
 		{"foo", "-h=false"},
 	} {
-		res := runVrg(t, args...)
-		if strings.Contains(res.stdout, "Usage:") {
-			t.Fatalf("vrg %v emitted help for a help-disabling spelling: %q", args, res.stdout)
-		}
+		assertUsageError(t, runVrg(t, args...), args)
+	}
+}
+
+// The success stub prints the exact protected child argv: the mandatory
+// internal flags, the user's spellings in encounter order with combined
+// shorts expanded, the terminator, then pattern and root.
+func TestChildArgv(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"plain pattern", []string{"foo"}, "search stub: argv=rg --json --no-config -- foo .\n"},
+		{"combined shorts with root", []string{"-iw", "foo", dir}, "search stub: argv=rg --json --no-config -i -w -- foo " + dir + "\n"},
+		{"option after pattern", []string{"foo", "-i", dir}, "search stub: argv=rg --json --no-config -i -- foo " + dir + "\n"},
+		{"repeated and mixed options", []string{"-i", "-s", "-i", "foo"}, "search stub: argv=rg --json --no-config -i -s -i -- foo .\n"},
+		{"combined repetition", []string{"-isi", "foo"}, "search stub: argv=rg --json --no-config -i -s -i -- foo .\n"},
+		{"combined three kinds", []string{"-iwF", "foo"}, "search stub: argv=rg --json --no-config -i -w -F -- foo .\n"},
+		{"long and short aliases", []string{"--ignore-case", "-s", "-i", "foo"}, "search stub: argv=rg --json --no-config --ignore-case -s -i -- foo .\n"},
+		{"options interleaved with both operands", []string{"foo", "-i", dir, "-s"}, "search stub: argv=rg --json --no-config -i -s -- foo " + dir + "\n"},
+		{"unrestricted mixed aliases", []string{"-u", "--unrestricted", "foo"}, "search stub: argv=rg --json --no-config -u --unrestricted -- foo .\n"},
+		{"unrestricted pair in one token", []string{"-iuu", "foo"}, "search stub: argv=rg --json --no-config -i -u -u -- foo .\n"},
+		{"empty pattern verbatim", []string{"", "."}, "search stub: argv=rg --json --no-config --  .\n"},
+		{"literal dash pattern", []string{"-", "."}, "search stub: argv=rg --json --no-config -- - .\n"},
+		{"dash-leading pattern", []string{"--", "-foo"}, "search stub: argv=rg --json --no-config -- -foo .\n"},
+		{"literal -- pattern", []string{"--", "--"}, "search stub: argv=rg --json --no-config -- -- .\n"},
+		{"literal -- pattern explicit root", []string{"--", "--", dir}, "search stub: argv=rg --json --no-config -- -- " + dir + "\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := runVrg(t, tc.args...)
+			if res.code != 0 {
+				t.Fatalf("vrg %v exited %d, want 0 (stderr %q)", tc.args, res.code, res.stderr)
+			}
+			if res.stderr != "" {
+				t.Fatalf("vrg %v: stderr not empty: %q", tc.args, res.stderr)
+			}
+			if res.stdout != tc.want {
+				t.Fatalf("vrg %v: stdout = %q, want %q", tc.args, res.stdout, tc.want)
+			}
+		})
+	}
+}
+
+// Flag-contract usage failures at the process boundary: unsupported and
+// argument-taking options, the third cumulative unrestricted occurrence,
+// and boolean assignment spellings all exit 2 with a sanitized diagnostic
+// and the generated usage block on stderr.
+func TestFlagContractUsageErrors(t *testing.T) {
+	for _, args := range [][]string{
+		{"-e", "foo"},
+		{"--type", "go", "foo"},
+		{"--max-count=3", "foo"},
+		{"-uuu", "foo"},
+		{"-u", "-uu", "foo"},
+		{"-iuuu", "foo"},
+		{"-u", "--unrestricted", "-u", "foo"},
+		{"--unrestricted", "-uu", "foo"},
+		{"--ignore-case=false", "foo"},
+		{"-i=false", "foo"},
+		{"--unrestricted=false", "foo"},
+		{"--help=false", "foo"},
+		{"-h=false", "foo"},
+		{"-foo"},
+		{"-i"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			assertUsageError(t, runVrg(t, args...), args)
+		})
 	}
 }

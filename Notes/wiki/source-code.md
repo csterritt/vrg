@@ -7,17 +7,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 - `cmd/vrg/main.go` — thin process boundary. `run` calls `cli.Parse` with
   `os.Stat` injected and maps the explicit result kind to stream/status:
   help → exit 0 (help already on stdout), search → escaped stub line
-  (`search stub: pattern=… root=…`), exit 0, usage error → sanitized
-  diagnostic on stderr, exit 2.
+  (`search stub: argv=rg …` printing `Result.ChildArgs`), exit 0, usage
+  error → sanitized diagnostic on stderr, exit 2.
 
 ## internal/cli
 
-- `internal/cli/cli.go` — the Issue #1 CLI foundation and the sole
-  `mow.cli` v1.2.0 adapter. Contains the shared `optionDecls`/`argDecls`
-  table (parser config + raw-token recognition + generated help), the
-  ordered `scanArgs` preflight, `renderHelp`, `checkRoot`, the `Escape`
+- `internal/cli/cli.go` — the Issue #1 CLI foundation, the Issue #2
+  search-flag allow-list and child-argv contract, and the sole `mow.cli`
+  v1.2.0 adapter. Contains the shared `optionDecls`/`argDecls` table
+  (parser config + raw-token recognition + generated help), the ordered
+  `scanArgs`/`scanOption` preflight with ordered flag records and the
+  cumulative `-u` count, `renderHelp`, `checkRoot`, the `Escape`
   sanitizer, and the `Result`/`Kind`/`ErrorKind`/`Env` contract.
-  See [cli-foundation.md](cli-foundation.md).
+  See [cli-foundation.md](cli-foundation.md) and
+  [cli-flag-forwarding.md](cli-flag-forwarding.md).
 
 ## Package boundaries awaiting their issues
 
