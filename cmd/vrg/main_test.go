@@ -99,8 +99,8 @@ func assertHelpRun(t *testing.T, res runResult, args []string) {
 	if res.stderr != "" {
 		t.Fatalf("vrg %v: stderr not empty: %q", args, res.stderr)
 	}
-	if strings.Contains(res.stdout, "search stub:") {
-		t.Fatalf("vrg %v: help path produced stub output: %q", args, res.stdout)
+	if strings.Contains(res.stdout, "Searching") {
+		t.Fatalf("vrg %v: help path produced search output: %q", args, res.stdout)
 	}
 	for _, s := range []string{res.stdout, res.stderr} {
 		if strings.Contains(s, "\x1b[?1049") || strings.Contains(s, "\x9b") {
@@ -225,70 +225,12 @@ func TestCLIOutputSafety(t *testing.T) {
 	if strings.Contains(res.stderr, "\x1b") {
 		t.Fatalf("raw escape byte reached stderr: %q", res.stderr)
 	}
-
-	// The success stub escapes its substitutions too.
-	res = runVrg(t, "pa\x1b[31mt", ".")
-	if res.code != 0 {
-		t.Fatalf("stub run exited %d: %q", res.code, res.stderr)
-	}
-	if strings.Contains(res.stdout, "\x1b") {
-		t.Fatalf("raw escape byte reached stdout stub: %q", res.stdout)
-	}
-	if !strings.Contains(res.stdout, "^[") {
-		t.Fatalf("stub did not show the escaped pattern: %q", res.stdout)
-	}
 }
 
 // The executable boundary: cmd/vrg alone chooses statuses and streams.
+// Search cases are covered by subprocess tests in search_test.go; this
+// test covers the usage-error boundary at the process level.
 func TestExecutableBoundary(t *testing.T) {
-	dir := t.TempDir()
-	file := filepath.Join(dir, "file")
-	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	subdir := filepath.Join(dir, "sub")
-	if err := os.Mkdir(subdir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	linkDir := filepath.Join(dir, "linkdir")
-	if err := os.Symlink(subdir, linkDir); err != nil {
-		t.Fatal(err)
-	}
-
-	searchCases := []struct {
-		name string
-		args []string
-	}{
-		{"default root", []string{"foo"}},
-		{"explicit dir", []string{"foo", subdir}},
-		{"regular file", []string{"foo", file}},
-		{"symlink root", []string{"foo", linkDir}},
-		{"empty pattern", []string{"", "."}},
-		{"literal dash pattern", []string{"-", "."}},
-		{"help-like operand", []string{"--", "--help"}},
-		{"-h operand", []string{"--", "-h"}},
-		{"literal -- operand", []string{"--", "--"}},
-	}
-	for _, tc := range searchCases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := runVrg(t, tc.args...)
-			if res.code != 0 {
-				t.Fatalf("vrg %v exited %d, want 0 (stderr %q)", tc.args, res.code, res.stderr)
-			}
-			if res.stderr != "" {
-				t.Fatalf("vrg %v: stderr not empty: %q", tc.args, res.stderr)
-			}
-			if !strings.Contains(res.stdout, "search stub:") {
-				t.Fatalf("vrg %v: missing stub output: %q", tc.args, res.stdout)
-			}
-		})
-	}
-
-	res := runVrg(t, "foo")
-	if want := "search stub: argv=rg --json --no-config -- foo .\n"; res.stdout != want {
-		t.Fatalf("stub did not print the child argv: got %q, want %q", res.stdout, want)
-	}
-
 	errorCases := [][]string{
 		{"--"},            // missing pattern
 		{"a", "b", "c"},   // excess operands
@@ -306,7 +248,7 @@ func TestExecutableBoundary(t *testing.T) {
 	}
 
 	// stdin rejection must name stdin.
-	res = runVrg(t, "foo", "-")
+	res := runVrg(t, "foo", "-")
 	if !strings.Contains(res.stderr, "stdin") && !strings.Contains(res.stderr, "standard input") {
 		t.Fatalf("stdin root diagnostic does not name stdin: %q", res.stderr)
 	}
@@ -318,12 +260,18 @@ func TestDashFileRootAtProcessBoundary(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "-"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res := runVrgIn(t, dir, "foo", "./-")
-	if res.code != 0 {
-		t.Fatalf(`vrg foo ./- exited %d, want 0 (stderr %q)`, res.code, res.stderr)
+	fakeDir := t.TempDir()
+	writeFakeRG(t, fakeDir, "")
+	handshakeFile := filepath.Join(t.TempDir(), "handshake")
+	cmd := exec.Command(binPath, "foo", "./-")
+	cmd.Dir = dir
+	cmd.Env = []string{
+		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
+		"VRG_TEST_HANDSHAKE=" + handshakeFile,
 	}
-	if !strings.Contains(res.stdout, "search stub:") {
-		t.Fatalf("missing stub output: %q", res.stdout)
+	_, _, exitCode := runVrgWithQuit(t, cmd, handshakeFile)
+	if exitCode != 0 {
+		t.Fatalf(`vrg foo ./- exited %d, want 0`, exitCode)
 	}
 }
 
@@ -335,48 +283,6 @@ func TestHelpAssignmentSpellingsAreNotHelp(t *testing.T) {
 		{"foo", "-h=false"},
 	} {
 		assertUsageError(t, runVrg(t, args...), args)
-	}
-}
-
-// The success stub prints the exact protected child argv: the mandatory
-// internal flags, the user's spellings in encounter order with combined
-// shorts expanded, the terminator, then pattern and root.
-func TestChildArgv(t *testing.T) {
-	dir := t.TempDir()
-	cases := []struct {
-		name string
-		args []string
-		want string
-	}{
-		{"plain pattern", []string{"foo"}, "search stub: argv=rg --json --no-config -- foo .\n"},
-		{"combined shorts with root", []string{"-iw", "foo", dir}, "search stub: argv=rg --json --no-config -i -w -- foo " + dir + "\n"},
-		{"option after pattern", []string{"foo", "-i", dir}, "search stub: argv=rg --json --no-config -i -- foo " + dir + "\n"},
-		{"repeated and mixed options", []string{"-i", "-s", "-i", "foo"}, "search stub: argv=rg --json --no-config -i -s -i -- foo .\n"},
-		{"combined repetition", []string{"-isi", "foo"}, "search stub: argv=rg --json --no-config -i -s -i -- foo .\n"},
-		{"combined three kinds", []string{"-iwF", "foo"}, "search stub: argv=rg --json --no-config -i -w -F -- foo .\n"},
-		{"long and short aliases", []string{"--ignore-case", "-s", "-i", "foo"}, "search stub: argv=rg --json --no-config --ignore-case -s -i -- foo .\n"},
-		{"options interleaved with both operands", []string{"foo", "-i", dir, "-s"}, "search stub: argv=rg --json --no-config -i -s -- foo " + dir + "\n"},
-		{"unrestricted mixed aliases", []string{"-u", "--unrestricted", "foo"}, "search stub: argv=rg --json --no-config -u --unrestricted -- foo .\n"},
-		{"unrestricted pair in one token", []string{"-iuu", "foo"}, "search stub: argv=rg --json --no-config -i -u -u -- foo .\n"},
-		{"empty pattern verbatim", []string{"", "."}, "search stub: argv=rg --json --no-config --  .\n"},
-		{"literal dash pattern", []string{"-", "."}, "search stub: argv=rg --json --no-config -- - .\n"},
-		{"dash-leading pattern", []string{"--", "-foo"}, "search stub: argv=rg --json --no-config -- -foo .\n"},
-		{"literal -- pattern", []string{"--", "--"}, "search stub: argv=rg --json --no-config -- -- .\n"},
-		{"literal -- pattern explicit root", []string{"--", "--", dir}, "search stub: argv=rg --json --no-config -- -- " + dir + "\n"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := runVrg(t, tc.args...)
-			if res.code != 0 {
-				t.Fatalf("vrg %v exited %d, want 0 (stderr %q)", tc.args, res.code, res.stderr)
-			}
-			if res.stderr != "" {
-				t.Fatalf("vrg %v: stderr not empty: %q", tc.args, res.stderr)
-			}
-			if res.stdout != tc.want {
-				t.Fatalf("vrg %v: stdout = %q, want %q", tc.args, res.stdout, tc.want)
-			}
-		})
 	}
 }
 

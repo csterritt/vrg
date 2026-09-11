@@ -14,3 +14,12 @@ Usage
  Input tokens: 167069 tokens
  Output tokens: 70644 tokens
  Cached input tokens: 6616295 tokens
+
+----
+Task 003-spawn-rg-collect-results-searching-screen.md
+
+Usage
+ Agent messages: 154 messages
+ Input tokens: 271181 tokens
+ Output tokens: 114370 tokens
+ Cached input tokens: 18699008 tokens

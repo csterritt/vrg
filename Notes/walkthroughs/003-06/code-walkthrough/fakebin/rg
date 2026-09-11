@@ -1,0 +1,14 @@
+#!/bin/sh
+# Fake rg that emits a valid ripgrep JSON stream.
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"fixtures/hello.go.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"fixtures/hello.go.txt"},"lines":{"text":"\tfmt.Println(\"hello world\")\n"},"line_number":6,"submatches":[{"match":{"text":"hello"},"start":16,"end":21},{"match":{"text":"world"},"start":22,"end":27}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"fixtures/hello.go.txt"},"lines":{"text":"\tfmt.Printf(\"hello %s\\n\", name)\n"},"line_number":10,"submatches":[{"match":{"text":"hello"},"start":15,"end":20}]}}'
+printf '%s\n' '{"type":"end","data":{"path":{"text":"fixtures/hello.go.txt"},"binary_offset":null}}'
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"fixtures/README.md"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"fixtures/README.md"},"lines":{"text":"It contains hello and config files.\n"},"line_number":4,"submatches":[{"match":{"text":"hello"},"start":12,"end":17}]}}'
+printf '%s\n' '{"type":"end","data":{"path":{"text":"fixtures/README.md"},"binary_offset":null}}'
+printf '%s\n' '{"type":"summary","data":{"elapsed_total":{"secs":0,"nanos":1,"human":"0.000001s"}}}'
+if [ -n "$VRG_HANDSHAKE" ]; then
+	touch "$VRG_HANDSHAKE"
+fi
+exit 0

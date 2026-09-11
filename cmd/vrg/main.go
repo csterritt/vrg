@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
+	"os/exec"
 
+	tea "charm.land/bubbletea/v2"
+
+	"vrg/internal/app"
 	"vrg/internal/cli"
 )
 
@@ -23,19 +26,65 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case cli.KindHelp:
 		return 0
 	case cli.KindSearch:
-		// Interim stub proving the end-to-end slice; later issues replace
-		// it with the search and the TUI.
-		var argv strings.Builder
-		argv.WriteString("rg")
-		for _, a := range res.ChildArgs {
-			argv.WriteByte(' ')
-			argv.WriteString(cli.Escape(a))
-		}
-		fmt.Fprintf(stdout, "search stub: argv=%s\n", argv.String())
-		return 0
+		return runSearch(res, stdout, stderr)
 	default:
 		fmt.Fprintln(stderr, res.Diagnostic)
 		fmt.Fprintf(stderr, "\n%s", cli.HelpText())
 		return 2
 	}
+}
+
+// runSearch starts rg, runs the Bubble Tea program, and returns the exit
+// code. Start failure (rg not on PATH or exec error) prints a sanitized
+// diagnostic to stderr and returns 2 without entering the TUI.
+func runSearch(res cli.Result, stdout, stderr io.Writer) int {
+	workdir, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "vrg: cannot determine working directory: %s\n", cli.Escape(err.Error()))
+		return 2
+	}
+
+	rgCmd := exec.Command("rg", res.ChildArgs...)
+	rgCmd.Dir = workdir
+
+	rgStdout, err := rgCmd.StdoutPipe()
+	if err != nil {
+		fmt.Fprintf(stderr, "vrg: cannot start ripgrep: %s\n", cli.Escape(err.Error()))
+		return 2
+	}
+	rgStderr, err := rgCmd.StderrPipe()
+	if err != nil {
+		fmt.Fprintf(stderr, "vrg: cannot start ripgrep: %s\n", cli.Escape(err.Error()))
+		return 2
+	}
+
+	if err := rgCmd.Start(); err != nil {
+		fmt.Fprintf(stderr, "vrg: cannot start ripgrep: %s\n", cli.Escape(err.Error()))
+		return 2
+	}
+
+	model := app.New(res.ChildArgs, workdir, app.WithProcess(app.Process{
+		Cmd:    rgCmd,
+		Stdout: rgStdout,
+		Stderr: rgStderr,
+	}))
+
+	program := tea.NewProgram(model, tea.WithOutput(stdout))
+
+	finalModel, err := program.Run()
+	if err != nil {
+		fmt.Fprintf(stderr, "vrg: %s\n", cli.Escape(err.Error()))
+		return 2
+	}
+
+	m, ok := finalModel.(app.Model)
+	if !ok {
+		return 2
+	}
+
+	if m.State() == app.StateStartFailed && m.Diagnostic() != "" {
+		fmt.Fprintln(stderr, m.Diagnostic())
+	}
+
+	return m.ExitCode()
 }

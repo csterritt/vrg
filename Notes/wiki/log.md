@@ -35,3 +35,21 @@ source-code, unit-tests, and index. Sources:
 `Notes/PRD-vrg.md` (Invocation and child arguments), `internal/cli/cli.go`,
 `internal/cli/cli_test.go`, `internal/cli/internal_test.go`,
 `cmd/vrg/main.go`, `cmd/vrg/main_test.go`.
+
+## [2026-09-10] ingest | Issue #3 search collection path
+
+Ingested the completed Issue #3 implementation: ripgrep subprocess
+execution (`cmd/vrg/main.go` `runSearch`), dual-pipe stdout/stderr
+drainage, `internal/searchindex` JSON stream parsing (`begin`, `match`,
+`end`, `summary`, `context`) with text/bytes encoding, same-line
+merging, range normalization, raw-byte preservation, and unsigned byte
+path ordering, and `internal/app` Bubble Tea model with searching,
+summary, and start-failed states. Created
+[search-collection-path](search-collection-path.md); updated
+source-code, unit-tests, and index. Sources:
+`Notes/issues/003-spawn-rg-collect-results-searching-screen.md`,
+`Notes/PRD-vrg.md` (Module Design → SearchIndex / App, Testing
+Decisions), `cmd/vrg/main.go`, `cmd/vrg/search_test.go`,
+`internal/app/app.go`, `internal/app/app_test.go`,
+`internal/searchindex/searchindex.go`,
+`internal/searchindex/searchindex_test.go`.

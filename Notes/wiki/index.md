@@ -14,6 +14,9 @@ Catalog of all wiki pages for the vrg project.
 - [cli-flag-forwarding.md](cli-flag-forwarding.md) — Issue #2 CLI: search
   flag allow-list, ordered exact-spelling scan records, combined shorts,
   cumulative `-u`, assignment rejection, exact child argv
+- [search-collection-path.md](search-collection-path.md) — Issue #3:
+  ripgrep subprocess execution, dual-pipe drainage, SearchIndex parsing,
+  and the searching/summary TUI lifecycle
 
 ## Catalogs
 

@@ -1,0 +1,7 @@
+package main
+
+// Config holds runtime settings.
+type Config struct {
+	Name string
+	Port int
+}

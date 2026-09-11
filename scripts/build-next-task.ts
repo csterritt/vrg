@@ -194,7 +194,6 @@ async function implement(task: Task): Promise<Usage> {
 async function updateHistory(task: Task, usage: Usage): Promise<void> {
   const entry = [
     "",
-    "",
     "----",
     `Task ${task.file}`,
     "",
@@ -203,7 +202,7 @@ async function updateHistory(task: Task, usage: Usage): Promise<void> {
     ` Input tokens: ${usage.inputTokens} tokens`,
     ` Output tokens: ${usage.outputTokens} tokens`,
     ` Cached input tokens: ${usage.cachedInputTokens} tokens`,
-  ].join("\n");
+  ].join("\n") + "\n";
   await appendFile(HISTORY_FILE, entry, "utf8");
 }
 
@@ -223,12 +222,12 @@ async function main(): Promise<void> {
       return;
     }
     const usage = await implement(task);
+    await updateHistory(task, usage);
     const description = `Task Notes/tasks/${task.file} implemented by ${MODEL_LABEL}`;
     log(`Running: jj describe -m "${description}"`);
     await run("jj", ["describe", "-m", description]);
     log("Running: jj new");
     await run("jj", ["new"]);
-    await updateHistory(task, usage);
     log(
       `Recorded Devin usage: ${usage.agentMessages} messages, ${usage.inputTokens} input, ${usage.outputTokens} output, ${usage.cachedInputTokens} cached input tokens.`,
     );
