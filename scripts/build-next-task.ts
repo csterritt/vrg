@@ -10,6 +10,7 @@ const ROOT = join(import.meta.dir, "..");
 const TASKS_DIR = join(ROOT, "Notes", "tasks");
 const WALKTHROUGHS_DIR = join(ROOT, "Notes", "walkthroughs");
 const HISTORY_FILE = join(ROOT, "Notes", "History-my-base-workflow.md");
+const STOP_FILE = join(ROOT, "stop");
 const DEVIN_MODEL = "glm-5-2";
 const MODEL_LABEL = "GLM-5.2-high";
 const MIN_WALKTHROUGH_BYTES = 1024;
@@ -208,6 +209,15 @@ async function updateHistory(task: Task, usage: Usage): Promise<void> {
 
 async function main(): Promise<void> {
   for (;;) {
+    // Check for a "stop" file in the project root to break the loop early.
+    try {
+      await stat(STOP_FILE);
+      log("Stop file detected; breaking out of loop.");
+      break;
+    } catch {
+      // No stop file — continue.
+    }
+
     const task = await nextTask();
     if (!task) {
       log("All tasks are implemented. Nothing to do.");
@@ -231,8 +241,6 @@ async function main(): Promise<void> {
     log(
       `Recorded Devin usage: ${usage.agentMessages} messages, ${usage.inputTokens} input, ${usage.outputTokens} output, ${usage.cachedInputTokens} cached input tokens.`,
     );
-
-    break;
   }
 }
 

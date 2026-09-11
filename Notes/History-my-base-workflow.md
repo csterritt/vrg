@@ -23,3 +23,12 @@ Usage
  Input tokens: 271181 tokens
  Output tokens: 114370 tokens
  Cached input tokens: 18699008 tokens
+
+----
+Task 004-cancellation-child-cleanup-terminal-restore.md
+
+Usage
+ Agent messages: 160 messages
+ Input tokens: 178701 tokens
+ Output tokens: 61384 tokens
+ Cached input tokens: 15601920 tokens

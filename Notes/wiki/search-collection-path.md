@@ -1,12 +1,16 @@
-# Search collection path (Issue #3)
+# Search collection path (Issue #3, extended by Issue #4)
 
 The ripgrep execution and result-collection pipeline delivered by
 [Issue #3](../issues/003-spawn-rg-collect-results-searching-screen.md),
 replacing the Issue #2 stub with real subprocess execution, JSON
-stream collection, and an interim searching/summary TUI. Relevant PRD
-sections: *Implementation Decisions → Invocation and child arguments*,
-*Module Design → CLI / SearchIndex / App*, and *Testing Decisions →
-CLI / SearchIndex / App*.
+stream collection, and an interim searching/summary TUI.
+[Issue #4](../issues/004-cancellation-child-cleanup-terminal-restore.md)
+added cancellation, child termination/reaping, terminal restoration,
+and controlled-failure cleanup. Relevant PRD sections: *Implementation
+Decisions → Invocation and child arguments*, *Module Design → CLI /
+SearchIndex / App*, *Testing Decisions → CLI / SearchIndex / App /
+Subprocess boundary / Responsiveness boundaries*, and *Outcome and
+exit-status contract*.
 
 ## Process boundary
 
@@ -15,19 +19,28 @@ CLI / SearchIndex / App*.
 1. Resolves the working directory with `os.Getwd()`.
 2. Constructs `exec.Command("rg", res.ChildArgs...)` using the protected
    child argv from the [CLI contract](cli-flag-forwarding.md) and sets
-   `rgCmd.Dir` to the working directory.
+   `rgCmd.Dir` to the working directory. Since Issue #4, the child is
+   placed in its own process group (`Setpgid: true`) so cleanup can
+   kill the entire group.
 3. Creates stdout and stderr pipes via `StdoutPipe`/`StderrPipe`.
 4. Starts ripgrep with `rgCmd.Start()`. A start failure (rg not on PATH,
    exec error) prints a sanitized diagnostic to stderr and returns exit
    2 without entering the TUI.
-5. Constructs an `app.Model` with `app.WithProcess` injecting the running
-   process and its pipes.
+5. Constructs an `app.Process` via `app.NewProcess` (Issue #4) with the
+   running process and its pipes, then constructs an `app.Model` with
+   `app.WithProcess` and optional test seams.
 6. Runs the Bubble Tea program with `tea.NewProgram(model,
    tea.WithOutput(stdout))`.
-7. After the program exits, inspects the final model state: if
-   `StateStartFailed` and a diagnostic is present, prints it to stderr.
-8. Returns the model's exit code (0 for normal quit, 130 for Ctrl-C/quit
-   during search, 2 for failure).
+7. After the program exits, performs centralized cleanup (Issue #4):
+   kills the child process group with `syscall.Kill(-pid, SIGKILL)`,
+   then calls `proc.Cleanup()` which kills the direct child if still
+   running and waits for the collection goroutine to finish (ensuring
+   the child is reaped).
+8. Inspects the final model state: if a diagnostic is present, prints
+   it to stderr exactly once, after the terminal has been restored by
+   Bubble Tea.
+9. Returns the model's exit code (0 for normal quit, 130 for
+   Ctrl-C/quit during search, 2 for failure).
 
 The library packages never call `os.Exit` or write directly to
 stdout/stderr. All exit-status and stream-destination decisions live in
@@ -99,15 +112,19 @@ raw path bytes, so non-UTF-8 paths sort after ASCII paths by byte value.
 `internal/app/app.go` implements the Bubble Tea model:
 
 - `Model` — the app state, carrying child argv, working directory,
-  process handle, gate channel, file/line counts, diagnostic, and exit
-  code.
+  process handle, gate channel, failure signal channel, file/line
+  counts, diagnostic, exit code, and a cancelled flag.
 - `New(childArgs, workdir, opts...)` — constructs a model in the
   searching state.
-- `WithProcess(p)` — injects a running ripgrep process (stdout/stderr
-  pipes and `*exec.Cmd`).
+- `NewProcess(cmd, stdout, stderr)` (Issue #4) — creates a `*Process`
+  with lifecycle channels (`done`, `cancel`) initialized.
+- `WithProcess(p)` — injects a running ripgrep process.
 - `WithGate(ch)` — test seam: holds index preparation until the channel
   is closed or receives, so tests can verify the searching state persists
   after rg exits but before the index is ready.
+- `WithFailureSignal(ch)` (Issue #4) — test seam: a channel whose
+  receipt triggers a `ControlledFailureMsg` with the received string as
+  the diagnostic.
 - `State()` / `ExitCode()` / `Diagnostic()` — accessors for the entry
   point.
 
@@ -119,11 +136,16 @@ raw path bytes, so non-UTF-8 paths sort after ASCII paths by byte value.
   interim summary is shown.
 - `StateStartFailed` — rg could not be started; the entry point should
   print the diagnostic and exit 2.
+- `StateFailed` (Issue #4) — controlled application failure after the
+  child started; the entry point prints the diagnostic and exits 2.
+- `StateCancelled` (Issue #4) — cancellation via `q` while searching or
+  `ctrl+c` in any state. Late search completions are ignored.
 
 ### Lifecycle
 
-`Init()` returns a `collectResults` command if a process was injected.
-`collectResults` runs as a Bubble Tea command:
+`Init()` returns a `tea.Batch` of `collectResults` and (if a failure
+signal was injected) `watchFailure`. `collectResults` runs as a Bubble
+Tea command:
 
 1. Drains stderr concurrently in a goroutine (`io.Copy` into a buffer) so
    a large stderr stream cannot block ripgrep while stdout collection
@@ -131,26 +153,84 @@ raw path bytes, so non-UTF-8 paths sort after ASCII paths by byte value.
 2. Parses stdout line by line with a `bufio.Scanner` (64 KiB initial,
    64 MiB max buffer) into a `searchindex.Builder`.
 3. Waits for the stderr drain goroutine to finish.
-4. Waits for ripgrep to exit with `p.Cmd.Wait()`.
-5. Holds at the gate if set (test seam).
+4. Waits for ripgrep to exit with `p.Cmd.Wait()` (reaping the child).
+   If `OnReap` is set, calls it with the wait error (test seam for
+   proving the reap path ran).
+5. Holds at the gate if set (test seam). The gate select is
+   cancellable: if the cancel channel is closed (cancellation), the
+   goroutine skips index preparation and returns promptly.
 6. Builds the index and returns a `SearchCompleteMsg` with file and
    line counts.
+7. Closes the `done` channel on exit (deferred), so the process
+   boundary can wait for the goroutine to finish.
+
+`watchFailure` (Issue #4) waits on the failure signal channel and emits
+a `ControlledFailureMsg` when it fires.
 
 `Update` handles:
 
-- `SearchCompleteMsg` — transitions to `StateSummary`, records file and
-  line counts.
+- `SearchCompleteMsg` — if not cancelled, transitions to `StateSummary`,
+  records file and line counts. If cancelled, ignores the message
+  (late-completion rejection).
 - `SearchFailedMsg` — transitions to `StateStartFailed`, records the
   sanitized diagnostic, sets exit code 2, and quits.
-- `tea.KeyPressMsg` — `q` quits (exit 0 from summary, exit 130 from
-  searching); Ctrl-C quits with exit 130; escape is ignored.
+- `ControlledFailureMsg` (Issue #4) — transitions to `StateFailed`,
+  records the sanitized diagnostic, sets exit code 2, cancels the
+  collection goroutine, and quits.
+- `tea.KeyPressMsg` — `q` while searching cancels (exit 130); `q` from
+  summary quits (exit 0); Ctrl-C in any state cancels (exit 130);
+  escape is a no-op.
 - `tea.WindowSizeMsg` — records width and height.
 
 `View` renders:
 
-- `StateSearching` — `Searching…`
-- `StateSummary` — `N files, M matched lines`
+- `StateSearching` — `Searching…` (alt screen enabled).
+- `StateSummary` — `N files, M matched lines` (alt screen enabled).
 - other states — empty.
+
+### Cancellation (Issue #4)
+
+`q` while searching (including the post-rg-exit/preparation window when
+the gate holds index preparation) and `ctrl+c` in any state cancel
+outstanding work:
+
+1. The model transitions to `StateCancelled`, sets `cancelled = true`,
+   sets exit code 130, and calls `process.Cancel()` (closes the cancel
+   channel, releasing the collection goroutine from the gate).
+2. The model returns `tea.Quit`.
+3. The process boundary kills the child process group and calls
+   `proc.Cleanup()`, which waits for the collection goroutine to finish.
+4. The collection goroutine, unblocked by the child's termination
+   (pipes close), calls `Wait()` (reaping the child), and closes `done`.
+5. Late `SearchCompleteMsg` from the goroutine is ignored by the
+   cancelled model.
+
+### Controlled failure (Issue #4)
+
+An injectable failure hook (`WithFailureSignal`) lets tests trigger a
+controlled application failure after the child has started. The failure
+path:
+
+1. The model transitions to `StateFailed`, records the sanitized
+   diagnostic, sets exit code 2, cancels the collection goroutine, and
+   quits.
+2. The process boundary kills the child process group and calls
+   `proc.Cleanup()`.
+3. After the terminal is restored by Bubble Tea (on `tea.Quit`), the
+   process boundary writes the diagnostic to stderr exactly once
+   through the single post-restoration stderr writer.
+4. The diagnostic is never written both directly and through a later
+   replay mechanism (exactly-once across mechanisms).
+5. Exit status is 2.
+
+### Terminal restoration (Issue #4)
+
+Bubble Tea's renderer enables the alternate screen and hides the
+cursor on startup. On `tea.Quit`, the renderer exits the alt screen
+(`\x1b[?1049l`) and shows the cursor (`\x1b[?25h`), restoring both the
+display and the PTY input modes (raw/no-echo undone). The process
+boundary writes any diagnostic after `program.Run()` returns, ensuring
+it appears after terminal restoration.
 
 ### Sanitization
 
@@ -173,4 +253,9 @@ See [unit-tests](unit-tests.md) for the SearchIndex, App model, and
 subprocess-boundary test catalogs. Subprocess tests use a fake `rg`
 shell script and a PTY (via `github.com/creack/pty`) to drive the Bubble
 Tea program, because Bubble Tea's cancelable reader uses epoll, which
-requires a terminal file descriptor.
+requires a terminal file descriptor. Issue #4 extended the harness with
+a controllable blocked fake rg (readiness handshake + indefinite block),
+reap-evidence side channel (`VRG_TEST_REAP`), termios snapshot/restore
+assertions, display-restoration sequence checks, gate injection
+(`VRG_TEST_GATE`), and controlled-failure injection
+(`VRG_TEST_FAIL_TRIGGER` / `VRG_TEST_FAIL_DIAGNOSTIC`).

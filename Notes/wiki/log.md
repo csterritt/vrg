@@ -53,3 +53,29 @@ Decisions), `cmd/vrg/main.go`, `cmd/vrg/search_test.go`,
 `internal/app/app.go`, `internal/app/app_test.go`,
 `internal/searchindex/searchindex.go`,
 `internal/searchindex/searchindex_test.go`.
+
+## [2026-09-11] ingest | Issue #4 cancellation, child cleanup, terminal restore
+
+Ingested the completed Issue #4 implementation: cancellation (q while
+searching, ctrl+c in any state) with exit 130, late-completion
+rejection via `StateCancelled` and a `cancelled` flag, child
+termination/reaping via `Process.Cancel`/`Process.Cleanup` and
+process-group kill, terminal restoration (alt screen exit, cursor
+show) by Bubble Tea on `tea.Quit`, single post-restoration stderr
+writer for diagnostics, exactly-once diagnostic behavior, injectable
+controlled-failure hook (`WithFailureSignal`), and a reusable
+fake-rg/PTY harness with blocked-child readiness/completion
+handshakes, reap-evidence side channel (`VRG_TEST_REAP`), termios
+snapshot/restore assertions, display-restoration sequence checks,
+gate injection (`VRG_TEST_GATE`), and controlled-failure injection
+(`VRG_TEST_FAIL_TRIGGER` / `VRG_TEST_FAIL_DIAGNOSTIC`). Updated
+[search-collection-path](search-collection-path.md) with
+cancellation, controlled-failure, and terminal-restoration sections;
+updated source-code, unit-tests, and index. Sources:
+`Notes/tasks/004-cancellation-child-cleanup-terminal-restore.md`,
+`Notes/issues/004-cancellation-child-cleanup-terminal-restore.md`,
+`Notes/PRD-vrg.md` (Outcome and exit-status contract, Cancellation
+precedence, Cleanup, Terminal restoration, Subprocess-boundary
+testing, Responsiveness boundaries), `cmd/vrg/main.go`,
+`cmd/vrg/cancel_test.go`, `internal/app/app.go`,
+`internal/app/app_test.go`.

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -36,7 +37,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 // runSearch starts rg, runs the Bubble Tea program, and returns the exit
 // code. Start failure (rg not on PATH or exec error) prints a sanitized
-// diagnostic to stderr and returns 2 without entering the TUI.
+// diagnostic to stderr and returns 2 without entering the TUI. Every
+// ordinary exit routes through the same centralized cleanup: the child
+// is terminated and reaped, and the terminal is restored by Bubble Tea
+// before any diagnostic is written.
 func runSearch(res cli.Result, stdout, stderr io.Writer) int {
 	workdir, err := os.Getwd()
 	if err != nil {
@@ -46,6 +50,10 @@ func runSearch(res cli.Result, stdout, stderr io.Writer) int {
 
 	rgCmd := exec.Command("rg", res.ChildArgs...)
 	rgCmd.Dir = workdir
+	// Put the child in its own process group so cleanup can kill the
+	// entire group, ensuring shell-script children (e.g., sleep in the
+	// test fake rg) are terminated and their pipes are closed.
+	rgCmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	rgStdout, err := rgCmd.StdoutPipe()
 	if err != nil {
@@ -63,16 +71,76 @@ func runSearch(res cli.Result, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	model := app.New(res.ChildArgs, workdir, app.WithProcess(app.Process{
-		Cmd:    rgCmd,
-		Stdout: rgStdout,
-		Stderr: rgStderr,
-	}))
+	proc := app.NewProcess(rgCmd, rgStdout, rgStderr)
+
+	// Test seam: if VRG_TEST_REAP is set, write the reaped wait status
+	// to that file path after the child exits, proving vrg's Wait/reap
+	// path ran.
+	if reapFile := os.Getenv("VRG_TEST_REAP"); reapFile != "" {
+		proc.OnReap = func(waitErr error) {
+			status := "exited"
+			if waitErr != nil {
+				status = waitErr.Error()
+			}
+			_ = os.WriteFile(reapFile, []byte(status), 0o644)
+		}
+	}
+
+	opts := []app.Option{app.WithProcess(proc)}
+
+	// Test seam: if VRG_TEST_GATE is set, hold index preparation until
+	// the named file appears.
+	if gateFile := os.Getenv("VRG_TEST_GATE"); gateFile != "" {
+		gate := make(chan struct{})
+		go func() {
+			for {
+				if _, err := os.Stat(gateFile); err == nil {
+					close(gate)
+					return
+				}
+			}
+		}()
+		opts = append(opts, app.WithGate(gate))
+	}
+
+	// Test seam: if VRG_TEST_FAIL_TRIGGER is set, watch for that file
+	// to appear and trigger a controlled failure with the diagnostic
+	// from VRG_TEST_FAIL_DIAGNOSTIC.
+	if failTrigger := os.Getenv("VRG_TEST_FAIL_TRIGGER"); failTrigger != "" {
+		failCh := make(chan string, 1)
+		diag := os.Getenv("VRG_TEST_FAIL_DIAGNOSTIC")
+		if diag == "" {
+			diag = "vrg: controlled failure"
+		}
+		go func() {
+			for {
+				if _, err := os.Stat(failTrigger); err == nil {
+					failCh <- diag
+					return
+				}
+			}
+		}()
+		opts = append(opts, app.WithFailureSignal(failCh))
+	}
+
+	model := app.New(res.ChildArgs, workdir, opts...)
 
 	program := tea.NewProgram(model, tea.WithOutput(stdout))
 
 	finalModel, err := program.Run()
+
+	// Centralized cleanup: terminate and reap the child on every exit.
+	// Kill the entire process group first (ensures shell-script children
+	// are terminated and their pipes are closed), then wait for the
+	// collection goroutine to finish.
+	if rgCmd.Process != nil {
+		_ = syscall.Kill(-rgCmd.Process.Pid, syscall.SIGKILL)
+	}
+	proc.Cleanup()
+
 	if err != nil {
+		// Terminal is already restored by Bubble Tea. Write the
+		// diagnostic exactly once, after restoration.
 		fmt.Fprintf(stderr, "vrg: %s\n", cli.Escape(err.Error()))
 		return 2
 	}
@@ -82,7 +150,9 @@ func runSearch(res cli.Result, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	if m.State() == app.StateStartFailed && m.Diagnostic() != "" {
+	// Single post-restoration stderr writer: write the diagnostic exactly
+	// once, after the terminal has been restored by Bubble Tea.
+	if m.Diagnostic() != "" {
 		fmt.Fprintln(stderr, m.Diagnostic())
 	}
 

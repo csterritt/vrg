@@ -1,0 +1,5 @@
+#!/bin/sh
+# Fake rg that signals ready, writes its PID, then blocks indefinitely.
+if [ -n "$VRG_TEST_READY" ]; then touch "$VRG_TEST_READY"; fi
+if [ -n "$VRG_TEST_PID" ]; then echo $$ > "$VRG_TEST_PID"; fi
+sleep 100000

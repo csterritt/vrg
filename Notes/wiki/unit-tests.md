@@ -94,6 +94,12 @@ table, parser config, and generated help cannot drift.
 - `tea.Model` interface compliance.
 - Gate behavior: the searching state persists after rg exits but before
   the gate releases the index.
+- Issue #4: `TestLateCompletionAfterCancellationIgnored` — late
+  `SearchCompleteMsg` after `q` cancellation does not revive the UI.
+- Issue #4: `TestLateCompletionAfterCtrlCIgnored` — late
+  `SearchCompleteMsg` after `ctrl+c` does not revive the UI.
+- Issue #4: `TestQDuringGateHeldExits130` — `q` while gate-held
+  preparation is cancellation (130), not a browse quit.
 
 ## cmd/vrg (subprocess boundary)
 
@@ -135,3 +141,26 @@ stdout/stderr/status separately:
   with valid stdout records does not deadlock or lose the stdout stream.
 - `TestStderrCapturedWithoutBlocking` — rg writing diagnostics to stderr
   while exiting 0 with a valid stdout stream does not block the child.
+
+`cancel_test.go` (Issue #4) extends the fake-rg/PTY harness with a
+controllable blocked fake rg (readiness handshake + indefinite block),
+reap-evidence side channel (`VRG_TEST_REAP`), termios snapshot/restore
+assertions, display-restoration sequence checks, gate injection
+(`VRG_TEST_GATE`), and controlled-failure injection
+(`VRG_TEST_FAIL_TRIGGER` / `VRG_TEST_FAIL_DIAGNOSTIC`):
+
+- `TestQAgainstBlockedFakeRGExits130` — `q` while the fake rg is
+  blocked exits 130, terminates and reaps the child, restores the
+  display, restores PTY termios.
+- `TestCtrlCAgainstBlockedFakeRGExits130` — `ctrl+c` while the fake rg
+  is blocked exits 130, terminates and reaps the child, restores the
+  display, restores PTY termios.
+- `TestNormalExitReapsChild` — normal exit while rg is still running
+  leaves no orphaned or unreaped child; reap evidence present.
+- `TestQDuringGateHeldPreparationExits130` — `q` after rg has exited
+  but while index preparation is gate-held exits 130 (cancellation),
+  not a browse quit.
+- `TestInjectedControlledFailure` — injected controlled failure after
+  child readiness terminates and reaps the child, restores termios,
+  writes a sanitized diagnostic exactly once after display restoration,
+  exits 2.

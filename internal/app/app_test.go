@@ -355,3 +355,79 @@ func TestEscIsNoOpDuringSummary(t *testing.T) {
 		}
 	}
 }
+
+// TestLateCompletionAfterCancellationIgnored verifies that a late
+// SearchCompleteMsg arriving after cancellation (q while searching) does
+// not revive the UI by transitioning to the summary state. This is the
+// Issue #4 late-completion rejection contract.
+func TestLateCompletionAfterCancellationIgnored(t *testing.T) {
+	m := app.New([]string{"--json", "--no-config", "--", "foo", "."}, "/work")
+	if m.State() != app.StateSearching {
+		t.Fatalf("State = %v, want StateSearching", m.State())
+	}
+
+	// Cancel via q while searching.
+	m, cmd := update(t, m, keyPress('q'))
+	assertQuit(t, cmd)
+	if m.ExitCode() != 130 {
+		t.Fatalf("ExitCode = %d, want 130", m.ExitCode())
+	}
+
+	// A late SearchCompleteMsg must not transition to summary or
+	// otherwise revive the cancelled UI.
+	m2, lateCmd := update(t, m, app.SearchCompleteMsg{Files: 3, Lines: 10})
+	if m2.State() == app.StateSummary {
+		t.Fatal("late SearchCompleteMsg revived the cancelled UI (transitioned to summary)")
+	}
+	if m2.ExitCode() != 130 {
+		t.Fatalf("after late completion, ExitCode = %d, want 130", m2.ExitCode())
+	}
+	if lateCmd != nil {
+		msg := execCmd(t, lateCmd)
+		if _, ok := msg.(tea.QuitMsg); ok {
+			t.Fatal("late SearchCompleteMsg after cancellation produced a quit command")
+		}
+	}
+}
+
+// TestLateCompletionAfterCtrlCIgnored verifies that a late
+// SearchCompleteMsg arriving after ctrl+c cancellation does not revive
+// the UI.
+func TestLateCompletionAfterCtrlCIgnored(t *testing.T) {
+	m := app.New([]string{"--json", "--no-config", "--", "foo", "."}, "/work")
+	m, cmd := update(t, m, ctrlC())
+	assertQuit(t, cmd)
+	if m.ExitCode() != 130 {
+		t.Fatalf("ExitCode = %d, want 130", m.ExitCode())
+	}
+
+	m2, _ := update(t, m, app.SearchCompleteMsg{Files: 3, Lines: 10})
+	if m2.State() == app.StateSummary {
+		t.Fatal("late SearchCompleteMsg revived the ctrl+c cancelled UI")
+	}
+}
+
+// TestQDuringGateHeldExits130 verifies that pressing q while the model is
+// in the searching state (representing gate-held index preparation after
+// rg has exited) is cancellation with exit 130, not a browse quit. This
+// is the Issue #4 post-rg-exit/preparation-window contract.
+func TestQDuringGateHeldExits130(t *testing.T) {
+	gate := make(chan struct{})
+	m := app.New(
+		[]string{"--json", "--no-config", "--", "foo", "."},
+		"/work",
+		app.WithGate(gate),
+	)
+	// The gate is held (never closed). The model stays in searching
+	// even though rg would have exited by this point in a real run.
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	if m.State() != app.StateSearching {
+		t.Fatalf("State = %v, want StateSearching (gate held)", m.State())
+	}
+
+	m, cmd := update(t, m, keyPress('q'))
+	assertQuit(t, cmd)
+	if m.ExitCode() != 130 {
+		t.Fatalf("ExitCode = %d, want 130 (cancellation, not browse quit)", m.ExitCode())
+	}
+}

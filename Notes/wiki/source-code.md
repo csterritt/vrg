@@ -8,8 +8,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `os.Stat` injected and maps the explicit result kind to stream/status:
   help → exit 0 (help already on stdout), search → `runSearch` (Issue #3:
   starts ripgrep with the protected child argv, runs the Bubble Tea
-  program, propagates exit codes), usage error → sanitized diagnostic on
-  stderr, exit 2. See [search-collection-path](search-collection-path.md).
+  program, propagates exit codes; Issue #4: centralized cleanup kills the
+  child process group and reaps via `proc.Cleanup`, single
+  post-restoration stderr writer for diagnostics, test seams for reap
+  evidence/gate/failure injection via `VRG_TEST_*` env vars), usage error
+  → sanitized diagnostic on stderr, exit 2. See
+  [search-collection-path](search-collection-path.md).
 
 ## internal/cli
 
@@ -38,13 +42,21 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 ## internal/app
 
 - `internal/app/app.go` — Issue #3: the Bubble Tea model owning the
-  search lifecycle. States: searching, summary, start-failed. `Init`
-  returns a `collectResults` command that drains stdout and stderr
-  concurrently, parses stdout into a `searchindex.Builder`, waits for
-  ripgrep to exit, builds the index, and returns a `SearchCompleteMsg`.
-  `Update` handles completion, failure, key (q, Ctrl-C, escape), and
-  resize. `View` renders the searching and summary screens. See
-  [search-collection-path](search-collection-path.md).
+  search lifecycle. States: searching, summary, start-failed. Issue #4
+  added cancelled and failed states, cancellation (q while searching,
+  ctrl+c anywhere) with child termination/reaping, late-completion
+  rejection, an injectable controlled-failure hook
+  (`WithFailureSignal`), a `Process` type with lifecycle channels
+  (`done`, `cancel`) and `Cleanup`/`Cancel` methods, alt-screen-enabled
+  views, and a cancellable gate select. `Init` returns a batch of
+  `collectResults` and `watchFailure`. `collectResults` drains stdout
+  and stderr concurrently, parses stdout into a `searchindex.Builder`,
+  waits for ripgrep to exit (reaping via `Wait` with optional `OnReap`
+  callback), holds at the cancellable gate if set, builds the index, and
+  returns a `SearchCompleteMsg`. `Update` handles completion, failure,
+  controlled failure, key (q, Ctrl-C, escape), and resize. `View`
+  renders the searching and summary screens with alt screen enabled.
+  See [search-collection-path](search-collection-path.md).
 
 ## Package boundaries awaiting their issues
 
