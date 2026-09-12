@@ -11,5 +11,5 @@
     "strict": true,
     "skipLibCheck": true
   },
-  "include": ["scripts/build-next-task.ts"]
+  "include": ["scripts/build-next-task.ts", "scripts/unify-history.ts"]
 }
