@@ -111,6 +111,16 @@ Catalog of all wiki pages for the vrg project.
   cells after grapheme clipping with the reserved column excluded,
   split-glyph blanks do not count as visible, and wrap mode has no
   indicators or reserved column
+- [grapheme-cluster-highlight-expansion.md](grapheme-cluster-highlight-expansion.md)
+  — Issue #21: match highlights expand to grapheme-cluster boundaries
+  so they never split a cluster; combining-only matches highlight the
+  whole base cluster; standalone zero-width clusters receive a visible
+  fallback cell; wide glyphs and ZWJ sequences are never split;
+  multi-cell escaped forms (ESC → `^[`) are preserved; wrap and clip
+  blank filler cells are never painted as match cells; expanded
+  `Highlights` and `ByteCells` are the single source for Viewport, App,
+  Issue #19 reveal, and Issue #20 indicators; `ContentDisplay.ByteOffsets`
+  added for raw-byte-to-cluster mapping
 
 ## Catalogs
 

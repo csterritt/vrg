@@ -814,6 +814,30 @@ table, parser config, and generated help cannot drift.
   `TestLoadPopulatesClustersCombining` — `Load` populates
   `Line.Clusters` via the shared grapheme policy.
 
+`grapheme_highlight_test.go` (Issue #21, external package
+`filebuffer_test`):
+
+- `TestHighlightExpandStartInsideCluster` — a match starting inside an
+  `é` (e + combining) cluster expands to the whole cluster's cell range.
+- `TestHighlightExpandEndInsideCluster` — a match ending inside a
+  cluster expands to the whole cluster's cell range.
+- `TestHighlightExpandBothInsideCluster` — a match entirely inside a
+  cluster expands to the whole cluster's cell range.
+- `TestHighlightCombiningOnlyMatchHighlightsBaseCluster` — a
+  combining-only match (matching just the combining mark bytes)
+  highlights the whole base-plus-combining cluster.
+- `TestHighlightStandaloneClusterFallbackCell` — a standalone
+  zero-width cluster receives a visible fallback cell so the highlight
+  is never zero cells.
+- `TestHighlightWidePairNeverSplit` — a wide glyph (2 cells) is never
+  split; the highlight covers both cells.
+- `TestHighlightZWJSequenceHandledBySharedPolicy` — an emoji ZWJ
+  sequence is one cluster; a partial match expands to the whole
+  sequence.
+- `TestHighlightExpandedSpanIsSoleSource` — `ByteCells` for combining
+  mark bytes map to the cluster's cell range (not 1-cell-per-rune), so
+  the Issue #19 reveal targets the cluster start.
+
 `safepresentation_test.go` (Issue #16 additions, external package
 `safepresentation_test`):
 
@@ -948,6 +972,18 @@ replay-ordering assertions:
 - `TestReplayFilenameWithNewlineAndESC` — a diagnostic embedding a
   filename with `\n` and ESC is escaped and single-lined in the
   replayed stderr text through the Issue #6 utility.
+
+`grapheme_highlight_test.go` (Issue #21, external package
+`viewport_test`):
+
+- `TestWrapBoundaryBlankNotHighlighted` — a wide cluster that moves to
+  the next wrapped row leaves blank filler cells that are not
+  highlighted.
+- `TestWrapBoundaryCombiningBlankNotHighlighted` — a combining-related
+  wrap boundary leaves blank filler cells that are not highlighted.
+- `TestClipSplitGlyphBlankNotHighlighted` — a wide cluster split by a
+  horizontal clip edge renders as blank cells that are not highlighted
+  (`clipHighlightsToPaintable` intersects with non-split cluster ranges).
 
 `pan_test.go` (Issue #18, external package `viewport_test`):
 
@@ -1101,3 +1137,19 @@ replay-ordering assertions:
   indicator style.
 - `TestIndicatorStylingUnderscore` — the `_` indicator uses the
   theme's inverse indicator style.
+
+`grapheme_indicator_test.go` (Issue #21, external package `app_test`):
+
+- `TestIndicatorMidClusterMatchHiddenLeft` — a mid-cluster match whose
+  cluster start is hidden left produces a left `*` (the expanded span
+  is entirely hidden left).
+- `TestIndicatorMidClusterMatchVisible` — a mid-cluster match whose
+  cluster is visible produces no hidden-match indicator.
+- `TestIndicatorWideClusterMatchHiddenLeft` — a wide-cluster match
+  hidden left produces a left `*`.
+- `TestIndicatorWideClusterMatchVisible` — a wide-cluster match that
+  is visible produces no hidden-match indicator.
+- `TestIndicatorMidClusterMatchFromLoad` — end-to-end: the production
+  `filebuffer.Load` path expands a combining-mark match to the base
+  cluster, and the indicator logic sees the expanded span (left `*`
+  when hidden left).

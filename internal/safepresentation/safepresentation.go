@@ -62,11 +62,17 @@ func GraphemeClusters(display string) []Cluster {
 
 // ContentDisplay is the escaped display form of raw content bytes and
 // its byte→cell mapping. ByteCells[i] is the [start, end) display cell
-// range occupied by original byte i. Line-terminator bytes (LF, CRLF)
-// produce no display cells and map to the end-of-line position.
+// range occupied by original byte i. ByteOffsets[i] is the display byte
+// offset where original byte i starts in Text. Line-terminator bytes
+// (LF, CRLF) produce no display cells and map to the end-of-line
+// position; their ByteOffsets point at the end of the display text.
 type ContentDisplay struct {
 	Text      string
 	ByteCells [][2]int
+	// ByteOffsets[i] is the display byte offset where original byte i
+	// starts in Text (Issue #21). Used to map raw bytes to grapheme
+	// clusters by display byte range.
+	ByteOffsets []int
 }
 
 // EscapePath escapes raw path bytes for safe single-line display.
@@ -160,22 +166,27 @@ func EscapeContent(raw []byte) ContentDisplay {
 	var b strings.Builder
 	b.Grow(len(raw))
 	cells := make([][2]int, 0, len(raw))
+	offsets := make([]int, 0, len(raw))
 	cell := 0
 	for i := 0; i < len(raw); {
 		c := raw[i]
 		if c == '\r' && i+1 < len(raw) && raw[i+1] == '\n' {
 			cells = append(cells, [2]int{cell, cell})
 			cells = append(cells, [2]int{cell, cell})
+			offsets = append(offsets, b.Len())
+			offsets = append(offsets, b.Len())
 			i += 2
 			continue
 		}
 		if c == '\n' {
 			cells = append(cells, [2]int{cell, cell})
+			offsets = append(offsets, b.Len())
 			i++
 			continue
 		}
 		if c < utf8.RuneSelf {
 			start := cell
+			off := b.Len()
 			switch {
 			case c == '\r':
 				b.WriteString("^M")
@@ -202,36 +213,43 @@ func EscapeContent(raw []byte) ContentDisplay {
 				cell++
 			}
 			cells = append(cells, [2]int{start, cell})
+			offsets = append(offsets, off)
 			i++
 			continue
 		}
 		r, size := utf8.DecodeRune(raw[i:])
 		if r == utf8.RuneError && size == 1 {
+			off := b.Len()
 			b.WriteRune('\ufffd')
 			cells = append(cells, [2]int{cell, cell + 1})
+			offsets = append(offsets, off)
 			cell++
 			i++
 			continue
 		}
 		if r >= 0x80 && r < 0xa0 {
 			start := cell
+			off := b.Len()
 			fmt.Fprintf(&b, `\u%04x`, r)
 			cell += 6
 			for j := 0; j < size; j++ {
 				cells = append(cells, [2]int{start, cell})
+				offsets = append(offsets, off)
 			}
 			i += size
 			continue
 		}
 		start := cell
+		off := b.Len()
 		b.Write(raw[i : i+size])
 		cell++
 		for j := 0; j < size; j++ {
 			cells = append(cells, [2]int{start, cell})
+			offsets = append(offsets, off)
 		}
 		i += size
 	}
-	return ContentDisplay{Text: b.String(), ByteCells: cells}
+	return ContentDisplay{Text: b.String(), ByteCells: cells, ByteOffsets: offsets}
 }
 
 // EscapeDiagnostic escapes raw diagnostic bytes for safe display while

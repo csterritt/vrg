@@ -1,0 +1,4 @@
+decomposed e with acute: é
+standalone combining: ́ start
+cjk wide: 中文
+zwj family: 👨‍👩‍👧

@@ -306,9 +306,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `GraphemeClusters(display string) []Cluster` segment an escaped
   display string into grapheme clusters using `github.com/rivo/uniseg`
   and compute each cluster's terminal cell width via
-  `uniseg.StringWidth`. See [safe-presentation](safe-presentation.md),
-  [browse-tracer](browse-tracer.md), and
-  [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md).
+  `uniseg.StringWidth`. Issue #21 added `ContentDisplay.ByteOffsets`:
+  `ByteOffsets[i]` is the display byte offset where original byte `i`
+  starts in `Text`, so `filebuffer` can map raw bytes to grapheme
+  clusters by display byte range (a combining mark's cell is outside
+  its cluster's cell range, so byte offsets are needed). See
+  [safe-presentation](safe-presentation.md), [browse-tracer](browse-tracer.md),
+  [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
+  and [grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md).
 
 ## internal/sinkfixtures
 
@@ -338,9 +343,19 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   their source line). Issue #16: `Load` now populates `Clusters` via
   `safepresentation.GraphemeClusters`. `Cluster` is an alias for
   `safepresentation.Cluster`. The completion message carries the fully
-  prepared buffer so `Update` does no full-file work. See
-  [browse-tracer](browse-tracer.md) and
-  [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md).
+  prepared buffer so `Update` does no full-file work. Issue #21 added
+  grapheme-cluster highlight expansion: `expandedByteCells` remaps
+  `ByteCells` so every byte in a cluster (including combining marks and
+  ZWJ joiners) maps to the cluster's full cell range; `expandedHighlights`
+  expands each submatch's byte range outward to the enclosing clusters'
+  cell boundaries (combining-only matches highlight the base cluster,
+  wide glyphs are never split, standalone zero-width clusters receive a
+  visible fallback cell, multi-cell escaped forms like ESC → `^[` are
+  preserved). The expanded `Highlights` and `ByteCells` are the single
+  source for Viewport, App, Issue #19 reveal, and Issue #20 indicators.
+  See [browse-tracer](browse-tracer.md),
+  [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
+  and [grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md).
 
 ## internal/viewport
 
@@ -395,7 +410,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   the widest visible line), `ClipLine(line)` (grapheme-safe clipping
   with blank cells for split clusters); `clampHOffset` (no-op in wrap
   mode), `computeMaxHOffset`, `widestLine`, `paintableMaxOffset`,
-  `clipLineToWindow`, and `clipHighlights` helpers; and
+  `clipLineToWindow`, and `clipHighlightsToPaintable` helpers (Issue
+  #21 replaced `clipHighlights` with `clipHighlightsToPaintable`, which
+  intersects highlights with fully-visible non-split cluster cell ranges
+  so split-blank filler cells are never painted as match cells); and
   `clampHOffset()` calls in `SetAnchor`/`SetOffset`/`SetPanelHeight`/
   `SetRows`/`Reveal`/all scroll methods for visible-set re-clamping.
   Issue #19 added minimal horizontal reveal:

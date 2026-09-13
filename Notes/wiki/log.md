@@ -676,3 +676,42 @@ and [unit-tests](unit-tests.md) (indicator_test.go entry). Sources:
 `Notes/tasks/020-hidden-content-indicators.md`,
 `Notes/PRD-vrg.md` (Layout and indicators section),
 `internal/app/app.go`, `internal/app/indicator_test.go`.
+
+## [2026-04-21] ingest | Issue #21 grapheme cluster highlight expansion
+
+Issue #21: match highlights now expand to grapheme-cluster boundaries so
+they never split a cluster. `filebuffer.Load` remaps `ByteCells` via
+`expandedByteCells` so every byte in a cluster (including combining
+marks and ZWJ joiners) maps to the cluster's full cell range, and
+converts each submatch to a display-cell span via `expandedHighlights`
+that expands outward to the enclosing clusters' cell boundaries.
+Combining-only matches highlight the whole base cluster; standalone
+zero-width clusters receive a visible fallback cell; wide glyphs and
+ZWJ sequences are never split; multi-cell escaped forms (ESC → `^[`)
+preserve their original cell range. The expanded `Highlights` and
+`ByteCells` are the single source for Viewport, App, Issue #19 reveal,
+and Issue #20 indicators. `safepresentation.ContentDisplay` gained
+`ByteOffsets` (display byte offset per raw byte) so `filebuffer` can
+map raw bytes to grapheme clusters by display byte range (a combining
+mark's cell is outside its cluster's cell range). `viewport.clipLineToWindow`
+now tracks `paintableRanges` (fully-visible non-split cluster cell
+ranges) and `clipHighlightsToPaintable` intersects highlights with them
+so split-blank filler cells are never painted as match cells (replacing
+`clipHighlights`). Tests in `internal/filebuffer/grapheme_highlight_test.go`,
+`internal/viewport/grapheme_highlight_test.go`, and
+`internal/app/grapheme_indicator_test.go` cover the expansion,
+wrap/clip blank exclusion, and indicator behavior through the
+production `filebuffer.Load` path. Created
+[grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md);
+updated [index](index.md), [source-code](source-code.md)
+(internal/safepresentation, internal/filebuffer, internal/viewport
+entries), and [unit-tests](unit-tests.md) (grapheme_highlight_test.go
+entries for filebuffer and viewport, grapheme_indicator_test.go entry
+for app). Sources: `Notes/tasks/021-grapheme-cluster-highlight-expansion.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation),
+`internal/filebuffer/filebuffer.go`,
+`internal/safepresentation/safepresentation.go`,
+`internal/viewport/viewport.go`,
+`internal/filebuffer/grapheme_highlight_test.go`,
+`internal/viewport/grapheme_highlight_test.go`,
+`internal/app/grapheme_indicator_test.go`.

@@ -176,3 +176,12 @@ Usage
  Input tokens: 251019 tokens
  Output tokens: 74888 tokens
  Cached input tokens: 8876160 tokens
+
+----
+Task 021-grapheme-cluster-highlight-expansion.md
+
+Usage
+ Agent messages: 140 messages
+ Input tokens: 259215 tokens
+ Output tokens: 59744 tokens
+ Cached input tokens: 15959168 tokens

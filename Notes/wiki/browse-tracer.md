@@ -53,7 +53,10 @@ for safe display:
 
 `ContentDisplay.ByteCells[i]` records the `[start, end)` display cell
 range for each original byte. A match covering an ESC byte highlights
-both cells of `^[`.
+both cells of `^[`. Issue #21 added `ContentDisplay.ByteOffsets[i]`
+(the display byte offset where original byte `i` starts) so
+`filebuffer` can map raw bytes to grapheme clusters by display byte
+range; see [grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md).
 
 ## FileBuffer
 
@@ -68,6 +71,11 @@ bytes into a display-ready `Buffer`:
   lines (LF and CRLF are terminators; standalone CR is content), escapes
   each line through `safepresentation.EscapeContent`, and maps
   `Stop.Submatches` to display cell ranges via the byte→cell map.
+  Issue #21: submatches are expanded to grapheme-cluster boundaries
+  via `expandedHighlights`, and `ByteCells` is remapped via
+  `expandedByteCells` so combining marks and ZWJ joiners map to their
+  cluster's cell range; see
+  [grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md).
 - `gutterWidth(lineCount)` — digit count of the largest line number
   plus two spaces, minimum one digit.
 

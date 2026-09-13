@@ -611,7 +611,9 @@ func paintableMaxOffset(clusters []filebuffer.Cluster, textWidth int) int {
 // window [hOffset, hOffset+textWidth) with grapheme-safe blank cells
 // (Issue #18). Clusters split by either edge become blank cells for
 // their visible portion. Highlights are shifted by -hOffset and clamped
-// to [0, textWidth).
+// to [0, textWidth), and further restricted to fully-visible (non-split)
+// cluster cells so blank filler cells are never painted as match cells
+// (Issue #21).
 func clipLineToWindow(line filebuffer.Line, hOffset, textWidth int) filebuffer.Line {
 	if hOffset < 0 {
 		hOffset = 0
@@ -622,6 +624,11 @@ func clipLineToWindow(line filebuffer.Line, hOffset, textWidth int) filebuffer.L
 	windowEnd := hOffset + textWidth
 	var b strings.Builder
 	var clippedClusters []filebuffer.Cluster
+	// paintableRanges tracks the source-line cell ranges of fully-
+	// visible (non-split) clusters within the window (Issue #21).
+	// Highlights are intersected with these ranges so split-blank
+	// filler cells are never painted as match cells.
+	var paintableRanges [][2]int
 	cellIndex := 0
 	for _, c := range line.Clusters {
 		clusterStart := cellIndex
@@ -656,8 +663,12 @@ func clipLineToWindow(line filebuffer.Line, hOffset, textWidth int) filebuffer.L
 				EndByte:   b.Len(),
 				Width:     c.Width,
 			})
+			// Record the fully-visible cluster's source cell range
+			// as paintable (Issue #21).
+			paintableRanges = append(paintableRanges, [2]int{clusterStart, clusterEnd})
 		} else {
-			// Split by a clip edge: render blank cells.
+			// Split by a clip edge: render blank cells. These
+			// cells are not paintable (Issue #21).
 			b.WriteString(strings.Repeat(" ", visibleCells))
 			for i := 0; i < visibleCells; i++ {
 				clippedClusters = append(clippedClusters, filebuffer.Cluster{
@@ -671,7 +682,7 @@ func clipLineToWindow(line filebuffer.Line, hOffset, textWidth int) filebuffer.L
 	clipped := filebuffer.Line{
 		Number:       line.Number,
 		Display:      b.String(),
-		Highlights:   clipHighlights(line.Highlights, hOffset, textWidth),
+		Highlights:   clipHighlightsToPaintable(line.Highlights, hOffset, textWidth, paintableRanges),
 		Clusters:     clippedClusters,
 		StartByte:    line.StartByte,
 		Continuation: line.Continuation,
@@ -679,9 +690,12 @@ func clipLineToWindow(line filebuffer.Line, hOffset, textWidth int) filebuffer.L
 	return clipped
 }
 
-// clipHighlights shifts highlight cell ranges by -hOffset and clamps
-// them to [0, textWidth) (Issue #18).
-func clipHighlights(highlights [][2]int, hOffset, textWidth int) [][2]int {
+// clipHighlightsToPaintable shifts highlight cell ranges by -hOffset,
+// clamps them to [0, textWidth), and intersects them with the paintable
+// (fully-visible, non-split) cluster cell ranges (Issue #21). Split-
+// blank filler cells introduced at clip edges are never painted as
+// match cells.
+func clipHighlightsToPaintable(highlights [][2]int, hOffset, textWidth int, paintable [][2]int) [][2]int {
 	if len(highlights) == 0 {
 		return nil
 	}
@@ -699,8 +713,20 @@ func clipHighlights(highlights [][2]int, hOffset, textWidth int) [][2]int {
 		if end > windowEnd {
 			end = windowEnd
 		}
-		if start < end {
-			result = append(result, [2]int{start - hOffset, end - hOffset})
+		// Intersect [start, end) with each paintable range and emit
+		// the overlapping sub-ranges, shifted to local coordinates.
+		for _, pr := range paintable {
+			ps := start
+			if ps < pr[0] {
+				ps = pr[0]
+			}
+			pe := end
+			if pe > pr[1] {
+				pe = pr[1]
+			}
+			if ps < pe {
+				result = append(result, [2]int{ps - hOffset, pe - hOffset})
+			}
 		}
 	}
 	return result

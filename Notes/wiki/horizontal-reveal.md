@@ -34,6 +34,13 @@ raw byte offset to the display cell where the cluster begins. The
 cluster width is derived from the line's grapheme clusters at that
 cell via `viewport.ClusterWidthAtCell(line.Clusters, targetCell)`.
 
+Issue #21: `ByteCells` is remapped by `filebuffer.expandedByteCells` so
+every byte in a grapheme cluster (including combining marks and ZWJ
+joiners) maps to the cluster's full cell range. A combining-only match
+therefore reveals the base cluster's start cell, not the combining
+mark's phantom cell. See
+[grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md).
+
 Submatches are ordered by byte start then end by the search index, so
 the first submatch identifies the target. This matches the Issue #14
 vertical reveal's target-row derivation.
