@@ -1,4 +1,4 @@
-# Outcome contract (Issue #9, extended by Issue #10)
+# Outcome contract (Issue #9, extended by Issues #10 and #11)
 
 The fatal/warning outcome matrix and modal error overlay delivered by
 [Issue #9](../issues/009-error-overlay-and-fatal-outcomes.md), adding
@@ -6,10 +6,14 @@ stream-integrity accounting, separate process-success and
 stream-integrity assessment, a modal error overlay, and exit status 2
 for fatal process or stream-integrity outcomes. [Issue #10](../issues/010-record-robustness-malformed-oversized-unknown.md)
 extended the matrix with record-loss inputs (malformed, oversized,
-unknown) and after-filtering usable-results assessment. Relevant PRD
-sections: *Module Design → SearchIndex / App*, *Outcome and exit-status
-contract*, *Colours, overlays, and key precedence*. See also
-[record-robustness](record-robustness.md).
+unknown) and after-filtering usable-results assessment. [Issue #11](../issues/011-stderr-replay-of-collected-diagnostics.md)
+unified the controlled-failure diagnostic with the post-restoration
+replay writer and added the session diagnostic collection independent
+of display. Relevant PRD sections: *Module Design → SearchIndex / App*,
+*Outcome and exit-status contract*, *Colours, overlays, and key
+precedence* (replay bullet). See also
+[record-robustness](record-robustness.md) and
+[search-collection-path](search-collection-path.md).
 
 ## Stream integrity
 
@@ -143,3 +147,35 @@ user sees the beginning and end of the captured stderr.
 
 Once a search-derived status is fixed, later `ctrl+c` still overrides
 it to 130.
+
+## Post-restoration replay (Issue #11)
+
+The model maintains a session diagnostic collection independent of what
+was displayed. Every diagnostic the model processes is collected via
+`collectDiagnostic`, sanitized through `safepresentation.EscapeDiagnostic`,
+and appended to the collection in processing order. The collection is
+independent of display: diagnostics never shown in an overlay (e.g.,
+`DiagnosticMsg` entries) are also collected.
+
+The controlled-failure diagnostic is routed through the collection
+instead of a separate direct write, so the Issue #4 post-restoration
+writer serves every controlled exit. Exactly-once holds across both
+the former direct-write path and the replay mechanism: there is no
+duplicate between the two.
+
+After `program.Run()` returns and cleanup is complete, the process
+boundary replays every collected diagnostic to stderr, exactly once
+each, in collection order. Replay occurs strictly after the
+display-restoration sequence because `program.Run()` returns only
+after Bubble Tea restores the terminal.
+
+The shutdown boundary is defined at message-processing time: a
+diagnostic is "collected" once the model has processed the message
+carrying it. A diagnostic still in flight (e.g., a gated
+`SearchCompleteMsg`) has not been processed, is not collected, is not
+waited for, and is not replayed. This applies to both cancellation
+keys (`ctrl+c` and `q` while searching or preparation is incomplete).
+
+See [search-collection-path](search-collection-path.md) for the full
+collection and replay contract, and [safe-presentation](safe-presentation.md)
+for the diagnostic escaping rules.

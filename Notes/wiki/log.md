@@ -256,3 +256,41 @@ Outcome and exit-status contract; Resources and responsiveness),
 `internal/searchindex/oversized_test.go`,
 `internal/app/app.go`, `internal/app/outcome_test.go`,
 `internal/app/browse_test.go`.
+
+## [2026-09-11] ingest | Issue #11 stderr replay of collected diagnostics
+
+Ingested the completed Issue #11 implementation: the session
+diagnostic collection independent of display, the
+processed-versus-in-flight shutdown boundary, and post-restoration
+stderr replay of every collected diagnostic exactly once in collection
+order. `internal/app` added a `diagnostics []string` field on `Model`,
+a `collectDiagnostic` helper (sanitizes through
+`safepresentation.EscapeDiagnostic`, appends to the collection, fires
+the `onCollect` callback), a `Diagnostics()` accessor (returns a copy
+in collection order), a `DiagnosticMsg` type (collects without
+display), `WithDiagnosticSignal` and `WithOnCollect` options (test
+seams), and a `watchDiagnostic` command. The `SearchCompleteMsg`,
+`SearchFailedMsg`, `ControlledFailureMsg`, and `DiagnosticMsg`
+handlers now collect into the session collection. The
+controlled-failure diagnostic is routed through the collection instead
+of a separate direct write, so exactly-once holds across both the
+former direct-write path and the replay mechanism. The shutdown
+boundary is defined at message-processing time: a diagnostic is
+collected once the model has processed the message carrying it;
+in-flight diagnostics are not awaited or replayed. `cmd/vrg/main.go`
+replays every collected diagnostic from `m.Diagnostics()` to stderr
+exactly once each in collection order after terminal restoration, and
+wires the `VRG_TEST_COLLECT_ACK` acknowledgement side channel and the
+`VRG_TEST_DIAGNOSTIC_TRIGGER`/`VRG_TEST_DIAGNOSTIC_TEXT` diagnostic
+emission trigger. Updated
+[search-collection-path](search-collection-path.md),
+[outcome-contract](outcome-contract.md),
+[safe-presentation](safe-presentation.md) (replay writer added to the
+sink-safety table), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/tasks/011-stderr-replay-of-collected-diagnostics.md`,
+`Notes/issues/011-stderr-replay-of-collected-diagnostics.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence — replay
+bullet; Outcome and exit-status contract), `internal/app/app.go`,
+`internal/app/replay_test.go`, `cmd/vrg/main.go`,
+`cmd/vrg/replay_test.go`.

@@ -405,6 +405,41 @@ table, parser config, and generated help cannot drift.
 - `TestEscNeverQuitsWhenNoOverlay` — Esc never quits when no overlay
   is open, across all base states.
 
+`replay_test.go` (Issue #11, external package `app_test`):
+
+- `TestReplayCollectsDisplayedAndNeverDisplayedDiagnostics` — three
+  diagnostics (one displayed in an overlay, two never displayed via
+  `DiagnosticMsg`) all reach the collection exactly once each, in
+  collection order, on a normal exit.
+- `TestReplayNeverDisplayedDiagnosticCollected` — a diagnostic never
+  shown in an overlay is still collected.
+- `TestReplayCtrlCAfterProcessedDiagnosticReplayed` — a diagnostic
+  processed before `ctrl+c` in the next update is replayed; exit 130.
+- `TestReplayCtrlCGatedDiagnosticNotCollected` — a gated, undelivered
+  diagnostic is not waited for and not replayed; exit 130.
+- `TestReplayQAfterProcessedDiagnosticWhileSearching` — a diagnostic
+  collected before `q` while searching is incomplete is replayed;
+  exit 130.
+- `TestReplayQGatedDiagnosticNotCollected` — a gated, undelivered
+  diagnostic is not waited for and not replayed when `q` cancels;
+  exit 130.
+- `TestReplayControlledFailureCollectedExactlyOnce` — the
+  controlled-failure diagnostic enters the collection before shutdown
+  and is replayed exactly once with no separate direct write.
+- `TestReplayControlledFailureWithEarlierDiagnostic` — the
+  controlled-failure diagnostic appears exactly once alongside an
+  earlier diagnostic in collection order.
+- `TestReplayEscapesFilenameInDiagnostic` — a diagnostic embedding a
+  filename with `\n` and ESC is escaped and single-lined through the
+  Issue #6 utility.
+- `TestReplaySinkSafetyTable` — the replay writer (the
+  `Diagnostics()` collection) passes the Issue #6 sink-safety table:
+  no raw control bytes survive in any collected diagnostic for every
+  shared hostile fixture.
+- `TestReplayOnCollectAcknowledgement` — the `onCollect` callback
+  fires when a diagnostic is collected, providing the
+  application-side acknowledgement side channel.
+
 ## cmd/vrg (subprocess boundary)
 
 `main_test.go` builds the real binary once in `TestMain` and asserts
@@ -496,3 +531,34 @@ assertions, display-restoration sequence checks, gate injection
   child readiness terminates and reaps the child, restores termios,
   writes a sanitized diagnostic exactly once after display restoration,
   exits 2.
+
+`replay_test.go` (Issue #11) extends the fake-rg/PTY harness with the
+application-side collection acknowledgement side channel
+(`VRG_TEST_COLLECT_ACK`), the diagnostic emission trigger
+(`VRG_TEST_DIAGNOSTIC_TRIGGER` / `VRG_TEST_DIAGNOSTIC_TEXT`), and
+replay-ordering assertions:
+
+- `TestReplayCtrlCAfterStderrDiagnostic` — `ctrl+c` sent after a
+  stderr diagnostic has been collected (acknowledged) exits 130 with
+  termios restored and the diagnostic on vrg's stderr exactly once
+  after the display-restoration sequence.
+- `TestReplayQWhileSearchingAfterDiagnostic` — `q` sent after the
+  collection acknowledgement while the fake rg is still blocked
+  (searching incomplete) exits 130 with termios restored and the
+  collected diagnostic replayed exactly once after display
+  restoration.
+- `TestReplayQWhileGateHeldAfterDiagnostic` — `q` sent after the
+  collection acknowledgement while the preparation gate is still held
+  (result preparation incomplete) exits 130 with termios restored and
+  the collected diagnostic replayed exactly once after display
+  restoration.
+- `TestReplayNormalQAfterCompletedStreamWithWarning` — a normal `q`
+  after a completed stream with a stderr warning replays the warning
+  to stderr exactly once after the display-restoration sequence.
+- `TestReplayControlledFailureWithEarlierDiagnostic` — an injected
+  controlled failure's diagnostic appears exactly once alongside an
+  earlier diagnostic in collection order, counted across both the
+  former direct-write and replay mechanisms with no duplicate.
+- `TestReplayFilenameWithNewlineAndESC` — a diagnostic embedding a
+  filename with `\n` and ESC is escaped and single-lined in the
+  replayed stderr text through the Issue #6 utility.

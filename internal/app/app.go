@@ -310,11 +310,27 @@ type Model struct {
 	exitCode      int
 	cancelled     bool
 
+	// diagnostics is the session diagnostic collection, independent of
+	// what was displayed. Each entry is sanitized through
+	// sanitizeDiagnostic. The entry point replays these to stderr after
+	// terminal restoration, exactly once each, in collection order, on
+	// every controlled exit (Issue #11).
+	diagnostics []string
+	// onCollect, if set, is called when a diagnostic is collected into
+	// the session collection. It is a test seam for the application-side
+	// acknowledgement side channel (Issue #11), in the same mechanism
+	// family as Process.OnReap.
+	onCollect func(string)
+
 	childArgs []string
 	workdir   string
 	process   *Process
 	gate      chan struct{}
 	failSig   <-chan string
+	// diagSig, if set, is a channel whose receipt emits a DiagnosticMsg
+	// for collection without display (Issue #11). It is a test seam in
+	// the same mechanism family as failSig.
+	diagSig <-chan string
 
 	// Browse state.
 	index      *searchindex.Index
@@ -340,9 +356,11 @@ type config struct {
 	gate       chan struct{}
 	process    *Process
 	failSignal <-chan string
+	diagSignal <-chan string
 	theme      theme.Theme
 	fileLoader FileLoader
 	fileGate   chan struct{}
+	onCollect  func(string)
 }
 
 // Option configures the model.
@@ -371,6 +389,18 @@ func WithFailureSignal(ch <-chan string) Option {
 	return func(c *config) { c.failSignal = ch }
 }
 
+// WithDiagnosticSignal sets a channel whose receipt emits a
+// DiagnosticMsg for collection into the session diagnostic collection
+// without display (Issue #11). This is a test seam in the same
+// mechanism family as WithFailureSignal: the process boundary wires it
+// via an environment-variable-gated side channel so PTY tests can emit
+// a diagnostic while the fake rg or preparation gate is still blocked,
+// then wait for the collection acknowledgement before sending the exit
+// key.
+func WithDiagnosticSignal(ch <-chan string) Option {
+	return func(c *config) { c.diagSignal = ch }
+}
+
 // WithTheme sets the visual theme for the browse view. The no-style
 // theme disables all ANSI sequences for sink-safety testing.
 func WithTheme(t theme.Theme) Option {
@@ -391,6 +421,17 @@ func WithFileLoadGate(ch chan struct{}) Option {
 	return func(c *config) { c.fileGate = ch }
 }
 
+// WithOnCollect sets a callback called once a diagnostic has been
+// processed into the session collection. It is a test seam for the
+// application-side acknowledgement side channel (Issue #11), in the
+// same mechanism family as Process.OnReap: the process boundary sets
+// it via an environment-variable-gated side channel so PTY tests can
+// wait for the acknowledgement before sending the exit key. The
+// callback receives the sanitized diagnostic string.
+func WithOnCollect(f func(string)) Option {
+	return func(c *config) { c.onCollect = f }
+}
+
 // New creates a new app model for a search invocation. The model starts
 // in the searching state.
 func New(childArgs []string, workdir string, opts ...Option) Model {
@@ -405,9 +446,11 @@ func New(childArgs []string, workdir string, opts ...Option) Model {
 		process:    cfg.process,
 		gate:       cfg.gate,
 		failSig:    cfg.failSignal,
+		diagSig:    cfg.diagSignal,
 		theme:      cfg.theme,
 		fileLoader: cfg.fileLoader,
 		fileGate:   cfg.fileGate,
+		onCollect:  cfg.onCollect,
 		loadCancel: make(chan struct{}),
 	}
 }
@@ -421,6 +464,18 @@ func (m Model) ExitCode() int { return m.exitCode }
 // Diagnostic returns the sanitized diagnostic for stderr replay. Valid
 // after the model has received a SearchFailedMsg or ControlledFailureMsg.
 func (m Model) Diagnostic() string { return m.diagnostic }
+
+// Diagnostics returns a copy of the session diagnostic collection in
+// collection order (Issue #11). Each entry is sanitized through
+// sanitizeDiagnostic. The entry point replays these to stderr after
+// terminal restoration, exactly once each, on every controlled exit.
+// The collection is independent of what was displayed: diagnostics
+// never shown in an overlay are also collected.
+func (m Model) Diagnostics() []string {
+	out := make([]string, len(m.diagnostics))
+	copy(out, m.diagnostics)
+	return out
+}
 
 // OverlayOpen reports whether the modal overlay is currently open.
 func (m Model) OverlayOpen() bool { return m.overlayOpen }
@@ -450,6 +505,9 @@ func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.collectResults()}
 	if m.failSig != nil {
 		cmds = append(cmds, m.watchFailure())
+	}
+	if m.diagSig != nil {
+		cmds = append(cmds, m.watchDiagnostic())
 	}
 	return tea.Batch(cmds...)
 }
@@ -487,6 +545,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.overlayText = sanitizeDiagnostic(oc.OverlayText)
 			m.overlayFatal = oc.OverlayFatal
 			m.overlayScroll = 0
+			// Collect the overlay diagnostic into the session collection
+			// (Issue #11). The collection is independent of display:
+			// the overlay text is collected here regardless of whether
+			// the overlay is later dismissed or the user quits while it
+			// is open. The shutdown boundary is the message-processing
+			// point: the diagnostic is collected once the model has
+			// processed this SearchCompleteMsg.
+			if oc.OverlayText != "" {
+				m.collectDiagnostic(oc.OverlayText)
+			}
 			if oc.State == StateBrowse {
 				m.browseIdx = 0
 				m.loading = true
@@ -516,6 +584,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = StateStartFailed
 		m.diagnostic = sanitizeDiagnostic(msg.Diagnostic)
 		m.exitCode = 2
+		// Collect the start-failure diagnostic into the session
+		// collection (Issue #11). The entry point replays it from the
+		// collection after terminal restoration.
+		m.collectDiagnostic(msg.Diagnostic)
 		return m, tea.Quit
 
 	case ControlledFailureMsg:
@@ -525,7 +597,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cancelled = true
 		m.cancelProcess()
 		m.cancelLoad()
+		// Route the controlled-failure diagnostic through the session
+		// collection instead of a separate direct write (Issue #11).
+		// The entry point replays it from the collection after terminal
+		// restoration, so exactly-once holds across both the former
+		// direct-write path and the replay mechanism.
+		m.collectDiagnostic(msg.Diagnostic)
 		return m, tea.Quit
+
+	case DiagnosticMsg:
+		// Collect the diagnostic into the session collection without
+		// displaying it in an overlay (Issue #11). The entry point
+		// replays it to stderr after terminal restoration. This path
+		// serves diagnostics that are only recoverable through stderr
+		// replay: unknown-type warnings, late non-current load
+		// failures (Issue #26), and diagnostics collected just before
+		// exit.
+		m.collectDiagnostic(msg.Diagnostic)
+		return m, nil
 
 	case tea.KeyPressMsg:
 		// ctrl+c always overrides the fixed exit status to 130,
@@ -840,6 +929,17 @@ type ControlledFailureMsg struct {
 	Diagnostic string
 }
 
+// DiagnosticMsg carries a diagnostic to be collected into the session
+// diagnostic collection without being displayed in an overlay (Issue
+// #11). This is used for diagnostics that are only recoverable through
+// stderr replay: unknown-type warnings, late non-current load failures
+// (Issue #26), and diagnostics collected just before exit. The
+// diagnostic is sanitized and appended to the collection; the entry
+// point replays it to stderr after terminal restoration.
+type DiagnosticMsg struct {
+	Diagnostic string
+}
+
 // cancel transitions the model to the cancelled state, signals the
 // collection goroutine to stop, and returns a quit command. The exit
 // code is 130.
@@ -882,6 +982,21 @@ func (m Model) watchFailure() tea.Cmd {
 			return nil
 		}
 		return ControlledFailureMsg{Diagnostic: diag}
+	}
+}
+
+// watchDiagnostic returns a command that waits on the diagnostic
+// signal channel and emits a DiagnosticMsg when it fires (Issue #11).
+// The diagnostic is collected into the session collection without
+// display; the entry point replays it to stderr after terminal
+// restoration.
+func (m Model) watchDiagnostic() tea.Cmd {
+	return func() tea.Msg {
+		diag, ok := <-m.diagSig
+		if !ok {
+			return nil
+		}
+		return DiagnosticMsg{Diagnostic: diag}
 	}
 }
 
@@ -1245,4 +1360,21 @@ func processResultFromSys(state any) ProcessResult {
 // without double-escaping.
 func sanitizeDiagnostic(s string) string {
 	return safepresentation.EscapeDiagnostic([]byte(s))
+}
+
+// collectDiagnostic sanitizes s through sanitizeDiagnostic, appends it to
+// the session diagnostic collection, and fires the onCollect callback if
+// set (Issue #11). The callback is the application-side acknowledgement
+// side channel: it fires once a diagnostic has been processed into the
+// collection, in the same mechanism family as Process.OnReap. The
+// shutdown boundary is defined here: a diagnostic is "collected" once the
+// model has processed the message carrying it. A diagnostic still in
+// flight (e.g., a gated SearchCompleteMsg) has not been processed and is
+// not collected, not waited for, and not replayed.
+func (m *Model) collectDiagnostic(s string) {
+	sanitized := sanitizeDiagnostic(s)
+	m.diagnostics = append(m.diagnostics, sanitized)
+	if m.onCollect != nil {
+		m.onCollect(sanitized)
+	}
 }

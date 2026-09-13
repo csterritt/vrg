@@ -107,6 +107,7 @@ Every current sink routes through the shared utility:
 | Panel content | `EscapeContent` | `internal/app` renderLineWithHighlights |
 | Usage-error stderr | `EscapePath` via `cli.Escape` | `internal/cli` diagnostic; `cmd/vrg` stderr |
 | Generated CLI-help stdout | fixed text (no external data) | `internal/cli` renderHelp |
+| Replayed stderr diagnostic (Issue #11) | `EscapeDiagnostic` via `sanitizeDiagnostic` | `internal/app` collectDiagnostic; `cmd/vrg` replay loop |
 
 The Issue #1 `cli.Escape` is now a one-line wrapper around
 `safepresentation.EscapePath`. The duplicated escaper implementation
@@ -159,8 +160,8 @@ sequence.
 Later issues add sink rows by iterating over the same `sinkfixtures.Fixtures`
 slice. A new sink adds a test that calls the sink with each fixture and
 asserts `NoControlBytes` (no-style) and `NoPayloadAfterESC` (styled).
-No fixture duplication is needed. Issues #9, #11, #15, #31, and #34
-will add their own rows.
+No fixture duplication is needed. Issue #11 added the replayed stderr
+diagnostic sink row. Issues #15, #31, and #34 will add their own rows.
 
 ## Tests
 

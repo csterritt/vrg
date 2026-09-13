@@ -1,4 +1,4 @@
-# Search collection path (Issue #3, extended by Issues #4, #8, #9, and #10)
+# Search collection path (Issue #3, extended by Issues #4, #8, #9, #10, and #11)
 
 The ripgrep execution and result-collection pipeline delivered by
 [Issue #3](../issues/003-spawn-rg-collect-results-searching-screen.md),
@@ -16,13 +16,19 @@ modal error overlay. [Issue #10](../issues/010-record-robustness-malformed-overs
 added robust handling of malformed, oversized, and unknown-type records
 with separate counters, bounded 64 MiB record parsing with
 discard-and-resynchronize behavior, sanitized oversized-record
-diagnostics, and record-loss outcome rows. Relevant PRD sections:
+diagnostics, and record-loss outcome rows. [Issue #11](../issues/011-stderr-replay-of-collected-diagnostics.md)
+added the session diagnostic collection independent of display, the
+processed-versus-in-flight shutdown boundary, and post-restoration
+stderr replay of every collected diagnostic exactly once in collection
+order. Relevant PRD sections:
 *Implementation Decisions → Invocation and child arguments*,
 *Module Design → CLI / SearchIndex / App*, *Testing Decisions → CLI /
 SearchIndex / App / Subprocess boundary / Responsiveness boundaries*,
-*Outcome and exit-status contract*, and *Resources and responsiveness
-(64 MiB record limit)*. See also [outcome-contract](outcome-contract.md)
-and [record-robustness](record-robustness.md).
+*Outcome and exit-status contract*, *Colours, overlays, and key
+precedence* (replay bullet), and *Resources and responsiveness
+(64 MiB record limit)*. See also [outcome-contract](outcome-contract.md),
+[record-robustness](record-robustness.md), and
+[safe-presentation](safe-presentation.md).
 
 ## Process boundary
 
@@ -50,7 +56,11 @@ and [record-robustness](record-robustness.md).
    the child is reaped).
 8. Inspects the final model state: if a diagnostic is present, prints
    it to stderr exactly once, after the terminal has been restored by
-   Bubble Tea.
+   Bubble Tea. Since Issue #11, replays every collected diagnostic from
+   `m.Diagnostics()` to stderr, exactly once each, in collection order,
+   after terminal restoration. The controlled-failure diagnostic is
+   routed through the collection (no separate direct write), so the
+   Issue #4 post-restoration writer serves every controlled exit.
 9. Returns the model's exit code (0 for normal quit, 130 for
    Ctrl-C/quit during search, 2 for failure).
 
@@ -196,8 +206,21 @@ trailing malformed record so the outcome is fatal.
 - `WithFailureSignal(ch)` (Issue #4) — test seam: a channel whose
   receipt triggers a `ControlledFailureMsg` with the received string as
   the diagnostic.
+- `WithDiagnosticSignal(ch)` (Issue #11) — test seam: a channel whose
+  receipt emits a `DiagnosticMsg` for collection into the session
+  diagnostic collection without display. In the same mechanism family
+  as `WithFailureSignal`.
+- `WithOnCollect(f)` (Issue #11) — test seam: a callback called once a
+  diagnostic has been processed into the session collection. The
+  application-side acknowledgement side channel, in the same mechanism
+  family as `Process.OnReap`.
 - `State()` / `ExitCode()` / `Diagnostic()` — accessors for the entry
   point.
+- `Diagnostics()` (Issue #11) — returns a copy of the session
+  diagnostic collection in collection order. Each entry is sanitized
+  through `sanitizeDiagnostic`. The entry point replays these to
+  stderr after terminal restoration, exactly once each, on every
+  controlled exit. The collection is independent of what was displayed.
 
 ### States
 
@@ -222,7 +245,8 @@ trailing malformed record so the outcome is fatal.
 ### Lifecycle
 
 `Init()` returns a `tea.Batch` of `collectResults` and (if a failure
-signal was injected) `watchFailure`. `collectResults` runs as a Bubble
+signal was injected) `watchFailure`, and (if a diagnostic signal was
+injected, Issue #11) `watchDiagnostic`. `collectResults` runs as a Bubble
 Tea command:
 
 1. Drains stderr concurrently in a goroutine (`io.Copy` into a buffer) so
@@ -248,6 +272,11 @@ Tea command:
 `watchFailure` (Issue #4) waits on the failure signal channel and emits
 a `ControlledFailureMsg` when it fires.
 
+`watchDiagnostic` (Issue #11) waits on the diagnostic signal channel and
+emits a `DiagnosticMsg` when it fires. The diagnostic is collected into
+the session collection without display; the entry point replays it to
+stderr after terminal restoration.
+
 `Update` handles:
 
 - `SearchCompleteMsg` — if not cancelled, transitions based on the
@@ -256,12 +285,20 @@ a `ControlledFailureMsg` when it fires.
   `StateNoResults`, recording the excluded-file count for the binary
   skip suffix; with a nil index (backward-compatible path) to
   `StateSummary`. If cancelled, ignores the message (late-completion
-  rejection).
+  rejection). Since Issue #11, the overlay text from the outcome
+  decision is collected into the session diagnostic collection
+  regardless of whether the overlay is later displayed or dismissed.
 - `SearchFailedMsg` — transitions to `StateStartFailed`, records the
-  sanitized diagnostic, sets exit code 2, and quits.
+  sanitized diagnostic, sets exit code 2, collects the diagnostic into
+  the session collection (Issue #11), and quits.
 - `ControlledFailureMsg` (Issue #4) — transitions to `StateFailed`,
   records the sanitized diagnostic, sets exit code 2, cancels the
-  collection goroutine, and quits.
+  collection goroutine, collects the diagnostic into the session
+  collection (Issue #11, routing it through the collection instead of a
+  separate direct write), and quits.
+- `DiagnosticMsg` (Issue #11) — collects the diagnostic into the
+  session collection without displaying it in an overlay. This path
+  serves diagnostics that are only recoverable through stderr replay.
 - `tea.KeyPressMsg` — `q` while searching cancels (exit 130); `q` from
   summary quits (exit 0); `q` from no-results (Issue #8) quits with exit
   1 through the same cleanup path as browse; `q` from browse quits
@@ -312,6 +349,57 @@ path:
 4. The diagnostic is never written both directly and through a later
    replay mechanism (exactly-once across mechanisms).
 5. Exit status is 2.
+
+Since Issue #11, the controlled-failure diagnostic is routed through
+the session diagnostic collection (via `collectDiagnostic`) instead of
+a separate direct write, so the Issue #4 post-restoration writer serves
+every controlled exit. Exactly-once holds across both the former
+direct-write path and the replay mechanism.
+
+### Session diagnostic collection and replay (Issue #11)
+
+The model maintains a session diagnostic collection (`diagnostics
+[]string`) independent of what was displayed. Every diagnostic the
+model processes is collected via `collectDiagnostic`, which sanitizes
+the text through `sanitizeDiagnostic`, appends it to the collection,
+and fires the `onCollect` callback if set.
+
+Collection sources:
+
+- `SearchCompleteMsg` — the overlay text from the outcome decision is
+  collected regardless of whether the overlay is later displayed or
+  dismissed.
+- `SearchFailedMsg` — the start-failure diagnostic is collected.
+- `ControlledFailureMsg` — the controlled-failure diagnostic is
+  collected (routing it through the collection instead of a separate
+  direct write).
+- `DiagnosticMsg` — diagnostics collected without display, for
+  diagnostics only recoverable through stderr replay.
+
+The shutdown boundary is defined at message-processing time: a
+diagnostic is "collected" once the model has processed the message
+carrying it. A diagnostic still in flight (e.g., a gated
+`SearchCompleteMsg`) has not been processed, is not collected, is not
+waited for, and is not replayed. This applies to both cancellation
+keys: `ctrl+c` in any state and `q` while searching or gate-held
+preparation is incomplete.
+
+After `program.Run()` returns and cleanup is complete, the process
+boundary replays every collected diagnostic to stderr, exactly once
+each, in collection order. Replay occurs strictly after the
+display-restoration sequence (alt-screen exit, cursor show) and after
+input modes are restored, because `program.Run()` returns only after
+Bubble Tea restores the terminal. Replay does not wait on unrelated
+in-flight work: only diagnostics already processed by the model before
+the exit are collected.
+
+The `onCollect` callback is the application-side acknowledgement side
+channel, in the same mechanism family as `Process.OnReap`. The process
+boundary wires it via an environment-variable-gated side channel
+(`VRG_TEST_COLLECT_ACK`) so PTY tests can wait for the acknowledgement
+before sending the exit key, proving the model has processed the
+diagnostic into the session collection rather than merely that bytes
+reached the pipe.
 
 ### No-results outcome (Issue #8)
 
@@ -373,4 +461,8 @@ a controllable blocked fake rg (readiness handshake + indefinite block),
 reap-evidence side channel (`VRG_TEST_REAP`), termios snapshot/restore
 assertions, display-restoration sequence checks, gate injection
 (`VRG_TEST_GATE`), and controlled-failure injection
-(`VRG_TEST_FAIL_TRIGGER` / `VRG_TEST_FAIL_DIAGNOSTIC`).
+(`VRG_TEST_FAIL_TRIGGER` / `VRG_TEST_FAIL_DIAGNOSTIC`). Issue #11
+extended the harness with the application-side collection
+acknowledgement side channel (`VRG_TEST_COLLECT_ACK`), the diagnostic
+emission trigger (`VRG_TEST_DIAGNOSTIC_TRIGGER` /
+`VRG_TEST_DIAGNOSTIC_TEXT`), and replay-ordering assertions.

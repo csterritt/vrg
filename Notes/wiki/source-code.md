@@ -11,9 +11,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   program, propagates exit codes; Issue #4: centralized cleanup kills the
   child process group and reaps via `proc.Cleanup`, single
   post-restoration stderr writer for diagnostics, test seams for reap
-  evidence/gate/failure injection via `VRG_TEST_*` env vars), usage error
-  → sanitized diagnostic on stderr, exit 2. See
-  [search-collection-path](search-collection-path.md).
+  evidence/gate/failure injection via `VRG_TEST_*` env vars; Issue #11:
+  replays every collected diagnostic from `m.Diagnostics()` to stderr
+  exactly once each in collection order after terminal restoration, and
+  wires the `VRG_TEST_COLLECT_ACK` acknowledgement side channel and the
+  `VRG_TEST_DIAGNOSTIC_TRIGGER`/`VRG_TEST_DIAGNOSTIC_TEXT` diagnostic
+  emission trigger), usage error → sanitized diagnostic on stderr,
+  exit 2. See [search-collection-path](search-collection-path.md).
 
 ## internal/cli
 
@@ -111,7 +115,24 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `recordLossDiagnostics` helper, and new matrix rows for malformed,
   oversized, and unknown record loss. `collectResults` now uses
   `Builder.ReadFrom` (the bounded 64 MiB reader) instead of
-  `bufio.Scanner`. See
+  `bufio.Scanner`. Issue #11 added the session diagnostic collection
+  independent of display: `diagnostics []string` field,
+  `collectDiagnostic` helper (sanitizes through `EscapeDiagnostic`,
+  appends to collection, fires `onCollect` callback),
+  `Diagnostics()` accessor (returns a copy in collection order),
+  `DiagnosticMsg` type (collects without display), `WithDiagnosticSignal`
+  option (test seam for emitting a `DiagnosticMsg`),
+  `WithOnCollect` option (test seam for the application-side
+  acknowledgement side channel), and `watchDiagnostic` command. The
+  `SearchCompleteMsg`, `SearchFailedMsg`, `ControlledFailureMsg`, and
+  `DiagnosticMsg` handlers now collect into the session collection.
+  The controlled-failure diagnostic is routed through the collection
+  instead of a separate direct write, so exactly-once holds across
+  both the former direct-write path and the replay mechanism. The
+  shutdown boundary is defined at message-processing time: a
+  diagnostic is collected once the model has processed the message
+  carrying it; in-flight diagnostics are not awaited or replayed.
+  See
   [search-collection-path](search-collection-path.md),
   [browse-tracer](browse-tracer.md),
   [outcome-contract](outcome-contract.md), and

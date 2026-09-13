@@ -86,3 +86,12 @@ Usage
  Input tokens: 202337 tokens
  Output tokens: 58531 tokens
  Cached input tokens: 10340096 tokens
+
+----
+Task 011-stderr-replay-of-collected-diagnostics.md
+
+Usage
+ Agent messages: 106 messages
+ Input tokens: 183656 tokens
+ Output tokens: 71220 tokens
+ Cached input tokens: 11141824 tokens

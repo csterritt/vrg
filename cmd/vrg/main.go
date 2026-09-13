@@ -123,6 +123,49 @@ func runSearch(res cli.Result, stdout, stderr io.Writer) int {
 		opts = append(opts, app.WithFailureSignal(failCh))
 	}
 
+	// Test seam: if VRG_TEST_DIAGNOSTIC_TRIGGER is set, watch for that
+	// file to appear and emit a DiagnosticMsg with the text from
+	// VRG_TEST_DIAGNOSTIC_TEXT (Issue #11). This lets PTY tests emit a
+	// diagnostic while the fake rg or preparation gate is still
+	// blocked, then wait for the collection acknowledgement before
+	// sending the exit key.
+	if diagTrigger := os.Getenv("VRG_TEST_DIAGNOSTIC_TRIGGER"); diagTrigger != "" {
+		diagCh := make(chan string, 1)
+		diagText := os.Getenv("VRG_TEST_DIAGNOSTIC_TEXT")
+		if diagText == "" {
+			diagText = "vrg: test diagnostic"
+		}
+		go func() {
+			for {
+				if _, err := os.Stat(diagTrigger); err == nil {
+					diagCh <- diagText
+					return
+				}
+			}
+		}()
+		opts = append(opts, app.WithDiagnosticSignal(diagCh))
+	}
+
+	// Test seam: if VRG_TEST_COLLECT_ACK is set, wire the onCollect
+	// callback to append the sanitized diagnostic to that file (Issue
+	// #11). This is the application-side acknowledgement side channel,
+	// in the same mechanism family as VRG_TEST_REAP: PTY tests wait for
+	// the ack file to reach the expected line count before sending the
+	// exit key, proving the model has processed the diagnostic into the
+	// session collection rather than merely that bytes reached the
+	// pipe.
+	if ackFile := os.Getenv("VRG_TEST_COLLECT_ACK"); ackFile != "" {
+		_ = os.WriteFile(ackFile, nil, 0o644) // create empty file
+		opts = append(opts, app.WithOnCollect(func(diag string) {
+			f, err := os.OpenFile(ackFile, os.O_APPEND|os.O_WRONLY, 0o644)
+			if err != nil {
+				return
+			}
+			defer f.Close()
+			fmt.Fprintln(f, diag)
+		}))
+	}
+
 	model := app.New(res.ChildArgs, workdir, opts...)
 
 	program := tea.NewProgram(model, tea.WithOutput(stdout))
@@ -150,10 +193,17 @@ func runSearch(res cli.Result, stdout, stderr io.Writer) int {
 		return 2
 	}
 
-	// Single post-restoration stderr writer: write the diagnostic exactly
-	// once, after the terminal has been restored by Bubble Tea.
-	if m.Diagnostic() != "" {
-		fmt.Fprintln(stderr, m.Diagnostic())
+	// Post-restoration stderr replay (Issue #11): replay each collected
+	// diagnostic exactly once, in collection order, to sanitized stderr
+	// after the terminal has been restored by Bubble Tea. The collection
+	// is independent of what was displayed; diagnostics never shown in an
+	// overlay are also replayed. The controlled-failure diagnostic is
+	// routed through the collection (no separate direct write), so the
+	// Issue #4 writer serves every controlled exit. Replay does not wait
+	// on unrelated in-flight work: only diagnostics already processed by
+	// the model before the exit are collected.
+	for _, d := range m.Diagnostics() {
+		fmt.Fprintln(stderr, d)
 	}
 
 	return m.ExitCode()

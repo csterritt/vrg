@@ -15,12 +15,13 @@ Catalog of all wiki pages for the vrg project.
   flag allow-list, ordered exact-spelling scan records, combined shorts,
   cumulative `-u`, assignment rejection, exact child argv
 - [search-collection-path.md](search-collection-path.md) — Issue #3
-  (extended by Issues #4, #8, and #9): ripgrep subprocess execution,
-  dual-pipe drainage, SearchIndex parsing with binary-file exclusion
-  and stream-integrity accounting, the searching/summary/no-results TUI
+  (extended by Issues #4, #8, #9, #10, and #11): ripgrep subprocess
+  execution, dual-pipe drainage, SearchIndex parsing with binary-file
+  exclusion and stream-integrity accounting, the searching/summary/no-results TUI
   lifecycle, cancellation, child termination/reaping, terminal
-  restoration, controlled-failure cleanup, and the fatal/warning
-  outcome matrix with modal error overlay
+  restoration, controlled-failure cleanup, the fatal/warning
+  outcome matrix with modal error overlay, and the session diagnostic
+  collection with post-restoration stderr replay
 - [browse-tracer.md](browse-tracer.md) — Issue #5 (extended by Issue #7):
   two-pane browse view with file list, filename rule, gutter, true-inverse
   match highlights, current-match underline, async file loading with
@@ -36,10 +37,12 @@ Catalog of all wiki pages for the vrg project.
   styling, current-match underline, current-file underline, indicator,
   overlay, filename-rule, file-list, and base/gutter styles
 - [outcome-contract.md](outcome-contract.md) — Issue #9 (extended by
-  Issue #10): stream-integrity accounting, separate process-success and
-  stream-integrity assessment, the fatal/warning outcome matrix, the
-  modal error overlay, exit statuses, stderr capture and fallback
-  diagnostics, record-loss inputs and outcome rows
+  Issues #10 and #11): stream-integrity accounting, separate
+  process-success and stream-integrity assessment, the fatal/warning
+  outcome matrix, the modal error overlay, exit statuses, stderr
+  capture and fallback diagnostics, record-loss inputs and outcome
+  rows, and the post-restoration stderr replay with session
+  diagnostic collection
 - [record-robustness.md](record-robustness.md) — Issue #10: robust
   handling of malformed, oversized, and unknown-type records with
   separate counters, the 64 MiB record limit with

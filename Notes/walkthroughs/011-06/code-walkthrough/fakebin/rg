@@ -1,0 +1,8 @@
+#!/bin/sh
+# Emit a stderr warning, then a valid ripgrep JSON stream, then exit 0.
+printf 'warn one\n' >&2
+echo '{"type":"begin","data":{"path":{"text":"demo.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"demo.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+echo '{"type":"end","data":{"path":{"text":"demo.txt"},"binary_offset":null}}'
+echo '{"type":"summary","data":{}}'
+exit 0
