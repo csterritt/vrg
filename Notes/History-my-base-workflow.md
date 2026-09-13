@@ -257,3 +257,12 @@ Usage
  Input tokens: 263790 tokens
  Output tokens: 68998 tokens
  Cached input tokens: 12618752 tokens
+
+----
+Task 030-unsupported-encodings-utf16-utf32.md
+
+Usage
+ Agent messages: 147 messages
+ Input tokens: 219870 tokens
+ Output tokens: 61140 tokens
+ Cached input tokens: 15766144 tokens

@@ -366,10 +366,18 @@ type Model struct {
 	// of "Loading…" when set. Cleared on a successful load or when
 	// entering the file from a different file (re-entry retry).
 	readFailed bool
-	theme      theme.Theme
-	fileLoader FileLoader
-	fileGate   chan struct{}
-	loadCancel chan struct{}
+	// unsupportedEncoding is true when the current file's loaded
+	// buffer has an unsupported UTF-16/UTF-32 encoding (Issue #30).
+	// The render path shows "(unsupported encoding)" instead of file
+	// text. The notification follows the same current/non-current
+	// distinction as read failures: current → overlay + placeholder;
+	// non-current → diagnostic-only. Cleared on reload (r shows
+	// "Loading…" then re-detects) and when entering a different file.
+	unsupportedEncoding bool
+	theme               theme.Theme
+	fileLoader          FileLoader
+	fileGate            chan struct{}
+	loadCancel          chan struct{}
 	// loadRequestID is the next request identity for file loads
 	// (Issue #25). Each in-flight load is tagged with a unique ID so
 	// stale completions (from a cancelled or superseded request) can
@@ -1142,6 +1150,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.failedPaths != nil {
 				delete(m.failedPaths, string(msg.Path))
 			}
+			// Issue #30: collect the encoding diagnostic for an
+			// unsupported encoding regardless of whether the file is
+			// current. A non-current unsupported file is diagnostic-only
+			// (no overlay, no indicator), discovered by visiting that
+			// file or at exit through stderr replay.
+			if msg.Buffer.UnsupportedEncoding {
+				m.collectDiagnostic(msg.Buffer.EncodingDiagnostic)
+			}
 		} else if msg.Err != nil {
 			// Issue #26: read failure. Record the failure for this
 			// path and collect the diagnostic for stderr replay
@@ -1180,12 +1196,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Buffer != nil {
 			m.buffer = msg.Buffer
 			m.readFailed = false
+			if msg.Buffer.UnsupportedEncoding {
+				// Issue #30: current-file unsupported encoding. Show
+				// the error overlay (Issue #9 component) and the
+				// "(unsupported encoding)" placeholder. The file's
+				// cursor stops are retained and the filename row still
+				// identifies the path. No viewport is built (no file
+				// text); the stale-match guard does not run.
+				m.unsupportedEncoding = true
+				m.openReadFailureOverlay(msg.Buffer.EncodingDiagnostic)
+			} else {
+				m.unsupportedEncoding = false
+			}
 		} else if msg.Err != nil {
 			// Issue #26: current-file read failure. Show the error
 			// overlay (Issue #9 component) and the "(unreadable)"
 			// placeholder. The file's cursor stops are retained and
 			// the filename row still identifies the path.
 			m.readFailed = true
+			m.unsupportedEncoding = false
 			m.openReadFailureOverlay(msg.Err.Error())
 		}
 		m.loading = false
@@ -1194,8 +1223,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// default row model) adapts the buffer so the render path
 		// queries only the visible range. The per-file saved offset
 		// is restored so a revisited file starts from its saved
-		// position (Issue #12).
-		if msg.Buffer != nil {
+		// position (Issue #12). Issue #30: unsupported-encoding buffers
+		// have no file text, so no viewport is built.
+		if msg.Buffer != nil && !msg.Buffer.UnsupportedEncoding {
 			// Issue #28 stage one: validate, establish the
 			// revision, compute the gutter/text width, and
 			// request the matching prepared layout. No row-based
@@ -1873,6 +1903,19 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 		m.buffer = buf
 		m.loading = false
 		m.currentPath = stop.RawPath
+		m.readFailed = false
+		// Issue #30: a cached unsupported-encoding buffer shows
+		// the overlay and placeholder. No viewport is built (no
+		// file text). A cached normal buffer clears the
+		// unsupported-encoding flag.
+		if buf.UnsupportedEncoding {
+			m.unsupportedEncoding = true
+			m.openReadFailureOverlay(buf.EncodingDiagnostic)
+			m.viewport = nil
+			m.loadIntent = IntentReveal
+			return m, popupCmd
+		}
+		m.unsupportedEncoding = false
 		// Issue #17: clear the viewport so buildViewport treats
 		// this as a fresh load (restoring the saved per-file
 		// anchor) rather than a same-file rebuild (preserving
@@ -1897,6 +1940,7 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 	m.buffer = nil
 	m.viewport = nil
 	m.loading = true
+	m.unsupportedEncoding = false
 	m.currentPath = stop.RawPath
 	// Issue #26: re-entry into a previously failed file. The prior
 	// failure overlay reopens immediately (before the retry
@@ -1952,10 +1996,13 @@ func (m Model) handleReload() (tea.Model, tea.Cmd) {
 		m.reloadingPaths = make(map[string]bool)
 	}
 	m.reloadingPaths[string(m.currentPath)] = true
-	// Show "Loading…" and clear any prior read-failure state so the
-	// panel switches from "(unreadable)" to "Loading…" on retry.
+	// Show "Loading…" and clear any prior read-failure or
+	// unsupported-encoding state so the panel switches from
+	// "(unreadable)" or "(unsupported encoding)" to "Loading…" on
+	// retry (Issue #26, #30).
 	m.loading = true
 	m.readFailed = false
+	m.unsupportedEncoding = false
 	// Issue #28: set the reload-anchor intent. It is committed when
 	// the new revision's matching prepared layout installs. If
 	// navigation happens during the reload, the intent is replaced
@@ -2764,6 +2811,10 @@ func (m Model) renderFilenameRow(escapedName string) string {
 	} else if m.readFailed {
 		// Issue #26: the real status note for the unreadable state.
 		note = "(unreadable)"
+	} else if m.unsupportedEncoding {
+		// Issue #30: the real status note for the unsupported-encoding
+		// state.
+		note = "(unsupported encoding)"
 	} else if m.buffer != nil && m.buffer.Stale {
 		// Issue #29: persistent stale-content note. Shown on every
 		// display (no timer) while the current buffer's content does
@@ -2846,6 +2897,18 @@ func (m Model) renderContentPanel(escapedName string, currentLine int) string {
 		// Issue #26: current-file read failure. Show the
 		// "(unreadable)" placeholder instead of "Loading…".
 		b.WriteString("(unreadable)")
+		return b.String()
+	}
+	if m.unsupportedEncoding {
+		// Issue #30: current-file unsupported encoding. Show the
+		// "(unsupported encoding)" placeholder instead of file
+		// text or "Loading…". Truncate to the panel width so the
+		// composed view never overflows at constrained widths.
+		panelWidth := m.width - m.ListWidth() - 1
+		if panelWidth < 1 {
+			panelWidth = 1
+		}
+		b.WriteString(truncateRightCells("(unsupported encoding)", panelWidth))
 		return b.String()
 	}
 	if m.loading || m.buffer == nil || m.viewport == nil {

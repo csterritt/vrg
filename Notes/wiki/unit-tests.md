@@ -1635,3 +1635,61 @@ replay-ordering assertions:
   keeps the fixed exit status unchanged (browse, exit 0).
 - `TestStaleNoInventedHighlight` — a stale buffer with all
   submatches dropped does not invent highlights.
+
+`encoding_test.go` (Issue #30, external package `filebuffer_test`):
+
+- `TestUnsupportedUTF16LEBOM` — a file with a UTF-16 LE BOM (`FF FE`)
+  sets `UnsupportedEncoding` and an `EncodingDiagnostic` mentioning
+  UTF-16 LE.
+- `TestUnsupportedUTF16BEBOM` — a file with a UTF-16 BE BOM (`FE FF`)
+  sets `UnsupportedEncoding` and an `EncodingDiagnostic` mentioning
+  UTF-16 BE.
+- `TestUnsupportedUTF32LEBOM` — a file with a UTF-32 LE BOM
+  (`FF FE 00 00`) sets `UnsupportedEncoding` and an
+  `EncodingDiagnostic` mentioning UTF-32 LE (not UTF-16 LE).
+- `TestUnsupportedUTF32BEBOM` — a file with a UTF-32 BE BOM
+  (`00 00 FE FF`) sets `UnsupportedEncoding` and an
+  `EncodingDiagnostic` mentioning UTF-32 BE.
+- `TestUnsupportedNoHighlights` — an unsupported buffer has no lines
+  and no highlights.
+- `TestUnsupportedNoStaleValidation` — an unsupported buffer is not
+  stale (`Stale == false`); the validation guard never runs.
+- `TestUnsupportedReloadPreservesPlaceholder` — reloading an
+  unsupported file re-detects the BOM and preserves the placeholder.
+- `TestUnsupportedGutterWidth` — an unsupported buffer has a
+  three-cell gutter (matching an empty file).
+- `TestUnsupportedNoBOMNotUnsupported` — a file without a BOM is
+  not unsupported.
+- `TestUnsupportedShortFileNoFalsePositive` — a file shorter than
+  the shortest BOM is not unsupported.
+- `TestUnsupportedUTF16LETwoByteOnly` — a two-byte file containing
+  only `FF FE` is detected as UTF-16 LE.
+- `TestUTF8BOMNotMisclassified` — a file with a UTF-8 BOM
+  (`EF BB BF`) is not unsupported.
+
+`encoding_test.go` (Issue #30, external package `app_test`):
+
+- `TestUnsupportedCurrentFileOverlayPlaceholder` — a current-file
+  unsupported encoding opens the non-fatal error overlay with the
+  encoding diagnostic, shows `(unsupported encoding)` after
+  dismissal, retains cursor stops, and collects the diagnostic.
+- `TestUnsupportedCurrentFileDismissReturnsToBrowse` — dismissing
+  the unsupported-encoding overlay returns to browse with the
+  placeholder still shown; `q` quits with the fixed exit status.
+- `TestUnsupportedNonCurrentDiagnosticOnly` — a non-current
+  unsupported encoding is collected as a diagnostic only (no
+  overlay, no indicator); visiting the file opens the overlay.
+- `TestUnsupportedReloadViaR` — pressing `r` shows `Loading…`, then
+  re-detects the BOM and shows the placeholder with a fresh overlay.
+- `TestUnsupportedNoStaleNote` — an unsupported-encoding file does
+  not show the "file changed since search" stale note.
+- `TestUnsupportedOutcomeAllUnsupportedFixed0` — every retained
+  file having an unsupported encoding still exits 0 (fixed status
+  unchanged).
+- `TestUnsupportedComposedViewRobustness` — the unsupported state
+  with a long path at widths 80/40/20 keeps the composed view
+  well-formed (truncated safe path, `(unsupported encoding)`
+  placeholder, no overflow, nonnegative dimensions).
+- `TestUnsupportedRealFileUTF16LE` — a real UTF-16 LE file on disk
+  is detected by `filebuffer.Load` and presented through the App
+  with the placeholder, overlay, and UTF-16 diagnostic.

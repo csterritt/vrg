@@ -1058,3 +1058,39 @@ stale_note_test.go entries). Sources:
 `internal/filebuffer/stale_validation_test.go`,
 `internal/app/app.go`,
 `internal/app/stale_note_test.go`.
+
+## [2026-09-12] ingest | Issue #30 unsupported encodings UTF-16/UTF-32
+
+Ingested the completed Issue #30 implementation: UTF-16/UTF-32 BOM
+detection in `filebuffer.Load` via `detectUnsupportedBOM(data)`, with
+longer-before-shorter overlap ordering so `FF FE 00 00` classifies as
+UTF-32 LE rather than UTF-16 LE (UTF-32 LE/BE checked before UTF-16
+LE/BE); a placeholder `Buffer` with `UnsupportedEncoding = true`,
+`EncodingDiagnostic` set, no lines, no highlights, and `Stale = false`
+(stale-match guard never runs against raw encoded bytes); a leading
+UTF-8 BOM (`EF BB BF`) is not unsupported and falls through to the
+existing Issue #22 strip path. App integration: an
+`unsupportedEncoding bool` model flag mirrors `readFailed`; a
+current-file unsupported buffer opens the Issue #9 overlay with the
+encoding diagnostic (non-fatal), shows `(unsupported encoding)` in the
+panel and the Issue #24 status slot, collects the diagnostic for
+replay, and builds no viewport; a non-current unsupported buffer is
+diagnostic-only; `handleReload` clears the flag (showing `Loading…`
+then re-detecting); cached unsupported destinations open the overlay
+through the cached-destination path in `handleNavigate`. The
+`(unsupported encoding)` placeholder is truncated to the panel width
+so the composed view never overflows at constrained widths. The
+fixed search-derived exit status is never altered by unsupported
+encodings (all-unsupported outcome-matrix row keeps exit 0). Ripgrep
+invocation is unchanged (no forced encoding flag; default BOM
+detection remains enabled). Created
+[unsupported-encodings](unsupported-encodings.md); updated
+[index](index.md), [source-code](source-code.md) (internal/filebuffer
+and internal/app Issue #30 entries), and [unit-tests](unit-tests.md)
+(encoding_test.go entries for both packages). Sources:
+`Notes/tasks/030-unsupported-encodings-utf16-utf32.md`,
+`Notes/PRD-vrg.md` (Encodings, Stale-content validation, Invocation),
+`internal/filebuffer/filebuffer.go`,
+`internal/filebuffer/encoding_test.go`,
+`internal/app/app.go`,
+`internal/app/encoding_test.go`.

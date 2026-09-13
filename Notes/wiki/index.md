@@ -195,6 +195,15 @@ Catalog of all wiki pages for the vrg project.
   slot with no timer; reload recomputation; two-stage fallback reveal
   through the Issue #28 path; fixed search-derived exit status never
   altered by stale content; UTF-16/UTF-32 excluded (Issue #30)
+- [unsupported-encodings.md](unsupported-encodings.md) — Issue #30:
+  UTF-16/UTF-32 BOM detection in `filebuffer.Load` with
+  longer-before-shorter overlap ordering (UTF-32 LE `FF FE 00 00`
+  over UTF-16 LE `FF FE`); `(unsupported encoding)` placeholder with
+  no file text or highlights; explanatory encoding diagnostic;
+  current/non-current notification split mirroring Issue #26;
+  reloadability through `r`; stale-validation exclusion; fixed
+  search-derived exit status never altered by unsupported encodings;
+  ripgrep invocation unchanged (no forced encoding flag)
 
 ## Catalogs
 

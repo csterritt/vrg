@@ -33,6 +33,20 @@ type Buffer struct {
 	// is true. Reload recomputes Stale: it clears only when the newly
 	// loaded content passes validation for every retained submatch.
 	Stale bool
+	// UnsupportedEncoding is true when the file's leading bytes
+	// match a UTF-16 or UTF-32 BOM (Issue #30). Such files show
+	// "(unsupported encoding)" with no file text, no highlights,
+	// and an explanatory diagnostic (EncodingDiagnostic). They
+	// remain indexed and reloadable. The stale-match guard does
+	// not run against their raw encoded bytes, so Stale is always
+	// false when UnsupportedEncoding is true.
+	UnsupportedEncoding bool
+	// EncodingDiagnostic is the explanatory diagnostic for an
+	// unsupported encoding (Issue #30). It identifies the detected
+	// encoding (e.g. "UTF-16 LE", "UTF-32 BE") so the user can
+	// understand why the file is not shown. Empty when
+	// UnsupportedEncoding is false.
+	EncodingDiagnostic string
 }
 
 // Cluster is one grapheme cluster within a display string: its byte
@@ -102,6 +116,25 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 	data, err := os.ReadFile(string(path))
 	if err != nil {
 		return nil, err
+	}
+
+	// Issue #30: detect UTF-16 and UTF-32 BOMs. Longer BOMs are
+	// checked before overlapping shorter ones so FF FE 00 00
+	// classifies as UTF-32 LE rather than UTF-16 LE (FF FE is both
+	// the UTF-16 LE BOM and the first two bytes of the UTF-32 LE
+	// BOM). A detected UTF-16/32 file shows "(unsupported encoding)"
+	// with no file text, no highlights, and an explanatory
+	// diagnostic. It remains an indexed cursor stop and is
+	// reloadable. The stale-match guard (Issue #29) does not run
+	// against these raw encoded bytes, so Stale is always false.
+	// Ripgrep's default BOM detection remains enabled; no forced
+	// encoding flag exists in the child argv.
+	if enc := detectUnsupportedBOM(data); enc != "" {
+		return &Buffer{
+			UnsupportedEncoding: true,
+			EncodingDiagnostic:  "unsupported encoding: " + enc,
+			GutterWidth:         gutterWidth(0),
+		}, nil
 	}
 
 	// Detect and strip a leading UTF-8 BOM (EF BB BF). Ripgrep 15.x
@@ -303,6 +336,33 @@ func gutterWidth(lineCount int) int {
 		digits = len(fmt.Sprintf("%d", lineCount))
 	}
 	return digits + 2
+}
+
+// detectUnsupportedBOM checks the leading bytes of data for a UTF-16 or
+// UTF-32 BOM (Issue #30). Longer BOMs are checked before overlapping
+// shorter ones so FF FE 00 00 classifies as UTF-32 LE rather than
+// UTF-16 LE. Returns the encoding name ("UTF-32 LE", "UTF-32 BE",
+// "UTF-16 LE", or "UTF-16 BE") when a BOM is detected, or "" when no
+// unsupported-encoding BOM is present. A leading UTF-8 BOM (EF BB BF)
+// is not an unsupported encoding and returns "".
+func detectUnsupportedBOM(data []byte) string {
+	// UTF-32 BOMs are 4 bytes; check them before the 2-byte UTF-16
+	// BOMs because FF FE is both the UTF-16 LE BOM and the first
+	// two bytes of the UTF-32 LE BOM (FF FE 00 00).
+	if len(data) >= 4 && data[0] == 0xFF && data[1] == 0xFE && data[2] == 0x00 && data[3] == 0x00 {
+		return "UTF-32 LE"
+	}
+	if len(data) >= 4 && data[0] == 0x00 && data[1] == 0x00 && data[2] == 0xFE && data[3] == 0xFF {
+		return "UTF-32 BE"
+	}
+	// UTF-16 BOMs are 2 bytes.
+	if len(data) >= 2 && data[0] == 0xFF && data[1] == 0xFE {
+		return "UTF-16 LE"
+	}
+	if len(data) >= 2 && data[0] == 0xFE && data[1] == 0xFF {
+		return "UTF-16 BE"
+	}
+	return ""
 }
 
 // expandedByteCells remaps the per-byte display cell ranges from

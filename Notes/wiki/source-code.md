@@ -389,9 +389,19 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   line/byte and falls back to `stop.LineNumber - 1` only when the
   buffer provides no target; `renderFilenameRow` shows
   `file changed since search` in the Issue #24 status slot when
-  `m.buffer.Stale`. See
-  [load-completion-two-stage](load-completion-two-stage.md) and
-  [stale-match-validation](stale-match-validation.md).
+  `m.buffer.Stale`. Issue #30 integrated unsupported-encoding
+  detection: an `unsupportedEncoding bool` model flag mirrors
+  `readFailed`; a current-file unsupported buffer opens the Issue #9
+  overlay with the encoding diagnostic, shows
+  `(unsupported encoding)` in the panel and the Issue #24 status
+  slot, collects the diagnostic for replay, and builds no viewport; a
+  non-current unsupported buffer is diagnostic-only; `handleReload`
+  clears the flag (showing `Loading…` then re-detecting); cached
+  unsupported destinations open the overlay through the
+  cached-destination path in `handleNavigate`. See
+  [load-completion-two-stage](load-completion-two-stage.md),
+  [stale-match-validation](stale-match-validation.md), and
+  [unsupported-encodings](unsupported-encodings.md).
 
 ## internal/safepresentation
 
@@ -497,13 +507,24 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   (first surviving submatch, clamped recorded start with end-of-line
   cell clamping, or last source line); `Line` carries `RawBytes`
   (original line bytes), `ContentWidth`, `HasMarker`, `ValidStarts`,
-  and `FirstRecordedStart` for the fallback computation. See
+  and `FirstRecordedStart` for the fallback computation. Issue #30
+  added unsupported-encoding BOM detection: `detectUnsupportedBOM(data)`
+  checks the leading bytes for UTF-32 LE (`FF FE 00 00`), UTF-32 BE
+  (`00 00 FE FF`), UTF-16 LE (`FF FE`), and UTF-16 BE (`FE FF`), with
+  longer BOMs checked before overlapping shorter ones so `FF FE 00 00`
+  classifies as UTF-32 LE rather than UTF-16 LE; a detected file
+  returns a placeholder `Buffer` with `UnsupportedEncoding = true`,
+  `EncodingDiagnostic` set, no lines, no highlights, and `Stale =
+  false` (the stale-match guard never runs against raw encoded
+  bytes); a leading UTF-8 BOM (`EF BB BF`) is not unsupported and
+  falls through to the existing Issue #22 strip path. See
   [browse-tracer](browse-tracer.md),
   [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
   [grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md),
   [structural-line-handling](structural-line-handling.md),
-  [zero-width-match-markers](zero-width-match-markers.md), and
-  [stale-match-validation](stale-match-validation.md).
+  [zero-width-match-markers](zero-width-match-markers.md),
+  [stale-match-validation](stale-match-validation.md), and
+  [unsupported-encodings](unsupported-encodings.md).
 
 ## internal/viewport
 
