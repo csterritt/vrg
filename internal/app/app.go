@@ -381,6 +381,21 @@ type Model struct {
 	overlayText   string
 	overlayFatal  bool
 	overlayScroll int
+
+	// File-change pop-up state (Issue #15). The pop-up starts at
+	// selection time (when navigation crosses a file boundary), not
+	// at load completion. Each pop-up gets a fresh one-second instance;
+	// an expiry message dismisses only the matching instance, so a
+	// stale timer cannot dismiss a newer pop-up. Any key press dismisses
+	// the pop-up and performs its normal action in the same update.
+	// Centring and left-truncation are computed from the current
+	// terminal size at every render, so a resize recentres and
+	// re-truncates without dismissing or restarting the timer. An
+	// error overlay cancels the pop-up with no return after dismissal.
+	popupOpen     bool
+	popupPath     []byte
+	popupInstance uint64
+	popupDuration time.Duration
 }
 
 type config struct {
@@ -396,6 +411,10 @@ type config struct {
 	// When nil, viewport.BufferRows is used. This is a test seam for
 	// the render-cost guard.
 	rowProviderFactory RowProviderFactory
+	// popupDuration is the file-change pop-up lifetime. Zero means
+	// use the default (1 second); tests may set a very short duration
+	// so the timer fires immediately when executed.
+	popupDuration time.Duration
 }
 
 // RowProviderFactory builds a viewport.RowProvider from a loaded
@@ -482,10 +501,20 @@ func WithRowProviderFactory(f RowProviderFactory) Option {
 	return func(c *config) { c.rowProviderFactory = f }
 }
 
+// WithPopupDuration sets the file-change pop-up lifetime (Issue #15).
+// The production default is 1 second. Tests may set a very short
+// duration so the timer fires immediately when executed, avoiding
+// sleeps in test code.
+func WithPopupDuration(d time.Duration) Option {
+	return func(c *config) { c.popupDuration = d }
+}
+
 // New creates a new app model for a search invocation. The model starts
 // in the searching state.
 func New(childArgs []string, workdir string, opts ...Option) Model {
-	cfg := config{}
+	cfg := config{
+		popupDuration: time.Second,
+	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -505,6 +534,7 @@ func New(childArgs []string, workdir string, opts ...Option) Model {
 		perFileOffset:      make(map[string]int),
 		fileCache:          make(map[string]*filebuffer.Buffer),
 		loadCancel:         make(chan struct{}),
+		popupDuration:      cfg.popupDuration,
 	}
 }
 
@@ -582,6 +612,23 @@ func (m Model) CurrentPath() []byte {
 	return s.RawPath
 }
 
+// PopupOpen reports whether the file-change pop-up is currently shown
+// (Issue #15). The pop-up starts at selection time when navigation
+// crosses a file boundary and is dismissed by its one-second timer
+// expiry or any key press.
+func (m Model) PopupOpen() bool { return m.popupOpen }
+
+// PopupPath returns the raw path displayed in the file-change pop-up,
+// or nil when no pop-up is shown (Issue #15). The path is sanitized
+// through safepresentation.EscapePath at render time.
+func (m Model) PopupPath() []byte { return m.popupPath }
+
+// PopupInstance returns the instance ID of the current file-change
+// pop-up, or 0 when no pop-up is shown (Issue #15). Each pop-up gets
+// a fresh instance; an expiry message dismisses only the matching
+// instance, so a stale timer cannot dismiss a newer pop-up.
+func (m Model) PopupInstance() uint64 { return m.popupInstance }
+
 // EscapePathForDiagnostic escapes a raw filename for safe embedding in a
 // diagnostic. It delegates to safepresentation.EscapePath, the shared
 // single-line path escaper, so filename newlines become literal \n
@@ -643,6 +690,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.overlayText = sanitizeDiagnostic(oc.OverlayText)
 			m.overlayFatal = oc.OverlayFatal
 			m.overlayScroll = 0
+			// Issue #15: an error overlay cancels the file-change
+			// pop-up. After cancellation the pop-up does not return
+			// when the overlay is dismissed.
+			if m.overlayOpen {
+				m.cancelPopup()
+			}
 			// Collect the overlay diagnostic into the session collection
 			// (Issue #11). The collection is independent of display:
 			// the overlay text is collected here regardless of whether
@@ -758,6 +811,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.collectDiagnostic(msg.Diagnostic)
 		return m, nil
 
+	case FileChangePopupExpiryMsg:
+		// Issue #15: an expiry message dismisses the pop-up only if
+		// its instance matches the currently active pop-up. A stale
+		// expiry (from an older instance) must not dismiss a newer
+		// pop-up.
+		if m.popupOpen && m.popupInstance == msg.Instance {
+			m.dismissPopup()
+		}
+		return m, nil
+
 	case tea.KeyPressMsg:
 		// ctrl+c always overrides the fixed exit status to 130,
 		// regardless of overlay or base state.
@@ -767,6 +830,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// When the overlay is open, it captures key routing.
 		if m.overlayOpen {
 			return m.handleOverlayKey(msg)
+		}
+		// Issue #15: any key press dismisses the file-change pop-up
+		// and performs its normal action in the same update. The
+		// dismissal happens before the normal action so a cross-file
+		// navigation can open a fresh pop-up in the same update.
+		if m.popupOpen {
+			m.dismissPopup()
 		}
 		// Scroll keys are active in the browse state when content is
 		// loaded. Scrolling a "Loading…" placeholder is a no-op
@@ -953,6 +1023,10 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 	}
 	// Cross-file navigation. Save the departing file's viewport.
 	m.saveOffset()
+	// Issue #15: start the file-change pop-up at selection time,
+	// before either destination branch returns. The pop-up begins
+	// regardless of whether the destination is cached or loading.
+	popupCmd := m.startPopup(stop.RawPath)
 	// Switch the panel to the destination file immediately.
 	if buf, ok := m.fileCache[string(stop.RawPath)]; ok {
 		// Cached destination: show immediately with its saved
@@ -972,7 +1046,7 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 		// viewport is set from the saved offset (or 0 for a first
 		// visit).
 		m.revealTarget()
-		return m, nil
+		return m, popupCmd
 	}
 	// Uncached destination: request a load. The panel shows the
 	// loading placeholder until the load completes.
@@ -983,7 +1057,9 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 	// Issue #14: the load completion for this navigation should
 	// apply a destination reveal once the content is available.
 	m.needsReveal = true
-	return m, m.loadFileFor(stop.RawPath)
+	loadCmd := m.loadFileFor(stop.RawPath)
+	// Batch the pop-up timer and the load command so both run.
+	return m, tea.Batch(popupCmd, loadCmd)
 }
 
 // handleOverlayKey routes a key press to the open overlay. up/down
@@ -1051,6 +1127,16 @@ func (m Model) View() tea.View {
 	// Render the modal overlay on top of the base view when open.
 	if m.overlayOpen {
 		content = m.renderOverlay(content)
+	} else if m.popupOpen {
+		// Issue #15: render the file-change pop-up on top of the
+		// browse content. The pop-up is centered and shows a single-
+		// line safe path left-truncated to fit. Centring and
+		// truncation are computed from the current terminal size at
+		// every render, so a resize recentres and re-truncates
+		// without dismissing or restarting the timer. The pop-up
+		// is not shown when an error overlay is open (the overlay
+		// takes precedence and has already cancelled the pop-up).
+		content = m.renderPopup(content)
 	}
 	v := tea.NewView(content)
 	v.AltScreen = true
@@ -1133,6 +1219,101 @@ func (m Model) renderOverlay(base string) string {
 	// centring. For simplicity, the overlay replaces the visible area
 	// by being rendered on top using newlines to position it.
 	return overlay
+}
+
+// renderPopup renders the file-change pop-up on top of the base
+// content (Issue #15). The pop-up shows a single-line safe path
+// (sanitized through safepresentation.EscapePath) left-truncated to
+// fit the terminal width, centered horizontally and vertically. The
+// centring and truncation are computed from the current terminal size
+// at every render, so a resize recentres and re-truncates without
+// dismissing or restarting the timer.
+func (m Model) renderPopup(base string) string {
+	escaped := safepresentation.EscapePath(m.popupPath)
+	text := escaped.Text
+	// Left-truncate to the terminal width if needed, with a leading ….
+	width := m.width
+	if width < 1 {
+		width = 80
+	}
+	textWidth := visibleWidth(text)
+	if textWidth > width {
+		// Keep the trailing portion of the path (the filename end is
+		// usually more informative than the directory prefix).
+		keep := width - 1 // one cell for the leading …
+		if keep < 0 {
+			keep = 0
+		}
+		text = truncateLeftCells(text, keep)
+		text = "…" + text
+	}
+	// Center horizontally and vertically over the base content.
+	leftPad := 0
+	if width > visibleWidth(text) {
+		leftPad = (width - visibleWidth(text)) / 2
+	}
+	height := m.height
+	if height < 1 {
+		height = 24
+	}
+	topPad := 0
+	if height > 1 {
+		topPad = (height - 1) / 2
+	}
+	baseLines := strings.Split(base, "\n")
+	// Pad the base content to the full terminal height so the pop-up
+	// can be placed at the vertical centre even when the base content
+	// is shorter than the terminal.
+	for len(baseLines) < height {
+		baseLines = append(baseLines, "")
+	}
+	var b strings.Builder
+	for i, line := range baseLines {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		if i == topPad {
+			b.WriteString(strings.Repeat(" ", leftPad))
+			b.WriteString(m.theme.Base(text))
+		} else {
+			b.WriteString(line)
+		}
+	}
+	return b.String()
+}
+
+// truncateLeftCells returns the trailing keep cells of s, dropping
+// leading cells. ANSI escape sequences are preserved and do not count
+// toward the cell budget. Grapheme boundaries are not split: this
+// truncates at rune boundaries, which is sufficient for the single-line
+// safe path output of safepresentation.EscapePath (no combining marks
+// are produced for path text).
+func truncateLeftCells(s string, keep int) string {
+	if keep <= 0 {
+		return ""
+	}
+	// First strip ANSI sequences into a separate buffer while recording
+	// the visible runes, then take the trailing keep runes.
+	var runes []rune
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' {
+			i++
+			for i < len(s) && s[i] != 'm' {
+				i++
+			}
+			if i < len(s) {
+				i++
+			}
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		runes = append(runes, r)
+		i += size
+	}
+	if len(runes) <= keep {
+		return s
+	}
+	return string(runes[len(runes)-keep:])
 }
 
 // wrapText wraps s to the given cell width, breaking long unbroken
@@ -1257,6 +1438,64 @@ type ControlledFailureMsg struct {
 // point replays it to stderr after terminal restoration.
 type DiagnosticMsg struct {
 	Diagnostic string
+}
+
+// FileChangePopupExpiryMsg is the instance-keyed expiry message for
+// the file-change pop-up (Issue #15). The Instance identifies which
+// pop-up instance this expiry belongs to; an expiry from a stale
+// instance must not dismiss a newer pop-up. The pop-up starts at
+// selection time with a fresh one-second instance per pop-up.
+type FileChangePopupExpiryMsg struct {
+	Instance uint64
+}
+
+// popupInstanceCounter is the process-wide source of fresh pop-up
+// instance IDs. Each cross-file navigation increments it and uses the
+// new value as the pop-up instance, so a stale expiry message (carrying
+// an older instance) cannot dismiss a newer pop-up.
+var popupInstanceCounter uint64
+
+// startPopup opens the file-change pop-up for the given raw path with a
+// fresh instance ID and schedules the one-second expiry command (Issue
+// #15). The pop-up starts at selection time, not at load completion.
+// The duration comes from the model's configured popupDuration
+// (production default 1 second; tests may set 0 for an instant timer
+// so the expiry message is returned immediately without blocking).
+func (m *Model) startPopup(path []byte) tea.Cmd {
+	m.popupOpen = true
+	m.popupPath = path
+	popupInstanceCounter++
+	m.popupInstance = popupInstanceCounter
+	instance := m.popupInstance
+	dur := m.popupDuration
+	if dur == 0 {
+		// Instant timer: return the expiry message immediately
+		// without blocking. Used by tests that inject expiry
+		// messages directly rather than waiting for the timer.
+		return func() tea.Msg {
+			return FileChangePopupExpiryMsg{Instance: instance}
+		}
+	}
+	return tea.Tick(dur, func(time.Time) tea.Msg {
+		return FileChangePopupExpiryMsg{Instance: instance}
+	})
+}
+
+// dismissPopup closes the file-change pop-up without affecting any
+// other state (Issue #15).
+func (m *Model) dismissPopup() {
+	m.popupOpen = false
+	m.popupPath = nil
+	m.popupInstance = 0
+}
+
+// cancelPopup closes the file-change pop-up and clears the instance so
+// a stale expiry cannot revive it. Used by the error-overlay
+// cancellation path: after cancellation the pop-up does not return.
+func (m *Model) cancelPopup() {
+	m.popupOpen = false
+	m.popupPath = nil
+	m.popupInstance = 0
 }
 
 // cancel transitions the model to the cancelled state, signals the

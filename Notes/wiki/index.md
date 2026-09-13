@@ -23,14 +23,16 @@ Catalog of all wiki pages for the vrg project.
   outcome matrix with modal error overlay, and the session diagnostic
   collection with post-restoration stderr replay
 - [browse-tracer.md](browse-tracer.md) — Issue #5 (extended by Issue #7,
-  Issue #12, and Issue #13): two-pane browse view with file list,
+  Issue #12, Issue #13, and Issue #15): two-pane browse view with file list,
   filename rule, gutter, true-inverse match highlights, current-match
   underline, async file loading with "Loading…" placeholder, safe-presentation core for
   paths and content, theme toggle (`c`), hostile-fixture sink-safety
   method, manual vertical scrolling with per-file saved viewport state,
-  prepared-row rendering, and the circular matched-line cursor with
+  prepared-row rendering, the circular matched-line cursor with
   cursor-derived current file, cross-file load requests, viewport
-  handoff, and passive file list
+  handoff, passive file list, and the transient centred file-change
+  pop-up with instance-keyed one-second expiry, keypress dismissal,
+  error-overlay cancellation, and safe left-truncated centred rendering
 - [safe-presentation.md](safe-presentation.md) — Issue #6: shared
   safe-presentation utility for every output sink (path, content,
   diagnostic escaping), unified cli.Escape, shared sink-safety table

@@ -7,8 +7,8 @@ showing an ordered file list on the left and the current file's content
 on the right with matches highlighted in inverse video. Relevant PRD
 sections: *File list and layout*, *Text, graphemes, and safe
 presentation*, *Module Design → FileBuffer / Viewport / Theme / App*,
-*Navigation, viewport, and logical anchors*, and *Outcome and
-exit-status contract*.
+*Navigation, viewport, and logical anchors*, *Outcome and exit-status
+contract*, and *File-change pop-up*.
 
 ## Safe-presentation core
 
@@ -380,6 +380,132 @@ The file list is passive: there is no direct selection route in
 version 1. Keys other than `n`/`p` do not change the current file or
 cursor position. The file list underline follows the cursor's current
 file, but the user cannot select a file from the list directly.
+
+## File-change pop-up (Issue #15)
+
+Issue #15 added the transient centred filename pop-up shown when
+`n`/`p` navigation crosses a file boundary. Relevant PRD section:
+*File-change pop-up*. The pop-up is a presentation-only overlay; it
+does not alter navigation, loading, or viewport state.
+
+### Model state
+
+- `popupOpen bool` — whether the pop-up is currently visible.
+- `popupPath []byte` — the raw path of the selected file (retained for
+  identity; escaped only at render time).
+- `popupInstance uint64` — the instance ID of the current pop-up,
+  used to reject stale expiry messages.
+- `popupDuration time.Duration` — the configured pop-up lifetime
+  (production default 1 second; tests may set 0 for an instant
+  timer so the expiry message is returned immediately without
+  blocking).
+- `popupInstanceCounter` — process-wide source of fresh instance IDs.
+
+### Accessors
+
+- `PopupOpen() bool` — whether the pop-up is currently visible.
+- `PopupPath() []byte` — the raw path of the selected file, or nil
+  when no pop-up is open.
+- `PopupInstance() uint64` — the instance ID of the current pop-up,
+  or 0 when no pop-up is open.
+
+### Configuration
+
+- `WithPopupDuration(d time.Duration)` — sets the pop-up lifetime.
+  Production defaults to 1 second via `New`; tests use 0 for an
+  instant timer.
+
+### Expiry message
+
+`FileChangePopupExpiryMsg{Instance uint64}` is the instance-keyed
+expiry message. `Update` dismisses the pop-up only when the message's
+`Instance` matches the model's current `popupInstance`; a stale
+expiry (from an older instance) is ignored, so a stale timer cannot
+dismiss a newer pop-up.
+
+### Lifecycle
+
+`startPopup(path []byte) tea.Cmd` opens the pop-up:
+
+1. Sets `popupOpen = true`.
+2. Stores the raw path (for identity; escaped only at render time).
+3. Increments the process-wide `popupInstanceCounter` and captures
+   the new value as `popupInstance`.
+4. Schedules the expiry command: a `tea.Tick` for a non-zero
+   duration, or an immediate function returning the expiry message
+   for duration 0 (test mode).
+
+`dismissPopup()` closes the pop-up without affecting any other
+state. `cancelPopup()` closes the pop-up and resets the instance,
+used when an error overlay opens so the pop-up does not return after
+the overlay is dismissed.
+
+### Navigation integration
+
+In `handleNavigate`, the pop-up starts at the moment a cross-file
+navigation selection is accepted — immediately after saving the
+departing viewport offset, before either the cached or uncached
+destination branch returns:
+
+- Same-file navigation: no pop-up.
+- Cross-file navigation: `startPopup(stop.RawPath)` is called.
+- Cached destination: the pop-up timer command is returned
+  directly alongside the cached switch.
+- Uncached destination: the pop-up timer and the file-load command
+  are batched with `tea.Batch`, so the pop-up starts immediately
+  while the load proceeds asynchronously.
+
+### Keypress dismissal
+
+Any keypress while the pop-up is open dismisses it, and the same
+key then proceeds through normal key routing. The dismissal happens
+before the normal key switch, so `q` still quits, scroll keys still
+scroll, `n`/`p` still navigate, and `c` still toggles the theme.
+`Esc` dismisses the pop-up and is otherwise a no-op in browse state
+(it does not exit browse mode). `ctrl+c` retains global precedence
+and is not intercepted for dismissal.
+
+### Error-overlay cancellation
+
+When a `SearchCompleteMsg` opens an error overlay, `cancelPopup()`
+is called. This prevents the pop-up from returning after the overlay
+is dismissed. The pop-up is permanently cancelled by the error
+overlay; it does not return after dismissal.
+
+### Rendering
+
+`View` renders, in order:
+
+1. Base content (`renderBrowse`).
+2. Error overlay if open (takes precedence over the pop-up).
+3. Pop-up otherwise, if active.
+
+`renderPopup(base string) string`:
+
+- Escapes the raw path through `safepresentation.EscapePath`.
+- Left-truncates with a leading `…` to fit the terminal width via
+  `truncateLeftCells`.
+- Centres the pop-up horizontally and vertically over the base
+  content.
+- Pads the base view to the terminal height before inserting the
+  pop-up at the vertical centre (the base content may be shorter
+  than the terminal height).
+- Recomputes positioning and truncation on every render, so a
+  resize recentres and retruncates without restarting the timer.
+- Does not alter timer state.
+
+`truncateLeftCells(s string, maxCells int) string` left-truncates
+a string to fit `maxCells` visible cells, prefixing with `…` when
+truncation occurs. ANSI sequences are skipped (not counted) and
+preserved where they appear.
+
+### Sink safety
+
+The pop-up path is escaped through `safepresentation.EscapePath`,
+so no raw control bytes survive in the no-style composition path.
+The shared hostile-fixture sink-safety test
+(`TestPopupSinkSafetyNoStyle`) drives every fixture through the
+pop-up render path and asserts no control bytes survive.
 
 ## Sink-safety method
 

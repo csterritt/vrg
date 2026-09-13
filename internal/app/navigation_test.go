@@ -3,6 +3,7 @@ package app_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -45,7 +46,10 @@ func setupBrowseMulti(t *testing.T, idx *searchindex.Index, bufs map[string]*fil
 
 // deliverLoad executes a load command (if non-nil) and delivers the
 // resulting FileLoadCompleteMsg to the model. This simulates the
-// async load completing.
+// async load completing. Handles tea.BatchMsg (Issue #15: cross-file
+// navigation batches the pop-up timer and the load command). Timer
+// commands that block (e.g. tea.Tick with a non-zero duration) are
+// skipped via a short timeout so the test does not wait for the timer.
 func deliverLoad(t *testing.T, m app.Model, cmd tea.Cmd) app.Model {
 	t.Helper()
 	if cmd == nil {
@@ -54,6 +58,29 @@ func deliverLoad(t *testing.T, m app.Model, cmd tea.Cmd) app.Model {
 	msg := execCmd(t, cmd)
 	if lc, ok := msg.(app.FileLoadCompleteMsg); ok {
 		m, _ = update(t, m, lc)
+		return m
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c == nil {
+				continue
+			}
+			// Execute with a short timeout so blocking timer
+			// commands (e.g. tea.Tick with 1s duration) don't
+			// stall the test. The load command returns
+			// immediately; the timer command is skipped.
+			ch := make(chan tea.Msg, 1)
+			go func(cmd tea.Cmd) { ch <- cmd() }(c)
+			select {
+			case sub := <-ch:
+				if lc, ok := sub.(app.FileLoadCompleteMsg); ok {
+					m, _ = update(t, m, lc)
+				}
+			case <-time.After(100 * time.Millisecond):
+				// Command is still running (likely a timer);
+				// skip it and move on.
+			}
+		}
 	}
 	return m
 }

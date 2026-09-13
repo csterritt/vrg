@@ -122,3 +122,12 @@ Usage
  Input tokens: 274885 tokens
  Output tokens: 86571 tokens
  Cached input tokens: 9922752 tokens
+
+----
+Task 015-file-change-popup.md
+
+Usage
+ Agent messages: 161 messages
+ Input tokens: 141173 tokens
+ Output tokens: 58112 tokens
+ Cached input tokens: 18135360 tokens

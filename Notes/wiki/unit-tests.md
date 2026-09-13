@@ -636,6 +636,51 @@ table, parser config, and generated help cannot drift.
   rendered row of the first submatch's start cell, not merely a
   source-line ordinal.
 
+`popup_test.go` (Issue #15, external package `app_test`):
+
+- `TestPopupOpensOnCrossFileN` — cross-file `n` opens the pop-up
+  with the destination file's raw path.
+- `TestPopupDoesNotOpenOnSameFileN` — same-file `n` does not open
+  the pop-up.
+- `TestPopupDoesNotOpenForOneStop` — with one stop, `n` is a no-op
+  and does not open the pop-up.
+- `TestPopupExpiryDismisses` — a matching-instance
+  `FileChangePopupExpiryMsg` dismisses the pop-up.
+- `TestPopupStaleExpiryDoesNotDismiss` — a stale expiry (older
+  instance) does not dismiss a newer pop-up.
+- `TestPopupFreshInstanceEachOpen` — each cross-file navigation
+  increments the instance counter, so each pop-up has a fresh
+  instance.
+- `TestPopupKeypressDismissesAndPerformsAction` — a keypress
+  dismisses the pop-up and the same key performs its normal action
+  (theme toggle).
+- `TestPopupQStillQuits` — `q` dismisses the pop-up and still quits.
+- `TestPopupKeypressDismissesAndScrolls` — a scroll key dismisses
+  the pop-up and still scrolls.
+- `TestPopupEscDismisses` — `Esc` dismisses the pop-up and is
+  otherwise a no-op in browse state.
+- `TestPopupResizeRecentresAndRetruncates` — a resize recentres and
+  retruncates the pop-up without restarting the timer.
+- `TestPopupErrorOverlayCancelsPopup` — opening an error overlay
+  cancels the pop-up so it does not return after overlay dismissal.
+- `TestPopupLoadCompletionDoesNotRestartTimer` — file-load
+  completion does not restart the pop-up timer.
+- `TestPopupCentred` — the pop-up is centred horizontally and
+  vertically over the base content.
+- `TestPopupTruncatesLongPath` — a long path is left-truncated
+  with a leading `…` to fit the terminal width.
+- `TestPopupResizeRecentresAndRetruncates` — a resize retruncates
+  the path and recentres the pop-up.
+- `TestPopupSinkSafetyNoStyle` — the shared hostile-fixture set
+  driven through the pop-up render path via a no-style theme,
+  asserting no control bytes survive (including invalid UTF-8
+  paths via bytes-encoded begin/end records).
+- `TestPopupDoesNotReturnAfterExpiry` — after expiry dismissal,
+  the pop-up does not return on a subsequent same-file navigation.
+- `TestPopupDoesNotReturnAfterKeypress` — after keypress
+  dismissal, the pop-up does not return on a subsequent same-file
+  navigation.
+
 ## cmd/vrg (subprocess boundary)
 
 `main_test.go` builds the real binary once in `TestMain` and asserts

@@ -443,3 +443,47 @@ reveal_test.go catalog), and the index. Created
 `internal/viewport/viewport.go`, `internal/viewport/viewport_test.go`,
 `internal/app/app.go`, `internal/app/reveal_test.go`,
 `internal/app/navigation_test.go`.
+
+## [2026-09-10] ingest | Issue #15 file-change pop-up
+
+Implemented the transient centred file-change pop-up (Issue #15): when
+`n`/`p` navigation crosses a file boundary, a centred single-line
+pop-up displays the selected file's escaped path for one second or
+until a keypress. The pop-up starts at selection time (not load
+completion), uses instance-keyed one-second timers so stale expiry
+messages cannot dismiss newer pop-ups, and is dismissed by any
+keypress (the same key then performs its normal action: q still
+quits, scroll keys still scroll, Esc is a no-op besides dismissal).
+Error-overlay opening cancels the pop-up permanently; it does not
+return after overlay dismissal, expiry, or keypress dismissal. Resize
+recentres and retruncates without restarting the timer. The path is
+escaped through `safepresentation.EscapePath` and left-truncated
+with a leading `…` to fit the terminal width. Added `popupOpen`
+/`popupPath`/`popupInstance`/`popupDuration` fields; a process-wide
+`popupInstanceCounter`; `FileChangePopupExpiryMsg{Instance}`;
+`startPopup`/`dismissPopup`/`cancelPopup` helpers;
+`WithPopupDuration` option (test seam; production default 1 second,
+0 for instant test timer); `PopupOpen`/`PopupPath`/`PopupInstance`
+accessors; `handleNavigate` calls `startPopup` on cross-file
+navigation before the cached/uncached branch (uncached batches the
+timer and load via `tea.Batch`); `Update` dismisses on
+matching-instance expiry; keypress dismissal before normal key
+routing; `SearchCompleteMsg` error-overlay path calls `cancelPopup`;
+`View` renders the pop-up via `renderPopup` below the error overlay;
+`truncateLeftCells` helper. Tests added:
+`internal/app/popup_test.go` (open on cross-file n, no open on
+same-file/one-stop, matching/stale expiry, fresh instance, keypress
+dismissal with normal action, q still quits, scroll still scrolls,
+Esc dismisses, resize recentres/retruncates, error-overlay
+cancellation, load completion does not restart timer, centred
+rendering, long-path truncation, sink-safety across all hostile
+fixtures including invalid UTF-8 via bytes-encoded begin/end
+records, no return after expiry, no return after keypress). Updated
+`deliverLoad` in `navigation_test.go` to handle `tea.BatchMsg`
+with a short timeout so blocking timer commands don't stall tests.
+Updated [browse-tracer](browse-tracer.md) (file-change pop-up
+section), [source-code](source-code.md) (internal/app entry),
+[unit-tests](unit-tests.md) (popup_test.go catalog), and the index.
+Sources: `Notes/tasks/015-file-change-popup.md`,
+`Notes/PRD-vrg.md` (File-change pop-up), `internal/app/app.go`,
+`internal/app/popup_test.go`, `internal/app/navigation_test.go`.

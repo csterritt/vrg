@@ -198,7 +198,27 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   line index (`stop.LineNumber - 1`); the reveal is applied in
   `FileLoadCompleteMsg` (when `needsReveal` is set), in same-file
   `handleNavigate`, and in cross-file `handleNavigate` for a cached
-  destination. See
+  destination. Issue #15 added the file-change pop-up: `popupOpen`
+  /`popupPath`/`popupInstance`/`popupDuration` fields; a
+  process-wide `popupInstanceCounter` for fresh instance IDs;
+  `FileChangePopupExpiryMsg{Instance}` instance-keyed expiry
+  message; `startPopup(path)`/`dismissPopup()`/`cancelPopup()`
+  helpers; `WithPopupDuration` option (test seam; production
+  default 1 second, 0 for instant test timer);
+  `PopupOpen()`/`PopupPath()`/`PopupInstance()` accessors;
+  `handleNavigate` calls `startPopup(stop.RawPath)` on cross-file
+  navigation before the cached/uncached branch (uncached batches the
+  timer and load via `tea.Batch`); `Update` dismisses the pop-up on
+  matching-instance expiry (stale expiry ignored); any keypress
+  dismisses the pop-up before normal key routing (q still quits,
+  scroll keys still scroll, Esc is a no-op besides dismissal);
+  `SearchCompleteMsg` that opens an error overlay calls
+  `cancelPopup()` so the pop-up does not return after overlay
+  dismissal; `View` renders the pop-up via `renderPopup` (escaped
+  path, left-truncated with `…`, centred horizontally and
+  vertically, base padded to terminal height) below the error
+  overlay; `truncateLeftCells` helper for safe left-truncation.
+  See
   [search-collection-path](search-collection-path.md),
   [browse-tracer](browse-tracer.md),
   [outcome-contract](outcome-contract.md),
