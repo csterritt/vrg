@@ -94,12 +94,15 @@ reveal intent.
 ## Pending reveal intent
 
 When the viewport is nil (layout pending) and a reveal is requested
-(navigation or load completion), the intent is preserved in
-`pendingReveal bool` and committed once the layout installs. This
-ensures a stop selected while the gate was held is revealed per the
-Issue #14 rules once a matching layout is installed.
+(navigation or load completion), the intent is preserved in the
+`loadIntent` field (Issue #28) and committed once the matching layout
+installs. Issue #17 introduced `pendingReveal bool` for this purpose;
+Issue #28 generalized it into the `LoadIntent` enum covering both
+reveal and reload-anchor intents. See
+[load-completion-two-stage](load-completion-two-stage.md).
 
-`HasPendingReveal()` exposes the intent state for tests.
+`HasPendingReveal()` exposes the reveal-intent state for tests
+(`loadIntent == IntentReveal`).
 
 ## Cached-file navigation
 

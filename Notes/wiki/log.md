@@ -1002,3 +1002,26 @@ updated [index](index.md), [source-code](source-code.md)
 `Notes/PRD-vrg.md` (File loading, cache, reload, and selection
 consistency), `internal/app/app.go`,
 `internal/app/reload_test.go`.
+
+## [2026-09-10] ingest | Issue #28 two-stage load completion
+
+Ingested the completed Issue #28 implementation: the two-stage
+load-completion contract separating file-load completion (stage one)
+from viewport reveal/reload-anchor decisions (stage two). Added the
+`LoadIntent` enum (`IntentNone`, `IntentReveal`, `IntentReloadAnchor`)
+and `loadIntent` model field, replacing the Issue #14 `needsReveal`
+flag, the Issue #17 `pendingReveal` flag, and the Issue #27
+`pendingReloadAnchor` flag. Added `commitLoadIntent()` to commit the
+pending intent against the installed rows at stage two. Navigation
+during a pending reload replaces `IntentReloadAnchor` with
+`IntentReveal` so the latest selection wins. Stale layouts are
+discarded without consuming or mutating the intent. Created
+[load-completion-two-stage](load-completion-two-stage.md); updated
+[destination-reveal](destination-reveal.md),
+[logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md),
+[explicit-reload](explicit-reload.md), and the index. Sources:
+`Notes/tasks/028-load-completion-reveal-latest-target.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency), `internal/app/app.go`,
+`internal/app/two_stage_test.go`,
+`internal/app/reload_intent_test.go`.

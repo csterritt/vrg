@@ -75,22 +75,23 @@ reveal adjusts.
 
 The reveal is applied at:
 
-- **Startup after load** — when the startup file's first load
-  completes (`FileLoadCompleteMsg` with `needsReveal` set), the first
-  match is revealed. Issue #14 owns this startup-after-load trigger;
-  Issue #28 owns the broader load-completion reveal.
+- **Startup after load** — when the startup file's first load completes,
+  the first match is revealed. Issue #14 owns this startup-after-load
+  trigger; Issue #28 owns the broader load-completion reveal contract
+  that defers the reveal to the matching layout installation.
 - **Same-file navigation** — `n`/`p` within the same file reveals the
   new target row.
 - **Cross-file navigation to a cached destination** — the cached
   destination is shown with its saved viewport restored, then the
   reveal is applied.
 - **Cross-file navigation to an uncached destination** — the reveal is
-  applied when the load completes (`FileLoadCompleteMsg` with
-  `needsReveal` set).
+  applied when the load completes and the matching layout installs.
 
-Reload (`r`) does not trigger a reveal. The `needsReveal` flag is not
-set by reload, so a reload preserves the saved viewport anchor without
-revealing a match (PRD: "Reload by itself does not reveal a match").
+Reload (`r`) does not trigger a reveal. The reload sets the
+`IntentReloadAnchor` intent, so a reload preserves the saved viewport
+anchor without revealing a match (PRD: "Reload by itself does not
+reveal a match"). See [explicit-reload](explicit-reload.md) and
+[load-completion-two-stage](load-completion-two-stage.md).
 
 ## Reveal's effect on saved state
 
@@ -117,11 +118,18 @@ discard** the retained saved state.
 
 `internal/app/app.go`:
 
-- `needsReveal bool` — gates the startup-after-load and
-  uncached-cross-file-navigation reveal triggers.
+- `loadIntent LoadIntent` — carries the pending intent from stage one
+  (load completion) to stage two (matching layout installation). Issue
+  #28 generalizes the earlier `needsReveal`/`pendingReveal`/`pendingReloadAnchor`
+  flags into this single field. See
+  [load-completion-two-stage](load-completion-two-stage.md).
 - `revealTarget()` — reads the cursor's current stop, computes the
   rendered target row, records the offset, calls `Reveal`, and saves
   the new offset only if the reveal moved.
+- `commitLoadIntent()` — Issue #28 stage two: commits the pending
+  intent against the installed rows. `IntentReveal` calls
+  `revealTarget()`; `IntentReloadAnchor` preserves the anchor (no
+  reveal); `IntentNone` is a no-op. The intent is cleared after commit.
 - `targetRow(stop)` — returns the 0-based rendered row for the stop's
   first submatch start cell.
 
@@ -130,38 +138,53 @@ discard** the retained saved state.
 On `SearchCompleteMsg` entering `StateBrowse`:
 
 1. Creates the cursor (Issue #13).
-2. Sets `needsReveal = true` for the startup load.
+2. Sets `loadIntent = IntentReveal` for the startup load.
 3. Requests the startup file load.
 
-On `FileLoadCompleteMsg` with a non-nil buffer:
+On `FileLoadCompleteMsg` with a non-nil buffer (Issue #28 stage one):
 
 1. Stores the buffer, caches it, sets `currentPath`.
 2. Builds the row provider and restores the saved offset (0 for a
    first visit).
-3. If `needsReveal` is set, clears it and applies `revealTarget()`.
+3. If the layout installed synchronously (cache hit or test seam),
+   commits the intent immediately. Otherwise the intent is carried to
+   stage two.
+
+On `LayoutReadyMsg` with a matching key (Issue #28 stage two):
+
+1. Installs the prepared `RowModel`, preserves the anchor for
+   same-file rebuilds, restores the saved per-file anchor for fresh
+   loads.
+2. Commits the pending intent via `commitLoadIntent()`.
 
 On same-file `handleNavigate`:
 
-1. Applies `revealTarget()` to the new cursor stop.
+1. Applies `revealTarget()` to the new cursor stop. If a layout is
+   pending, carries `IntentReveal` for the next installation.
 
 On cross-file `handleNavigate` to a cached destination:
 
 1. Saves the departing file's offset.
 2. Switches the panel, restores the saved offset (0 for first visit).
-3. Applies `revealTarget()`.
+3. Sets `loadIntent = IntentReveal`. Commits immediately on a cache
+   hit; carries the intent on a stale-cache miss.
 
 On cross-file `handleNavigate` to an uncached destination:
 
 1. Saves the departing file's offset.
-2. Sets `needsReveal = true`.
-3. Requests the load. The reveal is applied when the load completes.
+2. Sets `loadIntent = IntentReveal`.
+3. Requests the load. The reveal is applied when the matching layout
+   installs.
 
 ## Issue boundaries
 
 - **Horizontal reveal** is owned by Issue #19. Issue #14 only handles
   vertical reveal.
 - **Load-completion reveal** in general is owned by Issue #28. Issue
-  #14 owns only the startup-after-load trigger.
+  #14 owns only the startup-after-load trigger. See
+  [load-completion-two-stage](load-completion-two-stage.md) for the
+  two-stage contract that defers reveal decisions to the matching
+  layout installation.
 - **Wrapping** (mapping a display cell to a sub-row within a wrapped
   source line) is owned by Issue #16. Until then, `targetRow` returns
   the 0-based source line index.

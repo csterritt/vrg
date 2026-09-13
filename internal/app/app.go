@@ -54,6 +54,29 @@ const (
 	StateCancelled
 )
 
+// LoadIntent classifies the pending intent carried between stage one (load
+// completion) and stage two (matching layout installation) of the Issue
+// #28 two-stage load-completion contract. The intent is set by the
+// action that selects a load and committed when a matching prepared
+// layout installs (or synchronously on a cache-hit install).
+type LoadIntent int
+
+const (
+	// IntentNone means no pending intent. A layout installation
+	// preserves the existing anchor (same-file rebuild) or restores
+	// the saved per-file offset (fresh load).
+	IntentNone LoadIntent = iota
+	// IntentReveal means the layout installation should apply the
+	// Issue #14/#19 destination reveal against the installed rows.
+	// The target is the latest selected cursor, never a target
+	// captured when the load was requested.
+	IntentReveal
+	// IntentReloadAnchor means the layout installation should
+	// preserve the anchor without revealing a match (Issue #27:
+	// "Reload by itself does not reveal a match").
+	IntentReloadAnchor
+)
+
 // OverlayKind classifies the modal overlay presentation.
 type OverlayKind int
 
@@ -398,14 +421,6 @@ type Model struct {
 	// a file revisited later can start from its saved position (Issue
 	// #12). The key is the string form of the raw path bytes.
 	perFileOffset map[string]int
-	// needsReveal is true when the next FileLoadCompleteMsg for the
-	// current file should apply a destination reveal (Issue #14). It is
-	// set for the startup load and for cross-file navigation to an
-	// uncached destination; it is cleared once the reveal is applied.
-	// Reload (r) does not set it, so a reload preserves the saved
-	// viewport anchor without revealing a match (PRD: "Reload by
-	// itself does not reveal a match").
-	needsReveal bool
 	// rowProviderFactory builds a RowProvider from a loaded buffer.
 	// When nil, viewport.BufferRows is used. This is a test seam for
 	// the render-cost guard: a counting fake proves the render path
@@ -435,20 +450,23 @@ type Model struct {
 	// mismatch means the completion is out-of-order or stale and is
 	// discarded.
 	pendingLayoutKey viewport.RowModelKey
-	// pendingReveal is true when a reveal intent is carried for
-	// the next matching layout installation (Issue #17). When the
-	// viewport is nil (layout pending) and a reveal is requested
-	// (navigation or load completion), the intent is preserved and
-	// committed once the layout installs.
-	pendingReveal bool
-	// pendingReloadAnchor is true when a reload-anchor intent is
-	// carried for the next matching layout installation (Issue #27).
-	// When a reload's load completes, the anchor is preserved (no
-	// reveal) and committed once the new revision's matching layout
-	// installs. This seam is owned by Issue #27; Issue #28 later
-	// generalizes it into the full two-stage reveal-versus-reload
-	// arbitration for all load completions.
-	pendingReloadAnchor bool
+	// loadIntent carries the pending intent for the next matching
+	// layout installation (Issue #28 generalizes the Issue #27
+	// reload-anchor seam). The intent is set by the action that
+	// starts or selects a load: IntentReveal for startup and
+	// navigation, IntentReloadAnchor for an explicit reload (r).
+	// Any navigation during a pending load replaces the intent with
+	// IntentReveal, so the commit always targets the latest
+	// selected cursor. Stage one (FileLoadCompleteMsg) does not
+	// perform row-based decisions; it only validates, establishes
+	// the revision, computes the gutter/text width, and requests
+	// a prepared layout. Stage two (LayoutReadyMsg, or a
+	// synchronous cache-hit install in buildViewport) commits the
+	// intent: IntentReveal applies the Issue #14/#19 reveal rules
+	// against the installed rows; IntentReloadAnchor preserves the
+	// anchor without revealing. Obsolete layouts are discarded
+	// without consuming or mutating the intent.
+	loadIntent LoadIntent
 	// revisions tracks per-path content revisions (Issue #27). Each
 	// reload of a path increments its revision, which feeds the
 	// layout key so stale layouts from a prior revision are
@@ -836,13 +854,22 @@ func (m Model) HasPendingLayout() bool { return m.pendingLayout }
 // pending.
 func (m Model) PendingLayoutKey() viewport.RowModelKey { return m.pendingLayoutKey }
 
+// LoadIntent returns the pending intent carried for the next matching
+// layout installation (Issue #28). IntentNone means no pending intent;
+// IntentReveal means the next matching layout installation should
+// apply the destination reveal; IntentReloadAnchor means it should
+// preserve the anchor without revealing a match.
+func (m Model) LoadIntent() LoadIntent { return m.loadIntent }
+
 // HasPendingReveal returns true when a reveal intent is carried for
-// the next matching layout installation (Issue #17).
-func (m Model) HasPendingReveal() bool { return m.pendingReveal }
+// the next matching layout installation (Issue #17, generalized by
+// Issue #28).
+func (m Model) HasPendingReveal() bool { return m.loadIntent == IntentReveal }
 
 // HasPendingReloadAnchor returns true when a reload-anchor intent is
-// carried for the next matching layout installation (Issue #27).
-func (m Model) HasPendingReloadAnchor() bool { return m.pendingReloadAnchor }
+// carried for the next matching layout installation (Issue #27,
+// generalized by Issue #28).
+func (m Model) HasPendingReloadAnchor() bool { return m.loadIntent == IntentReloadAnchor }
 
 // contentRevision returns the content revision for the given raw path
 // (Issue #27). The default revision for a first load is 1; each
@@ -1064,8 +1091,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Issue #14: the startup file's first load should
 				// apply a destination reveal once the content is
-				// available.
-				m.needsReveal = true
+				// available. Issue #28: the intent is carried to
+				// stage two (matching layout installation) rather
+				// than committed at stage one.
+				m.loadIntent = IntentReveal
 				return m.loadFile()
 			}
 			return m, nil
@@ -1167,32 +1196,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// is restored so a revisited file starts from its saved
 		// position (Issue #12).
 		if msg.Buffer != nil {
+			// Issue #28 stage one: validate, establish the
+			// revision, compute the gutter/text width, and
+			// request the matching prepared layout. No row-based
+			// reveal decision happens here. The intent set by the
+			// action that selected this load (IntentReveal for
+			// startup/navigation, IntentReloadAnchor for an
+			// explicit reload, possibly replaced by IntentReveal
+			// if navigation happened during the load) is carried to
+			// stage two. A reload that did not see intervening
+			// navigation keeps IntentReloadAnchor (PRD: "Reload by
+			// itself does not reveal a match").
 			layoutCmd := m.buildViewport()
-			// Issue #27: when this is a reload, record the
-			// reload-anchor pending intent — preserve the anchor,
-			// no reveal — committed when the new revision's
-			// matching prepared layout installs through the
-			// existing Issue #17 installation path.
-			if isReload {
-				m.pendingReloadAnchor = true
-			}
-			// Issue #14: apply destination reveal after the starting
-			// viewport is set. A first visit (including the startup
-			// file) starts from the top; a revisit starts from the
-			// saved offset. The reveal then adjusts from there.
-			// Reload (r) does not set needsReveal, so a reload
-			// preserves the saved viewport anchor without revealing
-			// a match (PRD: "Reload by itself does not reveal a
-			// match"). Issue #17: when the layout is pending (async
-			// preparation), the reveal intent is carried and
-			// committed once the layout installs.
-			if m.needsReveal {
-				m.needsReveal = false
-				if m.viewport != nil {
-					m.revealTarget()
-				} else {
-					m.pendingReveal = true
-				}
+			// If the layout installed synchronously (cache hit or
+			// factory test seam), commit the intent now. Otherwise
+			// (async preparation in flight) it is committed when the
+			// matching layout installs. Checking the returned command
+			// distinguishes a synchronous install from a cache miss
+			// that leaves the old viewport in place (e.g., a reload
+			// whose new revision invalidates the cached layout).
+			if layoutCmd == nil {
+				m.commitLoadIntent()
 			}
 			return m, layoutCmd
 		}
@@ -1247,20 +1271,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.SetAnchor(msg.RowModel.RowAnchor(offset))
 			}
 		}
-		// Commit the pending reveal intent (Issue #17).
-		if m.pendingReveal {
-			m.pendingReveal = false
-			m.revealTarget()
-		}
-		// Issue #27: commit the reload-anchor pending intent. The
-		// same-file path above already preserved the anchor (clamped
-		// to new content via SetAnchor). Clear the flag so it does
-		// not persist beyond the matching installation. This seam is
-		// owned by Issue #27; Issue #28 later generalizes it into
-		// the full two-stage reveal-versus-reload arbitration.
-		if m.pendingReloadAnchor {
-			m.pendingReloadAnchor = false
-		}
+		// Issue #28 stage two: commit the pending load intent
+		// against the installed rows. IntentReveal applies the
+		// Issue #14/#19 destination reveal; IntentReloadAnchor
+		// preserves the anchor (the same-file path above already
+		// carried it, clamped to new content via SetAnchor). The
+		// intent is cleared after commit so obsolete layouts and
+		// later loads start from IntentNone.
+		m.commitLoadIntent()
 		return m, nil
 
 	case SearchFailedMsg:
@@ -1364,9 +1382,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// search or changing cursor stops. It shows "Loading…" and
 		// issues exactly one reread via startLoad, which enforces the
 		// one-load-per-path rule (duplicates dropped, not queued). The
-		// reload does not set needsReveal, so the anchor is preserved
-		// without revealing a match. A failed reload replaces the old
-		// display with "(unreadable)" through the Issue #26 overlay.
+		// reload sets the IntentReloadAnchor intent (Issue #28), so
+		// the anchor is preserved without revealing a match. A failed
+		// reload replaces the old display with "(unreadable)" through
+		// the Issue #26 overlay.
 		if m.state == StateBrowse && msg.Code == 'r' && msg.Mod == 0 {
 			return m.handleReload()
 		}
@@ -1571,6 +1590,25 @@ func (m Model) currentFileIndex(path []byte) int {
 		}
 	}
 	return 0
+}
+
+// commitLoadIntent commits the pending load intent against the
+// installed viewport (Issue #28 stage two). IntentReveal applies the
+// Issue #14/#19 destination reveal against the installed rows;
+// IntentReloadAnchor preserves the anchor without revealing (Issue
+// #27). The intent is cleared after commit so obsolete layouts and
+// later loads start from IntentNone. This is a no-op for IntentNone.
+func (m *Model) commitLoadIntent() {
+	switch m.loadIntent {
+	case IntentReveal:
+		m.revealTarget()
+	case IntentReloadAnchor:
+		// The anchor was already preserved by the layout
+		// installation (same-file rebuild carries the anchor;
+		// fresh load restores the saved per-file offset). No
+		// reveal.
+	}
+	m.loadIntent = IntentNone
 }
 
 // revealTarget applies the Issue #14 destination reveal to the current
@@ -1778,13 +1816,25 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 	m.updateListOffset(m.currentFileIndex(stop.RawPath), m.height)
 	if !fileChanged {
 		// Same-file navigation: only the current matched line
-		// styling changes. Issue #14: reveal the new target row.
-		// Issue #17: when the viewport is nil (layout pending),
-		// carry the reveal intent for the next installation.
+		// styling changes. Issue #14: reveal the new target row
+		// when the viewport is installed. Issue #28: when a load
+		// is in flight (e.g., a reload), navigation replaces the
+		// pending intent with IntentReveal so the commit targets
+		// the latest selection. When the layout is pending
+		// (viewport nil), carry the reveal intent for the next
+		// installation.
 		if m.viewport != nil {
 			m.revealTarget()
+			// Issue #28: when a layout preparation is in flight
+			// (e.g., a reload whose new revision invalidated the
+			// cached layout), navigation replaces the pending
+			// intent with IntentReveal so the commit targets the
+			// latest selection.
+			if m.pendingLayout {
+				m.loadIntent = IntentReveal
+			}
 		} else {
-			m.pendingReveal = true
+			m.loadIntent = IntentReveal
 		}
 		return m, nil
 	}
@@ -1806,16 +1856,14 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 		// anchor) rather than a same-file rebuild (preserving
 		// the current anchor).
 		m.viewport = nil
+		// Issue #28: set the reveal intent for the latest
+		// selection. It is committed when the layout installs
+		// (synchronously on a cache hit, or via LayoutReadyMsg on
+		// a stale-cache miss).
+		m.loadIntent = IntentReveal
 		layoutCmd := m.buildViewport()
-		// Issue #14: apply destination reveal after the starting
-		// viewport is set from the saved offset (or 0 for a first
-		// visit). Issue #17: when the layout is pending (stale
-		// cached layout), the reveal intent is carried and
-		// committed once the layout installs.
-		if m.viewport != nil {
-			m.revealTarget()
-		} else {
-			m.pendingReveal = true
+		if layoutCmd == nil {
+			m.commitLoadIntent()
 		}
 		if layoutCmd != nil {
 			return m, tea.Batch(popupCmd, layoutCmd)
@@ -1845,9 +1893,10 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 		m.overlayReadFailure = true
 		m.cancelPopup()
 	}
-	// Issue #14: the load completion for this navigation should
-	// apply a destination reveal once the content is available.
-	m.needsReveal = true
+	// Issue #28: set the reveal intent for the latest
+	// selection. It is carried to stage two (matching layout
+	// installation) and committed there.
+	m.loadIntent = IntentReveal
 	// Issue #25: at most one load may be in flight per raw path.
 	// If a load is already in flight for this path (the user
 	// navigated away and back), start no second load and queue
@@ -1863,11 +1912,14 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 // handleReload rereads the current file without rerunning the search
 // or changing cursor stops (Issue #27). It shows "Loading…" and issues
 // exactly one reread via startLoad, which enforces the one-load-per-path
-// rule (duplicates dropped, not queued). The reload does not set
-// needsReveal, so the anchor is preserved without revealing a match.
-// The path is recorded in reloadingPaths so the FileLoadCompleteMsg
-// handler increments the content revision, producing a new layout key
-// that invalidates stale cached layouts from the prior revision.
+// rule (duplicates dropped, not queued). Issue #28: the reload sets the
+// IntentReloadAnchor intent so the matching layout installation
+// preserves the anchor without revealing a match (PRD: "Reload by
+// itself does not reveal a match"). Any navigation during the reload
+// replaces the intent with IntentReveal. The path is recorded in
+// reloadingPaths so the FileLoadCompleteMsg handler increments the
+// content revision, producing a new layout key that invalidates stale
+// cached layouts from the prior revision.
 func (m Model) handleReload() (tea.Model, tea.Cmd) {
 	if m.currentPath == nil {
 		return m, nil
@@ -1882,10 +1934,11 @@ func (m Model) handleReload() (tea.Model, tea.Cmd) {
 	// panel switches from "(unreadable)" to "Loading…" on retry.
 	m.loading = true
 	m.readFailed = false
-	// Reload does not set needsReveal: the anchor is preserved
-	// without revealing a match (PRD: "Reload by itself does not
-	// reveal a match").
-	m.needsReveal = false
+	// Issue #28: set the reload-anchor intent. It is committed when
+	// the new revision's matching prepared layout installs. If
+	// navigation happens during the reload, the intent is replaced
+	// with IntentReveal (see handleNavigate).
+	m.loadIntent = IntentReloadAnchor
 	// Issue #25: at most one load may be in flight per raw path.
 	// If a load is already in flight, startLoad drops the request.
 	var loadCmd tea.Cmd

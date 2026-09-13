@@ -1489,3 +1489,63 @@ replay-ordering assertions:
 - `TestReloadPreservesAnchorAfterLayoutInstall` — the anchor is
   asserted after the new revision's matching prepared layout installs
   (gated layout preparation), not against the old revision's layout.
+
+`two_stage_test.go` (Issue #28, external package `app_test`):
+
+- `TestStageOneNoRevealWithGatedLayout` — file-load completion does not
+  reveal using an old/current row model before the matching layout is
+  installed (gated layout; offset stays 0).
+- `TestStartupVisibleTargetKeepsTopZero` — a startup reveal for a
+  target already visible from offset 0 keeps the offset at 0 (no
+  unnecessary scroll).
+- `TestResizeBetweenLoadAndLayoutPreservesIntent` — a resize between
+  stage one and stage two preserves the reveal intent; the matching
+  (post-resize) layout commits the reveal.
+- `TestNavigationDuringPendingLayoutRevealsNewestTarget` — a
+  navigation while layout preparation is gated reveals the newest
+  target, not the original target.
+- `TestGutterGrowthBetweenStagesCommitsAtFinalWidth` — a gutter-width
+  change between stages commits the reveal at the final width.
+- `TestListToggleBetweenStagesCommitsAtFinalWidth` — a file-list
+  toggle between stages commits the reveal at the final text width.
+- `TestSavedViewportRevisitVisibleStays` — a saved-viewport revisit
+  with a visible target preserves the saved offset (no unnecessary
+  scroll).
+- `TestSavedViewportRevisitHiddenMoves` — a saved-viewport revisit
+  with a hidden target reveals the target (moves the offset).
+- `TestTerminatorOnlyMarkerRevealsInRunOffEdge` — a terminator-only
+  (`$`) marker reveals in run-off-edge mode.
+- `TestNonCurrentFileCompletionLeavesPanelUntouched` — a stale
+  (non-current) load completion is rejected without changing the
+  visible panel or the current intent.
+- `TestPopupUnaffectedByStages` — pop-up behavior remains
+  independent of load/layout staging.
+- `TestObsoleteLayoutDiscardedWithoutConsumingIntent` — a stale
+  layout is discarded without consuming or mutating the latest
+  intent.
+
+`reload_intent_test.go` (Issue #28, external package `app_test`):
+
+- `TestReloadSetsAnchorIntent` — pressing `r` sets
+  `IntentReloadAnchor`; the matching layout installation preserves the
+  anchor (no reveal).
+- `TestNavigationDuringReloadReplacesIntent` — pressing `n` during a
+  reload replaces `IntentReloadAnchor` with `IntentReveal`; the
+  matching layout installation reveals the latest target, not the
+  saved anchor.
+- `TestAwayAndBackReplacesReloadIntent` — away-and-back navigation
+  (n then p) during a reload replaces the reload intent with
+  `IntentReveal`, even though the final cursor equals the initial
+  cursor.
+- `TestReloadDoesNotRevealMatch` — a reload without navigation
+  preserves the saved anchor and does not reveal a match.
+- `TestNewerNavigationSupersedesReloadIntent` — cross-file
+  navigation during a reload supersedes the reload intent with a
+  reveal intent for the new file; a stale reload layout is discarded
+  without consuming the newer intent.
+- `TestStaleLoadCompletionDoesNotChangeIntent` — a stale
+  (non-current) load completion does not change the pending intent.
+- `TestReloadAnchorCommittedOnlyAfterMatchingLayout` — the
+  reload-anchor intent is committed (and the anchor asserted) only
+  after the matching prepared layout installs, not at load
+  completion.

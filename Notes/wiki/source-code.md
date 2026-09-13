@@ -367,13 +367,23 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `revisions map[string]int` (default `1`, incremented only for
   reloads); `LayoutKey()` now uses `contentRevision(path)` instead of
   the hardcoded `1` so stale cached layouts from a prior revision are
-  discarded by the Issue #17 installation guard; a
-  `pendingReloadAnchor bool` model field carries the reload-anchor
-  intent (preserve the anchor, no reveal) from load completion to the
-  matching layout installation, where it is cleared; `handleOverlayKey`
+  discarded by the Issue #17 installation guard; `handleOverlayKey`
   routes `r` through a read-failure overlay so the user can retry
   without dismissing it; `HasPendingReloadAnchor()` exposes the
   intent for tests. See [explicit-reload](explicit-reload.md).
+  Issue #28 generalized the Issue #14 `needsReveal`, Issue #17
+  `pendingReveal`, and Issue #27 `pendingReloadAnchor` flags into a
+  single `loadIntent LoadIntent` field with `IntentNone`,
+  `IntentReveal`, and `IntentReloadAnchor` values. Stage one
+  (`FileLoadCompleteMsg`) validates, caches, updates the revision,
+  installs the buffer, and starts layout preparation without making
+  row-based reveal decisions. Stage two (`LayoutReadyMsg` or
+  synchronous cache-hit installation) commits the intent via
+  `commitLoadIntent()`. Navigation during a pending reload replaces
+  `IntentReloadAnchor` with `IntentReveal`. Stale layouts are
+  discarded without consuming or mutating the intent. `LoadIntent()`
+  exposes the intent for tests. See
+  [load-completion-two-stage](load-completion-two-stage.md).
 
 ## internal/safepresentation
 

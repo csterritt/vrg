@@ -175,6 +175,16 @@ Catalog of all wiki pages for the vrg project.
   append-preserving-scroll, one-stop index route, cache stability
   until explicit `r`, and superseded-layout discard through the Issue
   #17 installation guard
+- [load-completion-two-stage.md](load-completion-two-stage.md) —
+  Issue #28: two-stage load-completion contract separating file-load
+  completion (stage one) from viewport reveal/reload-anchor decisions
+  (stage two); `LoadIntent` enum (`IntentNone`, `IntentReveal`,
+  `IntentReloadAnchor`) carrying the latest selection intent across
+  asynchronous loading and layout preparation; navigation replacing a
+  pending reload intent with `IntentReveal`; stale layouts discarded
+  without consuming or mutating the intent; reveal decisions deferred
+  to the matching layout installation so `targetRow` sees the correct
+  rows
 
 ## Catalogs
 

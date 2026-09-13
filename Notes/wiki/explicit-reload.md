@@ -92,27 +92,32 @@ do not.
 
 ### Reload-anchor pending intent
 
-`Model.pendingReloadAnchor bool` carries the reload-anchor intent
+Issue #28 generalized the reload-anchor pending intent into the
+`LoadIntent` enum. `Model.loadIntent LoadIntent` carries the intent
 from load completion to the matching layout installation:
 
+- `handleReload()` sets `loadIntent = IntentReloadAnchor`.
 - When a reload's `FileLoadCompleteMsg` arrives for the current path
-  with a buffer, the handler sets `pendingReloadAnchor = true` and
-  calls `buildViewport()`. The viewport may be nil while the new
-  layout is pending.
+  with a buffer, the handler calls `buildViewport()`. The viewport may
+  be nil while the new layout is pending. The intent is not committed
+  at stage one.
 - The `LayoutReadyMsg` handler installs the prepared `RowModel` only
   when `msg.Key` equals the current `LayoutKey()` (which now carries
   the new revision). On installation, the same-file anchor-preservation
   path (the viewport was non-nil from the prior revision's layout)
   reapplies the old anchor through `SetAnchor`, clamping to the new
-  content. The handler then clears `pendingReloadAnchor`.
+  content. The handler then commits the intent via
+  `commitLoadIntent()`, which for `IntentReloadAnchor` is a no-op
+  (the anchor was already preserved) and clears the intent.
 - A stale layout from a prior revision (e.g. a gated pre-reload layout
   released after the reload completes) has a key that no longer
-  matches and is discarded without touching the visible panel or
-  the anchor.
+  matches and is discarded without touching the visible panel, the
+  anchor, or the intent.
 
-This seam is owned by Issue #27. Issue #28 later generalizes it into
-the full two-stage reveal-versus-reload arbitration for all load
-completions.
+If navigation occurs while a reload is in flight, `handleNavigate`
+replaces `IntentReloadAnchor` with `IntentReveal` so the commit targets
+the latest selection, not the saved anchor. See
+[load-completion-two-stage](load-completion-two-stage.md).
 
 ### Anchor preservation and clamping
 
@@ -164,8 +169,11 @@ cached content until the user presses `r`.
 
 ## Model fields
 
-- `pendingReloadAnchor bool` — a reload-anchor intent is carried for
-  the next matching layout installation.
+- `loadIntent LoadIntent` — Issue #28: the pending intent carried for
+  the next matching layout installation. `IntentReloadAnchor` for an
+  explicit reload; `IntentReveal` for startup/navigation; `IntentNone`
+  when no intent is pending. Supersedes the Issue #27
+  `pendingReloadAnchor bool` field.
 - `revisions map[string]int` — per-path content revisions. The
   default is `1`; each reload increments the path's revision.
 - `reloadingPaths map[string]bool` — paths with an active reload
@@ -174,18 +182,15 @@ cached content until the user presses `r`.
 
 ## Public accessors
 
+- `LoadIntent() LoadIntent` — Issue #28: returns the pending intent.
 - `HasPendingReloadAnchor() bool` — reports whether a reload-anchor
-  intent is carried for the next matching layout installation.
+  intent is carried (`loadIntent == IntentReloadAnchor`).
 
 ## Out of scope
 
 - Match validation against reloaded content is owned by Issue #29.
   Issue #27 does not validate original search matches against the
   reloaded content.
-- The generalized reveal-versus-reload arbitration (full two-stage
-  pending-intent handling for all load completions) is owned by
-  Issue #28. Issue #27 owns only the initial reload-anchor
-  pending-intent seam.
 - Unsupported encodings are owned by Issue #30.
 - The generalized overlay append primitive is owned by Issue #32.
 

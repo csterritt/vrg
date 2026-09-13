@@ -239,3 +239,12 @@ Usage
  Input tokens: 196454 tokens
  Output tokens: 73349 tokens
  Cached input tokens: 13050944 tokens
+
+----
+Task 028-load-completion-reveal-latest-target.md
+
+Usage
+ Agent messages: 151 messages
+ Input tokens: 326399 tokens
+ Output tokens: 74913 tokens
+ Cached input tokens: 16327360 tokens
