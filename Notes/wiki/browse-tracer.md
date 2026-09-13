@@ -7,7 +7,8 @@ showing an ordered file list on the left and the current file's content
 on the right with matches highlighted in inverse video. Relevant PRD
 sections: *File list and layout*, *Text, graphemes, and safe
 presentation*, *Module Design → FileBuffer / Viewport / Theme / App*,
-and *Outcome and exit-status contract*.
+*Navigation, viewport, and logical anchors*, and *Outcome and
+exit-status contract*.
 
 ## Safe-presentation core
 
@@ -146,7 +147,9 @@ state:
 ### Browse model fields
 
 - `index *searchindex.Index` — the prepared navigation index.
-- `browseIdx int` — the current file index (0 for Issue #5).
+- `cursor *searchindex.Cursor` — the circular matched-line cursor
+  (Issue #13). The single global navigation anchor; current file and
+  current matched line derive from it. Startup selects the first stop.
 - `buffer *filebuffer.Buffer` — the loaded content for the current
   file.
 - `loading bool` — true while the file load is pending.
@@ -162,27 +165,40 @@ state:
   keyed by raw path (Issue #12).
 - `rowProviderFactory RowProviderFactory` — test seam for the
   render-cost guard (Issue #12).
+- `fileCache map[string]*filebuffer.Buffer` — session cache of loaded
+  buffers keyed by raw path (Issue #13). No eviction; the PRD retains
+  successful buffers for the session, so a revisited file can be shown
+  immediately without a reload.
 
 ### Update flow
 
 On `SearchCompleteMsg` with a non-nil index and files > 0:
 
-1. Transitions to `StateBrowse`, stores the index, sets `browseIdx = 0`,
-   sets `loading = true`.
+1. Transitions to `StateBrowse`, stores the index, creates the cursor
+   (`searchindex.NewCursor(m.index)`, which selects the first stop),
+   sets `loading = true` (Issue #13: replaced the Issue #5
+   `browseIdx = 0` with cursor creation).
 2. Returns `m.loadFile()` — a `tea.Cmd` that asynchronously loads the
-   current file.
+   cursor's current file.
 
-`loadFile`:
+`loadFile` (Issue #13: now delegates to `loadFileFor` with the cursor's
+current stop's raw path):
 
-1. Gets the current file's raw path and stops from the index.
+1. Gets the current file's raw path from the cursor's current stop.
 2. Waits at the file gate if set (cancellable via `loadCancel`).
 3. Calls the file loader (injected or `filebuffer.Load`).
 4. Returns a `FileLoadCompleteMsg` with the prepared buffer.
 
+`loadFileFor(path []byte)` (Issue #13) is the path-keyed load command
+used for cross-file navigation to an uncached destination. It collects
+the stops for the given raw path, waits at the gate, calls the loader,
+and returns a `FileLoadCompleteMsg`.
+
 On `FileLoadCompleteMsg`:
 
 1. If cancelled, ignores the message (late-load rejection).
-2. Stores the buffer and clears `loading`.
+2. Stores the buffer, caches it in `fileCache` keyed by raw path
+   (Issue #13), and clears `loading`.
 3. Issue #12: builds the viewport from prepared row data (via the row
    provider factory or `viewport.BufferRows`), restores the saved
    per-file offset for the path (0 for a first visit), and creates the
@@ -195,6 +211,23 @@ Key handling in browse state:
 - `ctrl+c` — exits with code 130 through the Issue #4 cancellation path.
 - `c` — toggles the theme between dark and light (Issue #7), no
   persistence.
+- Issue #13 navigation keys (active whenever `StateBrowse` is active,
+  including while loading):
+  - `n` — advances the matched-line cursor to the next stop
+    circularly.
+  - `p` — retreats the matched-line cursor to the previous stop
+    circularly.
+  - With zero or one stop, both are strict no-ops: no state change, no
+    load command, no pop-up.
+  - On a same-file move, only the current matched line styling
+    changes; destination reveal belongs to Issue #14.
+  - On a cross-file move, the departing file's viewport offset is
+    saved, the content panel switches immediately, and a load is
+    requested for an uncached destination; a cached destination is
+    shown immediately with its saved viewport restored (first visit
+    starts at the top).
+  - Manual scrolling does not move the cursor, so `n`/`p` continue
+    from the last selected stop, not the manually visible line.
 - Issue #12 scroll keys (active only when the viewport is non-nil):
   - `up` / `down` — scroll one rendered row.
   - `u` / `d` — scroll half a page (`max(1, floor(contentHeight/2))`).
@@ -215,8 +248,10 @@ Key handling in browse state:
 - **File list (left pane)** — each file's raw path escaped through
   `safepresentation.EscapePath`, in raw-path order (the index's
   unsigned byte ordering). The current file is underlined via
-  `theme.Underline`. A simple fixed/heuristic width is used (Issue #24
-  owns the real formula).
+  `theme.Underline`. Issue #13: the current file derives from the
+  cursor's current stop's raw path, so the underline follows cursor
+  selection. A simple fixed/heuristic width is used (Issue #24 owns
+  the real formula).
 - **Content panel (right pane)** — the escaped filename embedded in a
   horizontal rule (`── name ──`), followed by content rows or
   `Loading…` while the buffer is unavailable. Issue #12: when the
@@ -231,9 +266,10 @@ Key handling in browse state:
   text using the byte→cell maps from the safe-presentation core
   (Issue #7: replaces Issue #5's `theme.Reverse` SGR 7 reverse video
   with explicit inverse colour pairs).
-- **Current matched line** — the first stop for the current file
-  (the first stop until Issue #13 adds navigation); its highlights use
-  `CurrentMatch` (true inverse + underline).
+- **Current matched line** — Issue #13: the cursor's current stop's
+  line number; its highlights use `CurrentMatch` (true inverse +
+  underline). The current matched line follows the cursor, so it
+  moves with `n`/`p` navigation.
 - **No borders** — no box-drawing border characters around the panel.
 - **Layout** — file-list lines padded to the list width, then joined
   with the corresponding content-panel lines.
@@ -263,6 +299,87 @@ Browse `q` and `ctrl+c` both route through the Issue #4 cleanup path:
   `proc.Cleanup()`.
 - Late `FileLoadCompleteMsg` and `SearchCompleteMsg` are ignored by the
   cancelled model.
+
+## Navigation cursor (Issue #13)
+
+Issue #13 added the single global matched-line cursor that indexes
+search stops across files and lines. The cursor is the navigation
+anchor; the current file and current matched line both derive from it.
+Relevant PRD section: *Navigation, viewport, and logical anchors*.
+
+### SearchIndex cursor
+
+`internal/searchindex` exposes `Cursor`, a circular cursor over an
+`Index`'s stops:
+
+- `NewCursor(idx *Index) *Cursor` — creates a cursor that starts at the
+  first stop (position 0) when the index has at least one stop, or at
+  -1 (no selection) when the index is empty or nil.
+- `Stop() (Stop, bool)` — returns the current stop and true, or a
+  zero `Stop` and false when the index is empty.
+- `Position() int` — the 0-based current stop position, or -1 when
+  empty.
+- `Len() int` — the number of stops.
+- `Next() (Stop, bool, bool)` — advances to the next stop circularly.
+  Returns the new stop, whether the cursor moved, and whether the
+  file changed (raw path differs). With zero or one stop it is a
+  strict no-op: moved and fileChanged are both false.
+- `Prev() (Stop, bool, bool)` — retreats to the previous stop
+  circularly. Same return contract as `Next`.
+
+The cursor operates on the `Index.stops` slice, which is already
+ordered by unsigned raw path bytes then ascending line number and
+deduplicated by `(raw path, line number)`. Multiple submatches on one
+source line are one stop (the Index merges them). File-change
+detection uses `bytes.Equal` on raw paths, so identical paths in
+`text` and `bytes` encodings are the same file.
+
+### App wiring
+
+The App creates the cursor on `SearchCompleteMsg` via
+`searchindex.NewCursor(m.index)`, replacing the Issue #5 `browseIdx`
+field. `handleNavigate(delta)` is called for `n` (delta 1) and `p`
+(delta -1):
+
+- With zero or one stop, the cursor is a strict no-op: no state
+  change, no load command, no pop-up.
+- On a same-file move, only the current matched line styling changes.
+  Destination reveal belongs to Issue #14.
+- On a cross-file move:
+  - The departing file's viewport offset is saved via `saveOffset`.
+  - If the destination file is cached in `fileCache`, the panel
+    switches immediately and the saved viewport is restored (first
+    visit starts at the top).
+  - If the destination file is uncached, the panel switches to the
+    loading placeholder and `loadFileFor(path)` requests the load.
+    The load completes through the existing `FileLoadCompleteMsg`
+    path, which caches the buffer and builds the viewport.
+
+`loadFile` now delegates to `loadFileFor` with the cursor's current
+stop's raw path. `loadFileFor(path)` is the path-keyed load command
+used for cross-file navigation.
+
+### Accessors
+
+- `CursorPosition() int` — the cursor's current position, or -1 when
+  empty.
+- `CurrentPath() []byte` — the cursor's current stop's raw path, or
+  nil when empty.
+
+### Manual scrolling independence
+
+Manual scrolling (Issue #12) does not move the cursor. The cursor
+and viewport are independent: scrolling changes only the viewport
+offset and per-file saved state, while `n`/`p` change only the
+cursor. After manual scrolling, `n`/`p` continue from the last
+selected stop, not the manually visible line.
+
+### Passive file list
+
+The file list is passive: there is no direct selection route in
+version 1. Keys other than `n`/`p` do not change the current file or
+cursor position. The file list underline follows the cursor's current
+file, but the user cannot select a file from the list directly.
 
 ## Sink-safety method
 

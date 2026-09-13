@@ -341,3 +341,57 @@ internal/app scroll_test.go catalogs), and the index. Sources:
 Module Design), `internal/viewport/viewport.go`,
 `internal/viewport/viewport_test.go`, `internal/app/app.go`,
 `internal/app/scroll_test.go`, `internal/app/browse_test.go`.
+
+## [2026-09-13] ingest | Issue #13 match navigation n/p circular cursor
+
+Ingested the completed Issue #13 implementation: the single global
+matched-line cursor and App wiring for circular `n`/`p` navigation.
+`internal/searchindex` added `Cursor`, a circular cursor over
+`Index.stops` (already ordered by unsigned raw path bytes then
+ascending line number and deduplicated by `(raw path, line number)`, so
+multiple submatches on one line are one stop). `NewCursor(idx)` starts
+at the first stop (position 0) or -1 when empty/nil.
+`Stop()`/`Position()`/`Len()` report state. `Next()`/`Prev()` move
+circularly with wrap at both ends and return the new stop, whether the
+cursor moved, and whether the file changed (raw path differs via
+`bytes.Equal`). With zero or one stop both are strict no-ops: no move,
+no file change. `internal/app` replaced the Issue #5 `browseIdx` int
+with a `cursor *searchindex.Cursor` field, created on
+`SearchCompleteMsg` via `searchindex.NewCursor`, selecting the first
+stop at startup. `handleNavigate(delta)` is called for `n` (delta 1)
+and `p` (delta -1): with zero or one stop it is a strict no-op; on a
+same-file move only the current matched line styling changes
+(destination reveal belongs to Issue #14); on a cross-file move the
+departing file's viewport offset is saved, the content panel switches
+immediately, a cached destination is shown with its saved viewport
+restored (first visit starts at the top), and an uncached destination
+requests a load via `loadFileFor(path)`. A `fileCache
+map[string]*filebuffer.Buffer` session cache keyed by raw path (no
+eviction) lets a revisited file be shown immediately without a reload.
+`loadFile` now delegates to `loadFileFor` with the cursor's current
+stop's raw path. `CursorPosition()`/`CurrentPath()` accessors expose
+cursor state. `renderBrowse` derives the current file and current
+matched line from the cursor so the file list underline and
+current-match styling follow cursor selection. Manual scrolling does
+not move the cursor, so `n`/`p` continue from the last selected stop.
+The file list remains passive with no direct selection route. Tests
+added: `internal/searchindex/cursor_test.go` (startup selection,
+position, Next/Prev advance/retreat, wrap at both ends, file-change
+flag, single-stop no-op, empty no-op, multiple-submatches-one-stop,
+Len, nil index, full cycle, bytes-equal file change) and
+`internal/app/navigation_test.go` (startup selection, cross-file
+switching with load request, same-file no-load, wrap cross-file,
+one-stop no-op, list underline follows cursor, current-match underline
+moves, manual-scroll independence, departing viewport save, saved
+viewport restore, first-visit top, passive file list, n while loading,
+multi-file multi-stop sequence). Updated
+[browse-tracer](browse-tracer.md) (Navigation cursor section, Browse
+model fields, Update flow, key handling, Rendering),
+[source-code](source-code.md) (internal/searchindex and internal/app
+entries), [unit-tests](unit-tests.md) (internal/searchindex cursor
+tests and internal/app navigation tests catalogs), and the index.
+Sources: `Notes/tasks/013-match-navigation-n-p-circular-cursor.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors),
+`internal/searchindex/searchindex.go`,
+`internal/searchindex/cursor_test.go`, `internal/app/app.go`,
+`internal/app/navigation_test.go`.

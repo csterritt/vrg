@@ -62,9 +62,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   is the bounded 64 MiB record reader that discards oversized records
   through the next newline and resynchronizes on the following record.
   Unknown string event types are counted separately from malformed and
-  never independently alter exit status. See
-  [search-collection-path](search-collection-path.md) and
-  [record-robustness](record-robustness.md).
+  never independently alter exit status. Issue #13 added the circular
+  matched-line cursor: `Cursor` tracks the current stop position over
+  `Index.stops` (already ordered by unsigned raw path bytes then
+  ascending line number and deduplicated by `(raw path, line number)`,
+  so multiple submatches on one line are one stop). `NewCursor(idx)`
+  starts at the first stop (position 0) or -1 when empty/nil.
+  `Stop()`/`Position()`/`Len()` report state. `Next()`/`Prev()` move
+  circularly with wrap at both ends and return the new stop, whether
+  the cursor moved, and whether the file changed (raw path differs via
+  `bytes.Equal`). With zero or one stop both are strict no-ops: no
+  move, no file change. See
+  [search-collection-path](search-collection-path.md),
+  [record-robustness](record-robustness.md), and
+  [browse-tracer](browse-tracer.md).
 
 ## internal/app
 
@@ -146,7 +157,28 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `viewport.SetPanelHeight` to recompute layout and clamp the offset.
   `renderContentPanel` queries `viewport.Visible()` for the visible
   range only instead of scanning the full buffer per frame. Scroll keys
-  are no-ops while the viewport is nil (loading placeholder). See
+  are no-ops while the viewport is nil (loading placeholder). Issue #13
+  added the circular matched-line cursor and App wiring: a
+  `cursor *searchindex.Cursor` field (replacing the Issue #5 `browseIdx`
+  int), created on `SearchCompleteMsg` via `searchindex.NewCursor`,
+  selecting the first stop at startup; `handleNavigate(delta)` called
+  for `n` (delta 1) and `p` (delta -1), moving the cursor circularly
+  with strict no-op behavior for zero or one stop; on a same-file move
+  only the current matched line styling changes (destination reveal
+  belongs to Issue #14); on a cross-file move the departing file's
+  viewport offset is saved, the content panel switches immediately, a
+  cached destination is shown with its saved viewport restored (first
+  visit starts at the top), and an uncached destination requests a load
+  via `loadFileFor(path)`; a `fileCache map[string]*filebuffer.Buffer`
+  session cache keyed by raw path (no eviction) so a revisited file can
+  be shown immediately without a reload; `loadFile` now delegates to
+  `loadFileFor` with the cursor's current stop's raw path;
+  `CursorPosition()`/`CurrentPath()` accessors; `renderBrowse` derives
+  the current file and current matched line from the cursor so the
+  file list underline and current-match styling follow cursor
+  selection; manual scrolling does not move the cursor, so `n`/`p`
+  continue from the last selected stop; the file list remains passive
+  with no direct selection route. See
   [search-collection-path](search-collection-path.md),
   [browse-tracer](browse-tracer.md),
   [outcome-contract](outcome-contract.md),

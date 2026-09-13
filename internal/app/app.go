@@ -335,13 +335,18 @@ type Model struct {
 
 	// Browse state.
 	index      *searchindex.Index
-	browseIdx  int
+	cursor     *searchindex.Cursor
 	buffer     *filebuffer.Buffer
 	loading    bool
 	theme      theme.Theme
 	fileLoader FileLoader
 	fileGate   chan struct{}
 	loadCancel chan struct{}
+	// fileCache retains loaded buffers for the session keyed by raw
+	// path, so a revisited file can be shown immediately without a
+	// reload (Issue #13). No eviction; the PRD retains successful
+	// buffers for the session.
+	fileCache map[string]*filebuffer.Buffer
 
 	// viewport is the scrollable content view for the current file.
 	// It holds prepared row data and the vertical offset. When nil
@@ -490,6 +495,7 @@ func New(childArgs []string, workdir string, opts ...Option) Model {
 		onCollect:          cfg.onCollect,
 		rowProviderFactory: cfg.rowProviderFactory,
 		perFileOffset:      make(map[string]int),
+		fileCache:          make(map[string]*filebuffer.Buffer),
 		loadCancel:         make(chan struct{}),
 	}
 }
@@ -541,6 +547,31 @@ func (m Model) SavedOffset(path []byte) int {
 		return 0
 	}
 	return m.perFileOffset[string(path)]
+}
+
+// CursorPosition returns the 0-based position of the matched-line
+// cursor in the stop list, or -1 when the index is empty (Issue #13).
+// The cursor is the single global navigation anchor; current file and
+// current matched line derive from it.
+func (m Model) CursorPosition() int {
+	if m.cursor == nil {
+		return -1
+	}
+	return m.cursor.Position()
+}
+
+// CurrentPath returns the raw path of the cursor's current stop, or
+// nil when the index is empty (Issue #13). The current file derives
+// from the cursor.
+func (m Model) CurrentPath() []byte {
+	if m.cursor == nil {
+		return nil
+	}
+	s, ok := m.cursor.Stop()
+	if !ok {
+		return nil
+	}
+	return s.RawPath
 }
 
 // EscapePathForDiagnostic escapes a raw filename for safe embedding in a
@@ -615,7 +646,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.collectDiagnostic(oc.OverlayText)
 			}
 			if oc.State == StateBrowse {
-				m.browseIdx = 0
+				// Issue #13: create the circular matched-line
+				// cursor. Startup selects the first stop;
+				// current file and current matched line derive
+				// from the cursor.
+				m.cursor = searchindex.NewCursor(m.index)
 				m.loading = true
 				return m, m.loadFile()
 			}
@@ -635,6 +670,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.Buffer != nil {
 			m.buffer = msg.Buffer
+			// Issue #13: cache the loaded buffer for the session
+			// so a revisited file can be shown immediately without
+			// a reload. No eviction; the PRD retains successful
+			// buffers for the session.
+			if m.fileCache == nil {
+				m.fileCache = make(map[string]*filebuffer.Buffer)
+			}
+			m.fileCache[string(msg.Path)] = msg.Buffer
 		}
 		m.loading = false
 		// Build the viewport from the prepared row data. The row
@@ -708,6 +751,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state == StateBrowse && m.viewport != nil {
 			if m.handleScrollKey(msg) {
 				return m, nil
+			}
+		}
+		// Issue #13: n/p move the circular matched-line cursor. The
+		// cursor is the single global navigation anchor; current file
+		// and current matched line derive from it. Navigation remains
+		// active while loading (the viewport may be nil); same-file
+		// navigation only changes current-line styling; cross-file
+		// navigation switches the panel and requests a load for an
+		// uncached destination. Manual scrolling does not move the
+		// cursor, so n/p continue from the last selected stop.
+		if m.state == StateBrowse {
+			if msg.Code == 'n' && msg.Mod == 0 {
+				return m.handleNavigate(1)
+			}
+			if msg.Code == 'p' && msg.Mod == 0 {
+				return m.handleNavigate(-1)
 			}
 		}
 		switch {
@@ -795,6 +854,65 @@ func (m *Model) saveOffset() {
 		m.perFileOffset = make(map[string]int)
 	}
 	m.perFileOffset[string(m.currentPath)] = m.viewport.Offset()
+}
+
+// handleNavigate moves the matched-line cursor by delta (1 for n, -1
+// for p) and wires the consequences (Issue #13). With zero or one stop
+// the cursor is a strict no-op: no state change, no load command, no
+// pop-up. With two or more stops the cursor moves circularly. On a
+// file change: the departing file's viewport offset is saved, the
+// content panel switches immediately, and a load is requested for an
+// uncached destination; a cached destination is shown immediately with
+// its saved viewport restored (first visit starts at the top). On a
+// same-file move: only the current matched line changes; destination
+// reveal belongs to Issue #14. Manual scrolling does not move the
+// cursor, so n/p continue from the last selected stop.
+func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
+	if m.cursor == nil {
+		return m, nil
+	}
+	var stop searchindex.Stop
+	var moved, fileChanged bool
+	if delta > 0 {
+		stop, moved, fileChanged = m.cursor.Next()
+	} else {
+		stop, moved, fileChanged = m.cursor.Prev()
+	}
+	if !moved {
+		// Zero or one stop: strict no-op. No pop-up, no reload.
+		return m, nil
+	}
+	if !fileChanged {
+		// Same-file navigation: only the current matched line
+		// styling changes. Destination reveal belongs to Issue #14.
+		return m, nil
+	}
+	// Cross-file navigation. Save the departing file's viewport.
+	m.saveOffset()
+	// Switch the panel to the destination file immediately.
+	if buf, ok := m.fileCache[string(stop.RawPath)]; ok {
+		// Cached destination: show immediately with its saved
+		// viewport restored (first visit starts at the top).
+		m.buffer = buf
+		m.loading = false
+		m.currentPath = stop.RawPath
+		factory := m.rowProviderFactory
+		if factory == nil {
+			factory = viewport.BufferRows
+		}
+		rows := factory(buf)
+		offset := m.SavedOffset(stop.RawPath)
+		m.viewport = viewport.New(rows, m.height)
+		m.viewport.SetOffset(offset)
+		return m, nil
+	}
+	// Uncached destination: request a load. The panel shows the
+	// loading placeholder until the load completes.
+	m.buffer = nil
+	m.viewport = nil
+	m.loading = true
+	m.currentPath = stop.RawPath
+	return m, m.loadFileFor(stop.RawPath)
 }
 
 // handleOverlayKey routes a key press to the open overlay. up/down
@@ -1131,19 +1249,33 @@ func (m Model) watchDiagnostic() tea.Cmd {
 }
 
 // loadFile returns a command that asynchronously loads the current
-// browse file. The command waits at the file gate (if set), calls the
-// file loader, and returns a FileLoadCompleteMsg with the prepared
-// buffer. The load is cancellable via loadCancel.
+// browse file (the cursor's current stop's file). The command waits at
+// the file gate (if set), calls the file loader, and returns a
+// FileLoadCompleteMsg with the prepared buffer. The load is
+// cancellable via loadCancel.
 func (m Model) loadFile() tea.Cmd {
+	if m.cursor == nil {
+		return nil
+	}
+	stop, ok := m.cursor.Stop()
+	if !ok {
+		return nil
+	}
+	return m.loadFileFor(stop.RawPath)
+}
+
+// loadFileFor returns a command that asynchronously loads the file at
+// the given raw path. The command waits at the file gate (if set),
+// calls the file loader with the stops for that file, and returns a
+// FileLoadCompleteMsg with the prepared buffer. The load is
+// cancellable via loadCancel. Issue #13 uses this for cross-file
+// navigation to an uncached destination.
+func (m Model) loadFileFor(path []byte) tea.Cmd {
 	return func() tea.Msg {
 		if m.index == nil {
 			return FileLoadCompleteMsg{}
 		}
 		stops := m.index.Stops()
-		if len(stops) == 0 {
-			return FileLoadCompleteMsg{}
-		}
-		path := stops[0].RawPath
 		var fileStops []searchindex.Stop
 		for _, s := range stops {
 			if bytes.Equal(s.RawPath, path) {
@@ -1195,7 +1327,9 @@ func groupByFile(stops []searchindex.Stop) []fileGroup {
 // renderBrowse renders the two-pane browse view: file list on the left,
 // content panel on the right. Each line is wrapped in the theme's base
 // colours; styled spans within (matches, current-file underline) restore
-// the base so text after them remains in base.
+// the base so text after them remains in base. Issue #13: the current
+// file and current matched line derive from the cursor; the file list
+// underline follows the cursor's current file.
 func (m Model) renderBrowse() string {
 	if m.index == nil || m.index.Files() == 0 {
 		return m.theme.Base("No results")
@@ -1203,27 +1337,37 @@ func (m Model) renderBrowse() string {
 
 	groups := groupByFile(m.index.Stops())
 
+	// Issue #13: the current file derives from the cursor. Find the
+	// file group index for the cursor's current stop's raw path.
+	currentFileIdx := 0
+	currentLine := 0
+	if m.cursor != nil {
+		if stop, ok := m.cursor.Stop(); ok {
+			for i, g := range groups {
+				if bytes.Equal(g.path, stop.RawPath) {
+					currentFileIdx = i
+					break
+				}
+			}
+			currentLine = stop.LineNumber
+		}
+	}
+
 	// File list (left pane).
 	listWidth := fileListWidth(m.width)
 	var listLines []string
 	for i, g := range groups {
 		escaped := safepresentation.EscapePath(g.path)
 		entry := escaped.Text
-		if i == m.browseIdx {
+		if i == currentFileIdx {
 			entry = m.theme.Underline(entry)
 		}
 		listLines = append(listLines, entry)
 	}
 
 	// Content panel (right pane).
-	current := groups[m.browseIdx]
+	current := groups[currentFileIdx]
 	escapedName := safepresentation.EscapePath(current.path)
-	// The current matched line is the first stop for the current file
-	// (the first stop until Issue #13 adds navigation).
-	currentLine := 0
-	if len(current.stops) > 0 {
-		currentLine = current.stops[0].LineNumber
-	}
 	panel := m.renderContentPanel(escapedName.Text, currentLine)
 
 	// Join horizontally: pad each file-list line to listWidth, then

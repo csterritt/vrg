@@ -104,3 +104,12 @@ Usage
  Input tokens: 225459 tokens
  Output tokens: 69879 tokens
  Cached input tokens: 13363328 tokens
+
+----
+Task 013-match-navigation-n-p-circular-cursor.md
+
+Usage
+ Agent messages: 140 messages
+ Input tokens: 341902 tokens
+ Output tokens: 73302 tokens
+ Cached input tokens: 15404544 tokens

@@ -856,3 +856,104 @@ type rawSubmatch struct {
 	Start int       `json:"start"`
 	End   int       `json:"end"`
 }
+
+// Cursor is the circular matched-line cursor over an Index's stops.
+// It tracks the current stop position within the stop list ordered by
+// unsigned raw path bytes then ascending line number. Startup selects
+// the first stop. n/p advance and retreat circularly with wrap at both
+// ends. Zero entries and exactly one entry make both Next and Prev
+// strict no-ops: the cursor does not move, no file change is reported,
+// and no pop-up or reload is triggered. Multiple submatches on one
+// line are one stop (the Index merges them). The cursor exposes
+// file-change information so the App can wire panel switching, load
+// requests, and viewport handoff.
+type Cursor struct {
+	idx *Index
+	// pos is the 0-based current stop position, or -1 when the index
+	// has no stops.
+	pos int
+}
+
+// NewCursor returns a cursor over idx. The cursor starts at the first
+// stop (position 0) when the index has at least one stop, or at -1
+// (no selection) when the index is empty or nil.
+func NewCursor(idx *Index) *Cursor {
+	if idx == nil || idx.Len() == 0 {
+		return &Cursor{idx: idx, pos: -1}
+	}
+	return &Cursor{idx: idx, pos: 0}
+}
+
+// Stop returns the current stop and true, or a zero Stop and false
+// when the index is empty.
+func (c *Cursor) Stop() (Stop, bool) {
+	if c == nil || c.idx == nil || c.pos < 0 {
+		return Stop{}, false
+	}
+	stops := c.idx.stops
+	if c.pos >= len(stops) {
+		return Stop{}, false
+	}
+	return stops[c.pos], true
+}
+
+// Position returns the 0-based current stop position, or -1 when the
+// index is empty.
+func (c *Cursor) Position() int {
+	if c == nil {
+		return -1
+	}
+	return c.pos
+}
+
+// Len returns the number of stops in the cursor's index.
+func (c *Cursor) Len() int {
+	if c == nil || c.idx == nil {
+		return 0
+	}
+	return c.idx.Len()
+}
+
+// Next advances the cursor to the next stop circularly. It returns the
+// new (or unchanged) stop, whether the cursor moved, and whether the
+// file changed. With zero or one stops it is a strict no-op: moved is
+// false and fileChanged is false. With two or more stops, the cursor
+// advances by one position, wrapping from the last stop to the first.
+// fileChanged is true when the new stop's raw path differs from the
+// previous stop's raw path.
+func (c *Cursor) Next() (stop Stop, moved bool, fileChanged bool) {
+	return c.step(1)
+}
+
+// Prev retreats the cursor to the previous stop circularly. It returns
+// the new (or unchanged) stop, whether the cursor moved, and whether
+// the file changed. With zero or one stops it is a strict no-op: moved
+// is false and fileChanged is false. With two or more stops, the
+// cursor retreats by one position, wrapping from the first stop to
+// the last. fileChanged is true when the new stop's raw path differs
+// from the previous stop's raw path.
+func (c *Cursor) Prev() (stop Stop, moved bool, fileChanged bool) {
+	return c.step(-1)
+}
+
+// step moves the cursor by delta positions (1 for Next, -1 for Prev),
+// wrapping circularly. It returns the resulting stop, whether the
+// cursor moved, and whether the file changed. With zero or one stops
+// it is a strict no-op.
+func (c *Cursor) step(delta int) (stop Stop, moved bool, fileChanged bool) {
+	if c == nil || c.idx == nil || c.pos < 0 {
+		return Stop{}, false, false
+	}
+	n := c.idx.Len()
+	if n <= 1 {
+		return c.idx.stops[c.pos], false, false
+	}
+	oldStop := c.idx.stops[c.pos]
+	newPos := (c.pos + delta) % n
+	if newPos < 0 {
+		newPos += n
+	}
+	c.pos = newPos
+	newStop := c.idx.stops[c.pos]
+	return newStop, true, !bytes.Equal(oldStop.RawPath, newStop.RawPath)
+}

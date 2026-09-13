@@ -132,6 +132,37 @@ table, parser config, and generated help cannot drift.
   stops), `TestUnknownType` (unknown counted separately, unknown does
   not substitute for summary, unknown after summary is unknown and
   after-summary integrity failure).
+- Issue #13 cursor tests (`cursor_test.go`, external package
+  `searchindex_test`):
+  - `TestCursorStartupSelectsFirstStop` — a new cursor selects the
+    first stop in path-then-line order.
+  - `TestCursorPosition` — `Position()` reports the 0-based stop
+    index, starting at 0 for the first stop.
+  - `TestCursorNextAdvances` / `TestCursorPrevRetreats` — `Next`/`Prev`
+    move the cursor to the next/previous stop in path-then-line
+    order.
+  - `TestCursorNextWraps` / `TestCursorPrevWraps` — `Next` wraps from
+    the last stop to the first; `Prev` wraps from the first stop to
+    the last (circular).
+  - `TestCursorFileChangeFlag` / `TestCursorPrevFileChangeFlag` — the
+    `fileChanged` flag is true when navigation crosses a file
+    boundary and false within the same file, including on wrap.
+  - `TestCursorSingleStopNoOp` — with exactly one stop, `Next` and
+    `Prev` are strict no-ops: no move, no file change, stop unchanged.
+  - `TestCursorEmptyNoOp` — with zero stops, `Next` and `Prev` are
+    strict no-ops and `Stop()` returns ok=false.
+  - `TestCursorMultipleSubmatchesOneStop` — multiple submatches on one
+    line count as one navigation stop; the cursor treats them as one
+    position.
+  - `TestCursorLen` / `TestCursorEmptyLen` — `Len()` reports the
+    number of stops (0 for empty).
+  - `TestCursorNilIndex` — a nil index produces an empty cursor that
+    does not panic on any operation.
+  - `TestCursorFullCycleNext` / `TestCursorFullCyclePrev` — a full
+    circular cycle of `Next`/`Prev` returns to the starting position.
+  - `TestCursorFileChangeBytesEqual` — the `fileChanged` flag uses
+    raw byte comparison, so identical paths in `text` and `bytes`
+    encodings are the same file.
 
 ## internal/safepresentation
 
@@ -506,6 +537,48 @@ table, parser config, and generated help cannot drift.
   scrolling: only the new visible range is queried.
 - `TestRenderShowsOnlyVisibleRows` — the rendered view contains only
   the visible rows, not the full buffer.
+
+`navigation_test.go` (Issue #13, external package `app_test`):
+
+- `TestNavigationStartupSelectsFirstStop` / `TestNavigationStartup-
+  SelectsFirstStopView` — startup selects the first stop in
+  path-then-line order; the current file is the first file and the
+  view shows the first file's content.
+- `TestNavigationNextSwitchesFile` / `TestNavigationPrevSwitchesFile`
+  — `n`/`p` crossing a file boundary switches the content panel to
+  the new file and requests its load when uncached.
+- `TestNavigationNextSameFileNoLoad` — `n` within the same file does
+  not request a load (the file is already loaded).
+- `TestNavigationNextWrapsCrossFile` / `TestNavigationPrevWrapsCrossFile`
+  — `n`/`p` wraps across file boundaries; a cached destination is
+  shown immediately without a reload.
+- `TestNavigationOneStopNextNoOp` / `TestNavigationOneStopPrevNoOp` —
+  with exactly one stop, `n` and `p` are strict no-ops: no state
+  change, no load command, no view change.
+- `TestNavigationListUnderlineFollowsCursor` — the file list underline
+  follows the cursor's current file after navigation.
+- `TestNavigationCurrentMatchUnderlineMoves` — the current matched
+  line's matches render with the Issue #7 `CurrentMatch` style (true
+  inverse + underline) and the underline moves to the new current line
+  after same-file navigation.
+- `TestNavigationManualScrollIndependence` / `TestNavigationManual-
+  ScrollThenPContinues` — manual scrolling does not move the cursor;
+  `n`/`p` continue from the last selected stop, not the scrolled
+  position.
+- `TestNavigationSavesDepartingViewport` — navigating away from a
+  file saves that file's viewport offset as per-file state.
+- `TestNavigationRestoresSavedViewport` — a revisited file starts
+  from its saved viewport offset.
+- `TestNavigationFirstVisitStartsAtTop` — a first visit to a file
+  starts at the top (offset 0).
+- `TestNavigationFileListPassive` — keys other than `n`/`p` do not
+  change the current file or cursor position; the file list is passive
+  with no direct selection route.
+- `TestNavigationNextWhileLoading` — `n` while a file is loading still
+  advances the cursor (navigation remains active while loading).
+- `TestNavigationMultiFileMultiStop` — a full navigation sequence
+  across multiple files with multiple stops each, checking cursor
+  position and current file at each step, including wrap.
 
 ## cmd/vrg (subprocess boundary)
 
