@@ -36,10 +36,7 @@ func setupBrowseMulti(t *testing.T, idx *searchindex.Index, bufs map[string]*fil
 		t.Fatalf("State = %v, want StateBrowse", m.State())
 	}
 	if cmd != nil {
-		msg := execCmd(t, cmd)
-		if lc, ok := msg.(app.FileLoadCompleteMsg); ok {
-			m, _ = update(t, m, lc)
-		}
+		m = deliverLoad(t, m, cmd)
 	}
 	return m
 }
@@ -50,6 +47,9 @@ func setupBrowseMulti(t *testing.T, idx *searchindex.Index, bufs map[string]*fil
 // navigation batches the pop-up timer and the load command). Timer
 // commands that block (e.g. tea.Tick with a non-zero duration) are
 // skipped via a short timeout so the test does not wait for the timer.
+// Issue #17: the FileLoadCompleteMsg handler returns a layout
+// preparation command; this helper delivers it too so the viewport
+// is installed.
 func deliverLoad(t *testing.T, m app.Model, cmd tea.Cmd) app.Model {
 	t.Helper()
 	if cmd == nil {
@@ -57,8 +57,8 @@ func deliverLoad(t *testing.T, m app.Model, cmd tea.Cmd) app.Model {
 	}
 	msg := execCmd(t, cmd)
 	if lc, ok := msg.(app.FileLoadCompleteMsg); ok {
-		m, _ = update(t, m, lc)
-		return m
+		nm, layoutCmd := update(t, m, lc)
+		return deliverLayout(t, nm, layoutCmd)
 	}
 	if batch, ok := msg.(tea.BatchMsg); ok {
 		for _, c := range batch {
@@ -74,7 +74,8 @@ func deliverLoad(t *testing.T, m app.Model, cmd tea.Cmd) app.Model {
 			select {
 			case sub := <-ch:
 				if lc, ok := sub.(app.FileLoadCompleteMsg); ok {
-					m, _ = update(t, m, lc)
+					nm, layoutCmd := update(t, m, lc)
+					m = deliverLayout(t, nm, layoutCmd)
 				}
 			case <-time.After(100 * time.Millisecond):
 				// Command is still running (likely a timer);
@@ -83,6 +84,61 @@ func deliverLoad(t *testing.T, m app.Model, cmd tea.Cmd) app.Model {
 		}
 	}
 	return m
+}
+
+// deliverLayout executes a layout preparation command (if non-nil) and
+// delivers the resulting LayoutReadyMsg to the model (Issue #17). This
+// simulates the async layout preparation completing. Handles
+// tea.BatchMsg (cross-file navigation batches the pop-up timer and the
+// layout command). Timer commands that block are skipped via a short
+// timeout so the test does not wait.
+func deliverLayout(t *testing.T, m app.Model, cmd tea.Cmd) app.Model {
+	t.Helper()
+	if cmd == nil {
+		return m
+	}
+	msg := execCmd(t, cmd)
+	if lr, ok := msg.(app.LayoutReadyMsg); ok {
+		m, _ = update(t, m, lr)
+		return m
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c == nil {
+				continue
+			}
+			ch := make(chan tea.Msg, 1)
+			go func(cmd tea.Cmd) { ch <- cmd() }(c)
+			select {
+			case sub := <-ch:
+				if lr, ok := sub.(app.LayoutReadyMsg); ok {
+					m, _ = update(t, m, lr)
+				}
+			case <-time.After(100 * time.Millisecond):
+				// Skip blocking commands (e.g. timers).
+			}
+		}
+	}
+	return m
+}
+
+// resize sends a WindowSizeMsg and delivers any resulting layout
+// preparation command (Issue #17). Tests that check viewport state
+// after a resize must use this helper so the async layout is installed.
+func resize(t *testing.T, m app.Model, width, height int) app.Model {
+	t.Helper()
+	m, cmd := update(t, m, tea.WindowSizeMsg{Width: width, Height: height})
+	return deliverLayout(t, m, cmd)
+}
+
+// navigate sends n or p and delivers any resulting layout preparation
+// command (Issue #17). Tests that check viewport state after
+// cross-file navigation must use this helper so the async layout is
+// installed.
+func navigate(t *testing.T, m app.Model, key rune) app.Model {
+	t.Helper()
+	m, cmd := update(t, m, keyPress(key))
+	return deliverLayout(t, m, cmd)
 }
 
 // assertCurrentPath requires the model's current file path to equal
@@ -561,7 +617,7 @@ func TestNavigationRestoresSavedViewport(t *testing.T) {
 	}
 
 	// Navigate back to a.go (p wraps or n wraps).
-	m, _ = update(t, m, keyPress('p'))
+	m = navigate(t, m, 'p')
 	assertCurrentPath(t, m, "src/a.go")
 	// a.go's saved offset (7) is the starting point. The match on
 	// line 10 (row 9) is visible from offset 7 (range [7, 30)), so

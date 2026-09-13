@@ -75,6 +75,16 @@ Catalog of all wiki pages for the vrg project.
   prepared swappable row model keyed by (path, content revision, text
   width, wrap mode), reserved indicator width, wrapped destination
   reveal, and continuation-row blank gutters
+- [logical-anchor-and-layout-preparation.md](logical-anchor-and-layout-preparation.md) —
+  Issue #17: width-independent logical viewport anchor with retention
+  through rewrap/wrap-toggle/resize and replacement by scrolling/moving
+  reveals, intentionally lossy EOF clamp, off-UI layout preparation
+  keyed by (path, content revision, text width, wrap mode),
+  installation-only-on-match guards with out-of-order discard,
+  model-carried pending reveal intent, cached-file stale-layout
+  navigation with matching-layout fast path, AC6 responsiveness during
+  gated preparation, and render-cost guards for visible rows and
+  file-list entries
 
 ## Catalogs
 

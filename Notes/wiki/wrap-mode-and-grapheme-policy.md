@@ -92,18 +92,26 @@ unchanged from Issue #14.
 The app carries a `wrapMode viewport.WrapMode` field (initial `WrapOn`)
 and a `rowModel *viewport.RowModel` field. `buildViewport()` constructs
 the viewport's row provider from the current buffer, wrap mode, and
-panel dimensions: when a `RowProviderFactory` test seam is set it is
-used directly; otherwise a `RowModel` is built at the current text width
-and wrap mode. The per-file saved offset is restored after building.
+panel dimensions. It has three paths (Issue #17):
+
+1. **RowProviderFactory test seam**: installs a row provider directly
+   (synchronous bypass for render-cost tests).
+2. **Cache hit**: a cached `RowModel` with a matching key is installed
+   immediately with no preparation request.
+3. **Cache miss or stale**: issues a layout preparation command (a
+   `tea.Cmd` that builds the `RowModel` and emits a `LayoutReadyMsg`).
+   The old layout remains installed until the new one arrives.
 
 The `w` key toggles the wrap mode in browse mode (when a buffer is
-loaded) and rebuilds the viewport. `w` is a no-op outside browse mode.
+loaded) and rebuilds the viewport via `buildViewport()`, preserving
+the logical anchor (Issue #17). `w` is a no-op outside browse mode.
 `WindowSizeMsg` rebuilds the row model when the text width changes so
-wrapping reflects the new panel width, preserving the current offset.
+wrapping reflects the new panel width, preserving the logical anchor.
 
 `renderContentPanel` shows a blank gutter for continuation rows
 (`line.Continuation`), aligned with the first row's text.
 
 See [browse-tracer](browse-tracer.md),
-[manual-vertical-scrolling](manual-vertical-scrolling.md), and
-[destination-reveal](destination-reveal.md).
+[manual-vertical-scrolling](manual-vertical-scrolling.md),
+[destination-reveal](destination-reveal.md), and
+[logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md).

@@ -69,10 +69,7 @@ func setupBrowseWithSize(t *testing.T, idx *searchindex.Index, buf *filebuffer.B
 		t.Fatalf("State = %v, want StateBrowse", m.State())
 	}
 	if cmd != nil {
-		msg := execCmd(t, cmd)
-		if lc, ok := msg.(app.FileLoadCompleteMsg); ok {
-			m, _ = update(t, m, lc)
-		}
+		m = deliverLoad(t, m, cmd)
 	}
 	return m
 }

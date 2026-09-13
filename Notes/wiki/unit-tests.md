@@ -748,6 +748,66 @@ table, parser config, and generated help cannot drift.
   returns the source line index.
 - `TestWrapAllTests` — aggregate test running all wrap tests.
 
+`anchor_test.go` (Issue #17, external package `viewport_test`):
+
+- `TestAnchorRoundTripThroughRewrap` — the anchor survives a rewrap
+  (same text location remains at the top after the text width changes).
+- `TestAnchorRoundTripThroughWrapToggle` — the anchor survives a
+  wrap-mode toggle (same text location remains at the top).
+- `TestAnchorReplacedByScrolling` — user scrolling replaces the anchor
+  with the new top row's anchor.
+- `TestAnchorReplacedByMovingReveal` — a reveal that moves the
+  viewport replaces the anchor.
+- `TestAnchorRetainedByNoScrollReveal` — a no-scroll reveal leaves the
+  anchor unchanged.
+- `TestEOFClampReplacesAnchor` — EOF clamping replaces the anchor with
+  the clamped top row's anchor (intentionally lossy).
+- `TestAnchorPreservedOnResizeWithShortContent` — the anchor is
+  preserved on resize even when the content is shorter than the
+  viewport.
+
+`anchor_test.go` (Issue #17, external package `app_test`):
+
+- `TestCursorPreservedOnResize` — a resize preserves the cursor
+  selection (the matched-line navigation cursor).
+- `TestCursorPreservedOnShrinkResize` — shrinking and re-widening the
+  terminal preserves the cursor selection.
+- `TestViewportAnchorOnResize` — a resize that changes the text width
+  recomputes the viewport top from the logical anchor, not the old
+  row ordinal.
+
+`layout_test.go` (Issue #17, external package `app_test`):
+
+- `TestLayoutGateCtrlCExits130` — `ctrl+c` exits 130 while a layout
+  preparation is held by the gate.
+- `TestLayoutGateQExits` — `q` exits with the fixed status while a
+  layout preparation is held by the gate.
+- `TestLayoutGateNavigateImmediate` — `n`/`p` advance the cursor
+  immediately while a layout preparation is held by the gate; the
+  latest pending reveal is preserved.
+- `TestLayoutGateWrapToggleImmediate` — `w` changes wrap mode
+  immediately and issues a keyed layout request without releasing
+  the gate.
+- `TestLayoutGateSecondResize` — a second resize is accepted without
+  releasing the gate.
+- `TestLayoutGatePendingRevealPreserved` — a pending reveal intent is
+  preserved while the layout is gated and committed once the layout
+  installs.
+- `TestLayoutOutOfOrderDiscarded` — out-of-order layout completions
+  across W1→W2→W3 resizes are discarded; only the latest matching
+  layout installs.
+- `TestLayoutForStaleFileDiscarded` — a layout completion for a file
+  that is no longer current leaves the visible panel and saved
+  per-file state untouched.
+- `TestCachedFileStaleLayoutRequestsRebuild` — navigation to a cached
+  file with a stale layout requests a prepared layout for the current
+  parameters.
+- `TestCachedFileMatchingLayoutCommitsImmediately` — navigation to a
+  cached file with a matching layout commits immediately with no
+  preparation request.
+- `TestRenderCostGuardFileList` — the file-list render path queries
+  only the visible range (counting fake provider).
+
 `grapheme_test.go` (Issue #16, external package `filebuffer_test`):
 
 - `TestLoadPopulatesClusters` / `TestLoadPopulatesClustersWide` /

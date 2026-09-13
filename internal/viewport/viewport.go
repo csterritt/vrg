@@ -78,12 +78,14 @@ type RowModelKey struct {
 	WrapMode  WrapMode
 }
 
-// rowSource tracks the source line and byte range for each rendered
-// row, used by RowFromByte for the Issue #14 target reveal.
+// rowSource tracks the source line, byte range, and cell start for each
+// rendered row, used by RowFromByte for the Issue #14 target reveal and
+// by RowFromCell/RowAnchor for the Issue #17 logical anchor.
 type rowSource struct {
 	lineIndex int
 	startByte int
 	endByte   int
+	startCell int // cell offset within the source line (Issue #17)
 }
 
 // Key returns the RowModelKey identifying this model.
@@ -137,6 +139,63 @@ func (m *RowModel) RowFromByte(lineIndex, byteOffset int) int {
 	return -1
 }
 
+// Anchor is a width-independent logical reading position: the 0-based
+// source line index and the display-column offset within that line
+// (Issue #17). After a rewrap, wrap toggle, or resize, the effective
+// top row is the row containing the anchor's text location, not the
+// former row ordinal.
+type Anchor struct {
+	LineIndex int
+	Column    int
+}
+
+// RowFromCell returns the 0-based rendered row index containing the
+// given display-column offset in the given 0-based source line, or -1
+// if not found (Issue #17). In run-off-edge mode every column of a line
+// maps to the same row (one row per line).
+func (m *RowModel) RowFromCell(lineIndex, column int) int {
+	for i, src := range m.sources {
+		if src.lineIndex != lineIndex {
+			continue
+		}
+		// Compute the row's cell width from its clusters.
+		rowWidth := 0
+		for _, c := range m.rows[i].Clusters {
+			rowWidth += c.Width
+		}
+		if column >= src.startCell && column < src.startCell+rowWidth {
+			return i
+		}
+		// A zero-width row (empty line) maps to its startCell.
+		if rowWidth == 0 && column == src.startCell {
+			return i
+		}
+	}
+	// Fall back: if column is at or past the last row's end for the
+	// line, return the last row for that line.
+	last := -1
+	for i, src := range m.sources {
+		if src.lineIndex == lineIndex {
+			last = i
+		}
+	}
+	if last >= 0 && column >= m.sources[last].startCell {
+		return last
+	}
+	return -1
+}
+
+// RowAnchor returns the source line and display-column offset for the
+// start of the given 0-based rendered row (Issue #17). In run-off-edge
+// mode every row starts at column 0 (each row is a full source line).
+func (m *RowModel) RowAnchor(row int) Anchor {
+	if row < 0 || row >= len(m.sources) {
+		return Anchor{}
+	}
+	src := m.sources[row]
+	return Anchor{LineIndex: src.lineIndex, Column: src.startCell}
+}
+
 // BuildRowModel constructs a swappable row model from a loaded buffer
 // at the given text width and wrap mode (Issue #16). In wrap mode,
 // long lines are broken at grapheme-cluster boundaries to fit the
@@ -157,6 +216,7 @@ func BuildRowModel(buf *filebuffer.Buffer, textWidth int, mode WrapMode, key Row
 				lineIndex: i,
 				startByte: 0,
 				endByte:   len(line.Display),
+				startCell: 0,
 			})
 			continue
 		}
@@ -168,6 +228,7 @@ func BuildRowModel(buf *filebuffer.Buffer, textWidth int, mode WrapMode, key Row
 				lineIndex: i,
 				startByte: wr.startByte,
 				endByte:   wr.endByte,
+				startCell: wr.startCell,
 			})
 		}
 	}
@@ -175,11 +236,12 @@ func BuildRowModel(buf *filebuffer.Buffer, textWidth int, mode WrapMode, key Row
 }
 
 // wrappedRow is one rendered row from wrapping a source line, with the
-// byte range it covers in the source line's display text.
+// byte range and cell start it covers in the source line's display text.
 type wrappedRow struct {
 	row       filebuffer.Line
 	startByte int
 	endByte   int
+	startCell int
 }
 
 // wrapLine breaks a source line into wrapped rows at grapheme-cluster
@@ -197,25 +259,28 @@ func wrapLine(line filebuffer.Line, textWidth int) []wrappedRow {
 			row:       line,
 			startByte: 0,
 			endByte:   len(line.Display),
+			startCell: 0,
 		}}
 	}
 	var result []wrappedRow
 	startCluster := 0
 	cellPos := 0
+	rowStartCell := 0
 	for ci := 0; ci < len(clusters); ci++ {
 		c := clusters[ci]
 		// If the cluster doesn't fit in the remaining cells, start a
 		// new row (unless we're at the start of a row).
 		if cellPos+c.Width > textWidth && cellPos > 0 {
-			result = append(result, makeWrappedRow(line, startCluster, ci, len(result) > 0))
+			result = append(result, makeWrappedRow(line, startCluster, ci, len(result) > 0, rowStartCell))
 			startCluster = ci
+			rowStartCell += cellPos
 			cellPos = 0
 		}
 		cellPos += c.Width
 	}
 	// Flush the final row.
 	isCont := len(result) > 0
-	result = append(result, makeWrappedRow(line, startCluster, len(clusters), isCont))
+	result = append(result, makeWrappedRow(line, startCluster, len(clusters), isCont, rowStartCell))
 	return result
 }
 
@@ -224,8 +289,9 @@ func wrapLine(line filebuffer.Line, textWidth int) []wrappedRow {
 // source line's Display from the first cluster's StartByte to the last
 // cluster's EndByte. StartByte is the byte offset in the source line.
 // Continuation is set for rows after the first. Highlights are adjusted
-// to local cell coordinates.
-func makeWrappedRow(line filebuffer.Line, startCluster, endCluster int, continuation bool) wrappedRow {
+// to local cell coordinates. rowStartCell is the cell offset of the row
+// start in the source line (Issue #17).
+func makeWrappedRow(line filebuffer.Line, startCluster, endCluster int, continuation bool, rowStartCell int) wrappedRow {
 	clusters := line.Clusters
 	startByte := clusters[startCluster].StartByte
 	var endByte int
@@ -235,11 +301,6 @@ func makeWrappedRow(line filebuffer.Line, startCluster, endCluster int, continua
 		endByte = len(line.Display)
 	}
 	display := line.Display[startByte:endByte]
-	// Compute the cell offset of the row start in the source line.
-	rowStartCell := 0
-	for i := 0; i < startCluster; i++ {
-		rowStartCell += clusters[i].Width
-	}
 	row := filebuffer.Line{
 		Number:       line.Number,
 		Display:      display,
@@ -252,6 +313,7 @@ func makeWrappedRow(line filebuffer.Line, startCluster, endCluster int, continua
 		row:       row,
 		startByte: startByte,
 		endByte:   endByte,
+		startCell: rowStartCell,
 	}
 }
 
@@ -311,18 +373,29 @@ type RowProvider interface {
 // [0, maxOffset] where maxOffset = max(0, rowCount - contentHeight).
 // This ensures no avoidable blank rows below EOF; files shorter than
 // the viewport naturally leave unused rows.
+//
+// The logical anchor (Issue #17) is a width-independent (source line,
+// display-column) position. After a rewrap, wrap toggle, or resize,
+// the effective top row is recomputed from the anchor so the same text
+// location remains at the top. User vertical scrolling and moving
+// reveals replace the anchor with the resulting top row's location.
+// EOF clamping that pulls the top upward updates the anchor to the new
+// top; this clamp is intentionally lossy — a later shrink need not
+// restore the old top.
 type Viewport struct {
 	rows        RowProvider
 	panelHeight int
 	offset      int
+	anchor      Anchor
 }
 
 // New creates a viewport with the given row provider and panel height.
 // The panel height includes the filename row; content height is
-// panelHeight - 1. The offset starts at 0 (top of file).
+// panelHeight - 1. The offset starts at 0 (top of file) and the anchor
+// defaults to (0, 0).
 func New(rows RowProvider, panelHeight int) *Viewport {
-	v := &Viewport{rows: rows, panelHeight: panelHeight}
-	v.clampOffset()
+	v := &Viewport{rows: rows, panelHeight: panelHeight, anchor: Anchor{0, 0}}
+	v.recomputeOffsetFromAnchor()
 	return v
 }
 
@@ -349,43 +422,64 @@ func (v *Viewport) RowCount() int {
 // Offset returns the current top row (0-based).
 func (v *Viewport) Offset() int { return v.offset }
 
-// SetOffset sets the top row, clamped to [0, maxOffset].
+// Anchor returns the current logical anchor (Issue #17).
+func (v *Viewport) Anchor() Anchor { return v.anchor }
+
+// SetAnchor sets the logical anchor and recomputes the offset from it
+// (Issue #17). The offset becomes the row containing the anchor's text
+// location, clamped to [0, maxOffset]. If the clamp pulls the offset
+// below the anchor's row, the anchor is updated to the new top row's
+// location (lossy EOF clamp).
+func (v *Viewport) SetAnchor(a Anchor) {
+	v.anchor = a
+	v.recomputeOffsetFromAnchor()
+}
+
+// SetOffset sets the top row, clamped to [0, maxOffset], and replaces
+// the anchor with the new top row's location (Issue #17).
 func (v *Viewport) SetOffset(offset int) {
 	v.offset = offset
 	v.clampOffset()
+	v.syncAnchorToOffset()
 }
 
-// SetPanelHeight updates the panel height and clamps the offset to the
-// new maxOffset. This is used on resize to recompute layout from current
-// dimensions without losing the reading position.
+// SetPanelHeight updates the panel height and recomputes the offset
+// from the anchor (Issue #17). If the new maxOffset pulls the offset
+// below the anchor's row (EOF clamp), the anchor is updated to the new
+// top row's location.
 func (v *Viewport) SetPanelHeight(panelHeight int) {
 	v.panelHeight = panelHeight
-	v.clampOffset()
+	v.recomputeOffsetFromAnchor()
 }
 
-// SetRows updates the row provider and clamps the offset to the new
-// maxOffset. This is used when prepared row data is rebuilt after a
-// load completes or the layout changes.
+// SetRows updates the row provider and recomputes the offset from the
+// anchor (Issue #17). This is used when prepared row data is rebuilt
+// after a load completes, the wrap mode toggles, or the layout
+// changes. The anchor is preserved; the offset becomes the row
+// containing the anchor's text location in the new row model.
 func (v *Viewport) SetRows(rows RowProvider) {
 	v.rows = rows
-	v.clampOffset()
+	v.recomputeOffsetFromAnchor()
 }
 
 // Reveal adjusts the viewport offset so that the target row is
 // visible. If the target row is already within the visible range, the
-// offset is unchanged (visible-target no-scroll). Otherwise the
-// viewport is moved so the target lands at zero-based row
-// floor(contentHeight / 3), clamped to valid top positions. At BOF and
-// EOF, available content takes precedence over one-third placement:
-// the computed offset is clamped to [0, maxOffset], so a target near
-// the top stays near the top and a target near the bottom stays near
-// the bottom rather than forcing the one-third row.
+// offset is unchanged (visible-target no-scroll) and the anchor is
+// retained (Issue #17). Otherwise the viewport is moved so the target
+// lands at zero-based row floor(contentHeight / 3), clamped to valid
+// top positions. A moving reveal replaces the anchor with the new top
+// row's location (Issue #17). At BOF and EOF, available content takes
+// precedence over one-third placement: the computed offset is clamped
+// to [0, maxOffset], so a target near the top stays near the top and a
+// target near the bottom stays near the bottom rather than forcing the
+// one-third row.
 func (v *Viewport) Reveal(targetRow int) {
 	if v.rows == nil {
 		return
 	}
 	contentHeight := v.ContentHeight()
-	// If the target is already visible, do not scroll.
+	// If the target is already visible, do not scroll and retain the
+	// anchor (Issue #17).
 	if targetRow >= v.offset && targetRow < v.offset+contentHeight {
 		return
 	}
@@ -395,6 +489,7 @@ func (v *Viewport) Reveal(targetRow int) {
 	third := contentHeight / 3
 	v.offset = targetRow - third
 	v.clampOffset()
+	v.syncAnchorToOffset()
 }
 
 // Visible returns the visible rows from the row provider. Only the
@@ -411,40 +506,52 @@ func (v *Viewport) Visible() []filebuffer.Line {
 	return v.rows.Rows(start, end)
 }
 
-// ScrollDown scrolls one rendered row down, clamped to maxOffset.
+// ScrollDown scrolls one rendered row down, clamped to maxOffset, and
+// replaces the anchor with the new top row's location (Issue #17).
 func (v *Viewport) ScrollDown() {
 	v.offset++
 	v.clampOffset()
+	v.syncAnchorToOffset()
 }
 
-// ScrollUp scrolls one rendered row up, clamped to 0.
+// ScrollUp scrolls one rendered row up, clamped to 0, and replaces the
+// anchor with the new top row's location (Issue #17).
 func (v *Viewport) ScrollUp() {
 	v.offset--
 	v.clampOffset()
+	v.syncAnchorToOffset()
 }
 
-// ScrollHalfDown scrolls half a page down: max(1, floor(contentHeight/2)).
+// ScrollHalfDown scrolls half a page down: max(1, floor(contentHeight/2)),
+// and replaces the anchor with the new top row's location (Issue #17).
 func (v *Viewport) ScrollHalfDown() {
 	v.offset += halfPage(v.ContentHeight())
 	v.clampOffset()
+	v.syncAnchorToOffset()
 }
 
-// ScrollHalfUp scrolls half a page up: max(1, floor(contentHeight/2)).
+// ScrollHalfUp scrolls half a page up: max(1, floor(contentHeight/2)),
+// and replaces the anchor with the new top row's location (Issue #17).
 func (v *Viewport) ScrollHalfUp() {
 	v.offset -= halfPage(v.ContentHeight())
 	v.clampOffset()
+	v.syncAnchorToOffset()
 }
 
-// ScrollPageDown scrolls a full page down: contentHeight rows.
+// ScrollPageDown scrolls a full page down: contentHeight rows, and
+// replaces the anchor with the new top row's location (Issue #17).
 func (v *Viewport) ScrollPageDown() {
 	v.offset += v.ContentHeight()
 	v.clampOffset()
+	v.syncAnchorToOffset()
 }
 
-// ScrollPageUp scrolls a full page up: contentHeight rows.
+// ScrollPageUp scrolls a full page up: contentHeight rows, and replaces
+// the anchor with the new top row's location (Issue #17).
 func (v *Viewport) ScrollPageUp() {
 	v.offset -= v.ContentHeight()
 	v.clampOffset()
+	v.syncAnchorToOffset()
 }
 
 // maxOffset returns the maximum valid top row: max(0, rowCount -
@@ -472,6 +579,47 @@ func (v *Viewport) clampOffset() {
 	if v.offset > max {
 		v.offset = max
 	}
+}
+
+// recomputeOffsetFromAnchor sets the offset to the row containing the
+// anchor's text location in the current row model, clamped to
+// [0, maxOffset] (Issue #17). If the clamp pulls the offset below the
+// anchor's row (EOF clamp), the anchor is updated to the new top row's
+// location. When the row provider is not a *RowModel (e.g. a test fake
+// or BufferRows), the offset is just clamped.
+func (v *Viewport) recomputeOffsetFromAnchor() {
+	if v.rows == nil {
+		v.offset = 0
+		return
+	}
+	rm, ok := v.rows.(*RowModel)
+	if !ok {
+		v.clampOffset()
+		return
+	}
+	row := rm.RowFromCell(v.anchor.LineIndex, v.anchor.Column)
+	if row < 0 {
+		row = 0
+		v.anchor = Anchor{0, 0}
+	}
+	v.offset = row
+	v.clampOffset()
+	// If clamping pulled the offset below the anchor's row, update the
+	// anchor to the new top row's location (lossy EOF clamp).
+	if v.offset != row {
+		v.anchor = rm.RowAnchor(v.offset)
+	}
+}
+
+// syncAnchorToOffset replaces the anchor with the current top row's
+// location (Issue #17). Called after scroll and reveal operations that
+// move the viewport.
+func (v *Viewport) syncAnchorToOffset() {
+	rm, ok := v.rows.(*RowModel)
+	if !ok || v.offset < 0 || v.offset >= rm.RowCount() {
+		return
+	}
+	v.anchor = rm.RowAnchor(v.offset)
 }
 
 // halfPage returns the half-page scroll amount: max(1, floor(h/2)).

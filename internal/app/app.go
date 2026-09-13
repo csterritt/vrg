@@ -365,6 +365,12 @@ type Model struct {
 	// currentPath is the raw path of the currently loaded file, used
 	// as the key for per-file viewport state.
 	currentPath []byte
+	// prevBuildPath is the raw path of the file for which the viewport
+	// was last built (Issue #17). buildViewport uses it to distinguish a
+	// same-file rebuild (wrap toggle, resize) — which preserves the
+	// current anchor — from a fresh load or cached cross-file
+	// navigation, which restores the saved per-file anchor.
+	prevBuildPath []byte
 	// perFileOffset saves the vertical viewport offset per raw path so
 	// a file revisited later can start from its saved position (Issue
 	// #12). The key is the string form of the raw path bytes.
@@ -382,6 +388,42 @@ type Model struct {
 	// the render-cost guard: a counting fake proves the render path
 	// queries only the visible row range.
 	rowProviderFactory RowProviderFactory
+	// layoutGate holds layout preparation until the channel is closed
+	// or receives a value (Issue #17). When nil, layout preparation
+	// completes immediately. This is a test seam for verifying the
+	// browse view stays responsive while a layout is pending.
+	layoutGate chan struct{}
+	// rowModelFactory builds a RowModel from a buffer and layout
+	// parameters (Issue #17). When nil, viewport.BuildRowModel is
+	// used.
+	rowModelFactory RowModelFactory
+	// fileListProvider provides file-list entries for rendering
+	// (Issue #17). When nil, the search index's file groups are
+	// used.
+	fileListProvider FileListProvider
+	// pendingLayout is true when a layout preparation is in flight
+	// (Issue #17). The preparation completes via a LayoutReadyMsg;
+	// the model installs the prepared RowModel only when its key
+	// matches the current parameters.
+	pendingLayout bool
+	// pendingLayoutKey is the key of the in-flight layout
+	// preparation (Issue #17). When a LayoutReadyMsg arrives, the
+	// model checks this key against the current parameters; a
+	// mismatch means the completion is out-of-order or stale and is
+	// discarded.
+	pendingLayoutKey viewport.RowModelKey
+	// pendingReveal is true when a reveal intent is carried for
+	// the next matching layout installation (Issue #17). When the
+	// viewport is nil (layout pending) and a reveal is requested
+	// (navigation or load completion), the intent is preserved and
+	// committed once the layout installs.
+	pendingReveal bool
+	// layoutCache stores installed RowModels per file path (Issue
+	// #17). When navigating to a cached file, the model checks
+	// whether the cached RowModel's key matches the current
+	// parameters; a match commits immediately with no preparation
+	// request, a mismatch requests a new preparation.
+	layoutCache map[string]*viewport.RowModel
 
 	// Overlay state. The modal error/warning overlay sits over the
 	// browse or no-results state. When OverlayFatal is true, dismissal
@@ -425,6 +467,19 @@ type config struct {
 	// use the default (1 second); tests may set a very short duration
 	// so the timer fires immediately when executed.
 	popupDuration time.Duration
+	// layoutGate holds layout preparation until the channel is closed
+	// or receives a value (Issue #17). This is a test seam for
+	// verifying the browse view stays responsive while a layout is
+	// pending.
+	layoutGate chan struct{}
+	// rowModelFactory builds a RowModel from a buffer and layout
+	// parameters (Issue #17). When nil, viewport.BuildRowModel is
+	// used. This is a test seam for the layout preparation path.
+	rowModelFactory RowModelFactory
+	// fileListProvider provides file-list entries for rendering
+	// (Issue #17). When nil, the search index's file groups are
+	// used. This is a test seam for the render-cost guard.
+	fileListProvider FileListProvider
 }
 
 // RowProviderFactory builds a viewport.RowProvider from a loaded
@@ -432,6 +487,21 @@ type config struct {
 // buffer's prepared lines; a test factory can substitute a counting
 // fake to prove the render path queries only the visible row range.
 type RowProviderFactory func(buf *filebuffer.Buffer) viewport.RowProvider
+
+// RowModelFactory builds a viewport.RowModel from a loaded buffer and
+// layout parameters (Issue #17). The default factory is
+// viewport.BuildRowModel. A test factory can substitute a counting or
+// instrumented fake for the layout preparation path.
+type RowModelFactory func(buf *filebuffer.Buffer, textWidth int, wrapMode viewport.WrapMode, key viewport.RowModelKey) *viewport.RowModel
+
+// FileListProvider provides file-list entries for rendering (Issue
+// #17). The default implementation uses the search index's file
+// groups. A test can substitute a counting fake to prove the render
+// path queries only the visible range, not all file entries.
+type FileListProvider interface {
+	FileCount() int
+	FilePath(idx int) []byte
+}
 
 // Option configures the model.
 type Option func(*config)
@@ -519,6 +589,31 @@ func WithPopupDuration(d time.Duration) Option {
 	return func(c *config) { c.popupDuration = d }
 }
 
+// WithLayoutGate sets a channel that holds layout preparation until the
+// channel is closed or receives a value (Issue #17). This is a test
+// seam for verifying the browse view stays responsive while a layout
+// preparation is pending. When nil (production), layout preparation
+// completes immediately.
+func WithLayoutGate(ch chan struct{}) Option {
+	return func(c *config) { c.layoutGate = ch }
+}
+
+// WithRowModelFactory sets a factory that builds a RowModel from a
+// buffer and layout parameters (Issue #17). When nil,
+// viewport.BuildRowModel is used. This is a test seam for the layout
+// preparation path.
+func WithRowModelFactory(f RowModelFactory) Option {
+	return func(c *config) { c.rowModelFactory = f }
+}
+
+// WithFileListProvider sets a provider for file-list rendering (Issue
+// #17). When nil, the search index's file groups are used. This is a
+// test seam for the render-cost guard: a counting fake proves the
+// render path queries only the visible range.
+func WithFileListProvider(p FileListProvider) Option {
+	return func(c *config) { c.fileListProvider = p }
+}
+
 // New creates a new app model for a search invocation. The model starts
 // in the searching state.
 func New(childArgs []string, workdir string, opts ...Option) Model {
@@ -541,8 +636,12 @@ func New(childArgs []string, workdir string, opts ...Option) Model {
 		fileGate:           cfg.fileGate,
 		onCollect:          cfg.onCollect,
 		rowProviderFactory: cfg.rowProviderFactory,
+		layoutGate:         cfg.layoutGate,
+		rowModelFactory:    cfg.rowModelFactory,
+		fileListProvider:   cfg.fileListProvider,
 		perFileOffset:      make(map[string]int),
 		fileCache:          make(map[string]*filebuffer.Buffer),
+		layoutCache:        make(map[string]*viewport.RowModel),
 		loadCancel:         make(chan struct{}),
 		popupDuration:      cfg.popupDuration,
 	}
@@ -594,6 +693,41 @@ func (m Model) ViewportRowCount() int {
 		return 0
 	}
 	return m.viewport.RowCount()
+}
+
+// WrapMode returns the current wrap mode (Issue #17).
+func (m Model) WrapMode() viewport.WrapMode { return m.wrapMode }
+
+// HasPendingLayout returns true when a layout preparation is in flight
+// (Issue #17). The preparation completes via a LayoutReadyMsg; the
+// model installs the prepared RowModel only when its key matches the
+// current parameters.
+func (m Model) HasPendingLayout() bool { return m.pendingLayout }
+
+// PendingLayoutKey returns the key of the in-flight layout
+// preparation (Issue #17). Returns the zero value when no layout is
+// pending.
+func (m Model) PendingLayoutKey() viewport.RowModelKey { return m.pendingLayoutKey }
+
+// HasPendingReveal returns true when a reveal intent is carried for
+// the next matching layout installation (Issue #17).
+func (m Model) HasPendingReveal() bool { return m.pendingReveal }
+
+// LayoutKey returns the current layout key for the loaded file (Issue
+// #17), or the zero value when no buffer is loaded.
+func (m Model) LayoutKey() viewport.RowModelKey {
+	if m.buffer == nil {
+		return viewport.RowModelKey{}
+	}
+	gw := m.buffer.GutterWidth
+	panelWidth := m.width - fileListWidth(m.width) - 1
+	tw := viewport.TextWidth(panelWidth, gw, m.wrapMode)
+	return viewport.RowModelKey{
+		Path:      string(m.currentPath),
+		Revision:  1,
+		TextWidth: tw,
+		WrapMode:  m.wrapMode,
+	}
 }
 
 // SavedOffset returns the saved per-file vertical viewport offset for
@@ -772,7 +906,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// position (Issue #12).
 		if msg.Buffer != nil {
 			m.currentPath = msg.Path
-			m.buildViewport()
+			layoutCmd := m.buildViewport()
 			// Issue #14: apply destination reveal after the starting
 			// viewport is set. A first visit (including the startup
 			// file) starts from the top; a revisit starts from the
@@ -780,11 +914,64 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Reload (r) does not set needsReveal, so a reload
 			// preserves the saved viewport anchor without revealing
 			// a match (PRD: "Reload by itself does not reveal a
-			// match").
+			// match"). Issue #17: when the layout is pending (async
+			// preparation), the reveal intent is carried and
+			// committed once the layout installs.
 			if m.needsReveal {
 				m.needsReveal = false
-				m.revealTarget()
+				if m.viewport != nil {
+					m.revealTarget()
+				} else {
+					m.pendingReveal = true
+				}
 			}
+			return m, layoutCmd
+		}
+		return m, nil
+
+	case LayoutReadyMsg:
+		// Late layout completions after cancellation must not revive
+		// the UI.
+		if m.cancelled {
+			return m, nil
+		}
+		// Issue #17: install only when the key matches the current
+		// parameters. Out-of-order or stale completions (from a
+		// prior resize, wrap toggle, or file switch) are discarded
+		// without touching the visible panel or saved per-file
+		// state.
+		currentKey := m.LayoutKey()
+		if msg.Key != currentKey {
+			return m, nil
+		}
+		// Install the prepared RowModel.
+		m.rowModel = msg.RowModel
+		if m.layoutCache == nil {
+			m.layoutCache = make(map[string]*viewport.RowModel)
+		}
+		m.layoutCache[string(m.currentPath)] = msg.RowModel
+		m.pendingLayout = false
+		// Preserve the anchor from the old viewport when rebuilding
+		// the same file (wrap toggle, resize). When the viewport is
+		// nil (fresh load), restore the saved per-file anchor.
+		var oldAnchor viewport.Anchor
+		sameFile := m.viewport != nil
+		if sameFile {
+			oldAnchor = m.viewport.Anchor()
+		}
+		m.viewport = viewport.New(msg.RowModel, m.height)
+		if sameFile {
+			m.viewport.SetAnchor(oldAnchor)
+		} else {
+			offset := m.SavedOffset(m.currentPath)
+			if offset > 0 && offset < msg.RowModel.RowCount() {
+				m.viewport.SetAnchor(msg.RowModel.RowAnchor(offset))
+			}
+		}
+		// Commit the pending reveal intent (Issue #17).
+		if m.pendingReveal {
+			m.pendingReveal = false
+			m.revealTarget()
 		}
 		return m, nil
 
@@ -880,7 +1067,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case msg.Code == 'w' && msg.Mod == 0:
 			if m.state == StateBrowse && m.buffer != nil {
 				m.wrapMode = m.wrapMode.Toggle()
-				m.buildViewport()
+				return m, m.buildViewport()
 			}
 			return m, nil
 		case msg.Code == 'c' && msg.Mod == 0:
@@ -918,19 +1105,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		// Recompute the viewport layout from the new dimensions and
-		// clamp the offset without losing the reading position (Issue
-		// #12). Issue #16: rebuild the row model when the text width
-		// changes so wrapping reflects the new panel width.
+		// Recompute the viewport layout from the new dimensions
+		// without losing the reading position (Issue #12). Issue #16:
+		// rebuild the row model when the text width changes so wrapping
+		// reflects the new panel width. Issue #17: buildViewport
+		// preserves the logical anchor across the rebuild, so the same
+		// text location remains at the top after the resize. The
+		// layout preparation is off the UI update path; the returned
+		// command is executed by the runtime.
 		if m.buffer != nil && m.rowProviderFactory == nil {
-			offset := 0
-			if m.viewport != nil {
-				offset = m.viewport.Offset()
-			}
-			m.buildViewport()
-			if m.viewport != nil {
-				m.viewport.SetOffset(offset)
-			}
+			return m, m.buildViewport()
 		} else if m.viewport != nil {
 			m.viewport.SetPanelHeight(msg.Height)
 		}
@@ -1006,33 +1190,96 @@ func (m *Model) revealTarget() {
 
 // buildViewport constructs the viewport's row provider from the
 // current buffer, wrap mode, and panel dimensions (Issue #16). When a
-// row provider factory is set (test seam), it is used directly;
-// otherwise a RowModel is built from the buffer at the current text
-// width and wrap mode. The per-file saved offset is restored so a
-// revisited file starts from its saved position (Issue #12).
-func (m *Model) buildViewport() {
+// row provider factory is set (test seam), it is used directly and
+// synchronously; otherwise layout preparation is off the UI update
+// path (Issue #17): a RowModel is built asynchronously via a tea.Cmd
+// and installed when a matching LayoutReadyMsg arrives.
+//
+// Issue #17: the logical anchor is preserved across rewrap, wrap
+// toggle, and resize. When the viewport already exists for the same
+// file (rebuild), the anchor is carried over so the same text location
+// remains at the top. When the file changed (fresh load or cached
+// cross-file navigation), the saved per-file anchor is restored (or
+// (0,0) for a first visit). A cached file with a matching installed
+// layout commits immediately with no preparation request; a stale
+// cached layout requests a new preparation.
+//
+// Returns a tea.Cmd when a layout preparation is issued (the caller
+// must return it so the runtime executes it), or nil when the layout
+// is installed synchronously (factory test seam) or from the cache.
+func (m *Model) buildViewport() tea.Cmd {
 	if m.buffer == nil {
-		return
+		return nil
 	}
-	var rows viewport.RowProvider
+	m.prevBuildPath = append(m.prevBuildPath[:0], m.currentPath...)
+
+	// Synchronous bypass: the row provider factory test seam
+	// installs a row provider directly (existing render-cost tests).
 	if m.rowProviderFactory != nil {
-		rows = m.rowProviderFactory(m.buffer)
-	} else {
-		gw := m.buffer.GutterWidth
-		panelWidth := m.width - fileListWidth(m.width) - 1
-		tw := viewport.TextWidth(panelWidth, gw, m.wrapMode)
-		key := viewport.RowModelKey{
-			Path:      string(m.currentPath),
-			Revision:  1,
-			TextWidth: tw,
-			WrapMode:  m.wrapMode,
+		rows := m.rowProviderFactory(m.buffer)
+		var oldAnchor viewport.Anchor
+		sameFile := m.viewport != nil
+		if sameFile {
+			oldAnchor = m.viewport.Anchor()
 		}
-		m.rowModel = viewport.BuildRowModel(m.buffer, tw, m.wrapMode, key)
-		rows = m.rowModel
+		m.viewport = viewport.New(rows, m.height)
+		if sameFile {
+			m.viewport.SetAnchor(oldAnchor)
+		} else {
+			offset := m.SavedOffset(m.currentPath)
+			if rm, ok := rows.(*viewport.RowModel); ok && offset > 0 && offset < rm.RowCount() {
+				m.viewport.SetAnchor(rm.RowAnchor(offset))
+			}
+		}
+		return nil
 	}
-	offset := m.SavedOffset(m.currentPath)
-	m.viewport = viewport.New(rows, m.height)
-	m.viewport.SetOffset(offset)
+
+	// Layout preparation path (Issue #17). Compute the current
+	// layout key and check the cache for a matching installed
+	// RowModel.
+	key := m.LayoutKey()
+	if cached, ok := m.layoutCache[string(m.currentPath)]; ok {
+		ck := cached.Key()
+		if ck.TextWidth == key.TextWidth && ck.WrapMode == key.WrapMode && ck.Revision == key.Revision {
+			// Cache hit: install immediately, no preparation.
+			m.rowModel = cached
+			var oldAnchor viewport.Anchor
+			sameFile := m.viewport != nil
+			if sameFile {
+				oldAnchor = m.viewport.Anchor()
+			}
+			m.viewport = viewport.New(cached, m.height)
+			if sameFile {
+				m.viewport.SetAnchor(oldAnchor)
+			} else {
+				offset := m.SavedOffset(m.currentPath)
+				if offset > 0 && offset < cached.RowCount() {
+					m.viewport.SetAnchor(cached.RowAnchor(offset))
+				}
+			}
+			return nil
+		}
+	}
+
+	// Cache miss or stale: issue a layout preparation command. The
+	// old layout (if any) remains installed until the new one
+	// arrives; for a fresh load the viewport is nil and the render
+	// path shows the loading placeholder.
+	m.pendingLayout = true
+	m.pendingLayoutKey = key
+	buf := m.buffer
+	factory := m.rowModelFactory
+	if factory == nil {
+		factory = viewport.BuildRowModel
+	}
+	gate := m.layoutGate
+	return func() tea.Msg {
+		if gate != nil {
+			<-gate
+		}
+		rm := factory(buf, key.TextWidth, key.WrapMode, key)
+		return LayoutReadyMsg{Key: key, RowModel: rm}
+	}
 }
 
 // targetRow returns the 0-based rendered row containing the display
@@ -1083,7 +1330,13 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 	if !fileChanged {
 		// Same-file navigation: only the current matched line
 		// styling changes. Issue #14: reveal the new target row.
-		m.revealTarget()
+		// Issue #17: when the viewport is nil (layout pending),
+		// carry the reveal intent for the next installation.
+		if m.viewport != nil {
+			m.revealTarget()
+		} else {
+			m.pendingReveal = true
+		}
 		return m, nil
 	}
 	// Cross-file navigation. Save the departing file's viewport.
@@ -1099,11 +1352,25 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 		m.buffer = buf
 		m.loading = false
 		m.currentPath = stop.RawPath
-		m.buildViewport()
+		// Issue #17: clear the viewport so buildViewport treats
+		// this as a fresh load (restoring the saved per-file
+		// anchor) rather than a same-file rebuild (preserving
+		// the current anchor).
+		m.viewport = nil
+		layoutCmd := m.buildViewport()
 		// Issue #14: apply destination reveal after the starting
 		// viewport is set from the saved offset (or 0 for a first
-		// visit).
-		m.revealTarget()
+		// visit). Issue #17: when the layout is pending (stale
+		// cached layout), the reveal intent is carried and
+		// committed once the layout installs.
+		if m.viewport != nil {
+			m.revealTarget()
+		} else {
+			m.pendingReveal = true
+		}
+		if layoutCmd != nil {
+			return m, tea.Batch(popupCmd, layoutCmd)
+		}
 		return m, popupCmd
 	}
 	// Uncached destination: request a load. The panel shows the
@@ -1474,6 +1741,15 @@ type FileLoadCompleteMsg struct {
 	Err    error
 }
 
+// LayoutReadyMsg signals that an asynchronous layout preparation has
+// finished (Issue #17). The RowModel is installed only when the key
+// matches the model's current parameters (path, content revision, text
+// width, wrap mode); out-of-order or stale completions are discarded.
+type LayoutReadyMsg struct {
+	Key      viewport.RowModelKey
+	RowModel *viewport.RowModel
+}
+
 // SearchFailedMsg signals that rg could not be started.
 type SearchFailedMsg struct {
 	Diagnostic string
@@ -1721,16 +1997,44 @@ func (m Model) renderBrowse() string {
 		}
 	}
 
-	// File list (left pane).
+	// File list (left pane). Issue #17: limit the file-list iteration
+	// to the visible range (terminal height) so the render path never
+	// queries the file-list provider beyond the visible rows.
 	listWidth := fileListWidth(m.width)
+	visibleRows := m.height
+	if visibleRows < 0 {
+		visibleRows = 0
+	}
 	var listLines []string
-	for i, g := range groups {
-		escaped := safepresentation.EscapePath(g.path)
-		entry := escaped.Text
-		if i == currentFileIdx {
-			entry = m.theme.Underline(entry)
+	if m.fileListProvider != nil {
+		fileCount := m.fileListProvider.FileCount()
+		limit := fileCount
+		if limit > visibleRows {
+			limit = visibleRows
 		}
-		listLines = append(listLines, entry)
+		for i := 0; i < limit; i++ {
+			path := m.fileListProvider.FilePath(i)
+			escaped := safepresentation.EscapePath(path)
+			entry := escaped.Text
+			if i == currentFileIdx {
+				entry = m.theme.Underline(entry)
+			}
+			listLines = append(listLines, entry)
+		}
+	} else {
+		limit := len(groups)
+		if limit > visibleRows {
+			limit = visibleRows
+		}
+		for i := 0; i < limit; i++ {
+			g := groups[i]
+			escaped := safepresentation.EscapePath(g.path)
+			entry := escaped.Text
+			if i == currentFileIdx {
+				entry = m.theme.Underline(entry)
+			}
+			listLines = append(listLines, entry)
+		}
 	}
 
 	// Content panel (right pane).

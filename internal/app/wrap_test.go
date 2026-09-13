@@ -33,7 +33,8 @@ func TestWrapModeOnByDefault(t *testing.T) {
 		t.Fatalf("wrap mode content lines = %d, want 2 (wrapping on by default)", wrapLines)
 	}
 	// Toggle wrap mode off with 'w'.
-	m, _ = update(t, m, keyPress('w'))
+	m, cmd := update(t, m, keyPress('w'))
+	m = deliverLayout(t, m, cmd)
 	// In run-off-edge mode, the 100-char line is one row.
 	view = viewContent(m)
 	contentLines := countContentXLines(view)
@@ -63,7 +64,8 @@ func TestWrapToggleChangesRowModel(t *testing.T) {
 	}
 
 	// Toggle to run-off-edge mode.
-	m, _ = update(t, m, keyPress('w'))
+	m, cmd := update(t, m, keyPress('w'))
+	m = deliverLayout(t, m, cmd)
 	view = viewContent(m)
 	offLines := countContentXLines(view)
 	if offLines != 1 {
@@ -71,7 +73,8 @@ func TestWrapToggleChangesRowModel(t *testing.T) {
 	}
 
 	// Toggle back to wrap mode.
-	m, _ = update(t, m, keyPress('w'))
+	m, cmd = update(t, m, keyPress('w'))
+	m = deliverLayout(t, m, cmd)
 	view = viewContent(m)
 	wrapLines2 := countContentXLines(view)
 	if wrapLines2 != 2 {
@@ -272,13 +275,15 @@ func TestWrapToggleRerenders(t *testing.T) {
 	buf := makeBuf([]filebuffer.Line{line}, 1, 4)
 	m := setupBrowseWithSize(t, idx, buf, 80, 24)
 	viewBefore := viewContent(m)
-	m, _ = update(t, m, keyPress('w'))
+	m, cmd := update(t, m, keyPress('w'))
+	m = deliverLayout(t, m, cmd)
 	viewAfter := viewContent(m)
 	if viewBefore == viewAfter {
 		t.Fatal("view did not change after wrap toggle")
 	}
 	// Toggle back.
-	m, _ = update(t, m, keyPress('w'))
+	m, cmd = update(t, m, keyPress('w'))
+	m = deliverLayout(t, m, cmd)
 	viewBack := viewContent(m)
 	if viewBack == viewAfter {
 		t.Fatal("view did not change after toggle back")

@@ -229,14 +229,34 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   the text width changes, `targetRow(stop)` now uses
   `RowModel.RowFromByte` with the first submatch's byte start to find
   the wrapped row, and `renderContentPanel` shows a blank gutter for
-  continuation rows. See
+  continuation rows. Issue #17 added the logical anchor and off-UI
+  layout preparation: a `prevBuildPath []byte` field (distinguishes
+  same-file rebuilds from fresh loads), `buildViewport()` now returns
+  a `tea.Cmd` (the layout preparation command) and has three paths
+  (factory test seam, cache hit, cache miss/stale); `LayoutReadyMsg`
+  with keyed installation guard (installs only when the key matches
+  current parameters, discards out-of-order/stale completions);
+  `pendingLayout`/`pendingLayoutKey`/`pendingReveal` fields;
+  `layoutCache map[string]*viewport.RowModel`; `LayoutKey()`,
+  `WrapMode()`, `HasPendingLayout()`, `PendingLayoutKey()`,
+  `HasPendingReveal()` accessors; `WithLayoutGate`,
+  `WithRowModelFactory`, `WithFileListProvider` options (test seams);
+  `RowModelFactory` and `FileListProvider` types; cross-file
+  navigation sets `viewport = nil` so installation restores the saved
+  per-file anchor; `FileLoadCompleteMsg` and `handleNavigate` carry
+  the reveal intent as `pendingReveal` when the viewport is nil; the
+  `LayoutReadyMsg` handler commits the pending reveal; `renderBrowse`
+  limits the file-list iteration to `min(fileCount, terminalHeight)`
+  for the render-cost guard. See
   [search-collection-path](search-collection-path.md),
   [browse-tracer](browse-tracer.md),
   [outcome-contract](outcome-contract.md),
   [record-robustness](record-robustness.md),
   [manual-vertical-scrolling](manual-vertical-scrolling.md),
-  [destination-reveal](destination-reveal.md), and
-  [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md).
+  [destination-reveal](destination-reveal.md),
+  [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
+  and
+  [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md).
 
 ## internal/safepresentation
 
@@ -332,11 +352,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   boundaries, two-cell clusters that don't fit move to the next row,
   continuation rows carry `Continuation=true`); and
   `RowFromByte(lineIndex, byteOffset)` mapping a source line and byte
-  offset to the wrapped row containing that byte. See
+  offset to the wrapped row containing that byte. Issue #17 added the
+  logical anchor: `Anchor{LineIndex, Column int}` (width-independent
+  source location); `RowModel.RowFromCell(lineIndex, column int) int`
+  and `RowModel.RowAnchor(row int) Anchor`; `Viewport` anchor field
+  with `Anchor()`, `SetAnchor`, and anchor-aware `SetRows`/
+  `SetPanelHeight`/`SetOffset`; `syncAnchorToOffset` and
+  `recomputeOffsetFromAnchor`; and lossy EOF-clamp anchor replacement.
+  See
   [manual-vertical-scrolling](manual-vertical-scrolling.md),
   [browse-tracer](browse-tracer.md),
-  [destination-reveal](destination-reveal.md), and
-  [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md).
+  [destination-reveal](destination-reveal.md),
+  [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
+  and
+  [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md).
 
 ## internal/theme
 

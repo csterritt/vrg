@@ -234,10 +234,7 @@ func setupBrowse(t *testing.T, idx *searchindex.Index, buf *filebuffer.Buffer) a
 	}
 	// Execute the async load command and deliver the completion message.
 	if cmd != nil {
-		msg := execCmd(t, cmd)
-		if lc, ok := msg.(app.FileLoadCompleteMsg); ok {
-			m, _ = update(t, m, lc)
-		}
+		m = deliverLoad(t, m, cmd)
 	}
 	return m
 }

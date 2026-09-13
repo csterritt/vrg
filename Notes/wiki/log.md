@@ -552,3 +552,36 @@ Updated [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md)
 (continuation rows and text width sections), [source-code](source-code.md)
 (viewport and app entries), and [unit-tests](unit-tests.md)
 (`TestWrapContinuationRowsThreePlus`).
+
+## [2026-09-11] ingest | Issue #17 logical anchor and layout preparation
+
+Ingested the completed Issue #17 implementation: the width-independent
+logical viewport anchor (`viewport.Anchor{LineIndex, Column}`) with
+`RowModel.RowFromCell`/`RowModel.RowAnchor` and anchor-aware
+`Viewport.SetRows`/`SetPanelHeight`/`SetOffset`; anchor retention through
+rewrap, wrap toggle, and resize; anchor replacement by user scrolling
+and moving reveals; intentionally lossy EOF-clamp anchor replacement;
+off-UI layout preparation via `buildViewport()` returning a `tea.Cmd`
+that emits `LayoutReadyMsg`; keyed installation guards (installs only
+when the key matches current parameters, discards out-of-order/stale
+completions); model-carried pending reveal intent (`pendingReveal`)
+committed on layout installation; cached-file stale-layout navigation
+with matching-layout fast path (`layoutCache`); AC6 responsiveness
+during gated preparation (`WithLayoutGate` test seam); render-cost
+guard for visible file-list entries (`WithFileListProvider` test seam,
+`renderBrowse` limits iteration to `min(fileCount, terminalHeight)`);
+and app integration (`prevBuildPath`, `LayoutKey()`, `WrapMode()`,
+`HasPendingLayout()`, `PendingLayoutKey()`, `HasPendingReveal()`
+accessors, `WithRowModelFactory`/`WithFileListProvider` options,
+cross-file navigation sets `viewport = nil` for fresh-load anchor
+restoration). Created
+[logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md);
+updated [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md)
+(`w` toggle and app integration section), [index](index.md),
+[source-code](source-code.md) (viewport and app entries), and
+[unit-tests](unit-tests.md) (anchor_test.go and layout_test.go entries).
+Sources: `Notes/tasks/017-logical-anchor-through-rewrap-and-resize.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors;
+Resources and responsiveness), `internal/viewport/viewport.go`,
+`internal/viewport/anchor_test.go`, `internal/app/app.go`,
+`internal/app/anchor_test.go`, `internal/app/layout_test.go`.

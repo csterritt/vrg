@@ -140,3 +140,12 @@ Usage
  Input tokens: 200769 tokens
  Output tokens: 100181 tokens
  Cached input tokens: 10682304 tokens
+
+----
+Task 017-logical-anchor-through-rewrap-and-resize.md
+
+Usage
+ Agent messages: 169 messages
+ Input tokens: 255164 tokens
+ Output tokens: 44219 tokens
+ Cached input tokens: 22063936 tokens
