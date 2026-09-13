@@ -905,3 +905,60 @@ loadFile/loadFileFor, navigation cursor, FileLoadCompleteMsg handler),
 `Notes/PRD-vrg.md` (File loading, cache, reload, and selection
 consistency), `internal/app/app.go`,
 `internal/app/load_isolation_test.go`.
+
+## [2026-10-19] ingest | Issue #26 read failures and retry rules
+
+Ingested the completed Issue #26 implementation: read-failure state
+and the `(unreadable)` placeholder, the non-fatal read-failure
+overlay with sanitized diagnostics, non-current diagnostic-only
+collection, the same-file-step no-retry versus cross-file
+exactly-one retry distinction, the five-step re-entry sequence,
+composed-view robustness, and the fixed-status guarantee. The
+`Model` gained `readFailed bool` (current file's last load attempt
+failed; rendering shows `(unreadable)` instead of `Loading…`),
+`failedPaths map[string]string` (failed raw paths to sanitized
+diagnostics; a successful load removes the path), and
+`overlayReadFailure bool` (the open overlay is a read-failure
+overlay). `openReadFailureOverlay` opens a fresh non-fatal
+`OverlayError` for a current-file load failure (or appends to an
+existing read-failure overlay on a re-entry retry failure without
+resetting `overlayScroll`), with search-complete overlays taking
+precedence and the file-change pop-up cancelled on open. The
+`FileLoadCompleteMsg` handler now distinguishes errors from
+successful buffers while retaining the Issue #25 request-ID and
+current-path isolation: current-file errors mark the file
+unreadable and collect the diagnostic; non-current errors record
+the diagnostic in `failedPaths` and collect it without disturbing
+the visible panel; the fixed `ExitCode` is not recomputed. Overlay
+dismissal clears `overlayReadFailure`. The filename row uses
+`(unreadable)` as the default status note when the current file
+has failed and no `WithStatusNote` callback overrides it;
+`truncateRightCells` truncates the status note when it would
+overflow the panel (reserving at least one cell for the path).
+`handleNavigate` reopens the prior-failure overlay immediately on
+re-entry into a previously failed file (clearing `readFailed`,
+setting `loading`, and starting exactly one retry load while the
+overlay is open, reusing the Issue #25 one-load-per-path rule).
+Public accessors `OverlayFatal()`, `OverlayText()`,
+`OverlayScroll()`, `IsLoading()`, and `ReadFailed()` were added.
+Tests in `internal/app/read_failure_test.go` cover the current-file
+overlay and placeholder, non-current diagnostic-only collection,
+same-file versus cross-file retry, composed-view robustness, and
+the outcome-matrix rows (fixed-0 all-fail, fixed-2 current-file,
+composed all-fail-with-fixed-2). Tests in
+`internal/app/reentry_test.go` cover the five-step re-entry
+sequence: immediate prior-failure overlay reopen with `Loading…`,
+exactly one in-flight retry, Esc-without-disturbance, settlement
+presentation, append-preserving-scroll on second failure,
+navigation away during retry, and one-load-per-path drop on
+re-entry while in flight. Created
+[read-failures-and-retry](read-failures-and-retry.md); updated
+[index](index.md), [source-code](source-code.md) (internal/app
+Issue #26 entry), and [unit-tests](unit-tests.md)
+(read_failure_test.go and reentry_test.go entries). Sources:
+`Notes/tasks/026-read-failures-unreadable-retry-rules.md`,
+`Notes/issues/026-read-failures-unreadable-retry-rules.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency), `internal/app/app.go`,
+`internal/app/read_failure_test.go`,
+`internal/app/reentry_test.go`.

@@ -152,6 +152,17 @@ Catalog of all wiki pages for the vrg project.
   requests, session-long buffer retention with no eviction,
   post-cancellation rejection, and separately gated decode/map phase
   with `ctrl+c`/`n`/`p`/`w`/`c`/resize all actionable
+- [read-failures-and-retry.md](read-failures-and-retry.md) — Issue #26:
+  read-failure state and `(unreadable)` placeholder, non-fatal
+  read-failure overlay with sanitized diagnostics, non-current
+  diagnostic-only collection, same-file-step no-retry versus
+  cross-file exactly-one retry, the five-step re-entry sequence with
+  prior-failure overlay reopen, exactly-one in-flight retry,
+  Esc-without-disturbance, settlement presentation, and
+  append-preserving-scroll on second failure, composed-view
+  robustness through Issue #24's slot, and load failures never
+  changing the fixed search-derived exit status (all-fail fixed-0,
+  current-file fixed-2, composed all-fail-with-fixed-2)
 
 ## Catalogs
 

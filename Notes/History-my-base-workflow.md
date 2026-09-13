@@ -221,3 +221,12 @@ Usage
  Input tokens: 285599 tokens
  Output tokens: 97700 tokens
  Cached input tokens: 14462912 tokens
+
+----
+Task 026-read-failures-unreadable-retry-rules.md
+
+Usage
+ Agent messages: 147 messages
+ Input tokens: 127585 tokens
+ Output tokens: 64259 tokens
+ Cached input tokens: 15589760 tokens

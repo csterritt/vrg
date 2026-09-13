@@ -1377,3 +1377,70 @@ replay-ordering assertions:
   resize is actionable while the file gate is held.
 - `TestLoadIsolationResponsiveCtrlCWhileFileGateHeld` — `ctrl+c`
   exits 130 while the file gate is held.
+
+`read_failure_test.go` (Issue #26, external package `app_test`):
+
+- `TestReadFailureCurrentFileOpensOverlay` — a current-file read
+  failure opens a non-fatal `OverlayError` with the sanitized
+  diagnostic.
+- `TestReadFailureCurrentFileShowsUnreadablePlaceholder` — after
+  dismissing the overlay, the content panel shows `(unreadable)`
+  instead of `Loading…`.
+- `TestReadFailureCursorStopsRetained` — the cursor stops remain
+  navigable after a current-file read failure.
+- `TestReadFailureOverlayDismissReturnsToBrowse` — dismissing the
+  read-failure overlay returns to the browse state.
+- `TestReadFailureDiagnosticCollected` — a current-file read failure
+  collects the sanitized diagnostic for replay.
+- `TestReadFailureNonCurrentDiagnosticOnly` — a non-current read
+  failure collects the diagnostic without replacing the visible
+  panel or opening an overlay.
+- `TestReadFailureDiagnosticInReplay` — the non-current failure
+  diagnostic appears in the replay.
+- `TestReadFailureSameFileStepNoRetry` — a same-file `n`/`p` step
+  requests no reload (the loader is not called again).
+- `TestReadFailureCrossFileEntryRetries` — entry from a different
+  file into an uncached, previously failed file requests exactly one
+  retry load.
+- `TestReadFailureOutcomeFixed0AllFail` — every retained file
+  failing to load with fixed status 0 still exits 0.
+- `TestReadFailureOutcomeFixed2CurrentFile` — a current-file
+  failure with fixed status 2 still exits 2.
+- `TestReadFailureOutcomeComposedAllFailFixed2` — the composed row
+  of usable search results with fixed status 2 where every retained
+  file subsequently fails to load: the ordinary status remains 2,
+  the load failures affect only file presentation and diagnostics,
+  and the already-fixed fatal-search outcome is not recomputed.
+- `TestReadFailureComposedViewSafeAtNarrowWidths` — the composed
+  view stays well-formed at constrained widths: the truncated safe
+  path follows Issue #24's slot rules, the `(unreadable)`
+  placeholder is shown, nothing overflows, and layout dimensions
+  remain nonnegative.
+
+`reentry_test.go` (Issue #26, external package `app_test`):
+
+- `TestReentryOverlayReopensImmediately` — entering a previously
+  failed file from a different file reopens the prior-failure
+  overlay immediately (before the retry completes) and the panel
+  switches from `(unreadable)` to `Loading…`; exactly one retry
+  starts while the overlay is open.
+- `TestReentrySuccessfulSettlement` — when the retry succeeds, the
+  placeholder changes to content without waiting for dismissal, the
+  overlay remains open and dismissible, and no new diagnostic is
+  collected.
+- `TestReentrySecondFailureAppend` — when the retry fails again,
+  exactly one new diagnostic occurrence is appended to the open
+  overlay text, the overlay scroll position is preserved, and
+  exactly one new replay occurrence is collected.
+- `TestReentryEscDoesNotDisturbInFlightLoad` — `Esc` dismisses the
+  overlay without disturbing the in-flight retry load; the load
+  completes and updates the file's state/cache.
+- `TestReentryNavigateAwayDuringRetry` — navigating away during a
+  retry causes the completion to update only that file's
+  state/cache; a later re-entry follows the same sequence against
+  the new prior state (a successful retry removes the path from
+  `failedPaths`, so a later re-entry shows the cached content with
+  no overlay).
+- `TestReentryOneRetryWhileInFlight` — if a retry is already in
+  flight, a second re-entry request is dropped under Issue #25's
+  one-load-per-path rule; the loader call count does not increase.

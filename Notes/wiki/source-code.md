@@ -329,6 +329,36 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [hidden-content-indicators](hidden-content-indicators.md),
   [file-list-layout](file-list-layout.md),
   and [async-load-isolation](async-load-isolation.md).
+  Issue #26 added read-failure handling: a `readFailed bool` model
+  field marking the current file's last load attempt as failed
+  (rendering shows `(unreadable)` instead of `Loading…`); a
+  `failedPaths map[string]string` model field tracking failed raw
+  paths to sanitized diagnostics (a successful load removes the
+  path); an `overlayReadFailure bool` model field marking the open
+  overlay as a read-failure overlay; `openReadFailureOverlay`
+  opening a fresh non-fatal `OverlayError` for a current-file load
+  failure (or appending to an existing read-failure overlay on a
+  re-entry retry failure without resetting `overlayScroll`), with
+  search-complete overlays taking precedence and the file-change
+  pop-up cancelled on open; the `FileLoadCompleteMsg` handler
+  distinguishing errors from successful buffers while retaining the
+  Issue #25 request-ID and current-path isolation (current-file
+  errors mark the file unreadable and collect the diagnostic;
+  non-current errors record the diagnostic in `failedPaths` and
+  collect it without disturbing the visible panel; the fixed
+  `ExitCode` is not recomputed); overlay dismissal clearing
+  `overlayReadFailure`; the filename row using `(unreadable)` as
+  the default status note when the current file has failed and no
+  `WithStatusNote` callback overrides it; `truncateRightCells`
+  truncating the status note when it would overflow the panel
+  (reserving at least one cell for the path); `handleNavigate`
+  reopening the prior-failure overlay immediately on re-entry into
+  a previously failed file (clearing `readFailed`, setting
+  `loading`, and starting exactly one retry load while the overlay
+  is open, reusing the Issue #25 one-load-per-path rule); and public
+  accessors `OverlayFatal()`, `OverlayText()`, `OverlayScroll()`,
+  `IsLoading()`, and `ReadFailed()`. See
+  [read-failures-and-retry](read-failures-and-retry.md).
 
 ## internal/safepresentation
 

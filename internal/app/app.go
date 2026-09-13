@@ -334,10 +334,15 @@ type Model struct {
 	diagSig <-chan string
 
 	// Browse state.
-	index      *searchindex.Index
-	cursor     *searchindex.Cursor
-	buffer     *filebuffer.Buffer
-	loading    bool
+	index   *searchindex.Index
+	cursor  *searchindex.Cursor
+	buffer  *filebuffer.Buffer
+	loading bool
+	// readFailed is true when the current file's last load attempt
+	// failed (Issue #26). The render path shows "(unreadable)" instead
+	// of "Loading…" when set. Cleared on a successful load or when
+	// entering the file from a different file (re-entry retry).
+	readFailed bool
 	theme      theme.Theme
 	fileLoader FileLoader
 	fileGate   chan struct{}
@@ -359,6 +364,12 @@ type Model struct {
 	// reload (Issue #13). No eviction; the PRD retains successful
 	// buffers for the session.
 	fileCache map[string]*filebuffer.Buffer
+	// failedPaths tracks files whose last load attempt failed, keyed
+	// by raw path (Issue #26). The value is the sanitized error
+	// diagnostic. A file in this map is retried on re-entry from a
+	// different file; same-file n/p steps do not retry. A successful
+	// load or a started retry removes the path from this map.
+	failedPaths map[string]string
 
 	// viewport is the scrollable content view for the current file.
 	// It holds prepared row data and the vertical offset. When nil
@@ -445,6 +456,16 @@ type Model struct {
 	overlayText   string
 	overlayFatal  bool
 	overlayScroll int
+	// overlayReadFailure is true when the open overlay is a read-failure
+	// overlay (Issue #26), as opposed to a search-complete error/warning
+	// overlay. A read-failure overlay is non-fatal: dismissal returns to
+	// the browse state with the "(unreadable)" placeholder. When a
+	// re-entry retry fails again, the new diagnostic is appended to the
+	// open read-failure overlay without resetting the scroll position.
+	// A search-complete overlay takes precedence: a load failure while a
+	// search-complete overlay is open does not open or append to a
+	// read-failure overlay.
+	overlayReadFailure bool
 
 	// File-change pop-up state (Issue #15). The pop-up starts at
 	// selection time (when navigation crosses a file boundary), not
@@ -688,6 +709,7 @@ func New(childArgs []string, workdir string, opts ...Option) Model {
 		fileListProvider:   cfg.fileListProvider,
 		perFileOffset:      make(map[string]int),
 		fileCache:          make(map[string]*filebuffer.Buffer),
+		failedPaths:        make(map[string]string),
 		layoutCache:        make(map[string]*viewport.RowModel),
 		loadCancel:         make(chan struct{}),
 		loadingPaths:       make(map[string]uint64),
@@ -726,6 +748,29 @@ func (m Model) OverlayOpen() bool { return m.overlayOpen }
 // OverlayKind returns the kind of the currently open overlay
 // (OverlayNone when no overlay is open).
 func (m Model) OverlayKind() OverlayKind { return m.overlay }
+
+// OverlayFatal reports whether the open overlay is fatal: dismissal
+// (q or Esc) exits 2 because there is no underlying state. A non-fatal
+// overlay dismisses to the base state.
+func (m Model) OverlayFatal() bool { return m.overlayFatal }
+
+// OverlayText returns the text content of the currently open overlay
+// (Issue #26). Returns the empty string when no overlay is open.
+func (m Model) OverlayText() string { return m.overlayText }
+
+// OverlayScroll returns the current vertical scroll offset of the
+// open overlay (Issue #26). Returns 0 when no overlay is open.
+func (m Model) OverlayScroll() int { return m.overlayScroll }
+
+// IsLoading reports whether the current file's content is loading
+// (Issue #26). When true, the panel shows the "Loading…" placeholder
+// (unless readFailed is also true, which shows "(unreadable)").
+func (m Model) IsLoading() bool { return m.loading }
+
+// ReadFailed reports whether the current file's last load attempt
+// failed (Issue #26). When true, the panel shows the "(unreadable)"
+// placeholder instead of "Loading…".
+func (m Model) ReadFailed() bool { return m.readFailed }
 
 // ViewportOffset returns the current vertical viewport offset (the
 // 0-based top row) for the loaded file. Returns 0 when no viewport is
@@ -1023,6 +1068,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.fileCache = make(map[string]*filebuffer.Buffer)
 			}
 			m.fileCache[string(msg.Path)] = msg.Buffer
+			// Issue #26: a successful load clears any prior failure
+			// record for this path.
+			if m.failedPaths != nil {
+				delete(m.failedPaths, string(msg.Path))
+			}
+		} else if msg.Err != nil {
+			// Issue #26: read failure. Record the failure for this
+			// path and collect the diagnostic for stderr replay
+			// (Issue #11). The diagnostic is collected regardless of
+			// whether the file is current: a non-current failure is
+			// diagnostic-only (no overlay, no indicator), discovered
+			// by visiting that file or at exit.
+			if m.failedPaths == nil {
+				m.failedPaths = make(map[string]string)
+			}
+			diag := msg.Err.Error()
+			m.failedPaths[string(msg.Path)] = sanitizeDiagnostic(diag)
+			m.collectDiagnostic(diag)
 		}
 		// Issue #25: a completion changes the visible panel only when
 		// its path is still the current path. A late completion for a
@@ -1033,6 +1096,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.Buffer != nil {
 			m.buffer = msg.Buffer
+			m.readFailed = false
+		} else if msg.Err != nil {
+			// Issue #26: current-file read failure. Show the error
+			// overlay (Issue #9 component) and the "(unreadable)"
+			// placeholder. The file's cursor stops are retained and
+			// the filename row still identifies the path.
+			m.readFailed = true
+			m.openReadFailureOverlay(msg.Err.Error())
 		}
 		m.loading = false
 		// Build the viewport from the prepared row data (Issue #16:
@@ -1676,6 +1747,23 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 	m.viewport = nil
 	m.loading = true
 	m.currentPath = stop.RawPath
+	// Issue #26: re-entry into a previously failed file. The prior
+	// failure overlay reopens immediately (before the retry
+	// completes) and the panel shows "Loading…" (not
+	// "(unreadable)"). The retry starts immediately while the
+	// overlay is open; it must not wait for dismissal. If a load is
+	// already in flight for this path, the one-load-per-path rule
+	// (Issue #25) drops the request.
+	if diag, failed := m.failedPaths[string(stop.RawPath)]; failed {
+		m.readFailed = false
+		m.overlay = OverlayError
+		m.overlayOpen = true
+		m.overlayText = diag
+		m.overlayFatal = false
+		m.overlayScroll = 0
+		m.overlayReadFailure = true
+		m.cancelPopup()
+	}
 	// Issue #14: the load completion for this navigation should
 	// apply a destination reveal once the content is available.
 	m.needsReveal = true
@@ -1689,6 +1777,41 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 	m, loadCmd = m.startLoad(stop.RawPath)
 	// Batch the pop-up timer and the load command so both run.
 	return m, tea.Batch(popupCmd, loadCmd)
+}
+
+// openReadFailureOverlay opens or appends to the read-failure overlay
+// for the current file (Issue #26). When no overlay is open, a fresh
+// non-fatal error overlay is opened with the diagnostic. When a
+// read-failure overlay is already open (re-entry retry failure), the
+// new diagnostic is appended to the overlay text without resetting the
+// scroll position (the minimal append-preserving-scroll primitive owned
+// by this issue). When a search-complete overlay is already open, it
+// takes precedence: the read failure is still collected as a diagnostic
+// and the panel shows "(unreadable)", but no read-failure overlay is
+// opened or appended.
+func (m *Model) openReadFailureOverlay(diag string) {
+	if m.overlayOpen && !m.overlayReadFailure {
+		// A search-complete overlay takes precedence. The read
+		// failure is collected as a diagnostic and the panel shows
+		// "(unreadable)", but the overlay is not changed.
+		return
+	}
+	sanitized := sanitizeDiagnostic(diag)
+	if m.overlayOpen && m.overlayReadFailure {
+		// Re-entry retry failure: append the new diagnostic to
+		// the open overlay without resetting the scroll position
+		// (the append-preserving-scroll primitive).
+		m.overlayText += "\n" + sanitized
+		return
+	}
+	// Fresh read-failure overlay: non-fatal, dismissible to browse.
+	m.overlay = OverlayError
+	m.overlayOpen = true
+	m.overlayText = sanitized
+	m.overlayFatal = false
+	m.overlayScroll = 0
+	m.overlayReadFailure = true
+	m.cancelPopup()
 }
 
 // handleOverlayKey routes a key press to the open overlay. up/down
@@ -1714,6 +1837,7 @@ func (m Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		// Non-fatal overlay: dismiss to the base state.
 		m.overlayOpen = false
+		m.overlayReadFailure = false
 		return m, nil
 	case msg.Code == tea.KeyEscape:
 		if m.overlayFatal {
@@ -1727,6 +1851,7 @@ func (m Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		// Non-fatal overlay: dismiss to the base state.
 		m.overlayOpen = false
+		m.overlayReadFailure = false
 		return m, nil
 	default:
 		// Other keys are ignored by the overlay.
@@ -2436,6 +2561,9 @@ func (m Model) renderFilenameRow(escapedName string) string {
 	note := ""
 	if m.statusNote != nil {
 		note = m.statusNote()
+	} else if m.readFailed {
+		// Issue #26: the real status note for the unreadable state.
+		note = "(unreadable)"
 	}
 	if note == "" {
 		// No status note: truncate the path to fit the panel width.
@@ -2452,11 +2580,27 @@ func (m Model) renderFilenameRow(escapedName string) string {
 	// is placed at the right of the filename row.
 	noteWidth := graphemeCellWidthString(note)
 	// The filename row format is "── <path> ── <note>". The
-	// separators and spaces consume 6 cells ("── " + " ── ").
-	// Truncate the path so the total fits the panel width.
-	availForPath := panelWidth - 6 - noteWidth
+	// separators and spaces consume 7 cells ("── " is 3 cells plus
+	// " ── " is 4 cells). Truncate the path so the total fits the
+	// panel width (Issue #24 slot rules; Issue #26 ensures the
+	// "(unreadable)" status note never overflows).
+	availForPath := panelWidth - 7 - noteWidth
 	if availForPath < 1 {
-		availForPath = 1
+		// The note doesn't fit alongside a 1-cell path. Truncate
+		// the note to leave at least 1 cell for the path (Issue
+		// #26: composed-view safety at constrained widths).
+		maxNote := panelWidth - 8
+		if maxNote < 0 {
+			maxNote = 0
+		}
+		if maxNote < noteWidth {
+			note = truncateRightCells(note, maxNote)
+			noteWidth = maxNote
+		}
+		availForPath = panelWidth - 7 - noteWidth
+		if availForPath < 1 {
+			availForPath = 1
+		}
 	}
 	truncated := TruncateLeftGrapheme(escapedName, availForPath)
 	return "── " + truncated + " ── " + note
@@ -2492,6 +2636,12 @@ func (m Model) renderContentPanel(escapedName string, currentLine int) string {
 	var b strings.Builder
 	b.WriteString(m.renderFilenameRow(escapedName))
 	b.WriteString("\n")
+	if m.readFailed {
+		// Issue #26: current-file read failure. Show the
+		// "(unreadable)" placeholder instead of "Loading…".
+		b.WriteString("(unreadable)")
+		return b.String()
+	}
 	if m.loading || m.buffer == nil || m.viewport == nil {
 		b.WriteString("Loading…")
 		return b.String()
@@ -2788,6 +2938,44 @@ func TruncateLeftGrapheme(s string, width int) string {
 		return "…"
 	}
 	return "…" + s[clusters[startIdx].StartByte:]
+}
+
+// truncateRightCells truncates s to at most width terminal cells from
+// the left (keeping the leading portion), appending an ellipsis when
+// truncation occurs. Uses grapheme clusters so combining marks and
+// wide runes are handled correctly (Issue #26: composed-view safety
+// for the "(unreadable)" status note at constrained widths).
+func truncateRightCells(s string, width int) string {
+	if width <= 0 || s == "" {
+		return ""
+	}
+	clusters := safepresentation.GraphemeClusters(s)
+	totalWidth := 0
+	for _, c := range clusters {
+		totalWidth += c.Width
+	}
+	if totalWidth <= width {
+		return s
+	}
+	// Reserve one cell for the trailing …, so the leading portion
+	// must fit in width-1 cells.
+	remaining := width - 1
+	if remaining <= 0 {
+		return "…"
+	}
+	used := 0
+	endIdx := 0
+	for i, c := range clusters {
+		if used+c.Width > remaining {
+			break
+		}
+		used += c.Width
+		endIdx = i + 1
+	}
+	if endIdx <= 0 {
+		return "…"
+	}
+	return s[:clusters[endIdx-1].EndByte] + "…"
 }
 
 // GraphemeClustersForTest segments s into grapheme clusters for test
