@@ -20,6 +20,30 @@ type Index struct {
 	// excludedFiles is the count of distinct files dropped by a
 	// non-null binary_offset in their end event.
 	excludedFiles int
+	// integrity is the stream-integrity assessment, kept separate from
+	// process success so the App can assess them independently.
+	integrity Integrity
+}
+
+// Integrity is the stream-integrity assessment, kept separate from
+// process success. A complete stream requires a valid summary and
+// valid paired begin/end metadata for encountered files. Orphaned or
+// inconsistent lifecycle records, missing end events, missing summary,
+// a second summary, any record after summary, or a trailing
+// unterminated record make integrity fail.
+type Integrity struct {
+	// Complete is true when the stream passed all lifecycle validation
+	// rules.
+	Complete bool
+}
+
+// Integrity returns the stream-integrity assessment, kept separate
+// from process success.
+func (idx *Index) Integrity() Integrity {
+	if idx == nil {
+		return Integrity{}
+	}
+	return idx.integrity
 }
 
 // Stops returns a copy of the navigation stops ordered by unsigned raw
@@ -86,6 +110,11 @@ type Stop struct {
 	// non-overlapping [start, end) intervals. Overlapping and adjacent
 	// ranges are merged.
 	Coverage []Range
+	// Incomplete is true when the stop's metadata is incomplete because
+	// its file was never opened by a begin event, was already closed by
+	// an end event, or was still open when the stream ended. The match
+	// is retained for browsing but its lifecycle is not intact.
+	Incomplete bool
 }
 
 // Submatch is one match span within a stop.
@@ -117,6 +146,31 @@ type Builder struct {
 	excluded map[string]bool
 	// excludedCount is the number of distinct excluded files.
 	excludedCount int
+	// open tracks raw paths whose begin event has been seen without a
+	// matching end event. Per-path open state is tracked independently so
+	// rg may interleave events across files during parallel search.
+	open map[string]bool
+	// closed tracks raw paths whose end event has been seen. A match
+	// arriving after the file's end is an orphaned match retained with
+	// incomplete metadata, unless the end was binary-excluding.
+	closed map[string]bool
+	// sawSummary is true once a summary record has been seen.
+	sawSummary bool
+	// afterSummary is true once any record arrives after a summary. The
+	// stream is incomplete thereafter.
+	afterSummary bool
+	// trailingMalformed is set by MarkTrailingMalformed to indicate the
+	// scanner saw a trailing unterminated record.
+	trailingMalformed bool
+	// integrityFailed is true once any lifecycle rule has been violated.
+	integrityFailed bool
+}
+
+// MarkTrailingMalformed signals that the scanner saw a trailing
+// unterminated record. The record is counted as malformed and the
+// stream is marked incomplete.
+func (b *Builder) MarkTrailingMalformed() {
+	b.trailingMalformed = true
 }
 
 // stopKey identifies one navigation stop by raw path bytes and line
@@ -133,6 +187,10 @@ type stopAccum struct {
 	lineNumber int
 	line       []byte
 	submatches []Submatch
+	// incomplete is true when the stop's metadata is incomplete because
+	// its file was never opened by a begin event, was already closed by
+	// an end event, or was still open when the stream ended.
+	incomplete bool
 }
 
 // NewBuilder creates a Builder that resolves relative result paths
@@ -144,15 +202,20 @@ func NewBuilder(workdir string) *Builder {
 		workdir:  workdir,
 		stops:    make(map[stopKey]*stopAccum),
 		excluded: make(map[string]bool),
+		open:     make(map[string]bool),
+		closed:   make(map[string]bool),
 	}
 }
 
 // Add parses one JSON record line and indexes it. It recognizes begin,
-// match, end, summary, and context events. Context events are ignored.
-// Match events are merged into navigation stops by raw path and line
-// number. Unknown event types are accepted without effect. It returns
-// nil for valid records and a non-nil error for malformed records; the
-// caller is responsible for skip and count handling.
+// match, end, summary, and context events. Context events are ignored
+// for lifecycle purposes. Match events are merged into navigation stops
+// by raw path and line number. Unknown event types are accepted
+// without effect. It returns nil for valid records and a non-nil error
+// for malformed records; the caller is responsible for skip and count
+// handling. Lifecycle validation is applied per the Issue #9
+// transition matrix; violations mark the stream integrity as failed
+// but never reject an otherwise well-formed record.
 func (b *Builder) Add(line []byte) error {
 	var rec struct {
 		Type string          `json:"type"`
@@ -163,6 +226,13 @@ func (b *Builder) Add(line []byte) error {
 	}
 	if rec.Type == "" {
 		return errors.New("missing or empty type field")
+	}
+	// Any record after a summary is an integrity failure. Context
+	// records participate in no lifecycle validation, so they do not
+	// trigger this check on their own; the afterSummary flag is set
+	// only by non-context records arriving after the summary.
+	if b.sawSummary && rec.Type != "context" {
+		b.afterSummary = true
 	}
 	switch rec.Type {
 	case "begin":
@@ -180,7 +250,9 @@ func (b *Builder) Add(line []byte) error {
 	}
 }
 
-// parseBegin validates a begin record's path field.
+// parseBegin validates a begin record's path field and tracks the
+// per-path open state. A begin while the path is already open is an
+// integrity failure (duplicate begin); the file remains open.
 func (b *Builder) parseBegin(data json.RawMessage) error {
 	var d struct {
 		Path textBytes `json:"path"`
@@ -188,14 +260,29 @@ func (b *Builder) parseBegin(data json.RawMessage) error {
 	if err := json.Unmarshal(data, &d); err != nil {
 		return fmt.Errorf("begin: invalid data: %w", err)
 	}
-	if _, err := d.Path.decode(); err != nil {
+	rawPath, err := d.Path.decode()
+	if err != nil {
 		return fmt.Errorf("begin: %w", err)
 	}
+	pathKey := string(rawPath)
+	if b.open[pathKey] {
+		// Duplicate begin: integrity failure. The file remains open.
+		b.integrityFailed = true
+		return nil
+	}
+	b.open[pathKey] = true
+	// A begin clears any prior closed state for the path so a later
+	// end can close it again.
+	delete(b.closed, pathKey)
 	return nil
 }
 
 // parseMatch validates a match record, decodes its fields, and merges it
-// into the navigation index.
+// into the navigation index. A match while the path is not open (never
+// opened, or after its end) is an orphaned match: it is retained with
+// incomplete metadata and the stream integrity fails. A match after a
+// binary-excluding end is dropped (binary exclusion takes precedence
+// over orphan retention).
 func (b *Builder) parseMatch(data json.RawMessage) error {
 	var d struct {
 		Path       textBytes     `json:"path"`
@@ -210,8 +297,13 @@ func (b *Builder) parseMatch(data json.RawMessage) error {
 	if err != nil {
 		return fmt.Errorf("match: path: %w", err)
 	}
+	pathKey := string(rawPath)
 	// Drop matches for files already excluded by a binary end event.
-	if b.excluded[string(rawPath)] {
+	// Binary exclusion takes precedence over orphan retention.
+	if b.excluded[pathKey] {
+		// The match is an orphan after a binary end; integrity fails
+		// but the match is not retained.
+		b.integrityFailed = true
 		return nil
 	}
 	line, err := d.Lines.decode()
@@ -235,24 +327,34 @@ func (b *Builder) parseMatch(data json.RawMessage) error {
 		}
 		subs = append(subs, Submatch{Match: match, Start: sm.Start, End: sm.End})
 	}
-	key := stopKey{path: string(rawPath), line: d.LineNumber}
+	// An orphaned match (path never opened, or after its end) is
+	// retained with incomplete metadata and the stream integrity fails.
+	orphaned := !b.open[pathKey]
+	if orphaned {
+		b.integrityFailed = true
+	}
+	key := stopKey{path: pathKey, line: d.LineNumber}
 	accum, ok := b.stops[key]
 	if !ok {
 		accum = &stopAccum{
 			rawPath:    rawPath,
 			lineNumber: d.LineNumber,
 			line:       line,
+			incomplete: orphaned,
 		}
 		b.stops[key] = accum
+	} else if orphaned {
+		accum.incomplete = true
 	}
 	accum.submatches = append(accum.submatches, subs...)
 	return nil
 }
 
-// parseEnd validates an end record's path and binary_offset fields.
-// A non-null binary_offset drops that file and all its previously
-// collected matches from the builder and counts it as a distinct
-// excluded file.
+// parseEnd validates an end record's path and binary_offset fields and
+// tracks the per-path open state. An end while the path is not open is
+// an integrity failure (orphaned/duplicate end). A non-null
+// binary_offset drops that file and all its previously collected
+// matches from the builder and counts it as a distinct excluded file.
 func (b *Builder) parseEnd(data json.RawMessage) error {
 	var d struct {
 		Path         textBytes       `json:"path"`
@@ -268,6 +370,16 @@ func (b *Builder) parseEnd(data json.RawMessage) error {
 	if len(d.BinaryOffset) == 0 {
 		return errors.New("end: missing binary_offset")
 	}
+	pathKey := string(rawPath)
+	// An end while the path is not open is an integrity failure.
+	if !b.open[pathKey] {
+		b.integrityFailed = true
+		// Do not add to closed; an orphaned end does not close anything.
+		return nil
+	}
+	// Close the file.
+	b.open[pathKey] = false
+	b.closed[pathKey] = true
 	if string(d.BinaryOffset) != "null" {
 		var n int64
 		if err := json.Unmarshal(d.BinaryOffset, &n); err != nil {
@@ -278,7 +390,6 @@ func (b *Builder) parseEnd(data json.RawMessage) error {
 		}
 		// Non-null binary_offset: exclude this file and drop its
 		// previously collected matches.
-		pathKey := string(rawPath)
 		if !b.excluded[pathKey] {
 			b.excluded[pathKey] = true
 			b.excludedCount++
@@ -297,7 +408,9 @@ func (b *Builder) dropStops(pathKey string) {
 	}
 }
 
-// parseSummary validates that a summary record has a data object.
+// parseSummary validates that a summary record has a data object and
+// records that a summary has been seen. A second summary is an
+// integrity failure.
 func (b *Builder) parseSummary(data json.RawMessage) error {
 	if len(data) == 0 {
 		return errors.New("summary: missing data")
@@ -305,14 +418,32 @@ func (b *Builder) parseSummary(data json.RawMessage) error {
 	if !strings.HasPrefix(strings.TrimSpace(string(data)), "{") {
 		return errors.New("summary: data is not an object")
 	}
+	if b.sawSummary {
+		// Second summary: integrity failure.
+		b.integrityFailed = true
+	}
+	b.sawSummary = true
 	return nil
 }
 
 // Build returns the prepared navigation index with stops ordered by
 // unsigned raw path bytes then ascending line number. Submatches within
 // each stop are sorted by byte start then end, and coverage is computed
-// as the union of submatch ranges.
+// as the union of submatch ranges. Stream integrity is finalized:
+// the stream is complete only if a summary was seen, no record arrived
+// after the summary, no per-path lifecycle rule was violated, no file
+// was still open at stream end, and no trailing unterminated record was
+// signaled.
 func (b *Builder) Build() *Index {
+	// A file still open when the stream ends is an integrity failure;
+	// its matches are retained with incomplete metadata.
+	for pathKey, isOpen := range b.open {
+		if isOpen {
+			b.integrityFailed = true
+			b.markPathIncomplete(pathKey)
+		}
+	}
+	complete := b.sawSummary && !b.afterSummary && !b.integrityFailed && !b.trailingMalformed
 	stops := make([]Stop, 0, len(b.stops))
 	for _, accum := range b.stops {
 		sort.SliceStable(accum.submatches, func(i, j int) bool {
@@ -328,6 +459,7 @@ func (b *Builder) Build() *Index {
 			Line:       accum.line,
 			Submatches: accum.submatches,
 			Coverage:   computeCoverage(accum.submatches),
+			Incomplete: accum.incomplete,
 		})
 	}
 	sort.SliceStable(stops, func(i, j int) bool {
@@ -337,7 +469,21 @@ func (b *Builder) Build() *Index {
 		}
 		return stops[i].LineNumber < stops[j].LineNumber
 	})
-	return &Index{stops: stops, excludedFiles: b.excludedCount}
+	return &Index{
+		stops:         stops,
+		excludedFiles: b.excludedCount,
+		integrity:     Integrity{Complete: complete},
+	}
+}
+
+// markPathIncomplete marks all stops for the given raw path as having
+// incomplete metadata (the file was still open when the stream ended).
+func (b *Builder) markPathIncomplete(pathKey string) {
+	for _, accum := range b.stops {
+		if string(accum.rawPath) == pathKey {
+			accum.incomplete = true
+		}
+	}
 }
 
 // resolvePath joins a relative raw path with the working directory

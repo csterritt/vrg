@@ -43,7 +43,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   the file and all its previously collected matches from the builder,
   counts the file as a distinct excluded file, and drops later matches
   for the same file. `Index.ExcludedFiles()` exposes the distinct
-  excluded-file count. See
+  excluded-file count. Issue #9 added stream-integrity accounting and
+  lifecycle validation: `Builder` tracks per-path open/closed state,
+  summary-seen state, after-summary state, trailing-malformed state,
+  and an integrity-failed flag. `Index.Integrity()` exposes the
+  `Integrity{Complete}` assessment, kept separate from process success
+  so the app can assess them independently. `Stop.Incomplete` marks
+  retained matches whose lifecycle metadata is incomplete (orphaned
+  match, file still open at stream end). `Builder.MarkTrailingMalformed`
+  signals a trailing unterminated record. See
   [search-collection-path](search-collection-path.md).
 
 ## internal/app
@@ -79,9 +87,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   excluded. The outcome logic consumes the retained stop count after
   binary filtering as the single usable-results value. `q` from
   no-results exits 1 through the Issue #4 cleanup path; `Esc` is a
-  no-op; `ctrl+c` exits 130. See
-  [search-collection-path](search-collection-path.md) and
-  [browse-tracer](browse-tracer.md).
+  no-op; `ctrl+c` exits 130. Issue #9 added the fatal/warning outcome
+  matrix and modal error overlay: `ProcessResult` (exit code + signal
+  death), `OutcomeInput`/`Outcome`, the pure `DecideOutcome` function,
+  `OverlayKind` (none/error/warning), `OverlayOpen()`/`OverlayKind()`
+  accessors, `SearchCompleteMsg.Process`/`Stderr` fields, and
+  `processResult`/`processResultFromSys` to derive the process result
+  from the wait error. The fixed exit status is decided once at
+  completion and never recomputed except by `ctrl+c` (which overrides
+  to 130). The overlay is modal: up/down scroll, q/Esc dismiss
+  (non-fatal) or exit 2 (fatal no-results), other keys ignored. Large
+  diagnostics show both head and tail. See
+  [search-collection-path](search-collection-path.md),
+  [browse-tracer](browse-tracer.md), and
+  [outcome-contract](outcome-contract.md).
 
 ## internal/safepresentation
 

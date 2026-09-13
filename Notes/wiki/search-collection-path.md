@@ -1,4 +1,4 @@
-# Search collection path (Issue #3, extended by Issues #4 and #8)
+# Search collection path (Issue #3, extended by Issues #4, #8, and #9)
 
 The ripgrep execution and result-collection pipeline delivered by
 [Issue #3](../issues/003-spawn-rg-collect-results-searching-screen.md),
@@ -9,10 +9,14 @@ added cancellation, child termination/reaping, terminal restoration,
 and controlled-failure cleanup. [Issue #8](../issues/008-no-results-screen-and-binary-exclusion.md)
 added binary-file exclusion during indexing and a distinct no-results
 TUI outcome for searches that complete successfully but yield no usable
-results. Relevant PRD sections: *Implementation Decisions → Invocation
-and child arguments*, *Module Design → CLI / SearchIndex / App*,
-*Testing Decisions → CLI / SearchIndex / App / Subprocess boundary /
-Responsiveness boundaries*, and *Outcome and exit-status contract*.
+results. [Issue #9](../issues/009-error-overlay-and-fatal-outcomes.md)
+added stream-integrity accounting, separate process-success and
+stream-integrity assessment, the fatal/warning outcome matrix, and the
+modal error overlay. Relevant PRD sections: *Implementation Decisions →
+Invocation and child arguments*, *Module Design → CLI / SearchIndex /
+App*, *Testing Decisions → CLI / SearchIndex / App / Subprocess
+boundary / Responsiveness boundaries*, and *Outcome and exit-status
+contract*. See also [outcome-contract](outcome-contract.md).
 
 ## Process boundary
 

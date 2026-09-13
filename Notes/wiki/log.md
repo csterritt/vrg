@@ -186,3 +186,37 @@ contract), `internal/searchindex/searchindex.go`,
 `internal/searchindex/searchindex_test.go`, `internal/app/app.go`,
 `internal/app/browse_test.go`, `cmd/vrg/search_test.go`,
 `cmd/vrg/cancel_test.go`.
+
+## [2026-09-13] ingest | Issue #9 error overlay and fatal outcomes
+
+Ingested the completed Issue #9 implementation: stream-integrity
+accounting, separate process-success and stream-integrity assessment,
+the fatal/warning outcome matrix, the modal error overlay, and exit
+status 2 for fatal process or stream-integrity outcomes.
+`internal/searchindex` now tracks per-path open/closed state,
+summary-seen state, after-summary state, trailing-malformed state, and
+an integrity-failed flag. `Index.Integrity()` exposes the
+`Integrity{Complete}` assessment, kept separate from process success.
+`Stop.Incomplete` marks retained matches whose lifecycle metadata is
+incomplete. `Builder.MarkTrailingMalformed` signals a trailing
+unterminated record. `internal/app` added `ProcessResult` (exit code +
+signal death), `OutcomeInput`/`Outcome`, the pure `DecideOutcome`
+function, `OverlayKind` (none/error/warning), `OverlayOpen()`/
+`OverlayKind()` accessors, `SearchCompleteMsg.Process`/`Stderr`
+fields, and `processResult`/`processResultFromSys` to derive the
+process result from the wait error. The fixed exit status is decided
+once at completion and never recomputed except by `ctrl+c` (which
+overrides to 130). The overlay is modal: up/down scroll, q/Esc dismiss
+(non-fatal) or exit 2 (fatal no-results), other keys ignored. Large
+diagnostics show both head and tail. Created
+[outcome-contract](outcome-contract.md). Updated
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/tasks/009-error-overlay-and-fatal-outcomes.md`,
+`Notes/issues/009-error-overlay-and-fatal-outcomes.md`,
+`Notes/PRD-vrg.md` (Result index contract, Outcome and exit-status
+contract, Colours/overlays/key precedence), `internal/searchindex/searchindex.go`,
+`internal/searchindex/lifecycle_test.go`, `internal/app/app.go`,
+`internal/app/outcome_test.go`, `internal/app/overlay_test.go`,
+`internal/app/browse_test.go`, `cmd/vrg/outcome_test.go`,
+`cmd/vrg/search_test.go`.

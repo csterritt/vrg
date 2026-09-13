@@ -68,3 +68,12 @@ Usage
  Input tokens: 235627 tokens
  Output tokens: 67439 tokens
  Cached input tokens: 16769984 tokens
+
+----
+Task 009-error-overlay-and-fatal-outcomes.md
+
+Usage
+ Agent messages: 123 messages
+ Input tokens: 407412 tokens
+ Output tokens: 74889 tokens
+ Cached input tokens: 15506880 tokens

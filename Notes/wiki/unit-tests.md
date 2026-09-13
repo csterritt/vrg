@@ -100,6 +100,15 @@ table, parser config, and generated help cannot drift.
   matches, counts the file as a distinct excluded file, drops later
   matches for the same file, retains matches for other files, and
   reports the retained stop count as the usable-results value.
+- Issue #9 lifecycle matrix tests (`lifecycle_test.go`,
+  `TestLifecycleMatrix`) — table-driven coverage of every lifecycle
+  transition row: duplicate `begin`, orphaned `match`, orphaned `end`,
+  match after `end`, records after summary, second summary, interleaved
+  open files with valid pairing, `text`/`bytes` path identity
+  agreement, missing `end`, missing `summary`, trailing malformed/
+  unterminated records, context records in arbitrary positions, and
+  binary exclusion precedence. Each row asserts integrity completeness
+  and stop count.
 
 ## internal/safepresentation
 
@@ -300,6 +309,70 @@ table, parser config, and generated help cannot drift.
   `SearchCompleteMsg` after cancellation from the no-results screen
   does not revive the UI.
 
+`outcome_test.go` (Issue #9, external package `app_test`):
+
+- `TestDecideOutcomeMatrix` — the single table-driven test covering
+  every row of the Issue #9 outcome table through the pure
+  `DecideOutcome` function: rg 0 clean browse, rg 1 retained results,
+  rg 1 empty, rg 0 empty, fatal code with/without results, signal
+  death with/without results, missing summary with matches, orphaned
+  end, incomplete stream (rg 0/1), stderr warning with/without
+  results, and fatal code with stderr. Each row asserts state, overlay
+  kind, overlay fatality, and exit status.
+- `TestDecideOutcomeGeneratedDiagnostic` — when a failed process
+  supplies no stderr, the outcome generates a diagnostic naming the
+  exit code or signal.
+- `TestDecideOutcomeStderrDiagnostic` — when a failed process supplies
+  stderr, the outcome uses it as the overlay text.
+- `TestOutcomeMatrixFlow` — the single table-driven test covering
+  every outcome-table row through the full `Update` flow, with
+  dismissal and exit assertions: rg 0 clean browse, rg 1 retained
+  results, rg 1 empty, fatal code with results (browse + overlay →
+  dismiss → browse → q → 2), fatal code without results (overlay → q/Esc
+  → 2), signal death with/without results, stderr warning with/without
+  results. Each row asserts initial presentation, dismissal behavior,
+  and final status.
+- `TestFixedStatusCtrlCOverride` — `ctrl+c` after search completion
+  exits 130 from browse, no-results, and open-overlay states,
+  overriding the fixed status.
+- `TestEscNeverExitsBaseState` — Esc never exits from a base state
+  (browse or no-results without an overlay).
+- `TestFixedStatusNotRecomputed` — the exit status is chosen once
+  after search and later dismissal does not recompute it.
+
+`overlay_test.go` (Issue #9, external package `app_test`):
+
+- `TestOverlayKeyDownScrolls` / `TestOverlayKeyUpScrolls` — up/down
+  scroll the overlay content.
+- `TestOverlayKeyQDismisses` / `TestOverlayKeyEscDismisses` — q/Esc
+  dismiss a non-fatal browse overlay (returns to browse, no quit).
+- `TestOverlayKeyCtrlCExits130` — ctrl+c from an open overlay exits
+  130.
+- `TestOverlayKeyOtherIgnored` — any key other than up/down/q/Esc/
+  ctrl+c is ignored by the overlay.
+- `TestOverlayFatalNoResultsQExits2` /
+  `TestOverlayFatalNoResultsEscExits2` — q/Esc on a fatal no-results
+  overlay exits 2.
+- `TestOverlayFatalNoResultsCtrlCExits130` — ctrl+c on a fatal
+  no-results overlay exits 130 (overriding the fixed 2).
+- `TestOverlayRendersDiagnostic` — the overlay view contains the
+  diagnostic text.
+- `TestOverlayRendersBorder` — the overlay view contains a
+  single-line border (┌┐└┘─│).
+- `TestOverlayBaseColors` — the overlay uses the theme base colours.
+- `TestOverlayLongUnbrokenWraps` — a long unbroken diagnostic string
+  wraps within the overlay border.
+- `TestOverlaySinkSafetyNoStyle` / `TestOverlaySinkSafetyStyled` —
+  the shared hostile-fixture set driven through the error overlay in
+  no-style and styled compositions, asserting no raw control bytes
+  survive and no fixture payload appears after an unescaped ESC.
+- `TestOverlayDiagnosticSanitized` — hostile diagnostic content is
+  sanitized through the Issue #6 utility (no raw control bytes).
+- `TestOverlayPreservesSafeWrapping` — overlay rendering preserves
+  safe wrapping and scrolling after a resize.
+- `TestEscNeverQuitsWhenNoOverlay` — Esc never quits when no overlay
+  is open, across all base states.
+
 ## cmd/vrg (subprocess boundary)
 
 `main_test.go` builds the real binary once in `TestMain` and asserts
@@ -347,6 +420,27 @@ stdout/stderr/status separately:
   with valid stdout records does not deadlock or lose the stdout stream.
 - `TestStderrCapturedWithoutBlocking` — rg writing diagnostics to stderr
   while exiting 0 with a valid stdout stream does not block the child.
+
+`outcome_test.go` (Issue #9) extends the fake-rg/PTY harness with fatal
+exit, signal death, and large-stderr fixtures:
+
+- `TestFatalExitWithResultsShowsOverlay` — a fake rg that emits two
+  valid matches then exits non-zero with stderr shows the browse view
+  with an error overlay containing the stderr text. Esc dismisses to
+  browse; q exits 2.
+- `TestFatalExitNoOutputNamesExitCode` — a fake rg that exits non-zero
+  with no output produces an overlay naming the exit code. q exits 2.
+- `TestFatalExitNoOutputEscExits2` — Esc on the fatal no-results overlay
+  also exits 2.
+- `TestSignalDeathNamesSignal` — a fake rg killed by SIGKILL
+  mid-stream produces an overlay naming the signal. q exits 2.
+- `TestStderrWarningWithSummaryShowsWarningOverlay` — a fake rg that
+  writes "warn" to stderr and a summary-only stream, exit 1, shows a
+  warning overlay then the no-results screen, and q exits 1.
+- `TestStderrContentFixture` — a fake rg writing ≥ 1 MiB to stderr
+  interleaved with a valid stdout stream produces a complete stdout
+  stream, includes the captured stderr in diagnostics, and the overlay
+  contains both the head and tail of the stderr text.
 
 `cancel_test.go` (Issue #4) extends the fake-rg/PTY harness with a
 controllable blocked fake rg (readiness handshake + indefinite block),

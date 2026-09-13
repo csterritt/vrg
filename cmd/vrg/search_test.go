@@ -79,6 +79,10 @@ func runVrgWithQuit(t *testing.T, cmd *exec.Cmd, handshake string) (stdout, stde
 	}()
 
 	// Send q to the PTY after the handshake file appears (or immediately).
+	// A delay after the handshake gives vrg time to process the
+	// completion and transition to browse/overlay before the first q.
+	// Two q presses handle both the no-overlay case (first q quits) and
+	// the warning-overlay case (first q dismisses, second q quits).
 	go func() {
 		if handshake != "" {
 			for i := 0; i < 1000; i++ {
@@ -88,6 +92,9 @@ func runVrgWithQuit(t *testing.T, cmd *exec.Cmd, handshake string) (stdout, stde
 				time.Sleep(10 * time.Millisecond)
 			}
 		}
+		time.Sleep(200 * time.Millisecond)
+		io.WriteString(ptmx, "q")
+		time.Sleep(100 * time.Millisecond)
 		io.WriteString(ptmx, "q")
 	}()
 

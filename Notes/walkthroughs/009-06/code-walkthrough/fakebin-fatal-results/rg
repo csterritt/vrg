@@ -1,0 +1,10 @@
+#!/bin/bash
+# Fake rg that emits a valid stream with one match, writes "boom" to
+# stderr, then exits 3 (fatal). vrg should show the browse view with an
+# error overlay containing "boom". Esc dismisses to browse; q exits 2.
+echo '{"type":"begin","data":{"path":{"text":"test.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+echo '{"type":"end","data":{"path":{"text":"test.txt"},"binary_offset":null}}'
+echo '{"type":"summary","data":{}}'
+echo "boom" >&2
+exit 3

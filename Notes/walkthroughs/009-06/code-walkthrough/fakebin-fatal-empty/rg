@@ -1,0 +1,4 @@
+#!/bin/bash
+# Fake rg that exits 2 with no output (fatal, no stderr). vrg should
+# show a fatal error overlay naming the exit code. q or Esc exits 2.
+exit 2

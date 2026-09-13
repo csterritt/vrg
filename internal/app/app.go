@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -52,6 +53,127 @@ const (
 	// or ctrl+c in any state). Late search completions are ignored.
 	StateCancelled
 )
+
+// OverlayKind classifies the modal overlay presentation.
+type OverlayKind int
+
+const (
+	// OverlayNone means no overlay is shown.
+	OverlayNone OverlayKind = iota
+	// OverlayError is the fatal error overlay (exit 2 outcome).
+	OverlayError
+	// OverlayWarning is the non-fatal warning overlay (stderr on rg 0/1).
+	OverlayWarning
+)
+
+// ProcessResult captures the ripgrep process exit outcome, kept separate
+// from stream integrity so the App can assess them independently.
+type ProcessResult struct {
+	// ExitCode is the process exit code. SignalDeath is true when the
+	// process was killed by a signal; in that case ExitCode is the
+	// signal number.
+	ExitCode int
+	// SignalDeath is true when the process died from a signal.
+	SignalDeath bool
+}
+
+// RecordLoss holds record-loss counts. Issue #10 extends the outcome
+// matrix with these; Issue #9 accepts but ignores them.
+type RecordLoss struct {
+	// Malformed is the count of skipped malformed records.
+	Malformed int
+	// Unknown is the count of skipped unknown record types.
+	Unknown int
+}
+
+// OutcomeInput is the input to the pure outcome decision.
+type OutcomeInput struct {
+	Process       ProcessResult
+	Integrity     searchindex.Integrity
+	UsableResults int
+	// RecordLoss is accepted but unused until Issue #10.
+	RecordLoss RecordLoss
+	// Diagnostics is the captured stderr text used for warning
+	// classification and overlay text.
+	Diagnostics string
+}
+
+// Outcome is the result of the pure outcome decision: the initial
+// presentation (state + overlay), whether the overlay is fatal (its
+// dismissal exits 2), the overlay text, and the fixed exit status.
+type Outcome struct {
+	// State is the initial presentation state (browse or no-results).
+	State State
+	// Overlay is the overlay kind to show initially.
+	Overlay OverlayKind
+	// OverlayFatal is true when the overlay is fatal with no underlying
+	// state: dismissal (q or Esc) exits 2.
+	OverlayFatal bool
+	// OverlayText is the text to render in the overlay (already
+	// determined, not yet sanitized).
+	OverlayText string
+	// ExitStatus is the fixed exit status decided once.
+	ExitStatus int
+}
+
+// DecideOutcome computes the initial presentation, post-dismissal
+// state, and fixed exit status from the search outcome inputs. It is
+// pure: it has no side effects and depends only on its inputs. The
+// stream is fatal when the process exits with a code other than 0 or 1,
+// dies by signal, or the stream integrity fails (incomplete). Issue #10
+// extends the matrix with record-loss inputs; until then, RecordLoss is
+// accepted but ignored.
+func DecideOutcome(in OutcomeInput) Outcome {
+	fatal := in.Process.SignalDeath || isFatalExit(in.Process.ExitCode) || !in.Integrity.Complete
+	hasResults := in.UsableResults > 0
+	hasDiag := in.Diagnostics != ""
+
+	if fatal {
+		text := in.Diagnostics
+		if text == "" {
+			text = generatedDiagnostic(in.Process)
+		}
+		if hasResults {
+			// Browse with error overlay; dismiss → browse; q → 2.
+			return Outcome{State: StateBrowse, Overlay: OverlayError, OverlayText: text, ExitStatus: 2}
+		}
+		// Fatal no-results overlay; q/Esc → 2 (no underlying state).
+		return Outcome{State: StateNoResults, Overlay: OverlayError, OverlayFatal: true, OverlayText: text, ExitStatus: 2}
+	}
+
+	// Not fatal: exit 0 or 1, complete stream.
+	if hasResults {
+		if hasDiag {
+			// Browse with warning overlay; dismiss → browse; q → 0.
+			return Outcome{State: StateBrowse, Overlay: OverlayWarning, OverlayText: in.Diagnostics, ExitStatus: 0}
+		}
+		// Browse; q → 0.
+		return Outcome{State: StateBrowse, Overlay: OverlayNone, ExitStatus: 0}
+	}
+
+	// No usable results.
+	if hasDiag {
+		// Warning overlay over no-results; dismiss → no-results; q → 1.
+		return Outcome{State: StateNoResults, Overlay: OverlayWarning, OverlayText: in.Diagnostics, ExitStatus: 1}
+	}
+	// No-results; q → 1.
+	return Outcome{State: StateNoResults, Overlay: OverlayNone, ExitStatus: 1}
+}
+
+// isFatalExit reports whether an exit code is a fatal ripgrep exit
+// (anything other than 0 or 1).
+func isFatalExit(code int) bool {
+	return code != 0 && code != 1
+}
+
+// generatedDiagnostic produces a diagnostic naming the exit code or
+// signal when a failed process supplies no stderr.
+func generatedDiagnostic(p ProcessResult) string {
+	if p.SignalDeath {
+		return fmt.Sprintf("ripgrep killed by signal %d", p.ExitCode)
+	}
+	return fmt.Sprintf("ripgrep exited with code %d", p.ExitCode)
+}
 
 // Process holds a running rg subprocess and its stdout/stderr pipes,
 // plus lifecycle channels for cancellation and completion.
@@ -153,6 +275,15 @@ type Model struct {
 	fileLoader FileLoader
 	fileGate   chan struct{}
 	loadCancel chan struct{}
+
+	// Overlay state. The modal error/warning overlay sits over the
+	// browse or no-results state. When OverlayFatal is true, dismissal
+	// (q or Esc) exits 2 because there is no underlying state.
+	overlay       OverlayKind
+	overlayOpen   bool
+	overlayText   string
+	overlayFatal  bool
+	overlayScroll int
 }
 
 type config struct {
@@ -241,6 +372,13 @@ func (m Model) ExitCode() int { return m.exitCode }
 // after the model has received a SearchFailedMsg or ControlledFailureMsg.
 func (m Model) Diagnostic() string { return m.diagnostic }
 
+// OverlayOpen reports whether the modal overlay is currently open.
+func (m Model) OverlayOpen() bool { return m.overlayOpen }
+
+// OverlayKind returns the kind of the currently open overlay
+// (OverlayNone when no overlay is open).
+func (m Model) OverlayKind() OverlayKind { return m.overlay }
+
 // EscapePathForDiagnostic escapes a raw filename for safe embedding in a
 // diagnostic. It delegates to safepresentation.EscapePath, the shared
 // single-line path escaper, so filename newlines become literal \n
@@ -275,22 +413,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cancelled {
 			return m, nil
 		}
-		if msg.Index != nil && msg.Index.Len() > 0 {
-			m.state = StateBrowse
+		if msg.Index != nil {
+			// Apply the Issue #9 outcome matrix through the pure
+			// DecideOutcome function. The fixed exit status is
+			// decided once here and never recomputed except by
+			// ctrl+c (which overrides to 130).
+			oc := DecideOutcome(OutcomeInput{
+				Process:       msg.Process,
+				Integrity:     msg.Index.Integrity(),
+				UsableResults: msg.Index.Len(),
+				Diagnostics:   msg.Stderr,
+			})
+			m.state = oc.State
+			m.exitCode = oc.ExitStatus
 			m.files = msg.Files
 			m.lines = msg.Lines
 			m.index = msg.Index
-			m.browseIdx = 0
-			m.loading = true
-			return m, m.loadFile()
-		}
-		if msg.Index != nil {
-			// Complete successful search with no usable results:
-			// present the no-results screen.
-			m.state = StateNoResults
 			m.excludedFiles = msg.Index.ExcludedFiles()
+			m.overlay = oc.Overlay
+			m.overlayOpen = oc.Overlay != OverlayNone
+			m.overlayText = sanitizeDiagnostic(oc.OverlayText)
+			m.overlayFatal = oc.OverlayFatal
+			m.overlayScroll = 0
+			if oc.State == StateBrowse {
+				m.browseIdx = 0
+				m.loading = true
+				return m, m.loadFile()
+			}
 			return m, nil
 		}
+		// Backward-compatible summary path (Index nil).
 		m.state = StateSummary
 		m.files = msg.Files
 		m.lines = msg.Lines
@@ -324,9 +476,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case tea.KeyPressMsg:
-		switch {
-		case msg.Code == 'c' && msg.Mod == tea.ModCtrl:
+		// ctrl+c always overrides the fixed exit status to 130,
+		// regardless of overlay or base state.
+		if msg.Code == 'c' && msg.Mod == tea.ModCtrl {
 			return m.cancel()
+		}
+		// When the overlay is open, it captures key routing.
+		if m.overlayOpen {
+			return m.handleOverlayKey(msg)
+		}
+		switch {
 		case msg.Code == 'c' && msg.Mod == 0:
 			if m.state == StateBrowse {
 				m.theme = m.theme.Toggle()
@@ -340,19 +499,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.exitCode = 0
 				return m, tea.Quit
 			case StateNoResults:
-				m.exitCode = 1
+				// Fixed exit status was decided at completion; q
+				// quits with it.
 				m.cancelled = true
 				m.cancelProcess()
 				m.cancelLoad()
 				return m, tea.Quit
 			case StateBrowse:
-				m.exitCode = 0
+				// Fixed exit status was decided at completion; q
+				// quits with it.
 				m.cancelled = true
 				m.cancelProcess()
 				m.cancelLoad()
 				return m, tea.Quit
 			}
 		case msg.Code == tea.KeyEscape:
+			// Esc never exits from a base state.
 			return m, nil
 		}
 
@@ -364,32 +526,204 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleOverlayKey routes a key press to the open overlay. up/down
+// scroll; q and Esc dismiss (or exit 2 for a fatal no-results overlay);
+// ctrl+c is handled before this is reached; other keys are ignored.
+func (m Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case msg.Code == tea.KeyUp:
+		if m.overlayScroll > 0 {
+			m.overlayScroll--
+		}
+		return m, nil
+	case msg.Code == tea.KeyDown:
+		m.overlayScroll++
+		return m, nil
+	case msg.Code == 'q' && msg.Mod == 0:
+		if m.overlayFatal {
+			// Fatal no-results overlay: dismissal exits 2.
+			m.cancelled = true
+			m.cancelProcess()
+			m.cancelLoad()
+			return m, tea.Quit
+		}
+		// Non-fatal overlay: dismiss to the base state.
+		m.overlayOpen = false
+		return m, nil
+	case msg.Code == tea.KeyEscape:
+		if m.overlayFatal {
+			// Fatal no-results overlay: Esc exits 2 (the one case
+			// where Esc terminates, because there is no underlying
+			// state).
+			m.cancelled = true
+			m.cancelProcess()
+			m.cancelLoad()
+			return m, tea.Quit
+		}
+		// Non-fatal overlay: dismiss to the base state.
+		m.overlayOpen = false
+		return m, nil
+	default:
+		// Other keys are ignored by the overlay.
+		return m, nil
+	}
+}
+
 // View renders the current state.
 func (m Model) View() tea.View {
+	var content string
 	switch m.state {
 	case StateSearching:
-		v := tea.NewView("Searching…")
-		v.AltScreen = true
-		return v
+		content = "Searching…"
 	case StateSummary:
-		v := tea.NewView(fmt.Sprintf("%d files, %d matched lines", m.files, m.lines))
-		v.AltScreen = true
-		return v
+		content = fmt.Sprintf("%d files, %d matched lines", m.files, m.lines)
 	case StateNoResults:
 		text := "No results found"
 		if m.excludedFiles > 0 {
 			text += fmt.Sprintf(" (%d binary files skipped)", m.excludedFiles)
 		}
-		v := tea.NewView(centerText(text, m.width, m.height))
-		v.AltScreen = true
-		return v
+		content = centerText(text, m.width, m.height)
 	case StateBrowse:
-		v := tea.NewView(m.renderBrowse())
-		v.AltScreen = true
-		return v
+		content = m.renderBrowse()
 	default:
-		return tea.NewView("")
+		content = ""
 	}
+	// Render the modal overlay on top of the base view when open.
+	if m.overlayOpen {
+		content = m.renderOverlay(content)
+	}
+	v := tea.NewView(content)
+	v.AltScreen = true
+	return v
+}
+
+// renderOverlay renders the modal overlay on top of the base content.
+// The overlay text is wrapped to the interior width (accounting for the
+// single-line border and side margins), scrolled by overlayScroll, and
+// rendered through the theme's Overlay style (base colours + plain
+// single-line border). The base content is rendered first so the
+// overlay sits on top.
+func (m Model) renderOverlay(base string) string {
+	// Determine the overlay width: up to 80% of the terminal width,
+	// capped to a reasonable maximum. The interior width accounts for
+	// the border sides and the single space margin on each side.
+	termWidth := m.width
+	if termWidth < 20 {
+		termWidth = 80
+	}
+	overlayWidth := termWidth * 4 / 5
+	if overlayWidth < 20 {
+		overlayWidth = 20
+	}
+	if overlayWidth > 100 {
+		overlayWidth = 100
+	}
+	interior := overlayWidth - 4 // two border chars + two spaces
+	if interior < 1 {
+		interior = 1
+	}
+	// Wrap the overlay text to the interior width, including unbroken
+	// strings.
+	wrapped := wrapText(m.overlayText, interior)
+	lines := strings.Split(wrapped, "\n")
+	// Apply vertical scrolling.
+	termHeight := m.height
+	if termHeight < 5 {
+		termHeight = 24
+	}
+	// Reserve space for the border (2 lines) and a margin.
+	maxVisible := termHeight - 4
+	if maxVisible < 1 {
+		maxVisible = 1
+	}
+	// When the diagnostic is very large, show both the head and tail
+	// so the user sees the beginning and end of the captured stderr.
+	if len(lines) > maxVisible {
+		headN := maxVisible / 2
+		if headN < 1 {
+			headN = 1
+		}
+		tailN := maxVisible - headN - 1
+		if tailN < 1 {
+			tailN = 1
+		}
+		head := lines[:headN]
+		tail := lines[len(lines)-tailN:]
+		lines = append(append(head, "…"), tail...)
+	}
+	scroll := m.overlayScroll
+	if scroll < 0 {
+		scroll = 0
+	}
+	if scroll > len(lines)-maxVisible {
+		scroll = len(lines) - maxVisible
+		if scroll < 0 {
+			scroll = 0
+		}
+	}
+	end := scroll + maxVisible
+	if end > len(lines) {
+		end = len(lines)
+	}
+	visible := strings.Join(lines[scroll:end], "\n")
+	// Render the overlay through the theme (base colours + border).
+	overlay := m.theme.Overlay(visible)
+	// Centre the overlay over the base content. The base content is
+	// rendered first; the overlay is placed below it with vertical
+	// centring. For simplicity, the overlay replaces the visible area
+	// by being rendered on top using newlines to position it.
+	return overlay
+}
+
+// wrapText wraps s to the given cell width, breaking long unbroken
+// strings. Existing newlines are preserved as line boundaries.
+func wrapText(s string, width int) string {
+	if width <= 0 {
+		return s
+	}
+	var b strings.Builder
+	for i, line := range strings.Split(s, "\n") {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(wrapLine(line, width))
+	}
+	return b.String()
+}
+
+// wrapLine wraps a single line (no embedded newlines) to the given cell
+// width, breaking long unbroken strings.
+func wrapLine(line string, width int) string {
+	if width <= 0 || visibleWidth(line) <= width {
+		return line
+	}
+	var b strings.Builder
+	col := 0
+	for i := 0; i < len(line); {
+		if line[i] == '\x1b' {
+			// Copy ANSI escape sequences without counting cells.
+			b.WriteByte(line[i])
+			i++
+			for i < len(line) && line[i] != 'm' {
+				b.WriteByte(line[i])
+				i++
+			}
+			if i < len(line) {
+				b.WriteByte(line[i])
+				i++
+			}
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(line[i:])
+		if col >= width {
+			b.WriteString("\n")
+			col = 0
+		}
+		b.WriteString(line[i : i+size])
+		col++
+		i += size
+	}
+	return b.String()
 }
 
 // centerText pads text with leading newlines and spaces to centre it
@@ -417,11 +751,19 @@ func centerText(text string, width, height int) string {
 
 // SearchCompleteMsg signals that collection and index preparation are
 // done. Index is nil for the backward-compatible summary path; non-nil
-// with results for the browse path.
+// with results for the browse path. Process carries the ripgrep exit
+// result; Stderr carries the captured stderr text used for warning
+// classification and overlay diagnostics.
 type SearchCompleteMsg struct {
 	Files int
 	Lines int
 	Index *searchindex.Index
+	// Process is the ripgrep process exit result. The zero value
+	// (ExitCode 0, no signal) is backward-compatible with pre-Issue #9
+	// callers.
+	Process ProcessResult
+	// Stderr is the captured stderr text.
+	Stderr string
 }
 
 // FileLoadCompleteMsg signals that an asynchronous file load has
@@ -794,11 +1136,44 @@ func (m Model) collectResults() tea.Cmd {
 		idx := builder.Build()
 
 		return SearchCompleteMsg{
-			Files: idx.Files(),
-			Lines: idx.Len(),
-			Index: idx,
+			Files:   idx.Files(),
+			Lines:   idx.Len(),
+			Index:   idx,
+			Process: processResult(waitErr),
+			Stderr:  stderrBuf.String(),
 		}
 	}
+}
+
+// processResult derives the ProcessResult from the child's wait error.
+// A nil error is exit code 0. An exec.ExitError carries the exit code
+// or, for signal death, the signal number with SignalDeath set.
+func processResult(waitErr error) ProcessResult {
+	if waitErr == nil {
+		return ProcessResult{}
+	}
+	if ee, ok := waitErr.(*exec.ExitError); ok {
+		if state := ee.Sys(); state != nil {
+			return processResultFromSys(state)
+		}
+		return ProcessResult{ExitCode: ee.ExitCode()}
+	}
+	return ProcessResult{ExitCode: 1}
+}
+
+// processResultFromSys derives the ProcessResult from the platform
+// wait status. On Unix, a signaled process reports Signaled() with the
+// signal number; otherwise the exit code is used.
+func processResultFromSys(state any) ProcessResult {
+	if ws, ok := state.(syscall.WaitStatus); ok {
+		if ws.Signaled() {
+			return ProcessResult{ExitCode: int(ws.Signal()), SignalDeath: true}
+		}
+		if ws.Exited() {
+			return ProcessResult{ExitCode: ws.ExitStatus()}
+		}
+	}
+	return ProcessResult{ExitCode: 1}
 }
 
 // sanitizeDiagnostic escapes raw diagnostic bytes for safe display while

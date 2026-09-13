@@ -67,9 +67,15 @@ func matchRecord(pathEnc, lineEnc map[string]any, lineNo int, subs []subSpec, by
 	return string(b)
 }
 
-// buildIndex builds a searchindex.Index from JSON record strings.
+// buildIndex builds a searchindex.Index from JSON record strings. When
+// the records do not include a summary, the stream is auto-completed by
+// wrapping match records with begin/end events for each distinct path
+// and appending a summary. This lets browse/no-results tests that don't
+// care about lifecycle validation use simple match-only fixtures while
+// still producing a complete (non-fatal) stream.
 func buildIndex(t *testing.T, workdir string, records ...string) *searchindex.Index {
 	t.Helper()
+	records = completeRecords(records)
 	b := searchindex.NewBuilder(workdir)
 	for _, r := range records {
 		if err := b.Add([]byte(r)); err != nil {
@@ -77,6 +83,67 @@ func buildIndex(t *testing.T, workdir string, records ...string) *searchindex.In
 		}
 	}
 	return b.Build()
+}
+
+// completeRecords wraps match-only record streams with begin/end events
+// for each distinct path and appends a summary when the input lacks a
+// summary record. Streams that already include a summary are returned
+// unchanged.
+func completeRecords(records []string) []string {
+	for _, r := range records {
+		if strings.Contains(r, `"type":"summary"`) {
+			return records
+		}
+	}
+	// No summary: collect distinct match paths in first-seen order.
+	var paths []string
+	seen := map[string]bool{}
+	for _, r := range records {
+		p, ok := extractRecordPath(r)
+		if ok && !seen[p] {
+			seen[p] = true
+			paths = append(paths, p)
+		}
+	}
+	var out []string
+	for _, p := range paths {
+		out = append(out, textBegin(p))
+	}
+	out = append(out, records...)
+	for _, p := range paths {
+		out = append(out, endRecord(p, nil))
+	}
+	out = append(out, summaryRecord())
+	return out
+}
+
+// extractRecordPath extracts the decoded path from a match record,
+// handling both text and bytes encodings. It returns the path and true
+// on success.
+func extractRecordPath(rec string) (string, bool) {
+	var d struct {
+		Type string `json:"type"`
+		Data struct {
+			Path struct {
+				Text  *string `json:"text"`
+				Bytes *string `json:"bytes"`
+			} `json:"path"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(rec), &d); err != nil || d.Type != "match" {
+		return "", false
+	}
+	if d.Data.Path.Text != nil {
+		return *d.Data.Path.Text, true
+	}
+	if d.Data.Path.Bytes != nil {
+		dec, err := base64.StdEncoding.DecodeString(*d.Data.Path.Bytes)
+		if err != nil {
+			return "", false
+		}
+		return string(dec), true
+	}
+	return "", false
 }
 
 // endRecord builds an end record. binaryOffset may be nil, an int, or

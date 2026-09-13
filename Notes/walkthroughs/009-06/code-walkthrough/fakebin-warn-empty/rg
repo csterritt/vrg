@@ -1,0 +1,7 @@
+#!/bin/bash
+# Fake rg that writes "warn" to stderr and a summary-only stream, then
+# exits 1. vrg should show a warning overlay, then the no-results
+# screen after dismissal. q exits 1.
+echo "warn" >&2
+echo '{"type":"summary","data":{}}'
+exit 1
