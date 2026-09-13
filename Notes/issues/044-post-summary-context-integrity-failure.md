@@ -1,7 +1,7 @@
 ## Issue 44: Post-`summary` `context` records are integrity failures, not exemptions
 
 **Type**: AFK
-**Blocked by**: None — can start immediately
+**Blocked by**: Issue 36 — AC4 and the outcome-composition verification require Issue 36's composed integrity diagnostic; the parser change itself can be developed first, but this issue cannot close until the diagnostic contract exists
 
 ### Parent PRD
 

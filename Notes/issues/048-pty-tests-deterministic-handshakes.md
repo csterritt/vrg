@@ -1,7 +1,7 @@
 ## Issue 48: Critical PTY tests wait on application handshakes, not fixed sleeps
 
 **Type**: AFK
-**Blocked by**: None — can start immediately
+**Blocked by**: Issue 45 — the handshakes must ride the same test-only harness mechanism (`vrg_testhooks`-tagged seams) that issue installs; implementing first would either add more production hooks that Issue 45 must then migrate or invent a competing harness
 
 ### Parent PRD
 
@@ -11,7 +11,7 @@
 
 Replace the fixed 100–500 ms `time.Sleep` delays in the critical PTY/subprocess tests (`cmd/vrg/outcome_test.go:18-58`, `cmd/vrg/replay_test.go:176-184`, `221-234`, `315-326`) with application-side acknowledgements. Issue 35 explicitly requires these tests to run without relying on sleeps: the harnesses currently wait fixed durations to *assume* model transitions completed, which can hide ordering bugs and flakes under load.
 
-- Add application-side acknowledgement for each state transition and key-processing boundary the tests wait on — e.g. a test-visible signal when a message has been processed, a load has completed, or a state has been entered — exposed through the same test-only harness mechanism as Issue 45 (not in the production binary).
+- Add application-side acknowledgement for each state transition and key-processing boundary the tests wait on — e.g. a test-visible signal when a message has been processed, a load has completed, or a state has been entered — exposed through the test-only `vrg_testhooks`-tagged seam mechanism Issue 45 installs (never in the production binary).
 - Each test waits on the handshake for the specific transition it cares about, with a bounded timeout for failure reporting — never on elapsed time as a proxy for progress.
 - The handshakes must not change production behaviour or timing; they observe it.
 

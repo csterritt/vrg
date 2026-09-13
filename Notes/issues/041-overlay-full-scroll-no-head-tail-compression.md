@@ -19,12 +19,12 @@ See PRD *Colours, overlays, and key precedence* (wrap + vertical scrolling) and 
 
 ### How to verify
 
-- **Manual**: trigger a fatal outcome with a fake rg that emits stderr longer than the overlay's visible height → open the overlay and scroll from the first row to the last with `up`/`down`/`u`/`d`/page keys, confirming every middle row is reachable and nothing is replaced by an ellipsis; dismiss and confirm scroll clamping at both ends.
-- **Automated**: overlay tests asserting the wrapped row count equals the full diagnostic content (no ellipsis marker injected), scroll offset clamps to `[0, rows-height]`, and a row-by-row scroll traversal reaches the final line; regression test that an appended error extends the scrollable set rather than being summarised away.
+- **Manual**: trigger a fatal outcome with a fake rg that emits stderr longer than the overlay's visible height → open the overlay and scroll from the first row to the last with repeated `up`/`down` (the error-overlay contract accepts only `up`, `down`, `q`, `Esc`, and `ctrl+c`; `u`/`d`/page keys are base file-content bindings and must be ignored), confirming every middle row is reachable and nothing is replaced by an ellipsis; dismiss and confirm scroll clamping at both ends.
+- **Automated**: overlay tests asserting the wrapped row count equals the full diagnostic content (no ellipsis marker injected), scroll offset clamps to `[0, rows-height]`, and a row-by-row `up`/`down` scroll traversal reaches the final line; regression test that an appended error extends the scrollable set rather than being summarised away; keep the existing ignored-key regression asserting `u`, `d`, page up, and page down have no effect while an error overlay is open.
 
 ### Acceptance criteria
 
-- [ ] Given a diagnostic longer than the visible overlay height, then all wrapped rows remain in the scrollable set and every row is reachable by scrolling.
+- [ ] Given a diagnostic longer than the visible overlay height, then all wrapped rows remain in the scrollable set and every row is reachable by `up`/`down` scrolling; the modal key contract is unchanged — `u`, `d`, page up, and page down remain ignored while the overlay is open.
 - [ ] Given scrolling through a long overlay, then no head/tail ellipsis substitutes for content rows.
 - [ ] Given new errors appended while an overlay is open, then they extend the scrollable content per the existing append contract without moving the reader's position.
 - [ ] Given tiny terminal sizes, then the existing clipped-overlay acceptance (story 83) still applies — clipping at render time is fine, removal from the scrollable set is not.

@@ -331,10 +331,19 @@ Output tokens: 19380 tokens
 Cached input tokens: 287376 tokens
 
 ----
-Critique final audit
+Critique issues built from final audit
 
 Usage
 Agent messages: 20 messages
 Input tokens: 109616 tokens
 Output tokens: 14492 tokens
 Cached input tokens: 1213559 tokens
+
+----
+Update issues based on the issue critique
+
+Usage
+Agent messages: 37 messages
+Input tokens: 91925 tokens
+Output tokens: 29093 tokens
+Cached input tokens: 2500105 tokens
