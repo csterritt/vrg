@@ -95,3 +95,12 @@ Usage
  Input tokens: 183656 tokens
  Output tokens: 71220 tokens
  Cached input tokens: 11141824 tokens
+
+----
+Task 012-manual-vertical-scrolling-and-per-file-viewport.md
+
+Usage
+ Agent messages: 126 messages
+ Input tokens: 225459 tokens
+ Output tokens: 69879 tokens
+ Cached input tokens: 13363328 tokens

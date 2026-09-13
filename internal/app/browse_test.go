@@ -206,7 +206,8 @@ func ml(num int, display string, highlights ...[2]int) filebuffer.Line {
 
 // setupBrowse creates a model in the browse state with the given index
 // and a file loader that returns the given buffer. The gate is released
-// immediately so the load completes.
+// immediately so the load completes. A default 80x24 terminal size is
+// set so the viewport has a usable content height.
 func setupBrowse(t *testing.T, idx *searchindex.Index, buf *filebuffer.Buffer) app.Model {
 	t.Helper()
 	gate := make(chan struct{})
@@ -218,6 +219,7 @@ func setupBrowse(t *testing.T, idx *searchindex.Index, buf *filebuffer.Buffer) a
 		app.WithFileLoadGate(gate),
 		app.WithFileLoader(loader),
 	)
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, app.SearchCompleteMsg{Files: idx.Files(), Lines: idx.Len(), Index: idx})
 	if m.State() != app.StateBrowse {
 		t.Fatalf("State = %v, want StateBrowse", m.State())
@@ -234,6 +236,8 @@ func setupBrowse(t *testing.T, idx *searchindex.Index, buf *filebuffer.Buffer) a
 
 // setupBrowseLoading creates a model in the browse state with the gate
 // held (not closed). The file load command is returned but not executed.
+// A default 80x24 terminal size is set so the viewport has a usable
+// content height once the load completes.
 func setupBrowseLoading(t *testing.T, idx *searchindex.Index) (app.Model, tea.Cmd) {
 	t.Helper()
 	gate := make(chan struct{})
@@ -245,6 +249,7 @@ func setupBrowseLoading(t *testing.T, idx *searchindex.Index) (app.Model, tea.Cm
 		app.WithFileLoadGate(gate),
 		app.WithFileLoader(loader),
 	)
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, app.SearchCompleteMsg{Files: idx.Files(), Lines: idx.Len(), Index: idx})
 	if m.State() != app.StateBrowse {
 		t.Fatalf("State = %v, want StateBrowse", m.State())
@@ -696,6 +701,7 @@ func TestSinkSafetyPanelContent(t *testing.T) {
 				app.WithFileLoader(loader),
 				app.WithTheme(theme.NoStyle()),
 			)
+			m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 			m, cmd := update(t, m, app.SearchCompleteMsg{
 				Files: idx.Files(), Lines: idx.Len(), Index: idx,
 			})
@@ -738,6 +744,7 @@ func TestSinkSafetyAllSinksHostile(t *testing.T) {
 		app.WithFileLoader(loader),
 		app.WithTheme(theme.NoStyle()),
 	)
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, app.SearchCompleteMsg{
 		Files: idx.Files(), Lines: idx.Len(), Index: idx,
 	})
@@ -937,7 +944,8 @@ func TestBrowseCurrentMatchUnderlineLight(t *testing.T) {
 
 // setupBrowseSink creates a browse model with a single file whose path
 // or content is the fixture, rendered through the given theme. The
-// file load completes immediately.
+// file load completes immediately. A default 80x24 terminal size is set
+// so the viewport has a usable content height.
 func setupBrowseSink(t *testing.T, path []byte, content string, themed theme.Theme) app.Model {
 	t.Helper()
 	idx := buildIndex(t, "/work",
@@ -957,6 +965,7 @@ func setupBrowseSink(t *testing.T, path []byte, content string, themed theme.The
 		app.WithFileLoader(loader),
 		app.WithTheme(themed),
 	)
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, app.SearchCompleteMsg{
 		Files: idx.Files(), Lines: idx.Len(), Index: idx,
 	})

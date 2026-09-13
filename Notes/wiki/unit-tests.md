@@ -177,6 +177,43 @@ table, parser config, and generated help cannot drift.
 - Invalid UTF-8 and control bytes safely escaped in display.
 - Nonexistent files return an error.
 
+## internal/viewport
+
+`viewport_test.go` (Issue #12, external package `viewport_test`):
+
+- `TestScrollDownOneRow` / `TestScrollUpOneRow` — one-row scroll unit.
+- `TestScrollHalfDown` / `TestScrollHalfUp` — half-page scroll unit
+  (`max(1, floor(contentHeight/2))`).
+- `TestScrollPageDown` / `TestScrollPageUp` — full-page scroll unit
+  (`contentHeight`).
+- `TestClampBOF` — scrolling up at the top of the file is a no-op for
+  one-row, half-page, and full-page units.
+- `TestClampEOF` — scrolling down past EOF stops at `maxOffset` for
+  one-row, half-page, and full-page units.
+- `TestClampEOFLastRowAtBottom` — at `maxOffset`, the last row is
+  visible at the bottom of the content area.
+- `TestHalfPageOddHeight` / `TestHalfPageOddHeightUp` — half-page
+  formula for odd content heights (table-driven across panel heights).
+- `TestFileShorterThanViewport` — a file shorter than the viewport
+  leaves unused rows naturally; scrolling is a no-op.
+- `TestFileEqualToViewport` — a file exactly filling the viewport has
+  `maxOffset` 0; scrolling is a no-op.
+- `TestFileLongerThanViewport` — a file longer than the viewport can
+  scroll; the visible count equals the content height.
+- `TestFileLongerThanViewportMaxOffset` — `SetOffset` past EOF clamps
+  to `maxOffset`.
+- `TestEmptyFile` — an empty file has no visible rows; scrolling is a
+  no-op.
+- `TestVisibleQueriesOnlyVisibleRange` — `Visible()` queries the row
+  provider only for the visible `[offset, offset+contentHeight)` range
+  (render-cost guard at the Viewport level).
+- `TestVisibleQueriesOnlyVisibleRangeAtEOF` — render-cost guard at EOF
+  (visible range shorter than content height).
+- `TestSetOffsetClamp` — `SetOffset` clamps to `[0, maxOffset]`.
+- `TestContentHeight` — `ContentHeight()` returns `panelHeight - 1`.
+- `TestSetPanelHeight` / `TestSetPanelHeightClampsOffset` —
+  `SetPanelHeight` updates the panel height and clamps the offset.
+
 ## internal/theme
 
 `theme_test.go` (external package `theme_test`, Issue #7):
@@ -439,6 +476,36 @@ table, parser config, and generated help cannot drift.
 - `TestReplayOnCollectAcknowledgement` — the `onCollect` callback
   fires when a diagnostic is collected, providing the
   application-side acknowledgement side channel.
+
+`scroll_test.go` (Issue #12, external package `app_test`):
+
+- `TestScrollKeysOnLoadingPlaceholder` — scroll keys (`up`, `down`,
+  `u`, `d`, `pgup`, `pgdn`) on a `Loading…` placeholder are no-ops:
+  state stays `StateBrowse`, no error, view still shows `Loading…`.
+- `TestPerFileViewportStateSaved` — scrolling saves the vertical
+  offset as per-file state; `SavedOffset(path)` returns the saved
+  offset.
+- `TestPerFileViewportStateRestoredOnReload` — the saved per-file
+  offset is restored when the same file is loaded again via a
+  `FileLoadCompleteMsg`.
+- `TestPerFileViewportStateFirstVisitStartsAtTop` — a first visit
+  (no saved state) starts at offset 0 (top of file).
+- `TestScrollDownOneRow` / `TestScrollUpOneRow` — `down`/`up` scroll
+  one rendered row in the browse state.
+- `TestScrollHalfDown` / `TestScrollHalfUp` — `d`/`u` scroll half a
+  page (`max(1, floor(contentHeight/2))`).
+- `TestScrollPageDown` / `TestScrollPageUp` — `pgdn`/`pgup` scroll a
+  full page (`contentHeight`).
+- `TestScrollClampBOF` — `up` at the top of the file does nothing.
+- `TestScrollClampEOF` — scrolling past EOF stops with the last row
+  at the bottom.
+- `TestRenderCostGuard` — a counting fake row provider proves a frame
+  render queries only the visible `[0, contentHeight)` range, not the
+  full buffer.
+- `TestRenderCostGuardAfterScroll` — the render-cost guard holds after
+  scrolling: only the new visible range is queried.
+- `TestRenderShowsOnlyVisibleRows` — the rendered view contains only
+  the visible rows, not the full buffer.
 
 ## cmd/vrg (subprocess boundary)
 

@@ -22,11 +22,13 @@ Catalog of all wiki pages for the vrg project.
   restoration, controlled-failure cleanup, the fatal/warning
   outcome matrix with modal error overlay, and the session diagnostic
   collection with post-restoration stderr replay
-- [browse-tracer.md](browse-tracer.md) — Issue #5 (extended by Issue #7):
-  two-pane browse view with file list, filename rule, gutter, true-inverse
-  match highlights, current-match underline, async file loading with
-  "Loading…" placeholder, safe-presentation core for paths and content,
-  theme toggle (`c`), and hostile-fixture sink-safety method
+- [browse-tracer.md](browse-tracer.md) — Issue #5 (extended by Issue #7
+  and Issue #12): two-pane browse view with file list, filename rule,
+  gutter, true-inverse match highlights, current-match underline, async
+  file loading with "Loading…" placeholder, safe-presentation core for
+  paths and content, theme toggle (`c`), hostile-fixture sink-safety
+  method, manual vertical scrolling with per-file saved viewport state,
+  and prepared-row rendering
 - [safe-presentation.md](safe-presentation.md) — Issue #6: shared
   safe-presentation utility for every output sink (path, content,
   diagnostic escaping), unified cli.Escape, shared sink-safety table
@@ -36,6 +38,13 @@ Catalog of all wiki pages for the vrg project.
   (dark/light), `c` toggle with no persistence, true-inverse match
   styling, current-match underline, current-file underline, indicator,
   overlay, filename-rule, file-list, and base/gutter styles
+- [manual-vertical-scrolling.md](manual-vertical-scrolling.md) —
+  Issue #12: manual vertical scrolling with one-row, half-page, and
+  full-page scroll units; BOF/EOF clamping with no avoidable blank
+  rows; natural unused rows for short files; loading placeholder
+  no-op; per-file saved vertical viewport state; prepared-row
+  rendering via RowProvider; and the visible-range-only render-cost
+  guard
 - [outcome-contract.md](outcome-contract.md) — Issue #9 (extended by
   Issues #10 and #11): stream-integrity accounting, separate
   process-success and stream-integrity assessment, the fatal/warning

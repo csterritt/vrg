@@ -77,10 +77,13 @@ standalone CR is content, not a terminator.
 
 ## Viewport
 
-`internal/viewport/viewport.go` is a minimal seam: a `Viewport` with
-`Lines`, `Height`, and `Offset` (always 0 for Issue #5). `Visible()`
-returns the lines at the current offset. Later issues add scrolling,
-cursor tracking, and reveal-on-match.
+`internal/viewport/viewport.go` is the scrollable content view. Issue
+#5 landed a minimal seam (`Lines`, `Height`, `Offset` always 0). Issue
+#12 expanded it into the full manual vertical scrolling and
+prepared-row rendering module. See
+[manual-vertical-scrolling](manual-vertical-scrolling.md) for the
+complete scroll-unit, clamping, per-file state, and render-cost
+contracts.
 
 ## Theme
 
@@ -151,6 +154,14 @@ state:
 - `fileLoader FileLoader` — the injected or default loader.
 - `fileGate chan struct{}` — the file-load gate.
 - `loadCancel chan struct{}` — cancellation channel for the file load.
+- `viewport *viewport.Viewport` — the scrollable content view (Issue
+  #12). `nil` while loading or no buffer.
+- `currentPath []byte` — raw path of the currently loaded file (Issue
+  #12).
+- `perFileOffset map[string]int` — per-file saved vertical offset
+  keyed by raw path (Issue #12).
+- `rowProviderFactory RowProviderFactory` — test seam for the
+  render-cost guard (Issue #12).
 
 ### Update flow
 
@@ -172,6 +183,10 @@ On `FileLoadCompleteMsg`:
 
 1. If cancelled, ignores the message (late-load rejection).
 2. Stores the buffer and clears `loading`.
+3. Issue #12: builds the viewport from prepared row data (via the row
+   provider factory or `viewport.BufferRows`), restores the saved
+   per-file offset for the path (0 for a first visit), and creates the
+   viewport with the panel height and saved offset.
 
 Key handling in browse state:
 
@@ -180,8 +195,16 @@ Key handling in browse state:
 - `ctrl+c` — exits with code 130 through the Issue #4 cancellation path.
 - `c` — toggles the theme between dark and light (Issue #7), no
   persistence.
+- Issue #12 scroll keys (active only when the viewport is non-nil):
+  - `up` / `down` — scroll one rendered row.
+  - `u` / `d` — scroll half a page (`max(1, floor(contentHeight/2))`).
+  - `pgup` / `pgdn` — scroll a full page (`contentHeight`).
+  - After each scroll, the offset is saved as per-file state.
+  - While the viewport is `nil` (loading placeholder), scroll keys are
+    no-ops.
 - Other keys and resize — handled without blocking, even while a load
-  is pending.
+  is pending. `WindowSizeMsg` calls `viewport.SetPanelHeight` to
+  recompute layout and clamp the offset (Issue #12).
 
 ### Rendering
 
@@ -196,7 +219,10 @@ Key handling in browse state:
   owns the real formula).
 - **Content panel (right pane)** — the escaped filename embedded in a
   horizontal rule (`── name ──`), followed by content rows or
-  `Loading…` while the buffer is unavailable.
+  `Loading…` while the buffer is unavailable. Issue #12: when the
+  viewport is active, `renderContentPanel` queries `viewport.Visible()`
+  for the visible row range only instead of scanning the full buffer
+  per frame.
 - **Gutter** — right-justified line number padded to the digit count of
   the largest line number, followed by two spaces.
 - **Highlights** — matched spans rendered in true-inverse colours via

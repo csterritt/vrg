@@ -132,11 +132,26 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   shutdown boundary is defined at message-processing time: a
   diagnostic is collected once the model has processed the message
   carrying it; in-flight diagnostics are not awaited or replayed.
-  See
+  Issue #12 added manual vertical scrolling with per-file saved
+  viewport state: a `viewport *viewport.Viewport` field (nil while
+  loading), `perFileOffset map[string]int` for per-file saved offsets
+  keyed by raw path, `currentPath []byte`, a `RowProviderFactory` type
+  and `WithRowProviderFactory` option (test seam for the render-cost
+  guard), `ViewportOffset()`/`SavedOffset(path)` accessors,
+  `handleScrollKey` (routes `up`/`down`/`u`/`d`/`pgup`/`pgdn` to the
+  viewport), and `saveOffset` (records the current offset as per-file
+  state after every scroll). `FileLoadCompleteMsg` now builds the
+  viewport from prepared row data and restores the saved per-file
+  offset (0 for a first visit). `WindowSizeMsg` calls
+  `viewport.SetPanelHeight` to recompute layout and clamp the offset.
+  `renderContentPanel` queries `viewport.Visible()` for the visible
+  range only instead of scanning the full buffer per frame. Scroll keys
+  are no-ops while the viewport is nil (loading placeholder). See
   [search-collection-path](search-collection-path.md),
   [browse-tracer](browse-tracer.md),
-  [outcome-contract](outcome-contract.md), and
-  [record-robustness](record-robustness.md).
+  [outcome-contract](outcome-contract.md),
+  [record-robustness](record-robustness.md), and
+  [manual-vertical-scrolling](manual-vertical-scrolling.md).
 
 ## internal/safepresentation
 
@@ -186,10 +201,26 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 
 ## internal/viewport
 
-- `internal/viewport/viewport.go` — Issue #5: minimal scrollable content
-  view seam. `Viewport` with `Lines`, `Height`, and `Offset` (always 0
-  for Issue #5). `Visible()` returns lines at the current offset. Later
-  issues add scrolling, cursor tracking, and reveal-on-match.
+- `internal/viewport/viewport.go` — Issue #5 landed a minimal
+  scrollable content view seam. Issue #12 expanded it into the full
+  manual vertical scrolling and prepared-row rendering module. The
+  `RowProvider` interface (`RowCount() int`, `Rows(start, end int)
+  []filebuffer.Line`) supplies rendered rows on demand so the Viewport
+  queries only the visible range. `Viewport` holds a `RowProvider`,
+  `panelHeight`, and `offset`. Content height is `panelHeight - 1`
+  (the filename row occupies one row). The offset is clamped to
+  `[0, maxOffset]` where `maxOffset = max(0, rowCount - contentHeight)`,
+  ensuring no avoidable blank rows below EOF; files shorter than the
+  viewport naturally leave unused rows. `New(rows, panelHeight)` creates
+  a viewport at offset 0. `Visible()` queries the row provider for the
+  visible `[offset, offset+contentHeight)` range only. Scroll methods:
+  `ScrollDown`/`ScrollUp` (one row), `ScrollHalfDown`/`ScrollHalfUp`
+  (`max(1, floor(contentHeight/2))`), `ScrollPageDown`/`ScrollPageUp`
+  (full `contentHeight`). `SetOffset`, `SetPanelHeight`, and `SetRows`
+  re-clamp the offset. `BufferRows(buf)` adapts a `filebuffer.Buffer` to
+  `RowProvider`. See
+  [manual-vertical-scrolling](manual-vertical-scrolling.md) and
+  [browse-tracer](browse-tracer.md).
 
 ## internal/theme
 

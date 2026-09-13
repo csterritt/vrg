@@ -294,3 +294,50 @@ sink-safety table), [source-code](source-code.md),
 bullet; Outcome and exit-status contract), `internal/app/app.go`,
 `internal/app/replay_test.go`, `cmd/vrg/main.go`,
 `cmd/vrg/replay_test.go`.
+
+## [2026-09-11] ingest | Issue #12 manual vertical scrolling and per-file viewport
+
+Ingested Issue #12: manual vertical scrolling with per-file saved
+viewport state and prepared-row rendering. `internal/viewport` was
+expanded from the Issue #5 minimal seam into the full scroll module:
+`RowProvider` interface (`RowCount`/`Rows`) for on-demand prepared rows,
+`Viewport` with `panelHeight`/`offset`/`RowProvider`, content height as
+`panelHeight - 1` (filename row), `maxOffset = max(0, rowCount -
+contentHeight)` for no avoidable blank rows below EOF, scroll methods
+(one-row `ScrollDown`/`ScrollUp`, half-page `ScrollHalfDown`/
+`ScrollHalfUp` as `max(1, floor(contentHeight/2))`, full-page
+`ScrollPageDown`/`ScrollPageUp` as `contentHeight`), `SetOffset`/
+`SetPanelHeight`/`SetRows` with re-clamping, `Visible()` querying only
+the visible `[offset, offset+contentHeight)` range, and `BufferRows`
+adapter. `internal/app` integrated the viewport: `viewport` field (nil
+while loading), `perFileOffset map[string]int` for per-file saved
+offsets keyed by raw path, `currentPath []byte`, `RowProviderFactory`
+type and `WithRowProviderFactory` option (test seam for the render-cost
+guard), `ViewportOffset()`/`SavedOffset(path)` accessors,
+`handleScrollKey` routing `up`/`down`/`u`/`d`/`pgup`/`pgdn` to the
+viewport, `saveOffset` recording per-file state after every scroll,
+`FileLoadCompleteMsg` building the viewport from prepared row data and
+restoring the saved offset (0 for a first visit), `WindowSizeMsg`
+calling `viewport.SetPanelHeight`, and `renderContentPanel` querying
+`viewport.Visible()` for the visible range only instead of scanning
+the full buffer per frame. Scroll keys are no-ops while the viewport is
+nil (loading placeholder). Tests added: `internal/viewport/
+viewport_test.go` (scroll units, clamps, odd heights, file lengths,
+empty file, render-cost guard, SetOffset/SetPanelHeight clamping) and
+`internal/app/scroll_test.go` (placeholder no-op, per-file state
+saved/restored/first-visit, scroll key behavior, BOF/EOF clamps,
+render-cost guard before/after scroll, visible-rows-only rendering).
+Existing browse tests updated to set a terminal size before search
+completion so the viewport has a usable content height. Created
+[manual-vertical-scrolling](manual-vertical-scrolling.md), updated
+[browse-tracer](browse-tracer.md) (Viewport section, Browse model
+fields, Update flow, key handling, Rendering),
+[source-code](source-code.md) (internal/viewport and internal/app
+entries), [unit-tests](unit-tests.md) (internal/viewport and
+internal/app scroll_test.go catalogs), and the index. Sources:
+`Notes/tasks/012-manual-vertical-scrolling-and-per-file-viewport.md`,
+`Notes/issues/012-manual-vertical-scrolling-and-per-file-viewport.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors;
+Module Design), `internal/viewport/viewport.go`,
+`internal/viewport/viewport_test.go`, `internal/app/app.go`,
+`internal/app/scroll_test.go`, `internal/app/browse_test.go`.

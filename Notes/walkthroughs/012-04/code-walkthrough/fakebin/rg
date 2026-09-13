@@ -1,0 +1,8 @@
+#!/bin/sh
+# Emit a valid ripgrep JSON stream with one match on a long file, then
+# exit 0. The app enters the browse state and loads the file from disk.
+echo '{"type":"begin","data":{"path":{"text":"longfile.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"longfile.txt"},"lines":{"text":"match line 1\n"},"line_number":1,"submatches":[{"match":{"text":"match"},"start":0,"end":5}]}}'
+echo '{"type":"end","data":{"path":{"text":"longfile.txt"},"binary_offset":null}}'
+echo '{"type":"summary","data":{}}'
+exit 0

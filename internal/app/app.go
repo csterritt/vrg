@@ -19,6 +19,7 @@ import (
 	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
 	"vrg/internal/theme"
+	"vrg/internal/viewport"
 )
 
 // State identifies the current app state.
@@ -342,6 +343,23 @@ type Model struct {
 	fileGate   chan struct{}
 	loadCancel chan struct{}
 
+	// viewport is the scrollable content view for the current file.
+	// It holds prepared row data and the vertical offset. When nil
+	// (loading or no buffer), the render path shows the placeholder.
+	viewport *viewport.Viewport
+	// currentPath is the raw path of the currently loaded file, used
+	// as the key for per-file viewport state.
+	currentPath []byte
+	// perFileOffset saves the vertical viewport offset per raw path so
+	// a file revisited later can start from its saved position (Issue
+	// #12). The key is the string form of the raw path bytes.
+	perFileOffset map[string]int
+	// rowProviderFactory builds a RowProvider from a loaded buffer.
+	// When nil, viewport.BufferRows is used. This is a test seam for
+	// the render-cost guard: a counting fake proves the render path
+	// queries only the visible row range.
+	rowProviderFactory RowProviderFactory
+
 	// Overlay state. The modal error/warning overlay sits over the
 	// browse or no-results state. When OverlayFatal is true, dismissal
 	// (q or Esc) exits 2 because there is no underlying state.
@@ -361,7 +379,17 @@ type config struct {
 	fileLoader FileLoader
 	fileGate   chan struct{}
 	onCollect  func(string)
+	// rowProviderFactory builds a RowProvider from a loaded buffer.
+	// When nil, viewport.BufferRows is used. This is a test seam for
+	// the render-cost guard.
+	rowProviderFactory RowProviderFactory
 }
+
+// RowProviderFactory builds a viewport.RowProvider from a loaded
+// buffer. The default factory (viewport.BufferRows) slices the
+// buffer's prepared lines; a test factory can substitute a counting
+// fake to prove the render path queries only the visible row range.
+type RowProviderFactory func(buf *filebuffer.Buffer) viewport.RowProvider
 
 // Option configures the model.
 type Option func(*config)
@@ -432,6 +460,15 @@ func WithOnCollect(f func(string)) Option {
 	return func(c *config) { c.onCollect = f }
 }
 
+// WithRowProviderFactory sets a factory that builds a RowProvider from
+// a loaded buffer. When nil, viewport.BufferRows is used. This is a
+// test seam for the render-cost guard (Issue #12): a counting fake
+// proves the render path queries only the visible row range, not the
+// full buffer.
+func WithRowProviderFactory(f RowProviderFactory) Option {
+	return func(c *config) { c.rowProviderFactory = f }
+}
+
 // New creates a new app model for a search invocation. The model starts
 // in the searching state.
 func New(childArgs []string, workdir string, opts ...Option) Model {
@@ -440,18 +477,20 @@ func New(childArgs []string, workdir string, opts ...Option) Model {
 		opt(&cfg)
 	}
 	return Model{
-		state:      StateSearching,
-		childArgs:  childArgs,
-		workdir:    workdir,
-		process:    cfg.process,
-		gate:       cfg.gate,
-		failSig:    cfg.failSignal,
-		diagSig:    cfg.diagSignal,
-		theme:      cfg.theme,
-		fileLoader: cfg.fileLoader,
-		fileGate:   cfg.fileGate,
-		onCollect:  cfg.onCollect,
-		loadCancel: make(chan struct{}),
+		state:              StateSearching,
+		childArgs:          childArgs,
+		workdir:            workdir,
+		process:            cfg.process,
+		gate:               cfg.gate,
+		failSig:            cfg.failSignal,
+		diagSig:            cfg.diagSignal,
+		theme:              cfg.theme,
+		fileLoader:         cfg.fileLoader,
+		fileGate:           cfg.fileGate,
+		onCollect:          cfg.onCollect,
+		rowProviderFactory: cfg.rowProviderFactory,
+		perFileOffset:      make(map[string]int),
+		loadCancel:         make(chan struct{}),
 	}
 }
 
@@ -483,6 +522,26 @@ func (m Model) OverlayOpen() bool { return m.overlayOpen }
 // OverlayKind returns the kind of the currently open overlay
 // (OverlayNone when no overlay is open).
 func (m Model) OverlayKind() OverlayKind { return m.overlay }
+
+// ViewportOffset returns the current vertical viewport offset (the
+// 0-based top row) for the loaded file. Returns 0 when no viewport is
+// active (loading or no buffer).
+func (m Model) ViewportOffset() int {
+	if m.viewport == nil {
+		return 0
+	}
+	return m.viewport.Offset()
+}
+
+// SavedOffset returns the saved per-file vertical viewport offset for
+// the given raw path, or 0 if no state is saved (Issue #12). This is
+// the per-file state saved for later revisits; a first visit returns 0.
+func (m Model) SavedOffset(path []byte) int {
+	if m.perFileOffset == nil {
+		return 0
+	}
+	return m.perFileOffset[string(path)]
+}
 
 // EscapePathForDiagnostic escapes a raw filename for safe embedding in a
 // diagnostic. It delegates to safepresentation.EscapePath, the shared
@@ -578,6 +637,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.buffer = msg.Buffer
 		}
 		m.loading = false
+		// Build the viewport from the prepared row data. The row
+		// provider factory (or the default viewport.BufferRows)
+		// adapts the buffer so the render path queries only the
+		// visible range. The per-file saved offset is restored so a
+		// revisited file starts from its saved position (Issue #12).
+		if msg.Buffer != nil {
+			m.currentPath = msg.Path
+			factory := m.rowProviderFactory
+			if factory == nil {
+				factory = viewport.BufferRows
+			}
+			rows := factory(msg.Buffer)
+			offset := m.SavedOffset(msg.Path)
+			m.viewport = viewport.New(rows, m.height)
+			m.viewport.SetOffset(offset)
+		}
 		return m, nil
 
 	case SearchFailedMsg:
@@ -626,6 +701,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.overlayOpen {
 			return m.handleOverlayKey(msg)
 		}
+		// Scroll keys are active in the browse state when content is
+		// loaded. Scrolling a "Loading…" placeholder is a no-op
+		// (Issue #12). Manual scrolling does not move the matched-line
+		// cursor.
+		if m.state == StateBrowse && m.viewport != nil {
+			if m.handleScrollKey(msg) {
+				return m, nil
+			}
+		}
 		switch {
 		case msg.Code == 'c' && msg.Mod == 0:
 			if m.state == StateBrowse {
@@ -662,9 +746,55 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// Recompute the viewport layout from the new dimensions and
+		// clamp the offset without losing the reading position (Issue
+		// #12).
+		if m.viewport != nil {
+			m.viewport.SetPanelHeight(msg.Height)
+		}
 		return m, nil
 	}
 	return m, nil
+}
+
+// handleScrollKey routes a scroll key press to the viewport. up/down
+// scroll one rendered row; u/d scroll half a page (max(1,
+// floor(contentHeight/2))); page up/down scroll a full page. The
+// viewport clamps to valid content. After scrolling, the per-file
+// offset is saved for later revisits (Issue #12). Returns true if the
+// key was handled as a scroll key, false otherwise.
+func (m Model) handleScrollKey(msg tea.KeyPressMsg) bool {
+	switch {
+	case msg.Code == tea.KeyDown && msg.Mod == 0:
+		m.viewport.ScrollDown()
+	case msg.Code == tea.KeyUp && msg.Mod == 0:
+		m.viewport.ScrollUp()
+	case msg.Code == 'd' && msg.Mod == 0:
+		m.viewport.ScrollHalfDown()
+	case msg.Code == 'u' && msg.Mod == 0:
+		m.viewport.ScrollHalfUp()
+	case msg.Code == tea.KeyPgDown:
+		m.viewport.ScrollPageDown()
+	case msg.Code == tea.KeyPgUp:
+		m.viewport.ScrollPageUp()
+	default:
+		return false
+	}
+	m.saveOffset()
+	return true
+}
+
+// saveOffset records the current viewport offset as per-file state for
+// the current file's raw path (Issue #12). This is called after every
+// scroll action so a revisited file can start from its saved position.
+func (m *Model) saveOffset() {
+	if m.viewport == nil || m.currentPath == nil {
+		return
+	}
+	if m.perFileOffset == nil {
+		m.perFileOffset = make(map[string]int)
+	}
+	m.perFileOffset[string(m.currentPath)] = m.viewport.Offset()
 }
 
 // handleOverlayKey routes a key press to the open overlay. up/down
@@ -1128,20 +1258,24 @@ func (m Model) renderBrowse() string {
 
 // renderContentPanel renders the right pane: filename rule followed by
 // content rows or the loading placeholder. The currentLine parameter
-// identifies the current matched line for current-match styling.
+// identifies the current matched line for current-match styling. When
+// the viewport is active, only the visible row range is queried from
+// prepared data (Issue #12); the render path never scans the full
+// buffer per frame.
 func (m Model) renderContentPanel(escapedName string, currentLine int) string {
 	var b strings.Builder
 	b.WriteString("── " + escapedName + " ──")
 	b.WriteString("\n")
-	if m.loading || m.buffer == nil {
+	if m.loading || m.buffer == nil || m.viewport == nil {
 		b.WriteString("Loading…")
 		return b.String()
 	}
-	for _, line := range m.buffer.Lines {
-		gw := m.buffer.GutterWidth - 2
-		if gw < 1 {
-			gw = 1
-		}
+	visible := m.viewport.Visible()
+	gw := m.buffer.GutterWidth - 2
+	if gw < 1 {
+		gw = 1
+	}
+	for _, line := range visible {
 		b.WriteString(fmt.Sprintf("%*d  ", gw, line.Number))
 		b.WriteString(renderLineWithHighlights(line, m.theme, currentLine))
 		b.WriteString("\n")
