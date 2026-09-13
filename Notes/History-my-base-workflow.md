@@ -194,3 +194,12 @@ Usage
  Input tokens: 223850 tokens
  Output tokens: 68115 tokens
  Cached input tokens: 14921600 tokens
+
+----
+Task 023-zero-width-match-markers.md
+
+Usage
+ Agent messages: 141 messages
+ Input tokens: 222825 tokens
+ Output tokens: 86755 tokens
+ Cached input tokens: 15662784 tokens

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Fake rg that emits zero-width matches for $ (EOL) on each line of
+# eol_demo.txt. Each line gets a zero-width submatch at the terminator
+# byte (end of line). This simulates `rg '$' file`.
+path="demo_artifacts/eol_demo.txt"
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"'"$path"'"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":""},"start":3,"end":3}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"world\n"},"line_number":2,"submatches":[{"match":{"text":""},"start":5,"end":5}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"empty\n"},"line_number":3,"submatches":[{"match":{"text":""},"start":5,"end":5}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"\n"},"line_number":4,"submatches":[{"match":{"text":""},"start":0,"end":0}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"end\n"},"line_number":5,"submatches":[{"match":{"text":""},"start":3,"end":3}]}}'
+printf '%s\n' '{"type":"end","data":{"path":{"text":"'"$path"'"},"binary_offset":null}}'
+printf '%s\n' '{"type":"summary","data":{}}'
+exit 0

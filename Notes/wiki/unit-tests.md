@@ -1202,3 +1202,71 @@ replay-ordering assertions:
   `filebuffer.Load` path expands a combining-mark match to the base
   cluster, and the indicator logic sees the expanded span (left `*`
   when hidden left).
+
+`marker_indicator_test.go` (Issue #23, external package `app_test`):
+
+- `TestIndicatorMarkerHiddenLeftStar` — a zero-width EOL marker
+  entirely hidden left produces a left `*`.
+- `TestIndicatorMarkerVisibleNoStar` — a visible zero-width EOL marker
+  produces no hidden-match indicator.
+- `TestIndicatorMarkerHiddenRightStar` — a zero-width EOL marker
+  entirely hidden right produces a right `*` on the current matched
+  line.
+- `TestIndicatorTerminatorOnlyMarkerHiddenLeftStar` — a
+  terminator-only `$` marker on `hit\r\n` follows the same indicator
+  rules as any other marker (left `*` when hidden left).
+- `TestIndicatorMarkerOnlyLineAlwaysVisible` — a marker-only line
+  (empty line with EOL marker) has max offset 0, so the marker is
+  always visible and no `*` appears.
+
+`marker_test.go` (Issue #23, external package `filebuffer_test`):
+
+- `TestMarkerAtBOL` — a zero-width match at byte 0 produces a one-cell
+  marker highlight at display cell 0 without shifting text.
+- `TestMarkerAtEOL` — a zero-width match at the end of line produces a
+  one-cell marker at the EOL display column; the display is extended by
+  one space and the cluster width includes the marker cell.
+- `TestMarkerOnEmptyLine` — a zero-width match on an empty line
+  produces a marker at cell 0; the line has width one (single space,
+  one 1-cell cluster).
+- `TestMarkerOnCRLFTerminatorOnly` — a terminator-only `$` match on
+  `hit\r\n` at byte 4 produces a single marker cell at display column
+  3.
+- `TestMarkerOnLFTerminatorOnly` — a terminator-only `$` match on
+  `hit\n` at byte 3 produces a single marker cell at display column 3.
+- `TestMarkerInsideWideCluster` — a zero-width position inside a wide
+  cluster maps to the cluster start (wide glyph not split).
+- `TestMarkerInsideCombiningCluster` — a zero-width position inside a
+  combining cluster maps to the cluster start (base character cell).
+- `TestMarkerAtEOLDoesNotShiftText` — an EOL marker extends the
+  effective width by one cell without shifting the existing text.
+- `TestMarkerMidLineDoesNotExtendWidth` — a mid-line marker marks an
+  existing cell without extending the line width.
+- `TestMarkerAndNonZeroWidthOnSameLine` — a line with both a
+  zero-width marker and a non-zero-width highlight produces both.
+- `TestMarkerEOLClusterIsLast` — the EOL marker's virtual cluster is
+  the last cluster and has width 1.
+
+`marker_test.go` (Issue #23, external package `viewport_test`):
+
+- `TestMarkerAfterFullWrapRow` — a marker after a completely full wrap
+  row occupies another row.
+- `TestMarkerOnlyLineExtentOne` — a marker-only line has content
+  extent 1 (the marker cell).
+- `TestMarkerOnlyLineMaxPanOffsetZero` — a marker-only line has
+  maximum pan offset 0 under Issue #18's paintable-boundary maximum.
+- `TestMarkerCellRevealTarget` — the marker cell is a navigable
+  reveal target (`ClusterWidthAtCell` returns 1).
+- `TestMarkerHiddenLeftNotInClip` — a marker hidden left of the clip
+  window is excluded from the clipped output.
+- `TestMarkerVisibleInClip` — a marker within the clip window is
+  included with its highlight shifted to local coordinates.
+- `TestMarkerHiddenRightNotInClip` — a marker hidden right of the
+  clip window is excluded from the clipped output.
+- `TestMarkerParticipatesInPanClamping` — a line with an EOL marker
+  has its extent include the marker cell, so the pan clamp allows
+  scrolling to see the marker.
+- `TestMarkerEOLWrapRowCount` — an EOL marker on a line that does not
+  fill the wrap row stays on the same row.
+- `TestMarkerEOLRevealHorizontal` — `RevealHorizontal` can target the
+  EOL marker cell and make it visible.

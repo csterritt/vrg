@@ -130,6 +130,13 @@ Catalog of all wiki pages for the vrg project.
   only; leading UTF-8 BOM invisible with rg-line ↔ raw-file coordinate
   separation (`Buffer.BOMOffset`); non-leading U+FEFF as ordinary
   content
+- [zero-width-match-markers.md](zero-width-match-markers.md) —
+  Issue #23: zero-width submatches render as one inverse-video cell at
+  their mapped location (cluster-start mapping, EOL extension by one
+  cell, empty matched line width one); markers participate in wrap,
+  clip, extent, pan clamping, reveal, and Issue #20 indicators like
+  any other cell; terminator-only `$` marker is an ordinary marker
+  with no special cases
 
 ## Catalogs
 

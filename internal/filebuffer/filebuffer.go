@@ -3,6 +3,7 @@ package filebuffer
 import (
 	"fmt"
 	"os"
+	"sort"
 
 	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
@@ -109,9 +110,46 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		byteCells := expandedByteCells(d.ByteCells, d.ByteOffsets, clusters)
 		highlights := expandedHighlights(d.ByteOffsets, d.ByteCells, clusters, stopsByLine[lineNum])
 
+		// Issue #23: zero-width submatches (Start == End) render as
+		// one inverse-video cell at their mapped display location.
+		// A position inside a cluster maps to the cluster start (via
+		// the expanded ByteCells); a terminator or end-of-line
+		// position maps to the display end-of-line column. A marker at
+		// end of line extends the effective line width by one cell, so
+		// a space is appended to the display text and a 1-cell cluster
+		// is appended to the Clusters slice. An empty matched line
+		// therefore has width one. A marker after a completely full
+		// wrap row occupies another row because the extra cluster
+		// participates in wrapping. The marker highlight is a one-cell
+		// range [cell, cell+1) that participates in clipping, indicators,
+		// and reveal like any other highlight. The terminator-only $
+		// marker is an ordinary marker with no special cases.
+		display := d.Text
+		markerCells := markerCellsForStops(stopsByLine[lineNum], byteCells, clusters)
+		eolCell := clusterContentWidth(clusters)
+		eolMarkerAdded := false
+		for _, mc := range markerCells {
+			if mc == eolCell && !eolMarkerAdded {
+				display = display + " "
+				clusters = append(clusters, safepresentation.Cluster{
+					StartByte: len(d.Text),
+					EndByte:   len(d.Text) + 1,
+					Width:     1,
+				})
+				eolMarkerAdded = true
+			}
+			highlights = append(highlights, [2]int{mc, mc + 1})
+		}
+		// Sort highlights by start cell so renderLineWithHighlights
+		// processes them in cell order without skipping markers that
+		// precede non-zero-width highlights.
+		sort.SliceStable(highlights, func(i, j int) bool {
+			return highlights[i][0] < highlights[j][0]
+		})
+
 		lines = append(lines, Line{
 			Number:     lineNum,
-			Display:    d.Text,
+			Display:    display,
 			ByteCells:  byteCells,
 			Highlights: highlights,
 			Clusters:   clusters,
@@ -382,4 +420,46 @@ func expandedHighlights(byteOffsets []int, rawCells [][2]int, clusters []safepre
 		}
 	}
 	return highlights
+}
+
+// markerCellsForStops returns the display cell positions of zero-width
+// submatches (Start == End) for the given stops (Issue #23). Each
+// position is mapped through the expanded ByteCells: a byte inside a
+// cluster maps to the cluster start cell, and a terminator or
+// out-of-range byte maps to the display end-of-line column (the sum
+// of cluster widths). Duplicate cells are removed so multiple
+// zero-width submatches at the same position produce one marker.
+func markerCellsForStops(stops []searchindex.Stop, byteCells [][2]int, clusters []safepresentation.Cluster) []int {
+	contentWidth := clusterContentWidth(clusters)
+	var cells []int
+	seen := make(map[int]bool)
+	for _, s := range stops {
+		for _, sm := range s.Submatches {
+			if sm.Start != sm.End || sm.Start < 0 {
+				continue
+			}
+			var cell int
+			if sm.Start < len(byteCells) {
+				cell = byteCells[sm.Start][0]
+			} else {
+				cell = contentWidth
+			}
+			if !seen[cell] {
+				seen[cell] = true
+				cells = append(cells, cell)
+			}
+		}
+	}
+	return cells
+}
+
+// clusterContentWidth returns the total terminal cell width of the
+// given clusters: the sum of each cluster's Width. This is the display
+// content extent before any EOL marker extension (Issue #23).
+func clusterContentWidth(clusters []safepresentation.Cluster) int {
+	w := 0
+	for _, c := range clusters {
+		w += c.Width
+	}
+	return w
 }

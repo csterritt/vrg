@@ -365,10 +365,23 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   (`expandedHighlights` uses the end byte's original cell end when it
   has no cluster); a standalone CR is escaped as `^M`; an empty file
   produces zero lines with a three-cell gutter; non-leading U+FEFF is
-  ordinary content. See [browse-tracer](browse-tracer.md),
+  ordinary content. Issue #23 added zero-width match markers:
+  `markerCellsForStops(stops, byteCells, clusters)` returns the display
+  cell positions of zero-width submatches (`Start == End`), mapping each
+  through the expanded `ByteCells` (cluster-start mapping) and
+  deduplicating; `clusterContentWidth(clusters)` returns the sum of
+  cluster widths (the content extent before any EOL marker extension);
+  for each marker cell at the content width (EOL), `Load` appends a
+  space to `Display` and a 1-cell cluster to `Clusters` so the marker
+  has a paintable cell (an empty matched line therefore has width one);
+  each marker cell is appended to `Highlights` as `[cell, cell+1)` and
+  `Highlights` are sorted by start cell so rendering processes them in
+  cell order. The terminator-only `$` marker is an ordinary marker with
+  no special cases. See [browse-tracer](browse-tracer.md),
   [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
   [grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md),
-  and [structural-line-handling](structural-line-handling.md).
+  [structural-line-handling](structural-line-handling.md),
+  and [zero-width-match-markers](zero-width-match-markers.md).
 
 ## internal/viewport
 

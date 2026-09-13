@@ -1,0 +1,10 @@
+#!/bin/sh
+# Fake rg that emits a zero-width BOL match on a 200-char line.
+# Used for the run-off-edge pan case: panning right hides the BOL
+# marker left, producing a left * indicator.
+path="demo_artifacts/long_line.txt"
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"'"$path"'"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"'$(python3 -c "print('a'*200)")'\n"},"line_number":1,"submatches":[{"match":{"text":""},"start":0,"end":0}]}}'
+printf '%s\n' '{"type":"end","data":{"path":{"text":"'"$path"'"},"binary_offset":null}}'
+printf '%s\n' '{"type":"summary","data":{}}'
+exit 0

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Fake rg that emits a zero-width match for $ (EOL) on each line of
+# crlf_demo.txt. The \n byte of each CRLF maps to the display end-of-
+# line column. Line 1 "hit\r\n" has \n at byte 4, mapping to column 3.
+path="demo_artifacts/crlf_demo.txt"
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"'"$path"'"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"hit\r\n"},"line_number":1,"submatches":[{"match":{"text":""},"start":4,"end":4}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"world\r\n"},"line_number":2,"submatches":[{"match":{"text":""},"start":6,"end":6}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"empty\r\n"},"line_number":3,"submatches":[{"match":{"text":""},"start":6,"end":6}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"\r\n"},"line_number":4,"submatches":[{"match":{"text":""},"start":1,"end":1}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"end\r\n"},"line_number":5,"submatches":[{"match":{"text":""},"start":4,"end":4}]}}'
+printf '%s\n' '{"type":"end","data":{"path":{"text":"'"$path"'"},"binary_offset":null}}'
+printf '%s\n' '{"type":"summary","data":{}}'
+exit 0

@@ -756,3 +756,64 @@ Sources: `Notes/tasks/022-line-terminators-final-line-empty-file-utf8-bom.md`,
 `Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; Encodings
 and stale-content validation), `internal/filebuffer/filebuffer.go`,
 `internal/filebuffer/structural_line_test.go`.
+
+## [2026-09-13] ingest | Issue #23 zero-width match markers
+
+Issue #23: zero-width regex submatches (`Start == End`) render as one
+inverse-video cell at their mapped display location, underlined on
+the current matched line, marking an existing cell without shifting
+following text. A marker at end of line extends the effective line
+width by one cell, so an empty matched line has width one and a marker
+after a completely full wrap row occupies another row. A zero-width
+position inside a grapheme cluster maps to the cluster start with no
+split wide glyph. A terminator-only `$` match on `hit\r\n` (byte 4)
+produces a single marker cell at display column 3 following exactly
+the same reveal, wrap, clip, horizontal-extent, and indicator rules as
+any other marker, including counting as entirely hidden for the
+Issue #20 gutter `*` and right `*` indicators. Marker cells are
+navigable reveal targets. Markers participate in horizontal extent
+and pan clamping so a marker-only line has extent 1 and maximum offset
+0 under Issue #18's paintable-boundary maximum.
+
+`filebuffer.Load` produces the markers:
+`markerCellsForStops(stops, byteCells, clusters)` returns the display
+cell positions of zero-width submatches, mapping each through the
+expanded `ByteCells` (cluster-start mapping via Issue #21) and
+deduplicating; `clusterContentWidth(clusters)` returns the sum of
+cluster widths (the content extent before any EOL marker extension);
+for each marker cell at the content width (EOL), `Load` appends a
+space to `Display` and a 1-cell `safepresentation.Cluster` to
+`Clusters` so the marker has a paintable cell; each marker cell is
+appended to `Highlights` as `[cell, cell+1)` and `Highlights` are
+sorted by start cell so rendering processes them in cell order. The
+Viewport needs no marker-specific changes: the existing
+cluster-driven wrap model, clipping, extent, pan clamping, and
+reveal arithmetic operate on the marker's virtual cluster and
+one-cell highlight like any other cluster and highlight. The App's
+`renderLineWithHighlights` paints the marker space with the match or
+current-match style, and the indicator functions consume the
+one-cell highlight like any other.
+
+Tests in `internal/filebuffer/marker_test.go` cover BOL/EOL/empty-line
+markers, LF and CRLF terminator-only markers (column 3), wide and
+combining cluster-start mapping, no text shifting, mid-line no-width-
+extension, coexistence with non-zero-width highlights, and the EOL
+cluster being last with width 1. Tests in
+`internal/viewport/marker_test.go` cover wrap-row occupation,
+marker-only-line extent 1, max pan offset 0, reveal targeting,
+hidden-left/right clip exclusion, visible clip inclusion, pan
+clamping participation, and same-row wrap behavior. Tests in
+`internal/app/marker_indicator_test.go` cover hidden-left `*`,
+hidden-right `*`, visible no-indicator, terminator-only `*`, and
+marker-only-line always-visible behavior. Created
+[zero-width-match-markers](zero-width-match-markers.md); updated
+[index](index.md), [source-code](source-code.md) (internal/filebuffer
+entry), and [unit-tests](unit-tests.md) (marker_test.go entries for
+filebuffer and viewport, marker_indicator_test.go entry for app).
+Sources: `Notes/tasks/023-zero-width-match-markers.md`,
+`Notes/issues/023-zero-width-match-markers.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation),
+`internal/filebuffer/filebuffer.go`,
+`internal/filebuffer/marker_test.go`,
+`internal/viewport/marker_test.go`,
+`internal/app/marker_indicator_test.go`.
