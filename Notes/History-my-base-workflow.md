@@ -347,3 +347,12 @@ Agent messages: 37 messages
 Input tokens: 91925 tokens
 Output tokens: 29093 tokens
 Cached input tokens: 2500105 tokens
+
+----
+Critique issues from final audit again
+
+Usage
+Agent messages: 22 messages
+Input tokens: 108925 tokens
+Output tokens: 13670 tokens
+Cached input tokens: 1494931 tokens
