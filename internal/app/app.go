@@ -480,6 +480,10 @@ type config struct {
 	// (Issue #17). When nil, the search index's file groups are
 	// used. This is a test seam for the render-cost guard.
 	fileListProvider FileListProvider
+	// wrapMode is the initial wrap mode (Issue #19). The zero value
+	// is viewport.WrapOn (the production default). Tests may set this
+	// to viewport.WrapOff to verify horizontal reveal at startup.
+	wrapMode viewport.WrapMode
 }
 
 // RowProviderFactory builds a viewport.RowProvider from a loaded
@@ -614,6 +618,13 @@ func WithFileListProvider(p FileListProvider) Option {
 	return func(c *config) { c.fileListProvider = p }
 }
 
+// WithWrapMode sets the initial wrap mode (Issue #19). The production
+// default is WrapOn; tests use this to start in WrapOff and verify
+// horizontal reveal at startup.
+func WithWrapMode(mode viewport.WrapMode) Option {
+	return func(c *config) { c.wrapMode = mode }
+}
+
 // New creates a new app model for a search invocation. The model starts
 // in the searching state.
 func New(childArgs []string, workdir string, opts ...Option) Model {
@@ -644,6 +655,7 @@ func New(childArgs []string, workdir string, opts ...Option) Model {
 		layoutCache:        make(map[string]*viewport.RowModel),
 		loadCancel:         make(chan struct{}),
 		popupDuration:      cfg.popupDuration,
+		wrapMode:           cfg.wrapMode,
 	}
 }
 
@@ -1229,6 +1241,12 @@ func (m Model) handlePanKey(msg tea.KeyPressMsg) bool {
 // is already visible, the viewport does not scroll and the saved
 // per-file state is left unchanged. If the reveal moves the viewport,
 // the new offset replaces the saved per-file state.
+//
+// Issue #19: in run-off-edge mode, a horizontal reveal adjusts the
+// horizontal offset so the target cell is painted. The target cell is
+// derived from the line's ByteCells (raw byte offset → display cell),
+// and the cluster width is derived from the line's grapheme clusters.
+// The horizontal reveal is a no-op in wrap mode.
 func (m *Model) revealTarget() {
 	if m.viewport == nil || m.cursor == nil {
 		return
@@ -1244,6 +1262,24 @@ func (m *Model) revealTarget() {
 	// state; a no-scroll reveal does not discard it.
 	if m.viewport.Offset() != before {
 		m.saveOffset()
+	}
+	// Issue #19: horizontal reveal in run-off-edge mode. The display
+	// target is the start cell of the first submatch on the
+	// destination line. The target cell is derived from the line's
+	// ByteCells (raw byte → display cell), and the cluster width is
+	// derived from the line's grapheme clusters at that cell. The
+	// vertical reveal runs first so the target row is visible and
+	// the horizontal clamp uses the correct visible rows.
+	if m.wrapMode == viewport.WrapOff && m.buffer != nil && len(stop.Submatches) > 0 {
+		lineIdx := stop.LineNumber - 1
+		if lineIdx >= 0 && lineIdx < len(m.buffer.Lines) {
+			line := m.buffer.Lines[lineIdx]
+			sm := stop.Submatches[0]
+			if sm.Start >= 0 && sm.Start < len(line.ByteCells) {
+				targetCell := line.ByteCells[sm.Start][0]
+				m.viewport.RevealHorizontal(line, targetCell)
+			}
+		}
 	}
 }
 

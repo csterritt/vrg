@@ -998,6 +998,37 @@ replay-ordering assertions:
 - `TestExtentEvaluationTouchesOnlyVisibleRows` / `TestClampOnPanTouchesOnlyVisibleRows`
   — extent computation and clamping query only the visible row range.
 
+`reveal_horizontal_test.go` (Issue #19, external package
+`viewport_test`):
+
+- `TestRevealHorizontalRightSideSingleCell` — a single-cell target
+  right of view moves to `target - (textWidth - 1)` (right edge).
+- `TestRevealHorizontalLeftSide` — a target left of view moves to
+  `target` (left edge).
+- `TestRevealHorizontalTwoCellClusterRight` — a two-cell cluster
+  right of view moves to `target + 2 - textWidth` (right edge, full
+  cluster fits).
+- `TestRevealHorizontalPaintedCellSplitRightEdge` — a target split by
+  the right edge (rendered as blanks) is hidden and revealed.
+- `TestRevealHorizontalPaintedCellSplitLeftEdge` — a target split by
+  the left edge (rendered as blanks) is hidden and revealed.
+- `TestRevealHorizontalAlreadyPaintedNoMove` — an already-painted
+  single-cell target does not move.
+- `TestRevealHorizontalTwoCellAlreadyPaintedNoMove` — an
+  already-painted two-cell cluster does not move.
+- `TestRevealHorizontalOversizedMatchStartCell` — a match wider than
+  the text area is revealed by its start cell alone (cluster width 1).
+- `TestRevealHorizontalUnpaintableCluster` — a cluster wider than the
+  text area uses the geometric fallback (offset = target).
+- `TestRevealHorizontalUnpaintableClusterNoLoop` — repeated
+  navigation to an unpaintable cluster is idempotent (no panning
+  loop).
+- `TestRevealHorizontalNoOpInWrapMode` — horizontal reveal is a
+  no-op in wrap mode.
+- `TestClusterWidthAtCell` — `ClusterWidthAtCell` returns the
+  correct width for ASCII and CJK clusters, with a 1-cell fallback
+  for out-of-range cells.
+
 `pan_test.go` (Issue #18, external package `app_test`):
 
 - `TestPanRightOneColumn` / `TestPanLeftOneColumn` — `.`/`,` pan one
@@ -1016,3 +1047,26 @@ replay-ordering assertions:
 - `TestSplitClusterBlankRender` — a half-clipped CJK glyph renders
   blank rather than a broken glyph.
 - `TestPanAtMaxNoOp` — panning past the maximum does nothing.
+
+`reveal_horizontal_test.go` (Issue #19, external package `app_test`):
+
+- `TestStartupHorizontalRevealRunOffEdge` — the startup reveal
+  includes horizontal reveal in run-off-edge mode (right-edge
+  arithmetic).
+- `TestStartupHorizontalRevealWrapModeNoOp` — the startup horizontal
+  reveal is a no-op in wrap mode (offset stays zero).
+- `TestSameFileNavigationHorizontalReveal` — `n` within the same
+  file triggers a horizontal reveal (right-edge for a far match).
+- `TestSameFileNavigationHorizontalRevealBack` — `p` within the
+  same file triggers a horizontal reveal (left-edge for a left-of-view
+  match).
+- `TestSameFileNavigationHorizontalVisibleNoMove` — `n` to an
+  already-painted target does not move the horizontal offset.
+- `TestEveryNavigationTriggersHorizontalReveal` — every `n`/`p`
+  action triggers a horizontal reveal (right-edge and left-edge
+  cases across three matches).
+- `TestFileChangeResetThenHorizontalReveal` — cross-file navigation
+  resets the offset to zero and then applies the horizontal reveal.
+- `TestFileChangeResetOrdering` — the reset runs before the reveal,
+  so a far match in the first file does not carry over to the second
+  file's near match.

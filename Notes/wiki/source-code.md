@@ -256,7 +256,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `SetLayout` when the factory test seam is in use; `renderContentPanel`
   calls `Viewport.ClipLine` on each visible row before
   `renderLineWithHighlights`; `ViewportHOffset()` exposes the offset.
-  See
+  Issue #19 added horizontal reveal triggers: `revealTarget` now calls
+  `Viewport.RevealHorizontal` after the vertical reveal in run-off-edge
+  mode, deriving the target cell from `line.ByteCells[sm.Start][0]` and
+  the cluster width from `ClusterWidthAtCell`; `WithWrapMode` option
+  and `wrapMode` config field for starting in run-off-edge mode in
+  tests. See
   [search-collection-path](search-collection-path.md),
   [browse-tracer](browse-tracer.md),
   [outcome-contract](outcome-contract.md),
@@ -265,7 +270,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [destination-reveal](destination-reveal.md),
   [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
   [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md),
-  and [horizontal-panning](horizontal-panning.md).
+  [horizontal-panning](horizontal-panning.md),
+  and [horizontal-reveal](horizontal-reveal.md).
 
 ## internal/safepresentation
 
@@ -382,13 +388,22 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `clipLineToWindow`, and `clipHighlights` helpers; and
   `clampHOffset()` calls in `SetAnchor`/`SetOffset`/`SetPanelHeight`/
   `SetRows`/`Reveal`/all scroll methods for visible-set re-clamping.
-  See
+  Issue #19 added minimal horizontal reveal:
+  `ClusterWidthAtCell(clusters, cell)` returns the terminal cell width
+  of the grapheme cluster at a display cell (1 fallback);
+  `RevealHorizontal(line, targetCell)` adjusts the offset so the
+  target cluster is painted — no-op in wrap mode, no-op when already
+  painted (fully within the window, not split), right-edge arithmetic
+  for right-side reveal (`offset = target + clusterWidth - textWidth`),
+  left-edge for left-side (`offset = target`), geometric fallback for
+  unpaintable clusters (offset = target, no clamp, idempotent). See
   [manual-vertical-scrolling](manual-vertical-scrolling.md),
   [browse-tracer](browse-tracer.md),
   [destination-reveal](destination-reveal.md),
   [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
   [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md),
-  and [horizontal-panning](horizontal-panning.md).
+  [horizontal-panning](horizontal-panning.md),
+  and [horizontal-reveal](horizontal-reveal.md).
 
 ## internal/theme
 

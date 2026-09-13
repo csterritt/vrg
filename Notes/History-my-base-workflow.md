@@ -158,3 +158,12 @@ Usage
  Input tokens: 200861 tokens
  Output tokens: 69490 tokens
  Cached input tokens: 19512192 tokens
+
+----
+Task 019-minimal-horizontal-reveal.md
+
+Usage
+ Agent messages: 163 messages
+ Input tokens: 442364 tokens
+ Output tokens: 87120 tokens
+ Cached input tokens: 20202368 tokens

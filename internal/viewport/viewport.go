@@ -778,6 +778,77 @@ func (v *Viewport) Reveal(targetRow int) {
 	v.clampHOffset()
 }
 
+// ClusterWidthAtCell returns the terminal cell width of the grapheme
+// cluster at the given display cell, or 1 if no cluster covers the
+// cell (Issue #19). Callers use this to derive the target cluster
+// width for horizontal reveal arithmetic.
+func ClusterWidthAtCell(clusters []filebuffer.Cluster, cell int) int {
+	pos := 0
+	for _, c := range clusters {
+		if cell >= pos && cell < pos+c.Width {
+			return c.Width
+		}
+		pos += c.Width
+	}
+	return 1
+}
+
+// RevealHorizontal adjusts the horizontal offset so the target cell
+// (at the given display column within the given line) is painted
+// (Issue #19). The cluster width is derived from the line's grapheme
+// clusters at the target cell. In wrap mode this is a no-op. An
+// already-painted target (fully within the window, not split by either
+// clip edge) does not move the offset.
+//
+// Right-side reveal uses right-edge arithmetic so the entire target
+// cluster fits at the right edge: offset = target + clusterWidth -
+// textWidth. Left-side reveal places the target start at the left
+// edge: offset = target. A cluster wider than the text area
+// (unpaintable) uses the geometric fallback: the offset is set to the
+// target start column, the in-window portion renders as clipping
+// blanks, and the target is treated as geometrically revealed to
+// avoid panning loops on repeated navigation.
+func (v *Viewport) RevealHorizontal(line filebuffer.Line, targetCell int) {
+	if v.wrapMode == WrapOn || v.textWidth < 1 {
+		return
+	}
+	clusterWidth := ClusterWidthAtCell(line.Clusters, targetCell)
+	if clusterWidth < 1 {
+		clusterWidth = 1
+	}
+	// Unpaintable cluster: wider than the text area. Set the offset
+	// to the target start column (geometric fallback). The in-window
+	// portion renders as clipping blanks. Repeated navigation is
+	// idempotent: offset == targetCell means geometrically revealed,
+	// so no panning loop. The offset is not clamped here because the
+	// paintable-boundary maximum is zero for an unpaintable cluster
+	// and would undo the geometric position.
+	if clusterWidth > v.textWidth {
+		if v.hOffset != targetCell {
+			v.hOffset = targetCell
+		}
+		return
+	}
+	// Painted-cell visibility: the target cluster is painted when
+	// fully within [hOffset, hOffset+textWidth). A cluster split by
+	// either clip edge renders as blanks and is not painted, so it
+	// must be revealed.
+	windowEnd := v.hOffset + v.textWidth
+	if targetCell >= v.hOffset && targetCell+clusterWidth <= windowEnd {
+		return
+	}
+	if targetCell < v.hOffset {
+		// Left of view (or split by the left edge): reveal the
+		// target start at the left edge.
+		v.hOffset = targetCell
+	} else {
+		// Right of view (or split by the right edge): right-edge
+		// arithmetic so the entire cluster fits at the right edge.
+		v.hOffset = targetCell + clusterWidth - v.textWidth
+	}
+	v.clampHOffset()
+}
+
 // Visible returns the visible rows from the row provider. Only the
 // [offset, offset+contentHeight) range is queried, not the full buffer.
 // If the file is shorter than the viewport, the returned slice is

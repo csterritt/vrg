@@ -616,3 +616,32 @@ app entries). Sources:
 Layout and indicators), `internal/viewport/viewport.go`,
 `internal/viewport/pan_test.go`, `internal/app/app.go`,
 `internal/app/pan_test.go`.
+
+## [2026-09-12] ingest | Issue #19 minimal horizontal reveal
+
+Ingested the completed Issue #19 implementation: minimal horizontal
+reveal of the first-submatch start cell in run-off-edge mode. The
+viewport `RevealHorizontal(line, targetCell)` adjusts the horizontal
+offset so the target's grapheme cluster is painted — no-op in wrap
+mode, no-op when already painted (fully within the window, not split
+by either clip edge), right-edge arithmetic for right-side reveal
+(`offset = target + clusterWidth - textWidth`), left-edge for
+left-side (`offset = target`), geometric fallback for unpaintable
+clusters (offset = target, no clamp, idempotent to avoid panning
+loops). `ClusterWidthAtCell(clusters, cell)` derives the target
+cluster width. The app's `revealTarget` calls `RevealHorizontal`
+after the vertical reveal in run-off-edge mode, deriving the target
+cell from `line.ByteCells[sm.Start][0]`. The reveal triggers on
+startup after the initial file loads and on every actual
+match-navigation transition, after the new viewport/layout is
+installed and after the Issue #18 file-change horizontal reset.
+`WithWrapMode` option starts the app in run-off-edge mode for tests.
+Created [horizontal-reveal](horizontal-reveal.md); updated
+[index](index.md), [source-code](source-code.md) (viewport and app
+entries), and [unit-tests](unit-tests.md) (reveal_horizontal_test.go
+viewport and app entries). Sources:
+`Notes/tasks/019-minimal-horizontal-reveal.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors),
+`internal/viewport/viewport.go`,
+`internal/viewport/reveal_horizontal_test.go`,
+`internal/app/app.go`, `internal/app/reveal_horizontal_test.go`.

@@ -93,6 +93,14 @@ Catalog of all wiki pages for the vrg project.
   destructive clamping, retention through wrap toggles with re-entry
   clamping, reset on file change, grapheme-safe blank-cell clipping,
   and the visible-row render-cost guard
+- [horizontal-reveal.md](horizontal-reveal.md) — Issue #19: minimal
+  horizontal reveal of the first-submatch start cell in run-off-edge
+  mode; painted-cell visibility (split clusters are not painted);
+  minimum movement (right-edge arithmetic for right-side, left-edge
+  for left-side); unpaintable cluster geometric fallback with no
+  panning loop; oversized matches reveal only the start cell; startup
+  and navigation triggers through `revealTarget`; file-change reset
+  ordering before reveal; `WithWrapMode` test seam
 
 ## Catalogs
 
