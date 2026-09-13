@@ -1,0 +1,227 @@
+# Browse tracer (Issue #5)
+
+The two-pane browse view delivered by
+[Issue #5](../issues/005-browse-tracer-file-list-and-file-panel.md):
+after a completed search with results, the app enters a browse state
+showing an ordered file list on the left and the current file's content
+on the right with matches highlighted in inverse video. Relevant PRD
+sections: *File list and layout*, *Text, graphemes, and safe
+presentation*, *Module Design → FileBuffer / Viewport / Theme / App*,
+and *Outcome and exit-status contract*.
+
+## Safe-presentation core
+
+`internal/safepresentation` is the focused safe-presentation source
+Issue #5 lands ahead of the first arbitrary-data render. Issue #6 will
+unify it with the Issue #1 `cli.Escape` escaper into the shared
+all-sink utility.
+
+### Path escaping
+
+`EscapePath(raw []byte) PathDisplay` escapes raw path bytes for safe
+single-line display:
+
+- `\n`, `\r`, `\t` → `\n`, `\r`, `\t` (backslash escapes)
+- literal `\` → `\\`
+- invalid UTF-8 bytes → `\xNN`
+- other C0 controls → caret notation (`^X`)
+- DEL (0x7f) → `^?`
+- C1 controls (U+0080–U+009F) → `\u00XX`
+- valid printable Unicode → preserved
+
+`PathDisplay.ByteCells[i]` records the `[start, end)` display cell
+range occupied by original byte `i`, so highlight rendering can map
+byte ranges to cells. Displayed strings never become filesystem keys;
+callers retain original bytes for identity, ordering, and file access.
+
+### Content escaping
+
+`EscapeContent(raw []byte) ContentDisplay` escapes raw content bytes
+for safe display:
+
+- invalid UTF-8 → U+FFFD (one cell), raw-byte mapping retained
+- C0 controls and DEL → caret notation (`^[` for ESC, `^?` for DEL)
+- C1 controls → `\u00XX`-style escapes
+- LF and CRLF → line terminators, never displayed; bytes map to
+  end-of-line position
+- standalone CR (not followed by LF) → `^M`
+- tab → single `→` placeholder cell (provisional pending Issue #16's
+  eight-column-stop expansion)
+- valid printable Unicode → preserved
+
+`ContentDisplay.ByteCells[i]` records the `[start, end)` display cell
+range for each original byte. A match covering an ESC byte highlights
+both cells of `^[`.
+
+## FileBuffer
+
+`internal/filebuffer/filebuffer.go` loads, decodes, and maps a file's
+bytes into a display-ready `Buffer`:
+
+- `Buffer` — `Lines []Line`, `LineCount int`, `GutterWidth int`.
+- `Line` — `Number` (1-based source line), `Display` (escaped text),
+  `ByteCells` (per-byte cell ranges), `Highlights` (display cell ranges
+  for inverse video).
+- `Load(path, stops)` — reads the file at the raw path, splits it into
+  lines (LF and CRLF are terminators; standalone CR is content), escapes
+  each line through `safepresentation.EscapeContent`, and maps
+  `Stop.Submatches` to display cell ranges via the byte→cell map.
+- `gutterWidth(lineCount)` — digit count of the largest line number
+  plus two spaces, minimum one digit.
+
+The completion message carries a fully prepared buffer so `Update` does
+no full-file work. Line splitting recognizes LF and CRLF as terminators;
+a trailing terminator does not produce an extra empty line. A
+standalone CR is content, not a terminator.
+
+## Viewport
+
+`internal/viewport/viewport.go` is a minimal seam: a `Viewport` with
+`Lines`, `Height`, and `Offset` (always 0 for Issue #5). `Visible()`
+returns the lines at the current offset. Later issues add scrolling,
+cursor tracking, and reveal-on-match.
+
+## Theme
+
+`internal/theme/theme.go` holds the visual style configuration:
+
+- `New()` — default theme with styling enabled.
+- `NoStyle()` — disables all ANSI sequences for sink-safety testing.
+- `Underline(s)` — wraps `s` in the ANSI underline sequence
+  (`\x1b[4m…\x1b[0m`); no-op with the no-style theme.
+- `Reverse(s)` — wraps `s` in the ANSI inverse-video sequence
+  (`\x1b[7m…\x1b[0m`); no-op with the no-style theme.
+
+The no-style theme produces no ANSI escape sequences, so any control
+byte in the output must come from unsanitized external data. This is the
+sink-safety testing path.
+
+## App browse composition
+
+`internal/app/app.go` extends the Issue #3/#4 model with the browse
+state:
+
+### New state and messages
+
+- `StateBrowse` — the two-pane browse state, entered after a completed
+  search with results.
+- `SearchCompleteMsg` — now carries `Index *searchindex.Index` in
+  addition to `Files` and `Lines`. A non-nil index with files > 0
+  transitions to `StateBrowse`; otherwise the backward-compatible
+  `StateSummary` path is used.
+- `FileLoadCompleteMsg` — carries the fully prepared `*filebuffer.Buffer`
+  and the raw path. `Update` stores the buffer and clears the loading
+  flag. Late completions after cancellation are ignored.
+
+### New options
+
+- `WithTheme(theme.Theme)` — injects the visual theme.
+- `WithFileLoader(FileLoader)` — injects a file-loading function (test
+  seam).
+- `WithFileLoadGate(chan struct{})` — holds file loading until the
+  channel is closed or receives (test seam for responsiveness).
+
+`FileLoader` is `func(path []byte, stops []searchindex.Stop)
+(*filebuffer.Buffer, error)`. The default loader is
+`filebuffer.Load`.
+
+### Browse model fields
+
+- `index *searchindex.Index` — the prepared navigation index.
+- `browseIdx int` — the current file index (0 for Issue #5).
+- `buffer *filebuffer.Buffer` — the loaded content for the current
+  file.
+- `loading bool` — true while the file load is pending.
+- `theme theme.Theme` — the visual theme.
+- `fileLoader FileLoader` — the injected or default loader.
+- `fileGate chan struct{}` — the file-load gate.
+- `loadCancel chan struct{}` — cancellation channel for the file load.
+
+### Update flow
+
+On `SearchCompleteMsg` with a non-nil index and files > 0:
+
+1. Transitions to `StateBrowse`, stores the index, sets `browseIdx = 0`,
+   sets `loading = true`.
+2. Returns `m.loadFile()` — a `tea.Cmd` that asynchronously loads the
+   current file.
+
+`loadFile`:
+
+1. Gets the current file's raw path and stops from the index.
+2. Waits at the file gate if set (cancellable via `loadCancel`).
+3. Calls the file loader (injected or `filebuffer.Load`).
+4. Returns a `FileLoadCompleteMsg` with the prepared buffer.
+
+On `FileLoadCompleteMsg`:
+
+1. If cancelled, ignores the message (late-load rejection).
+2. Stores the buffer and clears `loading`.
+
+Key handling in browse state:
+
+- `q` — exits with code 0 through the Issue #4 cleanup path (cancels
+  process and load, quits).
+- `ctrl+c` — exits with code 130 through the Issue #4 cancellation path.
+- Other keys and resize — handled without blocking, even while a load
+  is pending.
+
+### Rendering
+
+`View` renders `StateBrowse` via `renderBrowse`:
+
+- **File list (left pane)** — each file's raw path escaped through
+  `safepresentation.EscapePath`, in raw-path order (the index's
+  unsigned byte ordering). The current file is underlined via
+  `theme.Underline`. A simple fixed/heuristic width is used (Issue #24
+  owns the real formula).
+- **Content panel (right pane)** — the escaped filename embedded in a
+  horizontal rule (`── name ──`), followed by content rows or
+  `Loading…` while the buffer is unavailable.
+- **Gutter** — right-justified line number padded to the digit count of
+  the largest line number, followed by two spaces.
+- **Highlights** — matched spans rendered in inverse video via
+  `theme.Reverse`, applied over the escaped display text using the
+  byte→cell maps from the safe-presentation core.
+- **No borders** — no box-drawing border characters around the panel.
+- **Layout** — file-list lines padded to the list width, then joined
+  with the corresponding content-panel lines.
+
+`renderLineWithHighlights` re-escapes the display text through
+`safepresentation.EscapeContent`, then applies `theme.Reverse` to each
+highlight cell range. With the no-style theme, no ANSI sequences are
+produced.
+
+### Cancellation and cleanup
+
+Browse `q` and `ctrl+c` both route through the Issue #4 cleanup path:
+
+- `cancelLoad()` closes `loadCancel`, releasing the file-load goroutine
+  from the gate.
+- `cancelProcess()` closes the process cancel channel.
+- The process boundary kills the child process group and calls
+  `proc.Cleanup()`.
+- Late `FileLoadCompleteMsg` and `SearchCompleteMsg` are ignored by the
+  cancelled model.
+
+## Sink-safety method
+
+The hostile-fixture raw-output tests exercise the real composition path
+through a no-style theme (`theme.NoStyle()`), which disables all ANSI
+sequences. The raw output is checked before any ANSI stripping: no
+fixture control byte may survive verbatim in the file list, filename
+rule, or panel content.
+
+Fixtures cover: OSC (`\x1b]0;x\x07`), CSI (`\x1b[2J`), C0 controls
+(BEL, BS, ESC), C1 (NEL `\xc2\x85`), DEL, standalone CR, invalid UTF-8
+path bytes, embedded filename newline, embedded tab, and literal
+backslash. Content fixtures add LF, CRLF, and tab.
+
+The `noControlBytes` assertion excludes newlines (which come from the
+multi-line layout, not fixtures) but rejects all other C0 controls and
+DEL.
+
+## Testing
+
+See [unit-tests](unit-tests.md) for the safe-presentation, FileBuffer,
+app browse, and sink-safety test catalogs.

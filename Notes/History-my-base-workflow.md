@@ -32,3 +32,12 @@ Usage
  Input tokens: 178701 tokens
  Output tokens: 61384 tokens
  Cached input tokens: 15601920 tokens
+
+----
+Task 005-browse-tracer-file-list-and-file-panel.md
+
+Usage
+ Agent messages: 119 messages
+ Input tokens: 204245 tokens
+ Output tokens: 143182 tokens
+ Cached input tokens: 12476544 tokens

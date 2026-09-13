@@ -80,6 +80,34 @@ table, parser config, and generated help cannot drift.
   line terminator retention, reusable builders, copy semantics from
   `Stops()`.
 
+## internal/safepresentation
+
+`safepresentation_test.go` (external package `safepresentation_test`):
+
+- Path escaping: `\n`/`\r`/`\t` → backslash escapes, `\\` → `\\\\`,
+  invalid UTF-8 → `\xNN`, C0 controls → caret notation, DEL → `^?`,
+  C1 controls → `\u00XX`, valid printable Unicode preserved.
+- Content escaping: invalid UTF-8 → U+FFFD with raw-byte mapping
+  retained, C0/DEL → caret notation (`^[` for ESC), C1 → `\u00XX`,
+  LF/CRLF → terminators (never displayed), standalone CR → `^M`,
+  tab → `→` (single cell, no specific cell position assertions).
+- Byte→cell mappings: escaped forms expose cell ranges so a match
+  covering an ESC byte highlights both `^` and `[`.
+- CSI input `\x1b[2J` displays as `^[[2J` (ESC → `^[`, literal `[`
+  preserved).
+
+## internal/filebuffer
+
+`filebuffer_test.go` (external package `filebuffer_test`):
+
+- Line counts, final-newline behavior, CRLF handling.
+- Gutter width (digit count of largest line number + two spaces,
+  minimum one digit).
+- Highlight spans from `Stop.Submatches` mapped to display cells.
+- Highlighting escaped ESC byte covers both cells of `^[`.
+- Invalid UTF-8 and control bytes safely escaped in display.
+- Nonexistent files return an error.
+
 ## internal/app
 
 `app_test.go` (external package `app_test`):
@@ -100,6 +128,42 @@ table, parser config, and generated help cannot drift.
   `SearchCompleteMsg` after `ctrl+c` does not revive the UI.
 - Issue #4: `TestQDuringGateHeldExits130` — `q` while gate-held
   preparation is cancellation (130), not a browse quit.
+
+`browse_test.go` (Issue #5, external package `app_test`):
+
+- `TestBrowseViewAfterCompletion` — `SearchCompleteMsg` with an `Index`
+  transitions to `StateBrowse` and shows a file list.
+- `TestBrowseLoadingPlaceholder` — panel shows `Loading…` until the file
+  load completes.
+- `TestBrowseKeyHandledWhileLoading` — a key message while loading is
+  handled without quitting or blocking.
+- `TestBrowseResizeHandledWhileLoading` — a resize message while loading
+  is handled.
+- `TestBrowseCtrlCExits130` — `ctrl+c` while loading exits 130 through
+  the Issue #4 cancellation path.
+- `TestBrowseQExitsZero` — `q` in browse state exits 0.
+- `TestBrowseFileLoadComplete` — `FileLoadCompleteMsg` replaces the
+  loading placeholder with content.
+- `TestBrowseLateLoadIgnoredAfterCancel` — a late `FileLoadCompleteMsg`
+  after cancellation does not revive the UI.
+- `TestBrowseFileListOrder` — file list is in raw-path order.
+- `TestBrowseCurrentFileUnderlined` — current file is underlined.
+- `TestBrowseFilenameRule` — filename is embedded in a horizontal rule.
+- `TestBrowseGutterFormat` — gutter is right-justified with two
+  trailing spaces.
+- `TestBrowseGutterRightJustified` — gutter is right-justified across
+  different digit counts.
+- `TestBrowseNoBorders` — no box-drawing border characters around the
+  panel.
+- `TestBrowseInverseVideo` — matched spans rendered with inverse video.
+- `TestBrowseInverseVideoCoversEscapedForm` — highlight over an ESC
+  byte covers both cells of `^[`.
+- Sink-safety tests (`TestSinkSafetyFileList`,
+  `TestSinkSafetyFilenameRule`, `TestSinkSafetyPanelContent`,
+  `TestSinkSafetyAllSinksHostile`) — hostile fixtures (OSC, CSI, C0, C1,
+  DEL, standalone CR, invalid UTF-8, embedded newline/tab, backslash)
+  driven through the real composition path via a no-style theme,
+  asserting no fixture control byte survives verbatim in raw output.
 
 ## cmd/vrg (subprocess boundary)
 

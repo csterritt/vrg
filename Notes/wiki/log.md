@@ -79,3 +79,27 @@ precedence, Cleanup, Terminal restoration, Subprocess-boundary
 testing, Responsiveness boundaries), `cmd/vrg/main.go`,
 `cmd/vrg/cancel_test.go`, `internal/app/app.go`,
 `internal/app/app_test.go`.
+
+## [2026-09-11] ingest | Issue #5 browse tracer
+
+Ingested the completed Issue #5 implementation: the two-pane browse
+view (file list on the left, content panel on the right with
+inverse-video highlights), the safe-presentation core for paths and
+content with byte→cell mappings, async file loading with a
+`Loading…` placeholder and prepared buffers delivered off the update
+path, the filename rule, right-justified gutter, no borders, browse
+`q` exit 0 and `ctrl+c` exit 130 through the Issue #4 cleanup path,
+late-load rejection after cancellation, responsive key/resize while
+loading, and the hostile-fixture sink-safety method via a no-style
+composition path. Created [browse-tracer](browse-tracer.md); updated
+source-code, unit-tests, and index. Sources:
+`Notes/tasks/005-browse-tracer-file-list-and-file-panel.md`,
+`Notes/issues/005-browse-tracer-file-list-and-file-panel.md`,
+`Notes/PRD-vrg.md` (File list and layout, Text, graphemes, and safe
+presentation, Module Design → FileBuffer / Viewport / Theme / App),
+`internal/safepresentation/safepresentation.go`,
+`internal/safepresentation/safepresentation_test.go`,
+`internal/filebuffer/filebuffer.go`,
+`internal/filebuffer/filebuffer_test.go`,
+`internal/viewport/viewport.go`, `internal/theme/theme.go`,
+`internal/app/app.go`, `internal/app/browse_test.go`.

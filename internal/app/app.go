@@ -11,10 +11,14 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
+	"vrg/internal/filebuffer"
+	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
+	"vrg/internal/theme"
 )
 
 // State identifies the current app state.
@@ -25,8 +29,13 @@ const (
 	// are being collected and indexed.
 	StateSearching State = iota
 	// StateSummary is the interim summary state shown after collection
-	// completes.
+	// completes without a browse index (backward-compatible path or no
+	// results).
 	StateSummary
+	// StateBrowse is the two-pane browse state shown after a completed
+	// search with results: a file list on the left and a matched-file
+	// content panel on the right.
+	StateBrowse
 	// StateStartFailed is the state when rg could not be started. The
 	// entry point should print the diagnostic to stderr and exit 2.
 	StateStartFailed
@@ -106,6 +115,12 @@ func (p *Process) Cleanup() {
 	}
 }
 
+// FileLoader loads a file's bytes into a prepared buffer. The path is
+// the raw path bytes from the search index; the stops are the matched
+// lines for this file. The returned buffer is fully decoded and mapped
+// so the caller's Update does no full-file work.
+type FileLoader func(path []byte, stops []searchindex.Stop) (*filebuffer.Buffer, error)
+
 // Model is the Bubble Tea model for the vrg app.
 type Model struct {
 	state      State
@@ -122,12 +137,25 @@ type Model struct {
 	process   *Process
 	gate      chan struct{}
 	failSig   <-chan string
+
+	// Browse state.
+	index      *searchindex.Index
+	browseIdx  int
+	buffer     *filebuffer.Buffer
+	loading    bool
+	theme      theme.Theme
+	fileLoader FileLoader
+	fileGate   chan struct{}
+	loadCancel chan struct{}
 }
 
 type config struct {
 	gate       chan struct{}
 	process    *Process
 	failSignal <-chan string
+	theme      theme.Theme
+	fileLoader FileLoader
+	fileGate   chan struct{}
 }
 
 // Option configures the model.
@@ -156,6 +184,26 @@ func WithFailureSignal(ch <-chan string) Option {
 	return func(c *config) { c.failSignal = ch }
 }
 
+// WithTheme sets the visual theme for the browse view. The no-style
+// theme disables all ANSI sequences for sink-safety testing.
+func WithTheme(t theme.Theme) Option {
+	return func(c *config) { c.theme = t }
+}
+
+// WithFileLoader injects a file-loading function for the browse view.
+// This is a test seam for verifying responsiveness while a load is held
+// by a gate.
+func WithFileLoader(loader FileLoader) Option {
+	return func(c *config) { c.fileLoader = loader }
+}
+
+// WithFileLoadGate sets a channel that holds file loading until the
+// channel is closed or receives a value. This is a test seam for
+// verifying the browse view stays responsive while a load is pending.
+func WithFileLoadGate(ch chan struct{}) Option {
+	return func(c *config) { c.fileGate = ch }
+}
+
 // New creates a new app model for a search invocation. The model starts
 // in the searching state.
 func New(childArgs []string, workdir string, opts ...Option) Model {
@@ -164,12 +212,16 @@ func New(childArgs []string, workdir string, opts ...Option) Model {
 		opt(&cfg)
 	}
 	return Model{
-		state:     StateSearching,
-		childArgs: childArgs,
-		workdir:   workdir,
-		process:   cfg.process,
-		gate:      cfg.gate,
-		failSig:   cfg.failSignal,
+		state:      StateSearching,
+		childArgs:  childArgs,
+		workdir:    workdir,
+		process:    cfg.process,
+		gate:       cfg.gate,
+		failSig:    cfg.failSignal,
+		theme:      cfg.theme,
+		fileLoader: cfg.fileLoader,
+		fileGate:   cfg.fileGate,
+		loadCancel: make(chan struct{}),
 	}
 }
 
@@ -207,9 +259,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cancelled {
 			return m, nil
 		}
+		if msg.Index != nil && msg.Index.Files() > 0 {
+			m.state = StateBrowse
+			m.files = msg.Files
+			m.lines = msg.Lines
+			m.index = msg.Index
+			m.browseIdx = 0
+			m.loading = true
+			return m, m.loadFile()
+		}
 		m.state = StateSummary
 		m.files = msg.Files
 		m.lines = msg.Lines
+		return m, nil
+
+	case FileLoadCompleteMsg:
+		// Late file-load completions after cancellation must not revive
+		// the UI.
+		if m.cancelled {
+			return m, nil
+		}
+		if msg.Buffer != nil {
+			m.buffer = msg.Buffer
+		}
+		m.loading = false
 		return m, nil
 
 	case SearchFailedMsg:
@@ -224,6 +297,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.exitCode = 2
 		m.cancelled = true
 		m.cancelProcess()
+		m.cancelLoad()
 		return m, tea.Quit
 
 	case tea.KeyPressMsg:
@@ -236,6 +310,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.cancel()
 			case StateSummary:
 				m.exitCode = 0
+				return m, tea.Quit
+			case StateBrowse:
+				m.exitCode = 0
+				m.cancelled = true
+				m.cancelProcess()
+				m.cancelLoad()
 				return m, tea.Quit
 			}
 		case msg.Code == tea.KeyEscape:
@@ -261,16 +341,31 @@ func (m Model) View() tea.View {
 		v := tea.NewView(fmt.Sprintf("%d files, %d matched lines", m.files, m.lines))
 		v.AltScreen = true
 		return v
+	case StateBrowse:
+		v := tea.NewView(m.renderBrowse())
+		v.AltScreen = true
+		return v
 	default:
 		return tea.NewView("")
 	}
 }
 
 // SearchCompleteMsg signals that collection and index preparation are
-// done.
+// done. Index is nil for the backward-compatible summary path; non-nil
+// with results for the browse path.
 type SearchCompleteMsg struct {
 	Files int
 	Lines int
+	Index *searchindex.Index
+}
+
+// FileLoadCompleteMsg signals that an asynchronous file load has
+// finished. The Buffer is the fully prepared, decoded, and mapped
+// buffer; Update does no full-file work.
+type FileLoadCompleteMsg struct {
+	Path   []byte
+	Buffer *filebuffer.Buffer
+	Err    error
 }
 
 // SearchFailedMsg signals that rg could not be started.
@@ -294,6 +389,7 @@ func (m Model) cancel() (tea.Model, tea.Cmd) {
 	m.cancelled = true
 	m.exitCode = 130
 	m.cancelProcess()
+	m.cancelLoad()
 	return m, tea.Quit
 }
 
@@ -302,6 +398,19 @@ func (m Model) cancel() (tea.Model, tea.Cmd) {
 func (m Model) cancelProcess() {
 	if m.process != nil {
 		m.process.Cancel()
+	}
+}
+
+// cancelLoad signals the file-load goroutine to stop waiting at the
+// file gate. Safe to call when no load is pending.
+func (m Model) cancelLoad() {
+	if m.loadCancel != nil {
+		select {
+		case <-m.loadCancel:
+			// Already closed.
+		default:
+			close(m.loadCancel)
+		}
 	}
 }
 
@@ -315,6 +424,243 @@ func (m Model) watchFailure() tea.Cmd {
 		}
 		return ControlledFailureMsg{Diagnostic: diag}
 	}
+}
+
+// loadFile returns a command that asynchronously loads the current
+// browse file. The command waits at the file gate (if set), calls the
+// file loader, and returns a FileLoadCompleteMsg with the prepared
+// buffer. The load is cancellable via loadCancel.
+func (m Model) loadFile() tea.Cmd {
+	return func() tea.Msg {
+		if m.index == nil {
+			return FileLoadCompleteMsg{}
+		}
+		stops := m.index.Stops()
+		if len(stops) == 0 {
+			return FileLoadCompleteMsg{}
+		}
+		path := stops[0].RawPath
+		var fileStops []searchindex.Stop
+		for _, s := range stops {
+			if bytes.Equal(s.RawPath, path) {
+				fileStops = append(fileStops, s)
+			}
+		}
+
+		if m.fileGate != nil {
+			select {
+			case <-m.fileGate:
+			case <-m.loadCancel:
+				return nil
+			}
+		}
+
+		loader := m.fileLoader
+		if loader == nil {
+			loader = filebuffer.Load
+		}
+		buf, err := loader(path, fileStops)
+		if err != nil {
+			return FileLoadCompleteMsg{Path: path, Err: err}
+		}
+		return FileLoadCompleteMsg{Path: path, Buffer: buf}
+	}
+}
+
+// fileGroup is a set of stops for one file, identified by raw path.
+type fileGroup struct {
+	path  []byte
+	stops []searchindex.Stop
+}
+
+// groupByFile groups stops by raw path. The index returns stops
+// ordered by unsigned raw path bytes then line number, so stops for
+// the same file are contiguous.
+func groupByFile(stops []searchindex.Stop) []fileGroup {
+	var groups []fileGroup
+	for _, s := range stops {
+		if len(groups) == 0 || !bytes.Equal(groups[len(groups)-1].path, s.RawPath) {
+			groups = append(groups, fileGroup{path: s.RawPath, stops: []searchindex.Stop{s}})
+		} else {
+			groups[len(groups)-1].stops = append(groups[len(groups)-1].stops, s)
+		}
+	}
+	return groups
+}
+
+// renderBrowse renders the two-pane browse view: file list on the left,
+// content panel on the right.
+func (m Model) renderBrowse() string {
+	if m.index == nil || m.index.Files() == 0 {
+		return "No results"
+	}
+
+	groups := groupByFile(m.index.Stops())
+
+	// File list (left pane).
+	listWidth := fileListWidth(m.width)
+	var listLines []string
+	for i, g := range groups {
+		escaped := safepresentation.EscapePath(g.path)
+		entry := escaped.Text
+		if i == m.browseIdx {
+			entry = m.theme.Underline(entry)
+		}
+		listLines = append(listLines, entry)
+	}
+
+	// Content panel (right pane).
+	current := groups[m.browseIdx]
+	escapedName := safepresentation.EscapePath(current.path)
+	panel := m.renderContentPanel(escapedName.Text)
+
+	// Join horizontally: pad each file-list line to listWidth, then
+	// append the corresponding content-panel line.
+	panelLines := strings.Split(panel, "\n")
+	maxLines := len(listLines)
+	if len(panelLines) > maxLines {
+		maxLines = len(panelLines)
+	}
+	var b strings.Builder
+	for i := 0; i < maxLines; i++ {
+		var listEntry, panelLine string
+		if i < len(listLines) {
+			listEntry = listLines[i]
+		}
+		if i < len(panelLines) {
+			panelLine = panelLines[i]
+		}
+		// Pad list entry to listWidth.
+		if w := visibleWidth(listEntry); w < listWidth {
+			listEntry += strings.Repeat(" ", listWidth-w)
+		}
+		b.WriteString(listEntry)
+		b.WriteString(" ")
+		b.WriteString(panelLine)
+		if i < maxLines-1 {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+// renderContentPanel renders the right pane: filename rule followed by
+// content rows or the loading placeholder.
+func (m Model) renderContentPanel(escapedName string) string {
+	var b strings.Builder
+	b.WriteString(renderFilenameRule(escapedName))
+	b.WriteString("\n")
+	if m.loading || m.buffer == nil {
+		b.WriteString("Loading…")
+		return b.String()
+	}
+	for _, line := range m.buffer.Lines {
+		gw := m.buffer.GutterWidth - 2
+		if gw < 1 {
+			gw = 1
+		}
+		b.WriteString(fmt.Sprintf("%*d  ", gw, line.Number))
+		b.WriteString(renderLineWithHighlights(line, m.theme))
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// renderFilenameRule embeds the escaped filename in a horizontal rule.
+func renderFilenameRule(escapedName string) string {
+	return "── " + escapedName + " ──"
+}
+
+// renderLineWithHighlights escapes the display text through the
+// safe-presentation core and applies inverse video to highlighted
+// cell ranges. With the no-style theme, no ANSI sequences are produced.
+func renderLineWithHighlights(line filebuffer.Line, t theme.Theme) string {
+	escaped := safepresentation.EscapeContent([]byte(line.Display))
+	display := escaped.Text
+	if t.IsNoStyle() || len(line.Highlights) == 0 {
+		return display
+	}
+	cellCount := visibleWidth(display)
+	var b strings.Builder
+	bytePos := 0
+	cellPos := 0
+	for _, hl := range line.Highlights {
+		if hl[0] < cellPos {
+			continue
+		}
+		startCell := hl[0]
+		endCell := hl[1]
+		if startCell >= cellCount {
+			continue
+		}
+		if endCell > cellCount {
+			endCell = cellCount
+		}
+		startByte := cellToBytePos(display, startCell)
+		endByte := cellToBytePos(display, endCell)
+		if startByte > bytePos {
+			b.WriteString(display[bytePos:startByte])
+		}
+		if endByte > startByte {
+			b.WriteString(t.Reverse(display[startByte:endByte]))
+		}
+		bytePos = endByte
+		cellPos = endCell
+	}
+	if bytePos < len(display) {
+		b.WriteString(display[bytePos:])
+	}
+	return b.String()
+}
+
+// cellToBytePos converts a cell position to a byte position in a
+// display string. Each rune is one cell (first-pass mapping pending
+// Issue #16's width policy).
+func cellToBytePos(s string, cell int) int {
+	pos := 0
+	for i := 0; i < cell && pos < len(s); i++ {
+		_, size := utf8.DecodeRuneInString(s[pos:])
+		pos += size
+	}
+	return pos
+}
+
+// visibleWidth returns the number of visible cells in s, excluding
+// ANSI escape sequences. Each rune is one cell (first-pass mapping
+// pending Issue #16's width policy).
+func visibleWidth(s string) int {
+	var w int
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' {
+			// Skip ANSI escape sequence: \x1b[...m.
+			i++
+			for i < len(s) && s[i] != 'm' {
+				i++
+			}
+			if i < len(s) {
+				i++ // skip 'm'
+			}
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(s[i:])
+		w++
+		i += size
+	}
+	return w
+}
+
+// fileListWidth returns a simple fixed width for the file list. Issue
+// #24 owns the real formula.
+func fileListWidth(termWidth int) int {
+	const min = 20
+	if termWidth <= 80 {
+		return min
+	}
+	w := termWidth / 4
+	if w < min {
+		w = min
+	}
+	return w
 }
 
 // collectResults drains both pipes concurrently, parses stdout JSON
@@ -374,6 +720,7 @@ func (m Model) collectResults() tea.Cmd {
 		return SearchCompleteMsg{
 			Files: idx.Files(),
 			Lines: idx.Len(),
+			Index: idx,
 		}
 	}
 }

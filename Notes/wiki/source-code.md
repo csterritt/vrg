@@ -56,14 +56,53 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   returns a `SearchCompleteMsg`. `Update` handles completion, failure,
   controlled failure, key (q, Ctrl-C, escape), and resize. `View`
   renders the searching and summary screens with alt screen enabled.
-  See [search-collection-path](search-collection-path.md).
+  Issue #5 added `StateBrowse` with a two-pane browse view (file list +
+  content panel), `SearchCompleteMsg.Index`, `FileLoadCompleteMsg`,
+  `WithTheme`/`WithFileLoader`/`WithFileLoadGate` options, async file
+  loading off the update path, inverse-video highlights, the
+  safe-presentation core for all visible strings, and browse `q` exit 0
+  through the Issue #4 cleanup path. See
+  [search-collection-path](search-collection-path.md) and
+  [browse-tracer](browse-tracer.md).
 
-## Package boundaries awaiting their issues
+## internal/safepresentation
 
-Each is a documented empty package mirroring PRD Module Design:
+- `internal/safepresentation/safepresentation.go` — Issue #5: the
+  focused safe-presentation core for paths and content. `EscapePath`
+  escapes raw path bytes for safe single-line display (backslash
+  escapes for `\n`/`\r`/`\t`/`\\`, `\xNN` for invalid UTF-8, caret
+  notation for C0/DEL, `\u00XX` for C1, valid printable Unicode
+  preserved). `EscapeContent` escapes raw content bytes for safe display
+  (U+FFFD for invalid UTF-8, caret notation for C0/DEL, `\u00XX` for C1,
+  LF/CRLF as terminators, `^M` for standalone CR, `→` for tab). Both
+  expose `ByteCells` byte→cell mappings so highlight rendering can cover
+  all cells of an escaped form. Issue #6 will unify this with the
+  Issue #1 `cli.Escape` escaper. See
+  [browse-tracer](browse-tracer.md).
 
-- `internal/filebuffer` — per-file loading/classification into safe
-  display-ready lines and validated highlights.
-- `internal/viewport` — logical reading position and rendered-row
-  visibility.
-- `internal/theme` — active colour scheme and styles.
+## internal/filebuffer
+
+- `internal/filebuffer/filebuffer.go` — Issue #5: loads, decodes, and
+  maps a file's bytes into a display-ready `Buffer`. `Load(path, stops)`
+  reads the file, splits lines (LF/CRLF terminators, standalone CR is
+  content), escapes each line through `safepresentation.EscapeContent`,
+  and maps `Stop.Submatches` to display cell ranges via the byte→cell
+  map. `Buffer` carries `Lines`, `LineCount`, and `GutterWidth`. `Line`
+  carries `Number`, `Display`, `ByteCells`, and `Highlights`. The
+  completion message carries the fully prepared buffer so `Update` does
+  no full-file work. See [browse-tracer](browse-tracer.md).
+
+## internal/viewport
+
+- `internal/viewport/viewport.go` — Issue #5: minimal scrollable content
+  view seam. `Viewport` with `Lines`, `Height`, and `Offset` (always 0
+  for Issue #5). `Visible()` returns lines at the current offset. Later
+  issues add scrolling, cursor tracking, and reveal-on-match.
+
+## internal/theme
+
+- `internal/theme/theme.go` — Issue #5: visual style configuration.
+  `New()` returns a default theme; `NoStyle()` disables all ANSI
+  sequences for sink-safety testing. `Underline(s)` and `Reverse(s)`
+  wrap strings in ANSI sequences (no-op with no-style theme). See
+  [browse-tracer](browse-tracer.md).

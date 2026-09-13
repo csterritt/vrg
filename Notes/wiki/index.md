@@ -19,6 +19,10 @@ Catalog of all wiki pages for the vrg project.
   drainage, SearchIndex parsing, the searching/summary TUI lifecycle,
   cancellation, child termination/reaping, terminal restoration, and
   controlled-failure cleanup
+- [browse-tracer.md](browse-tracer.md) — Issue #5: two-pane browse view
+  with file list, filename rule, gutter, inverse-video highlights,
+  async file loading with "Loading…" placeholder, safe-presentation
+  core for paths and content, and hostile-fixture sink-safety method
 
 ## Catalogs
 
