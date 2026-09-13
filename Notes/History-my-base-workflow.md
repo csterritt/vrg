@@ -266,3 +266,12 @@ Usage
  Input tokens: 219870 tokens
  Output tokens: 61140 tokens
  Cached input tokens: 15766144 tokens
+
+----
+Task 031-help-overlay.md
+
+Usage
+ Agent messages: 114 messages
+ Input tokens: 277705 tokens
+ Output tokens: 41655 tokens
+ Cached input tokens: 11933952 tokens

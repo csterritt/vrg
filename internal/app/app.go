@@ -87,7 +87,82 @@ const (
 	OverlayError
 	// OverlayWarning is the non-fatal warning overlay (stderr on rg 0/1).
 	OverlayWarning
+	// OverlayHelp is the modal help overlay opened with h/? (Issue
+	// #31). It uses the same wrapped, scrollable overlay component as
+	// the error overlay with base colours and a plain single-line
+	// border. Closing returns to the underlying base state.
+	OverlayHelp
 )
+
+// KeyBinding is one row of the help overlay's binding table: a key or
+// key sequence and its description. The table is defined once as data
+// (Issue #31) so the help renderer and documentation tests (Issue #34)
+// consume a single source.
+type KeyBinding struct {
+	// Key is the key or key sequence shown in the help overlay (e.g.
+	// "n", "up/down", "ctrl+c").
+	Key string
+	// Description is the one-line description of what the key does.
+	Description string
+}
+
+// KeyBindings returns the single source of truth for the help overlay's
+// binding table (Issue #31). It covers navigation, scrolling, panning,
+// wrap, colour, list toggle, reload, help, and quit/cancel bindings.
+// The help renderer consumes this slice; Issue #34's documentation test
+// iterates it to verify every binding is documented.
+func KeyBindings() []KeyBinding {
+	return []KeyBinding{
+		{Key: "n", Description: "Next match"},
+		{Key: "p", Description: "Previous match"},
+		{Key: "up/down", Description: "Scroll one row"},
+		{Key: "u/d", Description: "Scroll half a page"},
+		{Key: "PgUp/PgDn", Description: "Scroll a full page"},
+		{Key: ",/.", Description: "Pan one column left/right"},
+		{Key: "</>", Description: "Pan ten columns left/right"},
+		{Key: "[/]", Description: "Pan half the text width"},
+		{Key: "w", Description: "Toggle wrap mode"},
+		{Key: "c", Description: "Toggle colour scheme"},
+		{Key: "left/right", Description: "Hide/show file list"},
+		{Key: "Tab/Shift+Tab", Description: "Hide/show file list"},
+		{Key: "r", Description: "Reload current file"},
+		{Key: "h/?", Description: "Open this help"},
+		{Key: "q", Description: "Quit"},
+		{Key: "ctrl+c", Description: "Cancel and exit 130"},
+		{Key: "Esc", Description: "Dismiss overlay"},
+	}
+}
+
+// HelpFooter returns the footer text displayed at the bottom of the help
+// overlay (Issue #31). The footer slot is reserved for Issue #34's
+// documentation scale and memory-limits text; it is currently empty so
+// the help renderer and documentation tests can consume it as a defined
+// API without depending on Issue #34's content.
+func HelpFooter() string {
+	return ""
+}
+
+// helpText builds the help overlay text from the single binding table
+// (KeyBindings) and the footer slot (HelpFooter). Each binding is
+// rendered as "key  description" on its own line. The footer, when
+// non-empty, is appended after a blank line. The result is routed
+// through the Issue #6 utility by the overlay renderer's sanitization
+// path when any substituted text is external; the binding table itself
+// is fixed app-authored text.
+func helpText() string {
+	var b strings.Builder
+	for _, binding := range KeyBindings() {
+		b.WriteString(binding.Key)
+		b.WriteString("  ")
+		b.WriteString(binding.Description)
+		b.WriteString("\n")
+	}
+	if footer := HelpFooter(); footer != "" {
+		b.WriteString("\n")
+		b.WriteString(footer)
+	}
+	return b.String()
+}
 
 // ProcessResult captures the ripgrep process exit outcome, kept separate
 // from stream integrity so the App can assess them independently.
@@ -1374,6 +1449,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.popupOpen {
 			m.dismissPopup()
 		}
+		// Issue #31: h/? open the modal help overlay from ordinary
+		// browsing and the no-results screen. Opening help cancels
+		// any active Issue #15 file-change pop-up with no return on
+		// close. While help is open, h/? close it (handled by
+		// handleOverlayKey above).
+		if (msg.Code == 'h' || msg.Code == '?') && msg.Mod == 0 {
+			if m.state == StateBrowse || m.state == StateNoResults {
+				return m.openHelp()
+			}
+		}
 		// Scroll keys are active in the browse state when content is
 		// loaded. Scrolling a "Loading…" placeholder is a no-op
 		// (Issue #12). Manual scrolling does not move the matched-line
@@ -2050,6 +2135,24 @@ func (m *Model) openReadFailureOverlay(diag string) {
 	m.cancelPopup()
 }
 
+// openHelp opens the modal help overlay (Issue #31). The help overlay
+// uses the same wrapped, scrollable overlay component as the error
+// overlay with base colours and a plain single-line border. The help
+// text is built from the single binding table (KeyBindings) and the
+// footer slot (HelpFooter). Opening help cancels any active Issue #15
+// file-change pop-up with no return on close. The help overlay is
+// non-fatal: closing (q/Esc/h/?) returns to the underlying base state.
+func (m Model) openHelp() (tea.Model, tea.Cmd) {
+	m.overlay = OverlayHelp
+	m.overlayOpen = true
+	m.overlayText = helpText()
+	m.overlayFatal = false
+	m.overlayScroll = 0
+	m.overlayReadFailure = false
+	m.cancelPopup()
+	return m, nil
+}
+
 // handleOverlayKey routes a key press to the open overlay. up/down
 // scroll; q and Esc dismiss (or exit 2 for a fatal no-results overlay);
 // ctrl+c is handled before this is reached; other keys are ignored.
@@ -2057,6 +2160,8 @@ func (m *Model) openReadFailureOverlay(diag string) {
 // can retry a failed file without dismissing the overlay first. The
 // overlay stays open; the retry's completion appends on a second
 // failure or clears the panel on success.
+// Issue #31: h and ? close the help overlay (but are ignored by the
+// error/warning overlays).
 func (m Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.Code == tea.KeyUp:
@@ -2099,6 +2204,16 @@ func (m Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Non-fatal overlay: dismiss to the base state.
 		m.overlayOpen = false
 		m.overlayReadFailure = false
+		return m, nil
+	case (msg.Code == 'h' || msg.Code == '?') && msg.Mod == 0:
+		// Issue #31: h and ? close the help overlay. For error
+		// and warning overlays, h and ? are ignored (fall through
+		// to the default case).
+		if m.overlay == OverlayHelp {
+			m.overlayOpen = false
+			m.overlayReadFailure = false
+			return m, nil
+		}
 		return m, nil
 	default:
 		// Other keys are ignored by the overlay.
@@ -2149,13 +2264,14 @@ func (m Model) View() tea.View {
 // single-line border and side margins), scrolled by overlayScroll, and
 // rendered through the theme's Overlay style (base colours + plain
 // single-line border). The base content is rendered first so the
-// overlay sits on top.
+// overlay sits on top. At tiny sizes the overlay is clipped to the
+// terminal without a special borderless mode (Issue #31).
 func (m Model) renderOverlay(base string) string {
 	// Determine the overlay width: up to 80% of the terminal width,
 	// capped to a reasonable maximum. The interior width accounts for
 	// the border sides and the single space margin on each side.
 	termWidth := m.width
-	if termWidth < 20 {
+	if termWidth < 1 {
 		termWidth = 80
 	}
 	overlayWidth := termWidth * 4 / 5
@@ -2164,6 +2280,10 @@ func (m Model) renderOverlay(base string) string {
 	}
 	if overlayWidth > 100 {
 		overlayWidth = 100
+	}
+	// Clip to the terminal width at tiny sizes (Issue #31).
+	if overlayWidth > termWidth {
+		overlayWidth = termWidth
 	}
 	interior := overlayWidth - 4 // two border chars + two spaces
 	if interior < 1 {
@@ -2175,7 +2295,7 @@ func (m Model) renderOverlay(base string) string {
 	lines := strings.Split(wrapped, "\n")
 	// Apply vertical scrolling.
 	termHeight := m.height
-	if termHeight < 5 {
+	if termHeight < 1 {
 		termHeight = 24
 	}
 	// Reserve space for the border (2 lines) and a margin.
@@ -2185,7 +2305,9 @@ func (m Model) renderOverlay(base string) string {
 	}
 	// When the diagnostic is very large, show both the head and tail
 	// so the user sees the beginning and end of the captured stderr.
-	if len(lines) > maxVisible {
+	// The help overlay (Issue #31) skips this compression so vertical
+	// scrolling reaches every row.
+	if m.overlay != OverlayHelp && len(lines) > maxVisible {
 		headN := maxVisible / 2
 		if headN < 1 {
 			headN = 1

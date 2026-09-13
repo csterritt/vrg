@@ -1094,3 +1094,38 @@ and internal/app Issue #30 entries), and [unit-tests](unit-tests.md)
 `internal/filebuffer/encoding_test.go`,
 `internal/app/app.go`,
 `internal/app/encoding_test.go`.
+
+## [2026-09-12] ingest | Issue #31 help overlay h/? with wrapped scrollable key bindings
+
+Ingested the completed Issue #31 implementation: the modal help overlay
+opened with `h`/`?` from ordinary browsing and the no-results screen.
+The help overlay uses the same `renderOverlay` component as the Issue
+#9 error overlay (base colours, plain single-line border, wrapped text
+including unbroken strings, vertical scrolling) but skips the head/tail
+compression so all rows are reachable by scrolling. Key routing while
+open: `up`/`down` scroll, `q`/`Esc`/`h`/`?` close (returning to the
+underlying base state), `ctrl+c` exits 130, and every other key
+(including `n`/`p`/`w`/`c`/`r`) is ignored with the state behind
+unchanged. The `OverlayHelp` kind was added to `OverlayKind`. The
+key-binding list is defined once as data: `KeyBinding{Key, Description}`
+struct, `KeyBindings()` returning the single binding-table data source
+covering navigation, scrolling, panning, wrap, colour, list toggle,
+reload, help, and quit/cancel bindings, and `HelpFooter()` returning the
+footer slot reserved for Issue #34. `helpText()` builds the overlay text
+from the binding table plus footer. `openHelp()` opens the overlay and
+cancels any active Issue #15 file-change pop-up with no return on close.
+`handleOverlayKey` was extended to close the help overlay on `h`/`?`
+(ignored by error/warning overlays). At tiny sizes the overlay is
+clipped to the terminal without a borderless mode (overlay width capped
+to terminal width, visible height derived from terminal height) and
+restored on growth; rendering does not panic at 25×8. The help overlay
+passes the Issue #6 sink-safety check (no dangerous control bytes in
+the no-style path; no fixture payload after unescaped ESC with styles).
+Created [help-overlay](help-overlay.md); updated
+[index](index.md), [source-code](source-code.md) (internal/app Issue
+#31 entry), and [unit-tests](unit-tests.md) (help_overlay_test.go
+entries). Sources:
+`Notes/tasks/031-help-overlay.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence),
+`internal/app/app.go`,
+`internal/app/help_overlay_test.go`.

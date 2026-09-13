@@ -1693,3 +1693,56 @@ replay-ordering assertions:
 - `TestUnsupportedRealFileUTF16LE` — a real UTF-16 LE file on disk
   is detected by `filebuffer.Load` and presented through the App
   with the placeholder, overlay, and UTF-16 diagnostic.
+
+`help_overlay_test.go` (Issue #31, external package `app_test`):
+
+- `TestHelpOpensFromBrowse` / `TestHelpOpensFromBrowseQuestion` — `h`
+  and `?` open the help overlay from ordinary browsing.
+- `TestHelpOpensFromNoResults` / `TestHelpOpensFromNoResultsQuestion` —
+  `h` and `?` open the help overlay from the no-results screen.
+- `TestHelpCloseReturnsToBrowse` — `q`/`Esc`/`h`/`?` close the help
+  overlay and return to the underlying browse state.
+- `TestHelpCloseReturnsToNoResults` — `q`/`Esc`/`h`/`?` close the help
+  overlay and return to the underlying no-results state.
+- `TestHelpCloseThenQExits1FromNoResults` — after closing help opened
+  from no-results, a subsequent `q` still exits 1.
+- `TestHelpIgnoredKeysLeaveStateUnchanged` — every key other than
+  up/down/q/Esc/h/?/ctrl+c (including `n`/`p`/`w`/`c`/`r`) is ignored
+  while help is open, leaving the browse state unchanged.
+- `TestHelpIgnoredKeysLeaveNoResultsUnchanged` — same for the
+  no-results state.
+- `TestHelpCtrlCExits130` / `TestHelpCtrlCExits130FromNoResults` —
+  `ctrl+c` from the help overlay exits 130.
+- `TestHelpScrollDownIncrements` — `down` scrolls the help content.
+- `TestHelpScrollUpAtTopClamps` — `up` at the top clamps to 0 (no
+  negative scroll).
+- `TestHelpScrollReachesEveryRow` — vertical scrolling reaches every
+  row at a usable size.
+- `TestHelpWrapsLongUnbrokenString` — a long unbroken string wraps to
+  the interior width of the overlay border.
+- `TestHelpRendersAt25x8WithoutPanic` — the help overlay renders
+  without panic at 25×8.
+- `TestHelpClippedAtTinySize` — at 25×8 the overlay is clipped to the
+  terminal width (no line exceeds 25 cells).
+- `TestHelpRestoredOnGrowth` — after shrinking to 25×8 and growing
+  back to 80×24, the overlay renders normally with a border.
+- `TestKeyBindingsDefinedAsData` — `KeyBindings()` returns a
+  non-empty list with non-empty key and description for each row.
+- `TestKeyBindingsCoversAllCategories` — the binding table covers
+  navigation, scrolling, panning, wrap, colour, list toggle, reload,
+  help, and quit/cancel.
+- `TestHelpRendersBindingTable` — the help overlay view contains at
+  least one binding description from the binding table.
+- `TestHelpFooterSlot` — `HelpFooter()` is a defined API (footer
+  slot reserved for Issue #34).
+- `TestHelpOpensCancelsPopup` — opening help cancels an active
+  Issue #15 file-change pop-up with no return on close.
+- `TestHelpSinkSafetyNoStyle` — the help overlay passes the Issue #6
+  sink-safety check in the no-style composition path (no dangerous
+  control bytes).
+- `TestHelpSinkSafetyStyled` — with styles enabled, no fixture
+  payload appears after an unescaped ESC in the help overlay.
+- `TestHelpBaseColors` — the help overlay uses the theme base
+  colours (dark: white on black).
+- `TestHelpRendersBorder` — the help overlay view contains a
+  single-line border (same plain border as the error overlay).

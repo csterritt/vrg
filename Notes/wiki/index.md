@@ -204,6 +204,14 @@ Catalog of all wiki pages for the vrg project.
   reloadability through `r`; stale-validation exclusion; fixed
   search-derived exit status never altered by unsupported encodings;
   ripgrep invocation unchanged (no forced encoding flag)
+- [help-overlay.md](help-overlay.md) — Issue #31: modal help overlay
+  opened with `h`/`?` from browse and no-results; shared wrapped
+  scrollable overlay component with the Issue #9 error overlay (base
+  colours, plain single-line border); `q`/`Esc`/`h`/`?` close,
+  `ctrl+c` exits 130, other keys ignored; binding table as single
+  data source for rendering and Issue #34 documentation tests; footer
+  slot reserved for Issue #34; pop-up cancellation on open with no
+  return; tiny-size clipping without borderless mode; sink-safety row
 
 ## Catalogs
 

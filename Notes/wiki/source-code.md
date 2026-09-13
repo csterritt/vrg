@@ -402,6 +402,23 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [load-completion-two-stage](load-completion-two-stage.md),
   [stale-match-validation](stale-match-validation.md), and
   [unsupported-encodings](unsupported-encodings.md).
+  Issue #31 added the modal help overlay: `OverlayHelp` kind, `KeyBinding`
+  struct, `KeyBindings()` (single binding-table data source covering
+  navigation, scrolling, panning, wrap, colour, list toggle, reload,
+  help, and quit/cancel), `HelpFooter()` (footer slot reserved for
+  Issue #34), `helpText()` (builds overlay text from the binding table
+  plus footer), and `openHelp()` (opens the overlay, cancels any active
+  Issue #15 pop-up with no return on close). `h`/`?` open help from
+  browse and no-results; while open, `up`/`down` scroll, `q`/`Esc`/`h`/`?`
+  close, `ctrl+c` exits 130, and every other key (including `n`/`p`/`w`/`c`/`r`)
+  is ignored with the underlying state unchanged. The help overlay
+  shares the `renderOverlay` component with the error overlay (base
+  colours, plain single-line border, wrapped text including unbroken
+  strings, vertical scrolling reaching every row) but skips the
+  head/tail compression so all rows are reachable by scrolling. At tiny
+  sizes the overlay is clipped to the terminal without a borderless
+  mode and restored on growth; rendering does not panic at 25×8. See
+  [help-overlay](help-overlay.md).
 
 ## internal/safepresentation
 
