@@ -83,7 +83,10 @@ bytes into a display-ready `Buffer`:
 The completion message carries a fully prepared buffer so `Update` does
 no full-file work. Line splitting recognizes LF and CRLF as terminators;
 a trailing terminator does not produce an extra empty line. A
-standalone CR is content, not a terminator.
+standalone CR is content, not a terminator. Issue #25 added a
+`RequestID` field so the completion handler can reject stale
+completions from cancelled or superseded requests; see
+[async-load-isolation](async-load-isolation.md).
 
 ## Viewport
 
@@ -140,9 +143,12 @@ state:
   addition to `Files` and `Lines`. A non-nil index with files > 0
   transitions to `StateBrowse`; otherwise the backward-compatible
   `StateSummary` path is used.
-- `FileLoadCompleteMsg` — carries the fully prepared `*filebuffer.Buffer`
-  and the raw path. `Update` stores the buffer and clears the loading
-  flag. Late completions after cancellation are ignored.
+- `FileLoadCompleteMsg` — carries the fully prepared `*filebuffer.Buffer`,
+  the raw path, and a `RequestID` (Issue #25). `Update` validates the
+  request identity against the in-flight request for the path before
+  mutating state, so stale completions are rejected. Late completions
+  after cancellation are ignored. A completion for a non-current path
+  updates only that path's cache, not the visible panel.
 
 ### New options
 
@@ -181,6 +187,13 @@ state:
   buffers keyed by raw path (Issue #13). No eviction; the PRD retains
   successful buffers for the session, so a revisited file can be shown
   immediately without a reload.
+- `loadRequestID uint64` — the next request identity for file loads
+  (Issue #25). Each in-flight load is tagged with a unique ID so stale
+  completions can be rejected.
+- `loadingPaths map[string]uint64` — in-flight file loads by raw path,
+  mapping to the active request ID (Issue #25). At most one load may
+  be in flight per raw path; re-entering a loading path starts no
+  second load and queues nothing.
 
 ### Update flow
 
@@ -193,25 +206,41 @@ On `SearchCompleteMsg` with a non-nil index and files > 0:
 2. Returns `m.loadFile()` — a `tea.Cmd` that asynchronously loads the
    cursor's current file.
 
-`loadFile` (Issue #13: now delegates to `loadFileFor` with the cursor's
-current stop's raw path):
+`loadFile` (Issue #13: now delegates to `startLoad` with the cursor's
+current stop's raw path; Issue #25: `startLoad` enforces one-load-per-path
+and assigns a request identity):
 
 1. Gets the current file's raw path from the cursor's current stop.
-2. Waits at the file gate if set (cancellable via `loadCancel`).
-3. Calls the file loader (injected or `filebuffer.Load`).
-4. Returns a `FileLoadCompleteMsg` with the prepared buffer.
+2. Issue #25: `startLoad` checks `loadingPaths`; if a load is already
+   in flight for the path, returns nil (no second load, nothing
+   queued).
+3. Otherwise assigns a fresh `RequestID`, records it in `loadingPaths`,
+   and delegates to `loadFileFor`.
+4. `loadFileFor` waits at the file gate if set (cancellable via
+   `loadCancel`).
+5. Calls the file loader (injected or `filebuffer.Load`).
+6. Returns a `FileLoadCompleteMsg` with the prepared buffer and the
+   `RequestID`.
 
-`loadFileFor(path []byte)` (Issue #13) is the path-keyed load command
-used for cross-file navigation to an uncached destination. It collects
-the stops for the given raw path, waits at the gate, calls the loader,
-and returns a `FileLoadCompleteMsg`.
+`loadFileFor(path []byte, requestID uint64)` (Issue #25: now carries
+the request identity) is the path-keyed load command used for
+cross-file navigation to an uncached destination. It collects the
+stops for the given raw path, waits at the gate, calls the loader,
+and returns a `FileLoadCompleteMsg` tagged with the request identity.
 
 On `FileLoadCompleteMsg`:
 
 1. If cancelled, ignores the message (late-load rejection).
-2. Stores the buffer, caches it in `fileCache` keyed by raw path
-   (Issue #13), and clears `loading`.
-3. Issue #12: builds the viewport from prepared row data (via the row
+2. Issue #25: validates the `RequestID` against `loadingPaths` for
+   the path. Stale completions (cancelled, superseded, or already
+   completed) are discarded without touching the cache or panel.
+3. Removes the path from `loadingPaths` (no longer in flight).
+4. Caches the buffer in `fileCache` keyed by raw path (Issue #13),
+   regardless of whether the path is still current.
+5. Issue #25: updates the visible panel only when the completion's
+   path is still the current path. A late completion for a non-current
+   file updates only that file's cache.
+6. Issue #12: builds the viewport from prepared row data (via the row
    provider factory or `viewport.BufferRows`), restores the saved
    per-file offset for the path (0 for a first visit), and creates the
    viewport with the panel height and saved offset.
@@ -363,13 +392,20 @@ field. `handleNavigate(delta)` is called for `n` (delta 1) and `p`
     switches immediately and the saved viewport is restored (first
     visit starts at the top).
   - If the destination file is uncached, the panel switches to the
-    loading placeholder and `loadFileFor(path)` requests the load.
-    The load completes through the existing `FileLoadCompleteMsg`
-    path, which caches the buffer and builds the viewport.
+    loading placeholder and `startLoad(path)` requests the load
+    (Issue #25: enforces one-load-per-path; if a load is already in
+    flight for the path, no second load is started and nothing is
+    queued). The load completes through the existing
+    `FileLoadCompleteMsg` path, which validates the request identity,
+    caches the buffer, and updates the panel only if the path is
+    still current.
 
-`loadFile` now delegates to `loadFileFor` with the cursor's current
-stop's raw path. `loadFileFor(path)` is the path-keyed load command
-used for cross-file navigation.
+`loadFile` now delegates to `startLoad` with the cursor's current
+stop's raw path. `startLoad(path)` (Issue #25) is the single entry
+point for starting a load: it enforces one-load-per-path, assigns a
+fresh request identity, and delegates to `loadFileFor(path, requestID)`.
+`loadFileFor(path, requestID)` is the path-keyed load command used
+for cross-file navigation.
 
 ### Accessors
 

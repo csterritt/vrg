@@ -145,6 +145,13 @@ Catalog of all wiki pages for the vrg project.
   rendering only, filename-row buffer-status note slot with synthetic
   test seam, pathological-dimension clamping, and Issue #17 prepared-
   layout routing with anchor preservation
+- [async-load-isolation.md](async-load-isolation.md) — Issue #25:
+  keyed asynchronous load isolation — navigation during loads, raw-path
+  and request-identity keyed completions, panel isolation for late
+  completions, one-load-in-flight-per-path with dropped re-entry
+  requests, session-long buffer retention with no eviction,
+  post-cancellation rejection, and separately gated decode/map phase
+  with `ctrl+c`/`n`/`p`/`w`/`c`/resize all actionable
 
 ## Catalogs
 

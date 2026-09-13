@@ -862,3 +862,46 @@ logical anchors; Resources and responsiveness; Text, graphemes, and
 safe presentation), `internal/app/app.go`,
 `internal/app/filelist_layout_test.go`,
 `internal/app/anchor_test.go`, `internal/app/wrap_test.go`.
+
+## [2026-09-12] ingest | Issue #25 asynchronous load isolation
+
+Ingested the completed Issue #25 implementation: keyed asynchronous
+load isolation so the TUI stays navigable while file loads are
+pending, late completions update only their own file, and at most one
+load is in flight per raw path. `FileLoadCompleteMsg` now carries a
+`RequestID uint64` identifying the load request that produced it.
+`Model.loadRequestID` is the monotonically increasing request identity
+counter. `Model.loadingPaths map[string]uint64` tracks in-flight loads
+by raw path, mapping to the active request ID. `startLoad(path)
+(Model, tea.Cmd)` is the single entry point for starting a load: it
+enforces one-load-per-path (checks `loadingPaths`, returns nil if a
+load is already in flight), assigns a fresh request ID, records the
+in-flight request, and delegates to `loadFileFor(path, requestID)`.
+The `FileLoadCompleteMsg` handler validates the request ID against
+`loadingPaths` before mutating state (stale completions from
+cancelled or superseded requests are discarded), removes the path
+from `loadingPaths`, caches the buffer regardless of whether the
+path is current, and updates the visible panel only when the
+completion's path is still the current path. The `SearchCompleteMsg`
+handler sets `m.currentPath` to the startup file's raw path before
+starting the load so the keyed completion handler can identify it as
+current. `handleNavigate` calls `startLoad` instead of `loadFileFor`
+directly so the one-load-per-path rule is enforced on re-entry of a
+loading path. Tests in `internal/app/load_isolation_test.go` cover
+navigation during loads, placeholder scroll no-op, `w`/`c`/resize
+normal meaning while loading, keyed late completions for non-current
+files (A→B→C scenario), keyed completion for current path,
+one-load-per-path with dropped re-entry, cached revisit without
+reload, cache retention across multiple visits, post-cancellation
+rejection (ctrl+c and q), and input responsiveness during the
+decode/map phase (n, p, w, c, resize, ctrl+c all actionable while
+the file gate is held). Created
+[async-load-isolation](async-load-isolation.md); updated [index](index.md),
+[browse-tracer](browse-tracer.md) (FileLoadCompleteMsg, model fields,
+loadFile/loadFileFor, navigation cursor, FileLoadCompleteMsg handler),
+[source-code](source-code.md) (internal/app Issue #25 entry), and
+[unit-tests](unit-tests.md) (load_isolation_test.go entry). Sources:
+`Notes/tasks/025-async-load-isolation.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency), `internal/app/app.go`,
+`internal/app/load_isolation_test.go`.

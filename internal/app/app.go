@@ -342,6 +342,18 @@ type Model struct {
 	fileLoader FileLoader
 	fileGate   chan struct{}
 	loadCancel chan struct{}
+	// loadRequestID is the next request identity for file loads
+	// (Issue #25). Each in-flight load is tagged with a unique ID so
+	// stale completions (from a cancelled or superseded request) can
+	// be rejected.
+	loadRequestID uint64
+	// loadingPaths tracks in-flight file loads by raw path (Issue
+	// #25). The value is the request ID for the active load on that
+	// path. At most one load may be in flight per raw path;
+	// re-entering a loading path starts no second load and queues
+	// nothing. A path is removed from this map when its load
+	// completes (success or error) or is cancelled.
+	loadingPaths map[string]uint64
 	// fileCache retains loaded buffers for the session keyed by raw
 	// path, so a revisited file can be shown immediately without a
 	// reload (Issue #13). No eviction; the PRD retains successful
@@ -678,6 +690,7 @@ func New(childArgs []string, workdir string, opts ...Option) Model {
 		fileCache:          make(map[string]*filebuffer.Buffer),
 		layoutCache:        make(map[string]*viewport.RowModel),
 		loadCancel:         make(chan struct{}),
+		loadingPaths:       make(map[string]uint64),
 		popupDuration:      cfg.popupDuration,
 		wrapMode:           cfg.wrapMode,
 		listVisible:        true,
@@ -958,11 +971,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// from the cursor.
 				m.cursor = searchindex.NewCursor(m.index)
 				m.loading = true
+				// Issue #25: record the startup file's raw path as the
+				// current path so the keyed completion handler can
+				// identify it as the current file.
+				if stop, ok := m.cursor.Stop(); ok {
+					m.currentPath = stop.RawPath
+				}
 				// Issue #14: the startup file's first load should
 				// apply a destination reveal once the content is
 				// available.
 				m.needsReveal = true
-				return m, m.loadFile()
+				return m.loadFile()
 			}
 			return m, nil
 		}
@@ -978,16 +997,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cancelled {
 			return m, nil
 		}
+		// Issue #25: validate the request identity before mutating
+		// state. A completion is accepted only when its request ID
+		// matches the in-flight request for its path. Stale
+		// completions (from a cancelled or superseded request, or a
+		// path whose load already completed) are discarded without
+		// touching the cache or the visible panel.
+		if m.loadingPaths == nil {
+			m.loadingPaths = make(map[string]uint64)
+		}
+		expected, ok := m.loadingPaths[string(msg.Path)]
+		if !ok || expected != msg.RequestID {
+			return m, nil
+		}
+		// The load for this path is no longer in flight.
+		delete(m.loadingPaths, string(msg.Path))
 		if msg.Buffer != nil {
-			m.buffer = msg.Buffer
 			// Issue #13: cache the loaded buffer for the session
 			// so a revisited file can be shown immediately without
 			// a reload. No eviction; the PRD retains successful
-			// buffers for the session.
+			// buffers for the session. Issue #25: the cache is
+			// updated for this path regardless of whether it is
+			// the currently visible file.
 			if m.fileCache == nil {
 				m.fileCache = make(map[string]*filebuffer.Buffer)
 			}
 			m.fileCache[string(msg.Path)] = msg.Buffer
+		}
+		// Issue #25: a completion changes the visible panel only when
+		// its path is still the current path. A late completion for a
+		// non-current file updates only that file's cache, leaving
+		// the visible panel (and loading state) untouched.
+		if !bytes.Equal(msg.Path, m.currentPath) {
+			return m, nil
+		}
+		if msg.Buffer != nil {
+			m.buffer = msg.Buffer
 		}
 		m.loading = false
 		// Build the viewport from the prepared row data (Issue #16:
@@ -997,7 +1042,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// is restored so a revisited file starts from its saved
 		// position (Issue #12).
 		if msg.Buffer != nil {
-			m.currentPath = msg.Path
 			layoutCmd := m.buildViewport()
 			// Issue #14: apply destination reveal after the starting
 			// viewport is set. A first visit (including the startup
@@ -1635,7 +1679,14 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 	// Issue #14: the load completion for this navigation should
 	// apply a destination reveal once the content is available.
 	m.needsReveal = true
-	loadCmd := m.loadFileFor(stop.RawPath)
+	// Issue #25: at most one load may be in flight per raw path.
+	// If a load is already in flight for this path (the user
+	// navigated away and back), start no second load and queue
+	// nothing. The panel shows the loading placeholder; the
+	// existing load's completion will update the cache and, if
+	// this path is still current, the panel.
+	var loadCmd tea.Cmd
+	m, loadCmd = m.startLoad(stop.RawPath)
 	// Batch the pop-up timer and the load command so both run.
 	return m, tea.Batch(popupCmd, loadCmd)
 }
@@ -1987,11 +2038,16 @@ type SearchCompleteMsg struct {
 
 // FileLoadCompleteMsg signals that an asynchronous file load has
 // finished. The Buffer is the fully prepared, decoded, and mapped
-// buffer; Update does no full-file work.
+// buffer; Update does no full-file work. RequestID is the identity
+// of the load request that produced this completion (Issue #25).
+// Update validates it against the in-flight request for the path
+// before mutating state, so stale completions from cancelled or
+// superseded requests are rejected.
 type FileLoadCompleteMsg struct {
-	Path   []byte
-	Buffer *filebuffer.Buffer
-	Err    error
+	Path      []byte
+	RequestID uint64
+	Buffer    *filebuffer.Buffer
+	Err       error
 }
 
 // LayoutReadyMsg signals that an asynchronous layout preparation has
@@ -2149,28 +2205,57 @@ func (m Model) watchDiagnostic() tea.Cmd {
 // browse file (the cursor's current stop's file). The command waits at
 // the file gate (if set), calls the file loader, and returns a
 // FileLoadCompleteMsg with the prepared buffer. The load is
-// cancellable via loadCancel.
-func (m Model) loadFile() tea.Cmd {
+// cancellable via loadCancel. Issue #25: loadFile routes through
+// startLoad so the load is keyed by path and request identity. The
+// returned Model carries the updated loadingPaths and loadRequestID
+// so Update sees the in-flight request.
+func (m Model) loadFile() (Model, tea.Cmd) {
 	if m.cursor == nil {
-		return nil
+		return m, nil
 	}
 	stop, ok := m.cursor.Stop()
 	if !ok {
-		return nil
+		return m, nil
 	}
-	return m.loadFileFor(stop.RawPath)
+	return m.startLoad(stop.RawPath)
+}
+
+// startLoad begins an asynchronous load for the given raw path unless
+// a load is already in flight for that path (Issue #25: one load per
+// raw path). It assigns a new request identity, records the in-flight
+// request in loadingPaths, and returns a command that carries the
+// identity in its completion message. Re-entering a loading path starts
+// no second load and queues nothing; the existing load's completion
+// will update the cache and, if the path is still current, the panel.
+// The returned Model carries the updated loadingPaths and
+// loadRequestID so Update sees the in-flight request.
+func (m Model) startLoad(path []byte) (Model, tea.Cmd) {
+	if m.loadingPaths == nil {
+		m.loadingPaths = make(map[string]uint64)
+	}
+	if _, ok := m.loadingPaths[string(path)]; ok {
+		// A load is already in flight for this path. Do not start a
+		// second load and do not queue anything.
+		return m, nil
+	}
+	m.loadRequestID++
+	requestID := m.loadRequestID
+	m.loadingPaths[string(path)] = requestID
+	return m, m.loadFileFor(path, requestID)
 }
 
 // loadFileFor returns a command that asynchronously loads the file at
 // the given raw path. The command waits at the file gate (if set),
 // calls the file loader with the stops for that file, and returns a
-// FileLoadCompleteMsg with the prepared buffer. The load is
-// cancellable via loadCancel. Issue #13 uses this for cross-file
-// navigation to an uncached destination.
-func (m Model) loadFileFor(path []byte) tea.Cmd {
+// FileLoadCompleteMsg with the prepared buffer and the request
+// identity. The load is cancellable via loadCancel. Issue #13 uses
+// this for cross-file navigation to an uncached destination. Issue
+// #25 tags the completion with requestID so Update can reject stale
+// completions.
+func (m Model) loadFileFor(path []byte, requestID uint64) tea.Cmd {
 	return func() tea.Msg {
 		if m.index == nil {
-			return FileLoadCompleteMsg{}
+			return FileLoadCompleteMsg{RequestID: requestID}
 		}
 		stops := m.index.Stops()
 		var fileStops []searchindex.Stop
@@ -2194,9 +2279,9 @@ func (m Model) loadFileFor(path []byte) tea.Cmd {
 		}
 		buf, err := loader(path, fileStops)
 		if err != nil {
-			return FileLoadCompleteMsg{Path: path, Err: err}
+			return FileLoadCompleteMsg{Path: path, RequestID: requestID, Err: err}
 		}
-		return FileLoadCompleteMsg{Path: path, Buffer: buf}
+		return FileLoadCompleteMsg{Path: path, RequestID: requestID, Buffer: buf}
 	}
 }
 

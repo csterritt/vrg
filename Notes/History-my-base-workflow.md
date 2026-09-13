@@ -212,3 +212,12 @@ Usage
  Input tokens: 191363 tokens
  Output tokens: 61277 tokens
  Cached input tokens: 12545024 tokens
+
+----
+Task 025-async-load-isolation.md
+
+Usage
+ Agent messages: 145 messages
+ Input tokens: 285599 tokens
+ Output tokens: 97700 tokens
+ Cached input tokens: 14462912 tokens

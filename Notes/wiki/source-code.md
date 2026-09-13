@@ -294,7 +294,28 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   entries, applies `TruncateLeftGrapheme`, and skips list rendering
   for zero width; `renderContentPanel` delegates its first line to
   `renderFilenameRow`; `WithStatusNote(func() string)` test seam for
-  the synthetic status note. See
+  the synthetic status note. Issue #25 added keyed asynchronous load
+  isolation: a `RequestID uint64` field on `FileLoadCompleteMsg` so
+  the completion handler can reject stale completions; a
+  `loadRequestID uint64` model field as the monotonically increasing
+  request identity counter; a `loadingPaths map[string]uint64` model
+  field tracking in-flight loads by raw path (mapping to the active
+  request ID); `startLoad(path) (Model, tea.Cmd)` as the single entry
+  point for starting a load (enforces one-load-per-path by checking
+  `loadingPaths`, assigns a fresh request ID, records the in-flight
+  request, and delegates to `loadFileFor`); `loadFileFor(path,
+  requestID)` now carries the request identity in the completion
+  message; the `FileLoadCompleteMsg` handler validates the request
+  ID against `loadingPaths` before mutating state (stale completions
+  from cancelled or superseded requests are discarded), removes the
+  path from `loadingPaths`, caches the buffer regardless of whether
+  the path is current, and updates the visible panel only when the
+  completion's path is still the current path; the
+  `SearchCompleteMsg` handler sets `m.currentPath` to the startup
+  file's raw path before starting the load so the keyed completion
+  handler can identify it as current; `handleNavigate` calls
+  `startLoad` instead of `loadFileFor` directly so the one-load-per-path
+  rule is enforced on re-entry of a loading path. See
   [search-collection-path](search-collection-path.md),
   [browse-tracer](browse-tracer.md),
   [outcome-contract](outcome-contract.md),
@@ -306,7 +327,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [horizontal-panning](horizontal-panning.md),
   [horizontal-reveal](horizontal-reveal.md),
   [hidden-content-indicators](hidden-content-indicators.md),
-  and [file-list-layout](file-list-layout.md).
+  [file-list-layout](file-list-layout.md),
+  and [async-load-isolation](async-load-isolation.md).
 
 ## internal/safepresentation
 

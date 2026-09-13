@@ -1335,3 +1335,45 @@ replay-ordering assertions:
 - `TestListEntryTruncation` — long file-list paths are left-
   truncated with a leading `…` and the filename row path is truncated
   to fit the panel width.
+
+`load_isolation_test.go` (Issue #25, external package `app_test`):
+
+- `TestLoadIsolationNavigationActiveWhileLoading` — `n`/`p` remain
+  fully active while a file loads; the cursor advances and the panel
+  switches to the destination's loading placeholder.
+- `TestLoadIsolationPlaceholderScrollNoOp` — scrolling a `Loading…`
+  placeholder is a no-op (the viewport is nil while loading).
+- `TestLoadIsolationKeysNormalWhileLoading` — `w`, `c`, and resize
+  retain their normal meanings while a file loads.
+- `TestLoadIsolationKeyedCompletionNonCurrentPath` — A→B→C navigation
+  with A's completion arriving while C is current leaves C's panel
+  unchanged (still loading) and A cached; navigating back to A shows
+  content from the cache without a new load.
+- `TestLoadIsolationKeyedCompletionCurrentPath` — a load completion
+  for the current path updates the panel (shows content).
+- `TestLoadIsolationOneLoadPerPath` — at most one load is in flight
+  per raw path; re-entering a loading path starts no second load and
+  queues nothing (the loader is not called again).
+- `TestLoadIsolationCachedRevisitNoReload` — a successfully loaded
+  buffer is retained for the session; revisiting a cached file shows
+  content immediately without a new load.
+- `TestLoadIsolationCacheRetainedAcrossMultipleVisits` — a cached
+  buffer survives multiple visits away and back; no eviction occurs.
+- `TestLoadIsolationPostCancellationRejection` — late
+  `FileLoadCompleteMsg` messages arriving after `ctrl+c` are ignored;
+  the model stays cancelled and is not revived.
+- `TestLoadIsolationLateCompletionAfterQuit` — a late completion
+  after `q` does not change the view or revive the quit UI.
+- `TestLoadIsolationResponsiveNWhileFileGateHeld` — `n` is actionable
+  while the current file's load is held at the file gate (decode/map
+  phase gate); the cursor advances and the panel switches.
+- `TestLoadIsolationResponsivePWhileFileGateHeld` — `p` is actionable
+  while the file gate is held.
+- `TestLoadIsolationResponsiveWWhileFileGateHeld` — `w` (wrap toggle)
+  is actionable while the file gate is held.
+- `TestLoadIsolationResponsiveCWhileFileGateHeld` — `c` (theme
+  toggle) is actionable while the file gate is held.
+- `TestLoadIsolationResponsiveResizeWhileFileGateHeld` — terminal
+  resize is actionable while the file gate is held.
+- `TestLoadIsolationResponsiveCtrlCWhileFileGateHeld` — `ctrl+c`
+  exits 130 while the file gate is held.
