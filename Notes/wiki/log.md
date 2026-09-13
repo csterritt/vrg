@@ -715,3 +715,44 @@ for app). Sources: `Notes/tasks/021-grapheme-cluster-highlight-expansion.md`,
 `internal/filebuffer/grapheme_highlight_test.go`,
 `internal/viewport/grapheme_highlight_test.go`,
 `internal/app/grapheme_indicator_test.go`.
+
+## [2026-09-12] ingest | Issue #22 structural line handling
+
+Issue #22: FileBuffer structural line handling with raw/search/display
+coordinate separation. `Load` now detects and strips a leading UTF-8 BOM
+(`EF BB BF`) before `splitLines` so rg-line and raw-file coordinates
+are kept separate; `Buffer.BOMOffset` records the strip length (0 or 3)
+for converting back to raw-file coordinates (e.g. Issue #29 stale
+validation). A first-line match at rg offset 0 maps to raw byte 3 and
+highlights the correct display cell. The BOM adjustment applies only to
+line 1; line 2 and beyond have no adjustment. A BOM-only file produces
+zero lines; a BOM plus a newline produces one empty line. Non-leading
+U+FEFF is ordinary content (displayed, counted, matchable). LF and CRLF
+terminate lines and are not displayed; original line bytes including
+terminators are retained in `Line.ByteCells` for byte-coordinate mapping
+and later validation. A standalone CR (not followed by LF) is escaped as
+`^M` by the safe-presentation core. A missing final newline yields a
+final line; a trailing newline does not invent an extra empty line; an
+empty file has zero lines with a three-cell gutter (one digit slot plus
+two spaces) and no source rows. Terminator bytes and zero-width
+positions map to the display end-of-line column (byte 4 of `hit\r\n` →
+display column 3). A span covering visible text plus terminator
+highlights only the visible text: `expandedHighlights` now uses the end
+byte's original cell end when the end byte has no cluster (a terminator
+mapping to the zero-width end-of-line position), instead of falling
+back to the start cluster's cell end. The end-of-line marker for
+terminator-only matches is owned by Issue #23; the stale validation
+that consumes the retained bytes is owned by Issue #29. Tests in
+`internal/filebuffer/structural_line_test.go` cover mixed terminators,
+CRLF/LF not displayed, terminator-to-EOL mapping, text-plus-terminator
+spans, standalone CR escape, leading BOM invisible with first-line
+match at rg offset 0 → raw byte 3, BOM-only file, BOM plus newline,
+non-leading U+FEFF as content, empty file, unterminated final line, no
+phantom trailing line, and retained original bytes. Created
+[structural-line-handling](structural-line-handling.md); updated
+[index](index.md), [source-code](source-code.md) (internal/filebuffer
+entry), and [unit-tests](unit-tests.md) (structural_line_test.go entry).
+Sources: `Notes/tasks/022-line-terminators-final-line-empty-file-utf8-bom.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; Encodings
+and stale-content validation), `internal/filebuffer/filebuffer.go`,
+`internal/filebuffer/structural_line_test.go`.

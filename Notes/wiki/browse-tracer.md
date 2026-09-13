@@ -63,7 +63,8 @@ range; see [grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-exp
 `internal/filebuffer/filebuffer.go` loads, decodes, and maps a file's
 bytes into a display-ready `Buffer`:
 
-- `Buffer` — `Lines []Line`, `LineCount int`, `GutterWidth int`.
+- `Buffer` — `Lines []Line`, `LineCount int`, `GutterWidth int`,
+  `BOMOffset int` (Issue #22: leading UTF-8 BOM bytes stripped, 0 or 3).
 - `Line` — `Number` (1-based source line), `Display` (escaped text),
   `ByteCells` (per-byte cell ranges), `Highlights` (display cell ranges
   for inverse video).

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Fake rg that emits a valid JSON stream for a.txt (line 1, "foo")
+# while a.txt is a zero-byte file on disk. This simulates a stale
+# search result where the file was non-empty at search time but is
+# now empty.
+echo '{"type":"begin","data":{"path":{"text":"a.txt"}}}'
+echo '{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"foo\n"},"line_number":1,"submatches":[{"match":{"text":"foo"},"start":0,"end":3}]}}'
+echo '{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}'
+echo '{"type":"summary","data":{}}'
+exit 0

@@ -185,3 +185,12 @@ Usage
  Input tokens: 259215 tokens
  Output tokens: 59744 tokens
  Cached input tokens: 15959168 tokens
+
+----
+Task 022-line-terminators-final-line-empty-file-utf8-bom.md
+
+Usage
+ Agent messages: 140 messages
+ Input tokens: 223850 tokens
+ Output tokens: 68115 tokens
+ Cached input tokens: 14921600 tokens

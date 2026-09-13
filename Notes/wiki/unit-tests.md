@@ -838,6 +838,55 @@ table, parser config, and generated help cannot drift.
   mark bytes map to the cluster's cell range (not 1-cell-per-rune), so
   the Issue #19 reveal targets the cluster start.
 
+`structural_line_test.go` (Issue #22, external package
+`filebuffer_test`):
+
+- `TestStructuralMixedTerminators` — a file with LF, CRLF, and an
+  unterminated final line splits into the correct lines with no
+  terminator bytes in display.
+- `TestStructuralCRLFNotDisplayed` — CRLF terminators produce no
+  display cells or visible characters.
+- `TestStructuralTerminatorMapsToEOLColumn` — byte 4 (`\n`) and byte 3
+  (`\r`) of `hit\r\n` both map to display column 3 (end-of-line).
+- `TestStructuralLFTerminatorMapsToEOLColumn` — byte 3 (`\n`) of
+  `hit\n` maps to display column 3.
+- `TestStructuralSpanTextPlusTerminatorHighlightsVisibleOnly` — a
+  submatch covering `hit\r\n` (bytes 0–5) highlights only `[0, 3)` (the
+  visible text, not the terminator).
+- `TestStructuralSpanTextPlusLFTerminatorHighlightsVisibleOnly` — same
+  contract for a lone LF terminator.
+- `TestStructuralStandaloneCREscapedAsCaretM` — a standalone CR
+  mid-line is escaped as `^M`, not treated as a terminator.
+- `TestStructuralStandaloneCRByteCells` — the standalone CR byte maps
+  to the two display cells of `^M`.
+- `TestStructuralLeadingBOMInvisibleInDisplay` — a leading UTF-8 BOM
+  is invisible; line 1 display is `"hit"`, not `"\ufeffhit"`.
+- `TestStructuralLeadingBOMFirstLineMatchMapsToRawByte3` — a
+  first-line match at rg offset 0 highlights display cell 0 (raw byte
+  3 after the three-byte BOM).
+- `TestStructuralLeadingBOMMatchAtRGOffset1` — a first-line match at
+  rg offset 1 highlights display cell 1.
+- `TestStructuralLeadingBOMDoesNotAffectSecondLine` — the BOM
+  adjustment applies only to line 1; a line 2 match is not shifted.
+- `TestStructuralLeadingBOMOnlyFile` — a BOM-only file produces zero
+  lines with a three-cell gutter.
+- `TestStructuralLeadingBOMWithNewline` — a BOM followed by a newline
+  produces one empty line.
+- `TestStructuralNonLeadingFEFFIsOrdinaryContent` — a non-leading
+  U+FEFF is displayed as ordinary content (not stripped like a BOM).
+- `TestStructuralNonLeadingFEFFMatchHighlights` — a submatch on a
+  non-leading U+FEFF produces a highlight.
+- `TestStructuralEmptyFileZeroLinesThreeCellGutter` — an empty file
+  has zero lines, a three-cell gutter, and no source rows.
+- `TestStructuralNoFinalNewlineYieldsFinalLine` — a file without a
+  trailing newline counts and displays the last line.
+- `TestStructuralTrailingNewlineNoPhantomLine` — a trailing LF does
+  not invent an extra empty line.
+- `TestStructuralCRLFTrailingNewlineNoPhantomLine` — a trailing CRLF
+  does not invent an extra empty line.
+- `TestStructuralRetainedOriginalBytesForMapping` — `ByteCells` has
+  one entry per original raw byte including terminator bytes.
+
 `safepresentation_test.go` (Issue #16 additions, external package
 `safepresentation_test`):
 

@@ -121,6 +121,15 @@ Catalog of all wiki pages for the vrg project.
   `Highlights` and `ByteCells` are the single source for Viewport, App,
   Issue #19 reveal, and Issue #20 indicators; `ContentDisplay.ByteOffsets`
   added for raw-byte-to-cluster mapping
+- [structural-line-handling.md](structural-line-handling.md) — Issue #22:
+  LF/CRLF undisplayed terminators with retained original bytes;
+  standalone CR escaped as `^M`; unterminated final line counted; no
+  phantom trailing line; empty file zero lines with three-cell gutter;
+  terminator bytes and zero-width positions map to display end-of-line
+  column; span covering text plus terminator highlights visible text
+  only; leading UTF-8 BOM invisible with rg-line ↔ raw-file coordinate
+  separation (`Buffer.BOMOffset`); non-leading U+FEFF as ordinary
+  content
 
 ## Catalogs
 

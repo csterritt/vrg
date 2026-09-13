@@ -15,6 +15,15 @@ type Buffer struct {
 	Lines       []Line
 	LineCount   int
 	GutterWidth int
+	// BOMOffset is the number of leading UTF-8 BOM bytes stripped from
+	// the raw file before line splitting (Issue #22). Ripgrep 15.x
+	// removes a leading UTF-8 BOM from searched line data, so
+	// submatch offsets for line 1 are relative to the line without the
+	// BOM. Load strips the BOM so ByteCells and submatch offsets align
+	// in rg-line coordinates; BOMOffset is retained for converting
+	// back to raw-file coordinates (e.g. Issue #29 stale validation).
+	// Zero when no leading BOM is present; 3 (EF BB BF) otherwise.
+	BOMOffset int
 }
 
 // Cluster is one grapheme cluster within a display string: its byte
@@ -59,6 +68,20 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		return nil, err
 	}
 
+	// Detect and strip a leading UTF-8 BOM (EF BB BF). Ripgrep 15.x
+	// removes it from searched line data under default detection, so
+	// submatch offsets for line 1 are relative to the line without the
+	// BOM. Stripping it here keeps the raw-line bytes in rg-line
+	// coordinates so ByteCells and submatch offsets align; BOMOffset
+	// is retained on the Buffer for converting back to raw-file
+	// coordinates. Non-leading U+FEFF is not a file BOM and remains
+	// as ordinary content.
+	bomOffset := 0
+	if len(data) >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF {
+		bomOffset = 3
+		data = data[3:]
+	}
+
 	rawLines := splitLines(data)
 	lineCount := len(rawLines)
 	gw := gutterWidth(lineCount)
@@ -99,6 +122,7 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		Lines:       lines,
 		LineCount:   lineCount,
 		GutterWidth: gw,
+		BOMOffset:   bomOffset,
 	}, nil
 }
 
@@ -317,14 +341,19 @@ func expandedHighlights(byteOffsets []int, rawCells [][2]int, clusters []safepre
 				end = len(byteOffsets) - 1
 			}
 			endCi := clusterForByte(end)
-			if endCi < 0 {
+			endHasCluster := endCi >= 0
+			if !endHasCluster {
 				endCi = startCi
 			}
 			// Determine the expanded cell range. When a raw byte's
 			// display text sits within one cluster (combining mark,
 			// ZWJ joiner), replace its cell range with the cluster's
 			// range. When it spans multiple clusters (ESC → ^[),
-			// preserve the original multi-cell range.
+			// preserve the original multi-cell range. When the end
+			// byte has no cluster (a terminator byte mapping to the
+			// zero-width end-of-line position), use its original cell
+			// end so a span covering visible text plus terminator
+			// highlights only the visible text (Issue #22).
 			hlStart := rawCells[sm.Start][0]
 			hlEnd := rawCells[end][1]
 			if spanMultiCluster(sm.Start) {
@@ -337,6 +366,12 @@ func expandedHighlights(byteOffsets []int, rawCells [][2]int, clusters []safepre
 			if spanMultiCluster(end) {
 				// End byte spans multiple clusters: keep its
 				// original cell end (escaped form).
+				hlEnd = rawCells[end][1]
+			} else if !endHasCluster {
+				// End byte is a terminator or has no cluster: use
+				// its original cell end (the end-of-line position)
+				// so the highlight covers the visible text without
+				// the terminator.
 				hlEnd = rawCells[end][1]
 			} else {
 				hlEnd = clusterCells[endCi][1]

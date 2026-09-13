@@ -335,12 +335,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   reads the file, splits lines (LF/CRLF terminators, standalone CR is
   content), escapes each line through `safepresentation.EscapeContent`,
   and maps `Stop.Submatches` to display cell ranges via the byte→cell
-  map. `Buffer` carries `Lines`, `LineCount`, and `GutterWidth`. `Line`
-  carries `Number`, `Display`, `ByteCells`, `Highlights`, and (Issue
-  #16) `Clusters` (grapheme clusters from the shared policy),
-  `StartByte` (byte offset where a wrapped row begins), and
-  `Continuation` (true for wrapped rows that are not the first row of
-  their source line). Issue #16: `Load` now populates `Clusters` via
+  map. `Buffer` carries `Lines`, `LineCount`, `GutterWidth`, and (Issue
+  #22) `BOMOffset` (number of leading UTF-8 BOM bytes stripped, 0 or 3,
+  for raw-file ↔ rg-line coordinate conversion). `Line` carries
+  `Number`, `Display`, `ByteCells`, `Highlights`, and (Issue #16)
+  `Clusters` (grapheme clusters from the shared policy), `StartByte`
+  (byte offset where a wrapped row begins), and `Continuation` (true
+  for wrapped rows that are not the first row of their source line).
+  Issue #16: `Load` now populates `Clusters` via
   `safepresentation.GraphemeClusters`. `Cluster` is an alias for
   `safepresentation.Cluster`. The completion message carries the fully
   prepared buffer so `Update` does no full-file work. Issue #21 added
@@ -353,9 +355,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   visible fallback cell, multi-cell escaped forms like ESC → `^[` are
   preserved). The expanded `Highlights` and `ByteCells` are the single
   source for Viewport, App, Issue #19 reveal, and Issue #20 indicators.
-  See [browse-tracer](browse-tracer.md),
+  Issue #22 added structural line handling: `Load` detects and strips a
+  leading UTF-8 BOM (`EF BB BF`) before `splitLines` so rg-line and
+  raw-file coordinates are kept separate (`Buffer.BOMOffset` records the
+  strip length); `splitLines` retains original line bytes including
+  terminators for byte-coordinate mapping; terminator bytes and
+  zero-width positions map to the display end-of-line column; a span
+  covering visible text plus terminator highlights only the visible text
+  (`expandedHighlights` uses the end byte's original cell end when it
+  has no cluster); a standalone CR is escaped as `^M`; an empty file
+  produces zero lines with a three-cell gutter; non-leading U+FEFF is
+  ordinary content. See [browse-tracer](browse-tracer.md),
   [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
-  and [grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md).
+  [grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md),
+  and [structural-line-handling](structural-line-handling.md).
 
 ## internal/viewport
 
