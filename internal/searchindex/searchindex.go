@@ -3,14 +3,18 @@
 package searchindex
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"vrg/internal/safepresentation"
 )
 
 // Index is the prepared navigation index of matched lines, ordered by
@@ -20,6 +24,22 @@ type Index struct {
 	// excludedFiles is the count of distinct files dropped by a
 	// non-null binary_offset in their end event.
 	excludedFiles int
+	// malformedCount is the number of records skipped and counted as
+	// malformed (invalid JSON, invalid base64, missing/invalid type,
+	// or known events violating the per-record schema matrix).
+	malformedCount int
+	// oversizedCount is the number of records that exceeded the 64 MiB
+	// payload limit and were discarded. A final oversized record
+	// without a newline also increments malformedCount and marks the
+	// stream incomplete.
+	oversizedCount int
+	// unknownCount is the number of records with an unrecognised
+	// string event type. Unknown types are counted separately from
+	// malformed records and never independently alter exit status.
+	unknownCount int
+	// oversizedDiags is the list of per-record oversized diagnostics
+	// with sanitized paths, for records where path recovery succeeded.
+	oversizedDiags []string
 	// integrity is the stream-integrity assessment, kept separate from
 	// process success so the App can assess them independently.
 	integrity Integrity
@@ -86,6 +106,52 @@ func (idx *Index) ExcludedFiles() int {
 		return 0
 	}
 	return idx.excludedFiles
+}
+
+// MalformedCount returns the number of records skipped and counted as
+// malformed (invalid JSON, invalid base64, missing/invalid type, or
+// known events violating the per-record schema matrix). Malformed
+// counts are kept separate from stream-integrity failures except in
+// the two cases the Issue #9 and Issue #3 matrices mark both.
+func (idx *Index) MalformedCount() int {
+	if idx == nil {
+		return 0
+	}
+	return idx.malformedCount
+}
+
+// OversizedCount returns the number of records that exceeded the 64 MiB
+// payload limit and were discarded. A final oversized record without a
+// newline also increments MalformedCount and marks the stream
+// incomplete. Oversized counts are tracked separately from malformed
+// counts so the App can report them independently.
+func (idx *Index) OversizedCount() int {
+	if idx == nil {
+		return 0
+	}
+	return idx.oversizedCount
+}
+
+// UnknownCount returns the number of records with an unrecognised
+// string event type. Unknown types are counted separately from
+// malformed records and never independently alter exit status.
+func (idx *Index) UnknownCount() int {
+	if idx == nil {
+		return 0
+	}
+	return idx.unknownCount
+}
+
+// OversizedDiagnostics returns the per-record oversized diagnostics with
+// sanitized paths, for records where path recovery succeeded. Each
+// entry is of the form "oversized record skipped for <sanitized path>".
+// Records where the limit was reached before path recovery produce no
+// entry.
+func (idx *Index) OversizedDiagnostics() []string {
+	if idx == nil {
+		return nil
+	}
+	return idx.oversizedDiags
 }
 
 // Stop is one navigation stop: one matched source line in one file.
@@ -164,6 +230,19 @@ type Builder struct {
 	trailingMalformed bool
 	// integrityFailed is true once any lifecycle rule has been violated.
 	integrityFailed bool
+	// malformedCount is the number of records skipped and counted as
+	// malformed. It is kept separate from integrity failures except in
+	// the two cases the matrices mark both.
+	malformedCount int
+	// oversizedCount is the number of records that exceeded the 64 MiB
+	// payload limit and were discarded.
+	oversizedCount int
+	// unknownCount is the number of records with an unrecognised
+	// string event type.
+	unknownCount int
+	// oversizedDiags is the list of per-record oversized diagnostics
+	// with sanitized paths, for records where path recovery succeeded.
+	oversizedDiags []string
 }
 
 // MarkTrailingMalformed signals that the scanner saw a trailing
@@ -171,6 +250,190 @@ type Builder struct {
 // stream is marked incomplete.
 func (b *Builder) MarkTrailingMalformed() {
 	b.trailingMalformed = true
+	b.malformedCount++
+}
+
+// MaxRecordSize is the maximum JSON record payload size, excluding the
+// newline delimiter. Records at or below this limit are accepted;
+// records above it are discarded as oversized.
+const MaxRecordSize = 64 * 1024 * 1024 // 64 MiB
+
+// ReadFrom reads newline-delimited JSON records from r, parsing each
+// record that fits within MaxRecordSize and discarding oversized
+// records through the next newline. Oversized records are counted
+// separately and best-effort path recovery produces a diagnostic when
+// the type and data.path are recoverable from the partial data. A
+// trailing record without a newline is counted as malformed and marks
+// the stream incomplete; a trailing oversized record without a newline
+// also increments the oversized count. ReadFrom satisfies io.ReaderFrom
+// and returns the total bytes read.
+func (b *Builder) ReadFrom(r io.Reader) (int64, error) {
+	br := bufio.NewReaderSize(r, MaxRecordSize+1)
+	var total int64
+	for {
+		line, err := br.ReadString('\n')
+		total += int64(len(line))
+		if err == nil {
+			// Found newline. Record excludes the newline.
+			record := line[:len(line)-1]
+			if len(record) <= MaxRecordSize {
+				b.Add([]byte(record))
+			} else {
+				// Oversized record that fit in the buffer (should
+				// not happen with buffer size MaxRecordSize+1,
+				// but handle defensively).
+				b.recordOversized([]byte(record))
+			}
+			continue
+		}
+		if err == io.EOF {
+			// No more data. Handle trailing bytes.
+			if len(line) > 0 {
+				if len(line) > MaxRecordSize {
+					// Final oversized record without newline.
+					b.recordOversized([]byte(line))
+					b.malformedCount++
+					b.trailingMalformed = true
+				} else {
+					// Ordinary trailing record without newline.
+					b.MarkTrailingMalformed()
+				}
+			}
+			return total, nil
+		}
+		if err == bufio.ErrBufferFull {
+			// Record exceeds MaxRecordSize. The returned data is
+			// the first MaxRecordSize+1 bytes of the record.
+			b.recordOversized([]byte(line))
+			// Discard through the next newline.
+			rest, discardErr := br.ReadBytes('\n')
+			total += int64(len(rest))
+			if discardErr == nil {
+				continue
+			}
+			if discardErr == io.EOF {
+				// No more newlines. Final oversized record.
+				b.malformedCount++
+				b.trailingMalformed = true
+				return total, nil
+			}
+			return total, discardErr
+		}
+		// Other I/O error.
+		return total, err
+	}
+}
+
+// recordOversized counts an oversized record and, when the type and
+// data.path are recoverable from the partial data, appends a sanitized
+// path diagnostic.
+func (b *Builder) recordOversized(partial []byte) {
+	b.oversizedCount++
+	path, ok := recoverOversizedPath(partial)
+	if !ok {
+		return
+	}
+	b.oversizedDiags = append(b.oversizedDiags,
+		"oversized record skipped for "+safepresentation.EscapePath(path).Text)
+}
+
+// recoverOversizedPath attempts to extract the decoded path from the
+// partial data of an oversized match record using token-based JSON
+// parsing, which tolerates truncation after the fields of interest.
+func recoverOversizedPath(partial []byte) ([]byte, bool) {
+	dec := json.NewDecoder(bytes.NewReader(partial))
+	tok, err := dec.Token()
+	if err != nil || tok != json.Delim('{') {
+		return nil, false
+	}
+	var recType string
+	var foundType, foundPath bool
+	var pathBytes []byte
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			break
+		}
+		key, ok := tok.(string)
+		if !ok {
+			break
+		}
+		switch key {
+		case "type":
+			val, err := dec.Token()
+			if err != nil {
+				break
+			}
+			if s, ok := val.(string); ok {
+				recType = s
+				foundType = true
+			}
+		case "data":
+			pathBytes, foundPath = recoverDataPath(dec)
+		default:
+			if err := skipJSONValue(dec); err != nil {
+				break
+			}
+		}
+	}
+	if !foundType || recType != "match" || !foundPath || pathBytes == nil {
+		return nil, false
+	}
+	return pathBytes, true
+}
+
+// recoverDataPath extracts the decoded path from the data object of a
+// match record using token-based JSON parsing.
+func recoverDataPath(dec *json.Decoder) ([]byte, bool) {
+	tok, err := dec.Token()
+	if err != nil || tok != json.Delim('{') {
+		return nil, false
+	}
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			break
+		}
+		key, ok := tok.(string)
+		if !ok {
+			break
+		}
+		if key == "path" {
+			var tb textBytes
+			if err := dec.Decode(&tb); err != nil {
+				return nil, false
+			}
+			path, err := tb.decode()
+			if err != nil {
+				return nil, false
+			}
+			return path, true
+		}
+		if err := skipJSONValue(dec); err != nil {
+			break
+		}
+	}
+	return nil, false
+}
+
+// skipJSONValue skips the next JSON value (object, array, or scalar)
+// from the decoder.
+func skipJSONValue(dec *json.Decoder) error {
+	tok, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	if _, ok := tok.(json.Delim); ok {
+		for dec.More() {
+			if err := skipJSONValue(dec); err != nil {
+				return err
+			}
+		}
+		if _, err := dec.Token(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // stopKey identifies one navigation stop by raw path bytes and line
@@ -211,43 +474,67 @@ func NewBuilder(workdir string) *Builder {
 // match, end, summary, and context events. Context events are ignored
 // for lifecycle purposes. Match events are merged into navigation stops
 // by raw path and line number. Unknown event types are accepted
-// without effect. It returns nil for valid records and a non-nil error
-// for malformed records; the caller is responsible for skip and count
-// handling. Lifecycle validation is applied per the Issue #9
-// transition matrix; violations mark the stream integrity as failed
-// but never reject an otherwise well-formed record.
+// without effect. Malformed records (invalid JSON, invalid base64,
+// missing/invalid type, or known events violating the per-record
+// schema matrix) are skipped and counted as malformed; the count is
+// exposed via Index.MalformedCount and is kept separate from
+// stream-integrity failures. Add returns a non-nil error for malformed
+// records so callers may optionally react, but the count is tracked
+// internally and callers need not count errors themselves. Lifecycle
+// validation is applied per the Issue #9 transition matrix; violations
+// mark the stream integrity as failed but never reject an otherwise
+// well-formed record and never inflate the malformed count.
 func (b *Builder) Add(line []byte) error {
 	var rec struct {
 		Type string          `json:"type"`
 		Data json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(line, &rec); err != nil {
+		b.malformedCount++
+		// A malformed record arriving after a summary still marks
+		// the stream as after-summary; we cannot confirm it is a
+		// context record, so we treat it as a non-context record.
+		if b.sawSummary {
+			b.afterSummary = true
+		}
 		return fmt.Errorf("invalid json: %w", err)
-	}
-	if rec.Type == "" {
-		return errors.New("missing or empty type field")
 	}
 	// Any record after a summary is an integrity failure. Context
 	// records participate in no lifecycle validation, so they do not
 	// trigger this check on their own; the afterSummary flag is set
-	// only by non-context records arriving after the summary.
+	// only by non-context records arriving after the summary. This
+	// check runs before the missing-type check so that a record with
+	// no type field arriving after a summary still marks the stream.
 	if b.sawSummary && rec.Type != "context" {
 		b.afterSummary = true
 	}
+	if rec.Type == "" {
+		b.malformedCount++
+		return errors.New("missing or empty type field")
+	}
+	var err error
 	switch rec.Type {
 	case "begin":
-		return b.parseBegin(rec.Data)
+		err = b.parseBegin(rec.Data)
 	case "match":
-		return b.parseMatch(rec.Data)
+		err = b.parseMatch(rec.Data)
 	case "end":
-		return b.parseEnd(rec.Data)
+		err = b.parseEnd(rec.Data)
 	case "summary":
-		return b.parseSummary(rec.Data)
+		err = b.parseSummary(rec.Data)
 	case "context":
 		return nil
 	default:
+		// Unknown string event type: count separately from malformed.
+		// Unknown types never substitute for required known completion
+		// events and never independently alter exit status.
+		b.unknownCount++
 		return nil
 	}
+	if err != nil {
+		b.malformedCount++
+	}
+	return err
 }
 
 // parseBegin validates a begin record's path field and tracks the
@@ -355,6 +642,9 @@ func (b *Builder) parseMatch(data json.RawMessage) error {
 // an integrity failure (orphaned/duplicate end). A non-null
 // binary_offset drops that file and all its previously collected
 // matches from the builder and counts it as a distinct excluded file.
+// Per-record schema validation (path, binary_offset presence and
+// type) happens before lifecycle validation so a bad binary_offset is
+// malformed regardless of open state.
 func (b *Builder) parseEnd(data json.RawMessage) error {
 	var d struct {
 		Path         textBytes       `json:"path"`
@@ -370,6 +660,20 @@ func (b *Builder) parseEnd(data json.RawMessage) error {
 	if len(d.BinaryOffset) == 0 {
 		return errors.New("end: missing binary_offset")
 	}
+	// Validate binary_offset: null is valid; non-null must be a
+	// non-negative integer. Per-record schema validation happens
+	// before lifecycle validation so a bad binary_offset is malformed
+	// regardless of open state.
+	var binaryOffset int64
+	hasBinaryOffset := string(d.BinaryOffset) != "null"
+	if hasBinaryOffset {
+		if err := json.Unmarshal(d.BinaryOffset, &binaryOffset); err != nil {
+			return fmt.Errorf("end: binary_offset is not an integer: %w", err)
+		}
+		if binaryOffset < 0 {
+			return fmt.Errorf("end: binary_offset %d < 0", binaryOffset)
+		}
+	}
 	pathKey := string(rawPath)
 	// An end while the path is not open is an integrity failure.
 	if !b.open[pathKey] {
@@ -380,14 +684,7 @@ func (b *Builder) parseEnd(data json.RawMessage) error {
 	// Close the file.
 	b.open[pathKey] = false
 	b.closed[pathKey] = true
-	if string(d.BinaryOffset) != "null" {
-		var n int64
-		if err := json.Unmarshal(d.BinaryOffset, &n); err != nil {
-			return fmt.Errorf("end: binary_offset is not an integer: %w", err)
-		}
-		if n < 0 {
-			return fmt.Errorf("end: binary_offset %d < 0", n)
-		}
+	if hasBinaryOffset {
 		// Non-null binary_offset: exclude this file and drop its
 		// previously collected matches.
 		if !b.excluded[pathKey] {
@@ -470,9 +767,13 @@ func (b *Builder) Build() *Index {
 		return stops[i].LineNumber < stops[j].LineNumber
 	})
 	return &Index{
-		stops:         stops,
-		excludedFiles: b.excludedCount,
-		integrity:     Integrity{Complete: complete},
+		stops:          stops,
+		excludedFiles:  b.excludedCount,
+		malformedCount: b.malformedCount,
+		oversizedCount: b.oversizedCount,
+		unknownCount:   b.unknownCount,
+		oversizedDiags: b.oversizedDiags,
+		integrity:      Integrity{Complete: complete},
 	}
 }
 

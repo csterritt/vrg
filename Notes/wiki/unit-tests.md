@@ -109,6 +109,29 @@ table, parser config, and generated help cannot drift.
   unterminated records, context records in arbitrary positions, and
   binary exclusion precedence. Each row asserts integrity completeness
   and stop count.
+- Issue #10 malformed disposition tests (`malformed_test.go`,
+  `TestMalformedDisposition`) — table-driven coverage of every row of
+  the Issue #3 per-record schema matrix (invalid JSON, invalid base64,
+  missing/empty/non-string type, missing required fields, invalid line
+  numbers, empty submatches, invalid submatch ranges, malformed
+  `end.binary_offset`, malformed summary data) and the composite rows
+  (trailing unterminated record, malformed after summary). Each row
+  asserts the deterministic disposition: skipped-and-counted malformed,
+  stream-integrity failure, or both. Resynchronization after a skip is
+  asserted: a malformed record between valid ones is skipped, counted,
+  and followed by correct indexing of the remaining records. Lifecycle
+  violations never inflate the malformed count and vice versa except
+  where the matrices mark both.
+- Issue #10 oversized and unknown-type tests (`oversized_test.go`) —
+  `TestOversizedBoundary` (exactly 64 MiB accepted, 64 MiB+1 skipped),
+  `TestOversizedResynchronization` (oversized discarded through next
+  newline, parsing resumes), `TestOversizedFinalRecord` (trailing
+  oversized without newline: oversized + malformed + incomplete),
+  `TestOversizedDiagnostics` (recoverable path diagnostic, no path
+  recovery count only, file with only oversized matches absent from
+  stops), `TestUnknownType` (unknown counted separately, unknown does
+  not substitute for summary, unknown after summary is unknown and
+  after-summary integrity failure).
 
 ## internal/safepresentation
 
@@ -317,8 +340,12 @@ table, parser config, and generated help cannot drift.
   rg 1 empty, rg 0 empty, fatal code with/without results, signal
   death with/without results, missing summary with matches, orphaned
   end, incomplete stream (rg 0/1), stderr warning with/without
-  results, and fatal code with stderr. Each row asserts state, overlay
-  kind, overlay fatality, and exit status.
+  results, and fatal code with stderr. Issue #10 added rows for
+  unknown-only warnings with zero results, malformed skipped with
+  usable results, malformed skipped with zero usable results
+  (record-loss fatal), and oversized with zero usable results
+  (record-loss fatal). Each row asserts state, overlay kind, overlay
+  fatality, and exit status.
 - `TestDecideOutcomeGeneratedDiagnostic` — when a failed process
   supplies no stderr, the outcome generates a diagnostic naming the
   exit code or signal.
@@ -330,7 +357,12 @@ table, parser config, and generated help cannot drift.
   results, rg 1 empty, fatal code with results (browse + overlay →
   dismiss → browse → q → 2), fatal code without results (overlay → q/Esc
   → 2), signal death with/without results, stderr warning with/without
-  results. Each row asserts initial presentation, dismissal behavior,
+  results. Issue #10 added rows for unknown-only warnings with zero
+  results, malformed skipped with usable results (browse + warning →
+  dismiss → browse → q → 0), malformed skipped with zero usable results
+  (record-loss fatal, q → 2 and Esc → 2), and skipped record plus
+  binary exclusion leaving zero retained stops (record-loss fatal 2).
+  Each row asserts initial presentation, dismissal behavior,
   and final status.
 - `TestFixedStatusCtrlCOverride` — `ctrl+c` after search completion
   exits 130 from browse, no-results, and open-overlay states,

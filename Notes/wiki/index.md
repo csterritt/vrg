@@ -35,10 +35,18 @@ Catalog of all wiki pages for the vrg project.
   (dark/light), `c` toggle with no persistence, true-inverse match
   styling, current-match underline, current-file underline, indicator,
   overlay, filename-rule, file-list, and base/gutter styles
-- [outcome-contract.md](outcome-contract.md) — Issue #9: stream-integrity
-  accounting, separate process-success and stream-integrity assessment,
-  the fatal/warning outcome matrix, the modal error overlay, exit
-  statuses, stderr capture and fallback diagnostics
+- [outcome-contract.md](outcome-contract.md) — Issue #9 (extended by
+  Issue #10): stream-integrity accounting, separate process-success and
+  stream-integrity assessment, the fatal/warning outcome matrix, the
+  modal error overlay, exit statuses, stderr capture and fallback
+  diagnostics, record-loss inputs and outcome rows
+- [record-robustness.md](record-robustness.md) — Issue #10: robust
+  handling of malformed, oversized, and unknown-type records with
+  separate counters, the 64 MiB record limit with
+  discard-and-resynchronize behavior, sanitized oversized-record
+  diagnostics, unknown-type counting rules, missing-`end` retention,
+  and record-loss outcome rows with after-filtering usable-results
+  assessment
 
 ## Catalogs
 

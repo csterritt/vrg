@@ -85,6 +85,19 @@ func buildIndex(t *testing.T, workdir string, records ...string) *searchindex.In
 	return b.Build()
 }
 
+// buildIndexRaw builds a searchindex.Index from JSON record strings
+// without auto-completion and without fataling on Add errors. This
+// lets record-loss tests feed malformed and unknown records that Add
+// rejects with an error but still counts internally.
+func buildIndexRaw(t *testing.T, workdir string, records ...string) *searchindex.Index {
+	t.Helper()
+	b := searchindex.NewBuilder(workdir)
+	for _, r := range records {
+		_ = b.Add([]byte(r))
+	}
+	return b.Build()
+}
+
 // completeRecords wraps match-only record streams with begin/end events
 // for each distinct path and appends a summary when the input lacks a
 // summary record. Streams that already include a summary are returned

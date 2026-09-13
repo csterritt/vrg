@@ -220,3 +220,39 @@ contract, Colours/overlays/key precedence), `internal/searchindex/searchindex.go
 `internal/app/outcome_test.go`, `internal/app/overlay_test.go`,
 `internal/app/browse_test.go`, `cmd/vrg/outcome_test.go`,
 `cmd/vrg/search_test.go`.
+
+## [2026-09-12] ingest | Issue #10 record robustness — malformed, oversized, unknown
+
+Ingested the completed Issue #10 implementation: robust handling of
+malformed, oversized, and unknown-type records in ripgrep JSON streams
+with separate counters, bounded 64 MiB record parsing with
+discard-and-resynchronize behavior, sanitized oversized-record
+diagnostics, and record-loss outcome rows. `internal/searchindex`
+added `Index.MalformedCount()`, `Index.OversizedCount()`,
+`Index.UnknownCount()`, and `Index.OversizedDiagnostics()` accessors;
+`Builder.ReadFrom` is the bounded 64 MiB record reader that discards
+oversized records through the next newline and resynchronizes on the
+following record; `Builder.recordOversized` counts oversized records
+and recovers sanitized path diagnostics via token-based JSON parsing
+through the Issue #6 `safepresentation.EscapePath` utility; unknown
+string event types are counted separately from malformed and never
+independently alter exit status; a trailing oversized record without
+a newline is counted oversized and malformed and marks the stream
+incomplete. `internal/app` extended `RecordLoss` with `Oversized`,
+added `RecordLossDiagnostics` to `OutcomeInput`, the
+`recordLossDiagnostics` helper, and new outcome-matrix rows for
+malformed, oversized, and unknown record loss; `collectResults` now
+uses `Builder.ReadFrom` instead of `bufio.Scanner`. Created
+[record-robustness](record-robustness.md); updated
+[search-collection-path](search-collection-path.md),
+[outcome-contract](outcome-contract.md), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/tasks/010-record-robustness-malformed-oversized-unknown.md`,
+`Notes/issues/010-record-robustness-malformed-oversized-unknown.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity;
+Outcome and exit-status contract; Resources and responsiveness),
+`internal/searchindex/searchindex.go`,
+`internal/searchindex/malformed_test.go`,
+`internal/searchindex/oversized_test.go`,
+`internal/app/app.go`, `internal/app/outcome_test.go`,
+`internal/app/browse_test.go`.

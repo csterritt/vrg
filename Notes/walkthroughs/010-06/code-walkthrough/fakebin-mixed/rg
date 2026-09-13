@@ -1,0 +1,13 @@
+#!/bin/bash
+# Fake rg that emits a valid begin, a valid match, a garbage (malformed)
+# line, an unknown-type line, a valid end, and a summary, then exits 0.
+# vrg should show the browse view with a warning overlay listing both
+# skip counts (1 malformed record skipped, 1 unrecognised record types
+# skipped), and q exiting 0.
+echo '{"type":"begin","data":{"path":{"text":"demo.txt"}}}'
+echo '{"type":"match","data":{"path":{"text":"demo.txt"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}],"lines":{"text":"hello world\n"}}}'
+echo '{garbage line'
+echo '{"type":"unknown","data":{}}'
+echo '{"type":"end","data":{"path":{"text":"demo.txt"},"binary_offset":null}}'
+echo '{"type":"summary","data":{}}'
+exit 0

@@ -51,8 +51,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   so the app can assess them independently. `Stop.Incomplete` marks
   retained matches whose lifecycle metadata is incomplete (orphaned
   match, file still open at stream end). `Builder.MarkTrailingMalformed`
-  signals a trailing unterminated record. See
-  [search-collection-path](search-collection-path.md).
+  signals a trailing unterminated record. Issue #10 added robust
+  record handling: `Index.MalformedCount()`, `Index.OversizedCount()`,
+  `Index.UnknownCount()`, and `Index.OversizedDiagnostics()` expose
+  separate counters and sanitized path diagnostics. `Builder.ReadFrom`
+  is the bounded 64 MiB record reader that discards oversized records
+  through the next newline and resynchronizes on the following record.
+  Unknown string event types are counted separately from malformed and
+  never independently alter exit status. See
+  [search-collection-path](search-collection-path.md) and
+  [record-robustness](record-robustness.md).
 
 ## internal/app
 
@@ -97,10 +105,17 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   completion and never recomputed except by `ctrl+c` (which overrides
   to 130). The overlay is modal: up/down scroll, q/Esc dismiss
   (non-fatal) or exit 2 (fatal no-results), other keys ignored. Large
-  diagnostics show both head and tail. See
+  diagnostics show both head and tail. Issue #10 extended the outcome
+  matrix with record-loss inputs: `RecordLoss{Malformed, Unknown,
+  Oversized}` and `RecordLossDiagnostics` on `OutcomeInput`, the
+  `recordLossDiagnostics` helper, and new matrix rows for malformed,
+  oversized, and unknown record loss. `collectResults` now uses
+  `Builder.ReadFrom` (the bounded 64 MiB reader) instead of
+  `bufio.Scanner`. See
   [search-collection-path](search-collection-path.md),
-  [browse-tracer](browse-tracer.md), and
-  [outcome-contract](outcome-contract.md).
+  [browse-tracer](browse-tracer.md),
+  [outcome-contract](outcome-contract.md), and
+  [record-robustness](record-robustness.md).
 
 ## internal/safepresentation
 

@@ -1,12 +1,15 @@
-# Outcome contract (Issue #9)
+# Outcome contract (Issue #9, extended by Issue #10)
 
 The fatal/warning outcome matrix and modal error overlay delivered by
 [Issue #9](../issues/009-error-overlay-and-fatal-outcomes.md), adding
 stream-integrity accounting, separate process-success and
 stream-integrity assessment, a modal error overlay, and exit status 2
-for fatal process or stream-integrity outcomes. Relevant PRD sections:
-*Module Design → SearchIndex / App*, *Outcome and exit-status contract*,
-*Colours, overlays, and key precedence*.
+for fatal process or stream-integrity outcomes. [Issue #10](../issues/010-record-robustness-malformed-oversized-unknown.md)
+extended the matrix with record-loss inputs (malformed, oversized,
+unknown) and after-filtering usable-results assessment. Relevant PRD
+sections: *Module Design → SearchIndex / App*, *Outcome and exit-status
+contract*, *Colours, overlays, and key precedence*. See also
+[record-robustness](record-robustness.md).
 
 ## Stream integrity
 
@@ -53,25 +56,49 @@ code or, for signal death, the signal number with `SignalDeath` set.
 
 `DecideOutcome(OutcomeInput) Outcome` is the pure outcome decision. The
 stream is fatal when the process exits with a code other than 0 or 1,
-dies by signal, or the stream integrity fails (incomplete).
+dies by signal, or the stream integrity fails (incomplete). Issue #10
+added record-loss fatal rows: when malformed or oversized records leave
+zero usable results, the outcome is a record-loss fatal overlay (exit
+2). Unknown-only loss never independently changes exit status; it
+produces a warning overlay.
 
-| Process | Integrity | Usable results | Stderr | Initial state | Overlay | Fatal | Exit |
-|---------|-----------|----------------|--------|---------------|---------|-------|------|
-| 0       | complete  | >0             | any    | browse        | none    | no    | 0    |
-| 0       | complete  | 0              | none   | no-results    | none    | no    | 1    |
-| 0       | complete  | 0              | any    | no-results    | warning | no    | 1    |
-| 0       | complete  | >0             | any    | browse        | warning | no    | 0    |
-| 1       | complete  | >0             | none   | browse        | none    | no    | 0    |
-| 1       | complete  | >0             | any    | browse        | warning | no    | 0    |
-| 1       | complete  | 0              | none   | no-results    | none    | no    | 1    |
-| 1       | complete  | 0              | any    | no-results    | warning | no    | 1    |
-| fatal   | complete  | >0             | any    | browse        | error   | no    | 2    |
-| fatal   | complete  | 0              | any    | no-results    | error   | yes   | 2    |
-| any     | incomplete| >0             | any    | browse        | error   | no    | 2    |
-| any     | incomplete| 0              | any    | no-results    | error   | yes   | 2    |
+| Process | Integrity | Usable results | Stderr | Record loss | Initial state | Overlay | Fatal | Exit |
+|---------|-----------|----------------|--------|-------------|---------------|---------|-------|------|
+| 0       | complete  | >0             | none   | none        | browse        | none    | no    | 0    |
+| 0       | complete  | 0              | none   | none        | no-results    | none    | no    | 1    |
+| 0       | complete  | 0              | any    | none        | no-results    | warning | no    | 1    |
+| 0       | complete  | >0             | any    | none        | browse        | warning | no    | 0    |
+| 1       | complete  | >0             | none   | none        | browse        | none    | no    | 0    |
+| 1       | complete  | >0             | any    | none        | browse        | warning | no    | 0    |
+| 1       | complete  | 0              | none   | none        | no-results    | none    | no    | 1    |
+| 1       | complete  | 0              | any    | none        | no-results    | warning | no    | 1    |
+| fatal   | complete  | >0             | any    | none        | browse        | error   | no    | 2    |
+| fatal   | complete  | 0              | any    | none        | no-results    | error   | yes   | 2    |
+| any     | incomplete| >0             | any    | none        | browse        | error   | no    | 2    |
+| any     | incomplete| 0              | any    | none        | no-results    | error   | yes   | 2    |
+| 0       | complete  | >0             | any    | malformed   | browse        | warning | no    | 0    |
+| 0       | complete  | 0              | any    | malformed   | no-results    | error   | yes   | 2    |
+| 0       | complete  | 0              | any    | oversized   | no-results    | error   | yes   | 2    |
+| 0       | complete  | 0              | any    | unknown     | no-results    | warning | no    | 1    |
+| 0       | complete  | 0              | any    | malformed + binary exclusion | no-results | error | yes | 2 |
 
 The fixed exit status is decided once at completion and never recomputed
 except by `ctrl+c` (which overrides to 130).
+
+### Record-loss inputs (Issue #10)
+
+`OutcomeInput.RecordLoss` carries `Malformed`, `Unknown`, and
+`Oversized` counts. `OutcomeInput.RecordLossDiagnostics` carries the
+formatted diagnostic text for record-loss counts, combined with stderr
+diagnostics for the overlay text. The `recordLossDiagnostics` helper
+formats the malformed count ("N malformed record(s) skipped"), the
+unknown count ("N unrecognised record types skipped"), and the
+per-record oversized path diagnostics.
+
+Usable-results assessment happens after all filtering (binary exclusion
+and record loss), so a stream whose sole retained file was
+binary-excluded after a skipped record follows the record-loss fatal
+row rather than the no-results row.
 
 ## Overlay behavior
 

@@ -3,7 +3,6 @@
 package app
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -77,13 +76,21 @@ type ProcessResult struct {
 	SignalDeath bool
 }
 
-// RecordLoss holds record-loss counts. Issue #10 extends the outcome
-// matrix with these; Issue #9 accepts but ignores them.
+// RecordLoss holds record-loss counts for the outcome decision.
+// Malformed is the count of skipped malformed records. Unknown is the
+// count of skipped unknown record types. Oversized is the count of
+// records that exceeded the 64 MiB payload limit. When malformed or
+// oversized records leave zero usable results, the outcome is a
+// record-loss fatal overlay (exit 2). Unknown-only loss never
+// independently changes exit status.
 type RecordLoss struct {
 	// Malformed is the count of skipped malformed records.
 	Malformed int
 	// Unknown is the count of skipped unknown record types.
 	Unknown int
+	// Oversized is the count of records that exceeded the 64 MiB
+	// payload limit and were discarded.
+	Oversized int
 }
 
 // OutcomeInput is the input to the pure outcome decision.
@@ -91,11 +98,14 @@ type OutcomeInput struct {
 	Process       ProcessResult
 	Integrity     searchindex.Integrity
 	UsableResults int
-	// RecordLoss is accepted but unused until Issue #10.
-	RecordLoss RecordLoss
+	RecordLoss    RecordLoss
 	// Diagnostics is the captured stderr text used for warning
 	// classification and overlay text.
 	Diagnostics string
+	// RecordLossDiagnostics is the formatted diagnostic text for
+	// record-loss counts (malformed, unknown, oversized). It is
+	// combined with Diagnostics for the overlay text.
+	RecordLossDiagnostics string
 }
 
 // Outcome is the result of the pure outcome decision: the initial
@@ -120,13 +130,26 @@ type Outcome struct {
 // state, and fixed exit status from the search outcome inputs. It is
 // pure: it has no side effects and depends only on its inputs. The
 // stream is fatal when the process exits with a code other than 0 or 1,
-// dies by signal, or the stream integrity fails (incomplete). Issue #10
-// extends the matrix with record-loss inputs; until then, RecordLoss is
-// accepted but ignored.
+// dies by signal, or the stream integrity fails (incomplete). When
+// malformed or oversized records leave zero usable results, the
+// outcome is a record-loss fatal overlay (exit 2). Unknown-only loss
+// never independently changes exit status; it produces a warning
+// overlay. Record-loss diagnostics are combined with stderr
+// diagnostics for the overlay text.
 func DecideOutcome(in OutcomeInput) Outcome {
 	fatal := in.Process.SignalDeath || isFatalExit(in.Process.ExitCode) || !in.Integrity.Complete
 	hasResults := in.UsableResults > 0
-	hasDiag := in.Diagnostics != ""
+
+	// Combine stderr and record-loss diagnostics for overlay text.
+	overlayText := in.Diagnostics
+	if in.RecordLossDiagnostics != "" {
+		if overlayText != "" {
+			overlayText += "\n" + in.RecordLossDiagnostics
+		} else {
+			overlayText = in.RecordLossDiagnostics
+		}
+	}
+	hasOverlayText := overlayText != ""
 
 	if fatal {
 		text := in.Diagnostics
@@ -141,20 +164,28 @@ func DecideOutcome(in OutcomeInput) Outcome {
 		return Outcome{State: StateNoResults, Overlay: OverlayError, OverlayFatal: true, OverlayText: text, ExitStatus: 2}
 	}
 
-	// Not fatal: exit 0 or 1, complete stream.
+	// Record-loss fatal: no usable results due to malformed or
+	// oversized records. This is distinct from ordinary no-results
+	// because records were received but all were skipped.
+	recordLoss := !hasResults && (in.RecordLoss.Malformed > 0 || in.RecordLoss.Oversized > 0)
+	if recordLoss {
+		return Outcome{State: StateNoResults, Overlay: OverlayError, OverlayFatal: true, OverlayText: overlayText, ExitStatus: 2}
+	}
+
+	// Not fatal, no record loss: exit 0 or 1, complete stream.
 	if hasResults {
-		if hasDiag {
+		if hasOverlayText {
 			// Browse with warning overlay; dismiss → browse; q → 0.
-			return Outcome{State: StateBrowse, Overlay: OverlayWarning, OverlayText: in.Diagnostics, ExitStatus: 0}
+			return Outcome{State: StateBrowse, Overlay: OverlayWarning, OverlayText: overlayText, ExitStatus: 0}
 		}
 		// Browse; q → 0.
 		return Outcome{State: StateBrowse, Overlay: OverlayNone, ExitStatus: 0}
 	}
 
 	// No usable results.
-	if hasDiag {
+	if hasOverlayText {
 		// Warning overlay over no-results; dismiss → no-results; q → 1.
-		return Outcome{State: StateNoResults, Overlay: OverlayWarning, OverlayText: in.Diagnostics, ExitStatus: 1}
+		return Outcome{State: StateNoResults, Overlay: OverlayWarning, OverlayText: overlayText, ExitStatus: 1}
 	}
 	// No-results; q → 1.
 	return Outcome{State: StateNoResults, Overlay: OverlayNone, ExitStatus: 1}
@@ -164,6 +195,25 @@ func DecideOutcome(in OutcomeInput) Outcome {
 // (anything other than 0 or 1).
 func isFatalExit(code int) bool {
 	return code != 0 && code != 1
+}
+
+// recordLossDiagnostics builds the formatted diagnostic text for
+// record-loss counts from the index. It includes malformed count,
+// unknown count, and per-record oversized path diagnostics.
+func recordLossDiagnostics(idx *searchindex.Index) string {
+	var parts []string
+	if m := idx.MalformedCount(); m > 0 {
+		plural := ""
+		if m != 1 {
+			plural = "s"
+		}
+		parts = append(parts, fmt.Sprintf("%d malformed record%s skipped", m, plural))
+	}
+	if u := idx.UnknownCount(); u > 0 {
+		parts = append(parts, fmt.Sprintf("%d unrecognised record types skipped", u))
+	}
+	parts = append(parts, idx.OversizedDiagnostics()...)
+	return strings.Join(parts, "\n")
 }
 
 // generatedDiagnostic produces a diagnostic naming the exit code or
@@ -419,10 +469,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// decided once here and never recomputed except by
 			// ctrl+c (which overrides to 130).
 			oc := DecideOutcome(OutcomeInput{
-				Process:       msg.Process,
-				Integrity:     msg.Index.Integrity(),
-				UsableResults: msg.Index.Len(),
-				Diagnostics:   msg.Stderr,
+				Process:               msg.Process,
+				Integrity:             msg.Index.Integrity(),
+				UsableResults:         msg.Index.Len(),
+				Diagnostics:           msg.Stderr,
+				RecordLoss:            RecordLoss{Malformed: msg.Index.MalformedCount(), Unknown: msg.Index.UnknownCount(), Oversized: msg.Index.OversizedCount()},
+				RecordLossDiagnostics: recordLossDiagnostics(msg.Index),
 			})
 			m.state = oc.State
 			m.exitCode = oc.ExitStatus
@@ -1104,12 +1156,18 @@ func (m Model) collectResults() tea.Cmd {
 			io.Copy(&stderrBuf, p.Stderr)
 		}()
 
-		// Parse stdout line by line into the index builder.
+		// Parse stdout records into the index builder using the
+		// bounded 64 MiB record reader. Oversized records are
+		// discarded through the next newline; malformed and unknown
+		// records are counted by the builder.
 		builder := searchindex.NewBuilder(m.workdir)
-		scanner := bufio.NewScanner(p.Stdout)
-		scanner.Buffer(make([]byte, 64*1024), 64*1024*1024)
-		for scanner.Scan() {
-			builder.Add(scanner.Bytes())
+		if _, err := builder.ReadFrom(p.Stdout); err != nil {
+			// ReadFrom errors are I/O failures from the process pipe;
+			// the stream is treated as incomplete. The builder's
+			// integrity flags are not set by I/O errors, so we mark
+			// the stream as having a trailing malformed record to
+			// ensure the outcome is fatal.
+			builder.MarkTrailingMalformed()
 		}
 
 		// Wait for stderr drain to complete.

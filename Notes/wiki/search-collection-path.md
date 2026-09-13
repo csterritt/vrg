@@ -1,4 +1,4 @@
-# Search collection path (Issue #3, extended by Issues #4, #8, and #9)
+# Search collection path (Issue #3, extended by Issues #4, #8, #9, and #10)
 
 The ripgrep execution and result-collection pipeline delivered by
 [Issue #3](../issues/003-spawn-rg-collect-results-searching-screen.md),
@@ -12,11 +12,17 @@ TUI outcome for searches that complete successfully but yield no usable
 results. [Issue #9](../issues/009-error-overlay-and-fatal-outcomes.md)
 added stream-integrity accounting, separate process-success and
 stream-integrity assessment, the fatal/warning outcome matrix, and the
-modal error overlay. Relevant PRD sections: *Implementation Decisions →
-Invocation and child arguments*, *Module Design → CLI / SearchIndex /
-App*, *Testing Decisions → CLI / SearchIndex / App / Subprocess
-boundary / Responsiveness boundaries*, and *Outcome and exit-status
-contract*. See also [outcome-contract](outcome-contract.md).
+modal error overlay. [Issue #10](../issues/010-record-robustness-malformed-oversized-unknown.md)
+added robust handling of malformed, oversized, and unknown-type records
+with separate counters, bounded 64 MiB record parsing with
+discard-and-resynchronize behavior, sanitized oversized-record
+diagnostics, and record-loss outcome rows. Relevant PRD sections:
+*Implementation Decisions → Invocation and child arguments*,
+*Module Design → CLI / SearchIndex / App*, *Testing Decisions → CLI /
+SearchIndex / App / Subprocess boundary / Responsiveness boundaries*,
+*Outcome and exit-status contract*, and *Resources and responsiveness
+(64 MiB record limit)*. See also [outcome-contract](outcome-contract.md)
+and [record-robustness](record-robustness.md).
 
 ## Process boundary
 
@@ -133,6 +139,44 @@ raw path bytes, so non-UTF-8 paths sort after ASCII paths by byte value.
 - `Index.Files()` — number of distinct files with retained matches.
 - `Index.ExcludedFiles()` (Issue #8) — number of distinct files dropped
   by a non-null `binary_offset` in their `end` event.
+- `Index.Integrity()` (Issue #9) — `Integrity{Complete}`, true only when
+  every lifecycle rule passed.
+- `Index.MalformedCount()` (Issue #10) — number of records skipped and
+  counted as malformed (invalid JSON, invalid base64, missing/invalid
+  type, or known events violating the per-record schema matrix). Kept
+  separate from integrity failures except where the matrices mark both.
+- `Index.OversizedCount()` (Issue #10) — number of records that exceeded
+  the 64 MiB payload limit and were discarded.
+- `Index.UnknownCount()` (Issue #10) — number of records with an
+  unrecognised string event type, counted separately from malformed.
+- `Index.OversizedDiagnostics()` (Issue #10) — per-record oversized
+  diagnostics with sanitized paths, for records where path recovery
+  succeeded. Each entry is of the form "oversized record skipped for
+  <sanitized path>".
+
+### Bounded record parsing (Issue #10)
+
+`Builder.ReadFrom(io.Reader) (int64, error)` reads newline-delimited
+JSON records with an explicit bounded reader rather than a small
+default line-reader limit. The 64 MiB payload limit (`MaxRecordSize`)
+excludes the newline delimiter:
+
+- A record exactly at the 64 MiB limit is accepted.
+- A record one byte over is discarded as oversized.
+- An oversized record is consumed and discarded through its next
+  newline, so parsing resynchronizes on the following record. Oversized
+  records never permanently desynchronize the stream.
+- A trailing oversized record without a newline is counted oversized
+  **and also counted malformed** for its missing termination, and marks
+  the stream incomplete — all three dispositions asserted (oversized
+  count, malformed count, incomplete integrity), matching the PRD's
+  unqualified trailing-unterminated rule.
+- An ordinary trailing record without a newline is counted malformed
+  and marks the stream incomplete (the Issue #9 rule, unchanged).
+
+`collectResults` (in `internal/app`) now uses `Builder.ReadFrom` instead
+of `bufio.Scanner`. A `ReadFrom` I/O error marks the stream as having a
+trailing malformed record so the outcome is fatal.
 
 ## App model
 
@@ -184,8 +228,11 @@ Tea command:
 1. Drains stderr concurrently in a goroutine (`io.Copy` into a buffer) so
    a large stderr stream cannot block ripgrep while stdout collection
    waits.
-2. Parses stdout line by line with a `bufio.Scanner` (64 KiB initial,
-   64 MiB max buffer) into a `searchindex.Builder`.
+2. Parses stdout records into a `searchindex.Builder` via
+   `Builder.ReadFrom` (Issue #10), the bounded 64 MiB record reader that
+   discards oversized records through the next newline and resynchronizes
+   on the following record. A `ReadFrom` I/O error marks the stream as
+   having a trailing malformed record so the outcome is fatal.
 3. Waits for the stderr drain goroutine to finish.
 4. Waits for ripgrep to exit with `p.Cmd.Wait()` (reaping the child).
    If `OnReap` is set, calls it with the wait error (test seam for

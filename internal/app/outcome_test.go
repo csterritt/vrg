@@ -28,6 +28,8 @@ func TestDecideOutcomeMatrix(t *testing.T) {
 		integrity      searchindex.Integrity
 		usableResults  int
 		diagnostics    string
+		recordLoss     app.RecordLoss
+		recordLossDiag string
 		wantState      app.State
 		wantOverlay    app.OverlayKind
 		wantFatal      bool
@@ -207,15 +209,71 @@ func TestDecideOutcomeMatrix(t *testing.T) {
 			wantOverlay:    app.OverlayError,
 			wantExitStatus: 2,
 		},
+		// Issue #10: unknown-type-only warnings with zero results →
+		// warning overlay, then no-results, exit 1.
+		{
+			name:           "unknown-only zero results warning no-results 1",
+			process:        app.ProcessResult{ExitCode: 0},
+			integrity:      complete,
+			usableResults:  0,
+			recordLoss:     app.RecordLoss{Unknown: 1},
+			recordLossDiag: "1 unrecognised record types skipped",
+			wantState:      app.StateNoResults,
+			wantOverlay:    app.OverlayWarning,
+			wantExitStatus: 1,
+		},
+		// Issue #10: malformed skipped with usable results →
+		// browse with warning overlay, exit 0.
+		{
+			name:           "malformed with usable results browse warning 0",
+			process:        app.ProcessResult{ExitCode: 0},
+			integrity:      complete,
+			usableResults:  1,
+			recordLoss:     app.RecordLoss{Malformed: 1},
+			recordLossDiag: "1 malformed record skipped",
+			wantState:      app.StateBrowse,
+			wantOverlay:    app.OverlayWarning,
+			wantExitStatus: 0,
+		},
+		// Issue #10: malformed skipped with zero usable results →
+		// record-loss fatal overlay, exit 2.
+		{
+			name:           "malformed zero usable results record-loss fatal 2",
+			process:        app.ProcessResult{ExitCode: 0},
+			integrity:      complete,
+			usableResults:  0,
+			recordLoss:     app.RecordLoss{Malformed: 1},
+			recordLossDiag: "1 malformed record skipped",
+			wantState:      app.StateNoResults,
+			wantOverlay:    app.OverlayError,
+			wantFatal:      true,
+			wantExitStatus: 2,
+		},
+		// Issue #10: oversized with zero usable results →
+		// record-loss fatal overlay, exit 2.
+		{
+			name:           "oversized zero usable results record-loss fatal 2",
+			process:        app.ProcessResult{ExitCode: 0},
+			integrity:      complete,
+			usableResults:  0,
+			recordLoss:     app.RecordLoss{Oversized: 1},
+			recordLossDiag: "oversized record skipped for a.go",
+			wantState:      app.StateNoResults,
+			wantOverlay:    app.OverlayError,
+			wantFatal:      true,
+			wantExitStatus: 2,
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := app.DecideOutcome(app.OutcomeInput{
-				Process:       tc.process,
-				Integrity:     tc.integrity,
-				UsableResults: tc.usableResults,
-				Diagnostics:   tc.diagnostics,
+				Process:               tc.process,
+				Integrity:             tc.integrity,
+				UsableResults:         tc.usableResults,
+				Diagnostics:           tc.diagnostics,
+				RecordLoss:            tc.recordLoss,
+				RecordLossDiagnostics: tc.recordLossDiag,
 			})
 			if got.State != tc.wantState {
 				t.Fatalf("State = %v, want %v", got.State, tc.wantState)
@@ -277,9 +335,14 @@ func TestDecideOutcomeStderrDiagnostic(t *testing.T) {
 // outcomeFlowTestCase extends the pure matrix with dismissal and exit
 // assertions through the full Update flow.
 type outcomeFlowTestCase struct {
-	name           string
-	process        app.ProcessResult
-	records        []string
+	name    string
+	process app.ProcessResult
+	records []string
+	// raw is true when records should be fed through buildIndexRaw
+	// (no auto-completion, no fatal on Add errors) instead of
+	// buildIndex. This is needed for record-loss tests that include
+	// malformed or unknown records.
+	raw            bool
 	diagnostics    string
 	wantState      app.State
 	wantOverlay    app.OverlayKind
@@ -448,11 +511,88 @@ func TestOutcomeMatrixFlow(t *testing.T) {
 			quitKey:               'q',
 			wantFinalExit:         1,
 		},
+		// Issue #10: unknown-type-only warnings with zero results →
+		// warning overlay, dismiss → no-results, q → 1.
+		{
+			name:                  "unknown-only zero results warning overlay dismiss no-results q 1",
+			process:               app.ProcessResult{ExitCode: 0},
+			records:               []string{`{"type":"unknown","data":{}}`, summaryRecord()},
+			raw:                   true,
+			wantState:             app.StateNoResults,
+			wantOverlay:           app.OverlayWarning,
+			wantExitStatus:        1,
+			dismissKey:            'q',
+			wantStateAfterDismiss: app.StateNoResults,
+			quitKey:               'q',
+			wantFinalExit:         1,
+		},
+		// Issue #10: malformed skipped with usable results →
+		// browse with warning overlay, dismiss → browse, q → 0.
+		{
+			name:                  "malformed with usable results browse warning dismiss browse q 0",
+			process:               app.ProcessResult{ExitCode: 0},
+			records:               []string{textBegin("a.go"), `{bad json`, textMatch("a.go", "hello\n", 1, subSpec{"hello", 0, 5}), endRecord("a.go", nil), summaryRecord()},
+			raw:                   true,
+			wantState:             app.StateBrowse,
+			wantOverlay:           app.OverlayWarning,
+			wantExitStatus:        0,
+			dismissKey:            'q',
+			wantStateAfterDismiss: app.StateBrowse,
+			quitKey:               'q',
+			wantFinalExit:         0,
+		},
+		// Issue #10: malformed skipped with zero usable results →
+		// record-loss fatal overlay, q → 2.
+		{
+			name:           "malformed zero usable results record-loss fatal q 2",
+			process:        app.ProcessResult{ExitCode: 0},
+			records:        []string{`{bad json`, summaryRecord()},
+			raw:            true,
+			wantState:      app.StateNoResults,
+			wantOverlay:    app.OverlayError,
+			wantFatal:      true,
+			wantExitStatus: 2,
+			quitKey:        'q',
+			wantFinalExit:  2,
+		},
+		// Issue #10: malformed skipped with zero usable results →
+		// record-loss fatal overlay, Esc → 2.
+		{
+			name:           "malformed zero usable results record-loss fatal esc 2",
+			process:        app.ProcessResult{ExitCode: 0},
+			records:        []string{`{bad json`, summaryRecord()},
+			raw:            true,
+			wantState:      app.StateNoResults,
+			wantOverlay:    app.OverlayError,
+			wantFatal:      true,
+			wantExitStatus: 2,
+			quitKey:        tea.KeyEscape,
+			wantFinalExit:  2,
+		},
+		// Issue #10: skipped record plus binary exclusion leaving zero
+		// retained stops → record-loss fatal, exit 2.
+		{
+			name:           "malformed plus binary exclusion zero stops record-loss fatal 2",
+			process:        app.ProcessResult{ExitCode: 0},
+			records:        []string{textBegin("a.go"), `{bad json`, textMatch("a.go", "hello\n", 1, subSpec{"hello", 0, 5}), endRecord("a.go", 42), summaryRecord()},
+			raw:            true,
+			wantState:      app.StateNoResults,
+			wantOverlay:    app.OverlayError,
+			wantFatal:      true,
+			wantExitStatus: 2,
+			quitKey:        'q',
+			wantFinalExit:  2,
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			idx := buildIndex(t, "/work", tc.records...)
+			var idx *searchindex.Index
+			if tc.raw {
+				idx = buildIndexRaw(t, "/work", tc.records...)
+			} else {
+				idx = buildIndex(t, "/work", tc.records...)
+			}
 			m := app.New([]string{"--json", "--", "foo", "."}, "/work")
 			m, _ = update(t, m, app.SearchCompleteMsg{
 				Files:   idx.Files(),

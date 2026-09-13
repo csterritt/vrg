@@ -77,3 +77,12 @@ Usage
  Input tokens: 407412 tokens
  Output tokens: 74889 tokens
  Cached input tokens: 15506880 tokens
+
+----
+Task 010-record-robustness-malformed-oversized-unknown.md
+
+Usage
+ Agent messages: 104 messages
+ Input tokens: 202337 tokens
+ Output tokens: 58531 tokens
+ Cached input tokens: 10340096 tokens
