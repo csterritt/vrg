@@ -487,3 +487,68 @@ section), [source-code](source-code.md) (internal/app entry),
 Sources: `Notes/tasks/015-file-change-popup.md`,
 `Notes/PRD-vrg.md` (File-change pop-up), `internal/app/app.go`,
 `internal/app/popup_test.go`, `internal/app/navigation_test.go`.
+
+## [2026-09-11] ingest | Issue #16 wrap mode and grapheme policy
+
+Ingested the completed Issue #16 implementation: wrapping on by
+default with `w` toggling between wrap and run-off-edge modes; the
+shared grapheme segmentation and cell-width policy in
+`internal/safepresentation` (`Cluster{StartByte, EndByte, Width}` and
+`GraphemeClusters` using `github.com/rivo/uniseg` and
+`uniseg.StringWidth`); `filebuffer.Cluster` alias and
+`Line.Clusters`/`StartByte`/`Continuation` populated by `Load`;
+eight-column tab expansion in `EscapeContent` replacing Issue #5's
+`→` placeholder; the prepared swappable `RowModel` keyed by
+`RowModelKey{Path, Revision, TextWidth, WrapMode}`; `BuildRowModel`
+wrapping at grapheme-cluster boundaries (two-cell clusters that
+don't fit move to the next row, leaving a blank); `RowFromByte`
+mapping a source line and byte offset to the wrapped row;
+`ReservedWidth` (0 in wrap, 1 in run-off-edge for the Issue #20
+indicator); `TextWidth`; `Viewport.RowCount()`; the `w` key toggle
+in browse mode with viewport rebuild; `WindowSizeMsg` row-model
+rebuild when the text width changes; `targetRow(stop)` using
+`RowModel.RowFromByte` for the wrapped destination reveal; and
+`renderContentPanel` showing a blank gutter for continuation rows.
+Created [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md);
+updated [source-code](source-code.md) (safepresentation, filebuffer,
+viewport, and app entries), [unit-tests](unit-tests.md) (wrap_test.go
+in viewport and app, grapheme_test.go, safepresentation_test.go
+additions), and the index. Sources:
+`Notes/tasks/016-wrap-mode-and-toggle.md`,
+`Notes/PRD-vrg.md` (Wrap mode and grapheme policy),
+`internal/safepresentation/safepresentation.go`,
+`internal/safepresentation/safepresentation_test.go`,
+`internal/filebuffer/filebuffer.go`,
+`internal/filebuffer/grapheme_test.go`,
+`internal/viewport/viewport.go`,
+`internal/viewport/wrap_test.go`,
+`internal/app/app.go`,
+`internal/app/wrap_test.go`,
+`internal/app/browse_test.go`.
+
+## [2026-09-11] ingest | Issue #16 walkthrough bug fixes
+
+During the Issue #16 code walkthrough, two bugs were found and fixed:
+
+1. **Continuation flag for intermediate wrapped rows**: `wrapLine` in
+   `internal/viewport/viewport.go` only set `Continuation=true` for the
+   last wrapped row, not all continuation rows. Intermediate wrapped
+   rows were incorrectly marked as non-continuation, causing them to
+   show the line number in the gutter instead of a blank gutter. Fixed
+   by passing `len(result) > 0` instead of `false` when breaking a row.
+   Added `TestWrapContinuationRowsThreePlus` to catch the bug with 3+
+   wrapped rows.
+
+2. **Text width calculation in buildViewport**: `buildViewport` in
+   `internal/app/app.go` used `m.width` (terminal width) instead of
+   the content panel width (`m.width - fileListWidth(m.width) - 1`)
+   for the `TextWidth` calculation. This caused wrapping to use a
+   wider width than the visible content area, clipping text off the
+   right edge. Fixed by subtracting the file list width and separator.
+   Updated `TestWrappedTargetRevealLongLine` to use terminal width 50
+   (panel width 29, text width 25) with corrected expectations.
+
+Updated [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md)
+(continuation rows and text width sections), [source-code](source-code.md)
+(viewport and app entries), and [unit-tests](unit-tests.md)
+(`TestWrapContinuationRowsThreePlus`).

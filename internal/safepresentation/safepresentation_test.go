@@ -365,18 +365,19 @@ func TestContentStandaloneCR(t *testing.T) {
 	}
 }
 
-// TestContentTabPlaceholder verifies that tab renders as a single →
-// placeholder cell. The byte→cell map covers exactly 1 cell. No specific
-// cell position is asserted (deferred to Issue #16).
+// TestContentTabPlaceholder verifies that tab expands to the next
+// multiple of 8 source-display columns (Issue #16). A tab at column 1
+// expands to 7 spaces, reaching column 8. The byte→cell map covers
+// the 7 expanded cells.
 func TestContentTabPlaceholder(t *testing.T) {
 	d := safepresentation.EscapeContent([]byte("a\tb"))
-	if d.Text != "a→b" {
-		t.Fatalf("Text = %q, want %q", d.Text, "a→b")
+	if d.Text != "a       b" {
+		t.Fatalf("Text = %q, want %q", d.Text, "a       b")
 	}
-	// Tab byte maps to exactly 1 cell.
+	// Tab byte maps to 7 cells (columns 1-7).
 	got := d.ByteCells[1]
-	if got[1]-got[0] != 1 {
-		t.Fatalf("Tab ByteCells = %v, want width 1 cell", got)
+	if got[1]-got[0] != 7 {
+		t.Fatalf("Tab ByteCells = %v, want width 7 cells", got)
 	}
 }
 
@@ -393,13 +394,14 @@ func TestContentPreservePrintableUnicode(t *testing.T) {
 func TestContentMixed(t *testing.T) {
 	raw := []byte("a\x1b\t\xff\n")
 	d := safepresentation.EscapeContent(raw)
-	// a ^[ → \xff
-	want := "a^[→\ufffd"
+	// 'a' at col 0, ESC at cols [1, 3), tab at col 3 → 8-(3%8)=5 spaces
+	// → cols [3, 8), \xff at col 8 → cols [8, 9), \n at col 9.
+	want := "a^[     \ufffd"
 	if d.Text != want {
 		t.Fatalf("Text = %q, want %q", d.Text, want)
 	}
-	// 'a' → [0, 1), ESC → [1, 3), tab → [3, 4), \xff → [4, 5), \n → [5, 5)
-	wantCells := []cellRange{cr(0, 1), cr(1, 3), cr(3, 4), cr(4, 5), cr(5, 5)}
+	// 'a' → [0, 1), ESC → [1, 3), tab → [3, 8), \xff → [8, 9), \n → [9, 9)
+	wantCells := []cellRange{cr(0, 1), cr(1, 3), cr(3, 8), cr(8, 9), cr(9, 9)}
 	if len(d.ByteCells) != len(wantCells) {
 		t.Fatalf("ByteCells len = %d, want %d", len(d.ByteCells), len(wantCells))
 	}

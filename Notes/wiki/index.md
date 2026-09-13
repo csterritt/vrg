@@ -69,6 +69,12 @@ Catalog of all wiki pages for the vrg project.
   diagnostics, unknown-type counting rules, missing-`end` retention,
   and record-loss outcome rows with after-filtering usable-results
   assessment
+- [wrap-mode-and-grapheme-policy.md](wrap-mode-and-grapheme-policy.md) —
+  Issue #16: wrapping on by default, `w` toggle, shared grapheme
+  segmentation and cell-width policy, eight-column tab stops, the
+  prepared swappable row model keyed by (path, content revision, text
+  width, wrap mode), reserved indicator width, wrapped destination
+  reveal, and continuation-row blank gutters
 
 ## Catalogs
 

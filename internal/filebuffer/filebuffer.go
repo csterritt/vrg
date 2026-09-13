@@ -17,6 +17,12 @@ type Buffer struct {
 	GutterWidth int
 }
 
+// Cluster is one grapheme cluster within a display string: its byte
+// range and terminal cell width. It is an alias for
+// safepresentation.Cluster so callers can use filebuffer.Cluster
+// without importing safepresentation directly.
+type Cluster = safepresentation.Cluster
+
 // Line is one display-ready source line.
 type Line struct {
 	// Number is the 1-based source line number.
@@ -28,6 +34,19 @@ type Line struct {
 	ByteCells [][2]int
 	// Highlights are the display cell ranges to render in inverse video.
 	Highlights [][2]int
+	// Clusters are the grapheme clusters of the display text, produced
+	// by the shared grapheme segmentation policy (Issue #16). Viewport
+	// consumes these for wrapping without re-deriving.
+	Clusters []safepresentation.Cluster
+	// StartByte is the byte offset in the source line's display text
+	// where a wrapped row begins. Zero for source lines and the first
+	// row of a source line; non-zero for continuation rows. Set by the
+	// viewport row model.
+	StartByte int
+	// Continuation is true for wrapped rows that are not the first row
+	// of their source line. The renderer shows a blank gutter for
+	// continuation rows. Set by the viewport row model.
+	Continuation bool
 }
 
 // Load reads, decodes, and maps a file's bytes into a display-ready
@@ -79,6 +98,7 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 			Display:    d.Text,
 			ByteCells:  d.ByteCells,
 			Highlights: highlights,
+			Clusters:   safepresentation.GraphemeClusters(d.Text),
 		})
 	}
 

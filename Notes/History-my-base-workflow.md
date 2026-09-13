@@ -131,3 +131,12 @@ Usage
  Input tokens: 141173 tokens
  Output tokens: 58112 tokens
  Cached input tokens: 18135360 tokens
+
+----
+Task 016-wrap-mode-and-toggle.md
+
+Usage
+ Agent messages: 129 messages
+ Input tokens: 200769 tokens
+ Output tokens: 100181 tokens
+ Cached input tokens: 10682304 tokens

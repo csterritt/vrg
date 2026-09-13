@@ -18,11 +18,14 @@ stale-entry fallback. Submatches in a `searchindex.Stop` are ordered by
 byte start then end, so the first submatch identifies the target.
 
 The reveal targets the **rendered row containing this target**, not
-merely the source-line ordinal. Without wrapping (Issue #16 pending),
-each source line is one rendered row, so the rendered row is the
-0-based source line index (`stop.LineNumber - 1`). When wrapping is
-added, the mapping will consult the buffer's row-from-byte
-information to find the sub-row containing the start cell.
+merely the source-line ordinal. Issue #16 completed the wrapped
+mapping: `targetRow(stop)` uses `RowModel.RowFromByte(lineIndex,
+byteOffset)` with the first submatch's byte start to find the wrapped
+row containing the match. In run-off-edge mode (or when the row model
+is unavailable), it falls back to the 0-based source line index
+(`stop.LineNumber - 1`). A source line taller than several screens
+still reveals the match at `floor(contentHeight / 3)`. See
+[wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md).
 
 `Model.targetRow(stop searchindex.Stop) int` returns the 0-based
 rendered row for a stop.

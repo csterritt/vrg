@@ -84,7 +84,10 @@ standalone CR is content, not a terminator.
 prepared-row rendering module. See
 [manual-vertical-scrolling](manual-vertical-scrolling.md) for the
 complete scroll-unit, clamping, per-file state, and render-cost
-contracts.
+contracts. Issue #16 added the wrap row model and grapheme-aware
+layout; see [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md)
+for the wrap/run-off-edge modes, the swappable row model, and the
+wrapped destination reveal.
 
 ## Theme
 

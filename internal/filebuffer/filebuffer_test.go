@@ -26,7 +26,7 @@ func mkStop(path string, lineNo int, line string, subs ...searchindex.Submatch) 
 		RawPath:    []byte(path),
 		LineNumber: lineNo,
 		Line:       []byte(line),
-		Submatches:  subs,
+		Submatches: subs,
 	}
 }
 
@@ -107,8 +107,8 @@ func TestLoadLineCountTrailingNewline(t *testing.T) {
 // of the largest line number plus two spaces.
 func TestLoadGutterWidth(t *testing.T) {
 	cases := []struct {
-		name      string
-		content   string
+		name       string
+		content    string
 		wantGutter int
 	}{
 		{"3 lines (1 digit + 2)", "a\nb\nc\n", 3},

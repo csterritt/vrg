@@ -11,6 +11,7 @@ import (
 
 	"vrg/internal/app"
 	"vrg/internal/filebuffer"
+	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
 	"vrg/internal/sinkfixtures"
 	"vrg/internal/theme"
@@ -199,9 +200,16 @@ func makeBuf(lines []filebuffer.Line, lineCount, gutterWidth int) *filebuffer.Bu
 	return &filebuffer.Buffer{Lines: lines, LineCount: lineCount, GutterWidth: gutterWidth}
 }
 
-// ml creates a filebuffer.Line for testing.
+// ml creates a filebuffer.Line for testing. The Clusters field is
+// populated using the shared grapheme policy so the viewport row model
+// can wrap correctly (Issue #16).
 func ml(num int, display string, highlights ...[2]int) filebuffer.Line {
-	return filebuffer.Line{Number: num, Display: display, Highlights: highlights}
+	return filebuffer.Line{
+		Number:     num,
+		Display:    display,
+		Highlights: highlights,
+		Clusters:   safepresentation.GraphemeClusters(display),
+	}
 }
 
 // setupBrowse creates a model in the browse state with the given index

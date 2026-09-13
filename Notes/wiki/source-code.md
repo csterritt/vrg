@@ -217,14 +217,26 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   dismissal; `View` renders the pop-up via `renderPopup` (escaped
   path, left-truncated with `…`, centred horizontally and
   vertically, base padded to terminal height) below the error
-  overlay; `truncateLeftCells` helper for safe left-truncation.
-  See
+  overlay; `truncateLeftCells` helper for safe left-truncation. Issue
+  #16 added wrap mode and the swappable row model: a `wrapMode
+  viewport.WrapMode` field (initial `WrapOn`), a `rowModel
+  *viewport.RowModel` field, `buildViewport()` (constructs the row
+  provider from the buffer, wrap mode, and panel dimensions; uses the
+  `RowProviderFactory` test seam when set, otherwise builds a
+  `RowModel`), `ViewportRowCount()` accessor, the `w` key toggle
+  (toggles wrap mode in browse mode and rebuilds the viewport; no-op
+  outside browse mode), `WindowSizeMsg` rebuilds the row model when
+  the text width changes, `targetRow(stop)` now uses
+  `RowModel.RowFromByte` with the first submatch's byte start to find
+  the wrapped row, and `renderContentPanel` shows a blank gutter for
+  continuation rows. See
   [search-collection-path](search-collection-path.md),
   [browse-tracer](browse-tracer.md),
   [outcome-contract](outcome-contract.md),
   [record-robustness](record-robustness.md),
-  [manual-vertical-scrolling](manual-vertical-scrolling.md), and
-  [destination-reveal](destination-reveal.md).
+  [manual-vertical-scrolling](manual-vertical-scrolling.md),
+  [destination-reveal](destination-reveal.md), and
+  [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md).
 
 ## internal/safepresentation
 
@@ -238,14 +250,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   Unicode preserved). `EscapeContent(raw []byte) ContentDisplay`
   escapes raw content bytes for safe display (U+FFFD for invalid UTF-8,
   caret notation for C0/DEL, `\u00XX` for C1, LF/CRLF as terminators,
-  `^M` for standalone CR, `→` for tab). `EscapeDiagnostic(raw []byte)
-  string` escapes raw diagnostic bytes for safe display while
-  preserving real line boundaries (LF preserved, CRLF normalized to LF,
-  tabs expanded to eight-column stops, other controls escaped).
-  `PathDisplay`/`ContentDisplay` expose `ByteCells` byte→cell mappings
-  so highlight rendering can cover all cells of an escaped form. See
-  [safe-presentation](safe-presentation.md) and
-  [browse-tracer](browse-tracer.md).
+  `^M` for standalone CR, tabs expanded to eight-column stops per
+  Issue #16). `EscapeDiagnostic(raw []byte) string` escapes raw
+  diagnostic bytes for safe display while preserving real line
+  boundaries (LF preserved, CRLF normalized to LF, tabs expanded to
+  eight-column stops, other controls escaped). `PathDisplay`/
+  `ContentDisplay` expose `ByteCells` byte→cell mappings so highlight
+  rendering can cover all cells of an escaped form. Issue #16 added
+  the shared grapheme policy: `Cluster{StartByte, EndByte, Width}` and
+  `GraphemeClusters(display string) []Cluster` segment an escaped
+  display string into grapheme clusters using `github.com/rivo/uniseg`
+  and compute each cluster's terminal cell width via
+  `uniseg.StringWidth`. See [safe-presentation](safe-presentation.md),
+  [browse-tracer](browse-tracer.md), and
+  [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md).
 
 ## internal/sinkfixtures
 
@@ -268,9 +286,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   content), escapes each line through `safepresentation.EscapeContent`,
   and maps `Stop.Submatches` to display cell ranges via the byte→cell
   map. `Buffer` carries `Lines`, `LineCount`, and `GutterWidth`. `Line`
-  carries `Number`, `Display`, `ByteCells`, and `Highlights`. The
-  completion message carries the fully prepared buffer so `Update` does
-  no full-file work. See [browse-tracer](browse-tracer.md).
+  carries `Number`, `Display`, `ByteCells`, `Highlights`, and (Issue
+  #16) `Clusters` (grapheme clusters from the shared policy),
+  `StartByte` (byte offset where a wrapped row begins), and
+  `Continuation` (true for wrapped rows that are not the first row of
+  their source line). Issue #16: `Load` now populates `Clusters` via
+  `safepresentation.GraphemeClusters`. `Cluster` is an alias for
+  `safepresentation.Cluster`. The completion message carries the fully
+  prepared buffer so `Update` does no full-file work. See
+  [browse-tracer](browse-tracer.md) and
+  [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md).
 
 ## internal/viewport
 
@@ -290,16 +315,28 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `ScrollDown`/`ScrollUp` (one row), `ScrollHalfDown`/`ScrollHalfUp`
   (`max(1, floor(contentHeight/2))`), `ScrollPageDown`/`ScrollPageUp`
   (full `contentHeight`). `SetOffset`, `SetPanelHeight`, and `SetRows`
-  re-clamp the offset. Issue #14 added `Reveal(targetRow int)`: if the
-  target row is already within the visible range, the offset is
-  unchanged (visible-target no-scroll); otherwise the viewport is
-  moved so the target lands at zero-based row `floor(contentHeight /
-  3)`, clamped to `[0, maxOffset]` so BOF and EOF available content
-  takes precedence over one-third placement. `BufferRows(buf)` adapts
-  a `filebuffer.Buffer` to `RowProvider`. See
+  re-clamp the offset. `RowCount()` returns the total rendered row
+  count. Issue #14 added `Reveal(targetRow int)`: if the target row is
+  already within the visible range, the offset is unchanged (visible-
+  target no-scroll); otherwise the viewport is moved so the target
+  lands at zero-based row `floor(contentHeight / 3)`, clamped to
+  `[0, maxOffset]` so BOF and EOF available content takes precedence
+  over one-third placement. `BufferRows(buf)` adapts a
+  `filebuffer.Buffer` to `RowProvider`. Issue #16 added the wrap row
+  model: `WrapMode` (`WrapOn` default, `WrapOff` run-off-edge) with
+  `Toggle()`; `ReservedWidth(mode)` (0 in wrap, 1 in run-off-edge for
+  the Issue #20 indicator); `TextWidth(panelWidth, gutterWidth, mode)`;
+  `RowModelKey{Path, Revision, TextWidth, WrapMode}`; `RowModel`
+  (prepared rows + source mappings + key, implements `RowProvider`);
+  `BuildRowModel(buf, textWidth, mode, key)` (wraps at grapheme-cluster
+  boundaries, two-cell clusters that don't fit move to the next row,
+  continuation rows carry `Continuation=true`); and
+  `RowFromByte(lineIndex, byteOffset)` mapping a source line and byte
+  offset to the wrapped row containing that byte. See
   [manual-vertical-scrolling](manual-vertical-scrolling.md),
-  [browse-tracer](browse-tracer.md), and
-  [destination-reveal](destination-reveal.md).
+  [browse-tracer](browse-tracer.md),
+  [destination-reveal](destination-reveal.md), and
+  [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md).
 
 ## internal/theme
 

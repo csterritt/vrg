@@ -681,6 +681,91 @@ table, parser config, and generated help cannot drift.
   dismissal, the pop-up does not return on a subsequent same-file
   navigation.
 
+`wrap_test.go` (Issue #16, external package `app_test`):
+
+- `TestWrapModeOnByDefault` — the app starts with `WrapOn` so a long
+  line wraps to multiple rendered rows.
+- `TestWrapToggleChangesRowModel` — `w` flips the wrap mode and the
+  row count changes (wrap has more rows than run-off-edge).
+- `TestWrapTogglePreservesOffset` — `w` preserves the current
+  viewport offset (clamped to the new row count).
+- `TestWrapToggleDuringSearch` — `w` is a no-op outside browse mode
+  (during search the wrap mode is unchanged).
+- `TestContinuationGutterBlank` — continuation rows render with a
+  blank gutter aligned with the first row's text.
+- `TestWrappedTargetRevealLongLine` — a match near the end of a long
+  line is revealed on its own wrapped row at one-third placement.
+- `TestRenderCostGuardWithWrappingApp` — `View()` only invokes the
+  row provider for the visible range when wrapping is on (counting
+  fake provider).
+
+`wrap_test.go` (Issue #16, external package `viewport_test`):
+
+- `TestWrapRowCountASCII` / `TestWrapRowCountExactMultiple` /
+  `TestWrapRowCountShortLine` / `TestWrapRowCountMultipleLines` —
+  ASCII wrapping row counts at various widths.
+- `TestWrapRowCountWideCluster` — a two-cell cluster moves to the
+  next row when it cannot fit in the remaining cells.
+- `TestWrapRowCountCombining` — a combining mark attaches to its
+  base cluster and does not consume a cell.
+- `TestWrapCombiningAtBoundary` — a combining mark at a row boundary
+  stays with its base cluster.
+- `TestWrapContinuationRows` — continuation rows carry
+  `Continuation=true` and a blank gutter.
+- `TestRunOffEdgeRowCount` — run-off-edge mode produces one row per
+  source line.
+- `TestToggleWrapModeChangesRowModel` — `WrapMode.Toggle()` returns
+  the opposite mode.
+- `TestReservedIndicatorWidth` — `ReservedWidth` is 0 in wrap mode
+  and 1 in run-off-edge mode.
+- `TestTextWidthCalculation` — `TextWidth` is panel width minus
+  gutter minus reserved width, clamped to at least 1.
+- `TestRowModelKey` / `TestRowModelKeyDifferentModes` — the row
+  model key distinguishes path, revision, text width, and wrap mode.
+- `TestRowFromByteWrappedLine` / `TestRowFromByteFirstRow` /
+  `TestRowFromByteSecondLine` — `RowFromByte` maps a source line and
+  byte offset to the wrapped row containing that byte.
+- `TestWrappedSourceLineTallerThanScreens` — a source line taller
+  than several screens reveals the match at `floor(h / 3)`.
+- `TestRenderCostGuardWithWrapping` — the viewport queries only the
+  visible range from a counting fake row provider.
+- `TestSwappableRowModel` — the row model is a swappable value
+  carrying its key.
+- `TestTabStopsInWrapMode` / `TestTabStopsWrapLongLine` — tabs
+  expand to eight-column stops within wrapped rows.
+- `TestWrapEmptyLine` / `TestWrapRowDisplayText` /
+  `TestWrapRowStartByte` / `TestWrapRowHighlights` — wrapped row
+  display text, start byte, and adjusted highlight ranges.
+- `TestRowModelImplementsRowProvider` — `RowModel` implements
+  `RowProvider`.
+- `TestRevealAcrossMultipleWrappedLines` /
+  `TestRevealWrappedTargetWithViewport` /
+  `TestRevealWrappedTargetVisibleNoScroll` — reveal across wrapped
+  rows.
+- `TestWrapWideClusterBlankCell` — a wide cluster leaves a blank
+  cell at the row boundary.
+- `TestRunOffEdgeRowFromByte` — `RowFromByte` in run-off-edge mode
+  returns the source line index.
+- `TestWrapAllTests` — aggregate test running all wrap tests.
+
+`grapheme_test.go` (Issue #16, external package `filebuffer_test`):
+
+- `TestLoadPopulatesClusters` / `TestLoadPopulatesClustersWide` /
+  `TestLoadPopulatesClustersCombining` — `Load` populates
+  `Line.Clusters` via the shared grapheme policy.
+
+`safepresentation_test.go` (Issue #16 additions, external package
+`safepresentation_test`):
+
+- `TestGraphemeClustersASCII` / `TestGraphemeClustersWide` /
+  `TestGraphemeClustersCombining` / `TestGraphemeClustersWideWithCombining`
+  / `TestGraphemeClustersMixed` — `GraphemeClusters` segments ASCII,
+  wide, combining, wide-with-combining, and mixed text.
+- `TestTabExpansionEightColumnStops` / `TestTabExpansionAtColumnZero`
+  / `TestTabExpansionByteCells` / `TestTabExpansionMultipleTabs` /
+  `TestTabExpansionIndependentOfGutter` — `EscapeContent` expands
+  tabs to eight-column stops independent of gutter and pan.
+
 ## cmd/vrg (subprocess boundary)
 
 `main_test.go` builds the real binary once in `TestMain` and asserts

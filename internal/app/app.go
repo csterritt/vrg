@@ -352,6 +352,16 @@ type Model struct {
 	// It holds prepared row data and the vertical offset. When nil
 	// (loading or no buffer), the render path shows the placeholder.
 	viewport *viewport.Viewport
+	// rowModel is the prepared, swappable row model for the current
+	// file at the current text width and wrap mode (Issue #16). It is
+	// rebuilt when a load completes, the wrap mode is toggled, or the
+	// layout changes. Keyed by (path, content revision, text width,
+	// wrap mode) so Issue #17 can move preparation off the UI update
+	// path without restructuring it.
+	rowModel *viewport.RowModel
+	// wrapMode is the current wrap mode (Issue #16). Wrapping is on by
+	// default; 'w' toggles between wrap and run-off-edge modes.
+	wrapMode viewport.WrapMode
 	// currentPath is the raw path of the currently loaded file, used
 	// as the key for per-file viewport state.
 	currentPath []byte
@@ -577,6 +587,15 @@ func (m Model) ViewportOffset() int {
 	return m.viewport.Offset()
 }
 
+// ViewportRowCount returns the total number of rendered rows in the
+// current viewport's row provider, or 0 when no viewport is active.
+func (m Model) ViewportRowCount() int {
+	if m.viewport == nil {
+		return 0
+	}
+	return m.viewport.RowCount()
+}
+
 // SavedOffset returns the saved per-file vertical viewport offset for
 // the given raw path, or 0 if no state is saved (Issue #12). This is
 // the per-file state saved for later revisits; a first visit returns 0.
@@ -745,21 +764,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fileCache[string(msg.Path)] = msg.Buffer
 		}
 		m.loading = false
-		// Build the viewport from the prepared row data. The row
-		// provider factory (or the default viewport.BufferRows)
-		// adapts the buffer so the render path queries only the
-		// visible range. The per-file saved offset is restored so a
-		// revisited file starts from its saved position (Issue #12).
+		// Build the viewport from the prepared row data (Issue #16:
+		// swappable row model). The row provider factory (or the
+		// default row model) adapts the buffer so the render path
+		// queries only the visible range. The per-file saved offset
+		// is restored so a revisited file starts from its saved
+		// position (Issue #12).
 		if msg.Buffer != nil {
 			m.currentPath = msg.Path
-			factory := m.rowProviderFactory
-			if factory == nil {
-				factory = viewport.BufferRows
-			}
-			rows := factory(msg.Buffer)
-			offset := m.SavedOffset(msg.Path)
-			m.viewport = viewport.New(rows, m.height)
-			m.viewport.SetOffset(offset)
+			m.buildViewport()
 			// Issue #14: apply destination reveal after the starting
 			// viewport is set. A first visit (including the startup
 			// file) starts from the top; a revisit starts from the
@@ -864,6 +877,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		switch {
+		case msg.Code == 'w' && msg.Mod == 0:
+			if m.state == StateBrowse && m.buffer != nil {
+				m.wrapMode = m.wrapMode.Toggle()
+				m.buildViewport()
+			}
+			return m, nil
 		case msg.Code == 'c' && msg.Mod == 0:
 			if m.state == StateBrowse {
 				m.theme = m.theme.Toggle()
@@ -901,8 +920,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		// Recompute the viewport layout from the new dimensions and
 		// clamp the offset without losing the reading position (Issue
-		// #12).
-		if m.viewport != nil {
+		// #12). Issue #16: rebuild the row model when the text width
+		// changes so wrapping reflects the new panel width.
+		if m.buffer != nil && m.rowProviderFactory == nil {
+			offset := 0
+			if m.viewport != nil {
+				offset = m.viewport.Offset()
+			}
+			m.buildViewport()
+			if m.viewport != nil {
+				m.viewport.SetOffset(offset)
+			}
+		} else if m.viewport != nil {
 			m.viewport.SetPanelHeight(msg.Height)
 		}
 		return m, nil
@@ -975,17 +1004,53 @@ func (m *Model) revealTarget() {
 	}
 }
 
+// buildViewport constructs the viewport's row provider from the
+// current buffer, wrap mode, and panel dimensions (Issue #16). When a
+// row provider factory is set (test seam), it is used directly;
+// otherwise a RowModel is built from the buffer at the current text
+// width and wrap mode. The per-file saved offset is restored so a
+// revisited file starts from its saved position (Issue #12).
+func (m *Model) buildViewport() {
+	if m.buffer == nil {
+		return
+	}
+	var rows viewport.RowProvider
+	if m.rowProviderFactory != nil {
+		rows = m.rowProviderFactory(m.buffer)
+	} else {
+		gw := m.buffer.GutterWidth
+		panelWidth := m.width - fileListWidth(m.width) - 1
+		tw := viewport.TextWidth(panelWidth, gw, m.wrapMode)
+		key := viewport.RowModelKey{
+			Path:      string(m.currentPath),
+			Revision:  1,
+			TextWidth: tw,
+			WrapMode:  m.wrapMode,
+		}
+		m.rowModel = viewport.BuildRowModel(m.buffer, tw, m.wrapMode, key)
+		rows = m.rowModel
+	}
+	offset := m.SavedOffset(m.currentPath)
+	m.viewport = viewport.New(rows, m.height)
+	m.viewport.SetOffset(offset)
+}
+
 // targetRow returns the 0-based rendered row containing the display
 // target for the given stop. The display target is the start cell of
 // the first submatch on the destination line (the marker cell for a
 // zero-width match). Submatches are ordered by byte start then end by
 // the search index, so the first submatch identifies the target.
-// Without wrapping (Issue #16 pending), each source line is one
-// rendered row, so the rendered row is the 0-based source line index.
-// When wrapping is added, this mapping will consult the buffer's
-// row-from-byte information to find the sub-row containing the start
-// cell.
+// Issue #16: when wrapping is on, the rendered row is found via the
+// row model's RowFromByte, which maps the source line index and byte
+// offset to the wrapped row containing the match start. In run-off-
+// edge mode, each source line is one rendered row.
 func (m *Model) targetRow(stop searchindex.Stop) int {
+	if m.rowModel != nil && len(stop.Submatches) > 0 {
+		byteOffset := stop.Submatches[0].Start
+		if row := m.rowModel.RowFromByte(stop.LineNumber-1, byteOffset); row >= 0 {
+			return row
+		}
+	}
 	return stop.LineNumber - 1
 }
 
@@ -1034,14 +1099,7 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 		m.buffer = buf
 		m.loading = false
 		m.currentPath = stop.RawPath
-		factory := m.rowProviderFactory
-		if factory == nil {
-			factory = viewport.BufferRows
-		}
-		rows := factory(buf)
-		offset := m.SavedOffset(stop.RawPath)
-		m.viewport = viewport.New(rows, m.height)
-		m.viewport.SetOffset(offset)
+		m.buildViewport()
 		// Issue #14: apply destination reveal after the starting
 		// viewport is set from the saved offset (or 0 for a first
 		// visit).
@@ -1730,7 +1788,13 @@ func (m Model) renderContentPanel(escapedName string, currentLine int) string {
 		gw = 1
 	}
 	for _, line := range visible {
-		b.WriteString(fmt.Sprintf("%*d  ", gw, line.Number))
+		if line.Continuation {
+			// Issue #16: continuation rows have a blank gutter
+			// aligned with the first row's text.
+			b.WriteString(strings.Repeat(" ", gw+2))
+		} else {
+			b.WriteString(fmt.Sprintf("%*d  ", gw, line.Number))
+		}
 		b.WriteString(renderLineWithHighlights(line, m.theme, currentLine))
 		b.WriteString("\n")
 	}

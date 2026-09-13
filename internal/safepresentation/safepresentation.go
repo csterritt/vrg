@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/rivo/uniseg"
 )
 
 // PathDisplay is the escaped display form of a raw path and its
@@ -12,6 +14,50 @@ import (
 type PathDisplay struct {
 	Text      string
 	ByteCells [][2]int
+}
+
+// Cluster is one grapheme cluster within a display string: its byte
+// range and terminal cell width. The shared grapheme segmentation and
+// cell-width policy (Issue #16) produces clusters that FileBuffer
+// exposes and Viewport consumes for wrapping without re-deriving.
+type Cluster struct {
+	// StartByte is the byte offset of the cluster start in the display
+	// text.
+	StartByte int
+	// EndByte is the exclusive byte offset of the cluster end.
+	EndByte int
+	// Width is the terminal cell width of the cluster: 1 for narrow
+	// glyphs, 2 for wide (East Asian Wide/Fullwidth) glyphs, 0 for
+	// clusters that add no advance (combining marks attached to a base
+	// are part of the base cluster, so standalone zero-width clusters are
+	// rare).
+	Width int
+}
+
+// GraphemeClusters segments a display string into grapheme clusters and
+// computes each cluster's terminal cell width. This is the one shared
+// grapheme segmentation and cell-width policy (Issue #16): FileBuffer
+// calls it to populate Line.Clusters, and Viewport consumes those
+// clusters for wrapping without re-deriving. The display string is
+// already escaped through EscapeContent (or EscapePath); clusters
+// operate on the escaped form.
+func GraphemeClusters(display string) []Cluster {
+	clusters := make([]Cluster, 0, len(display))
+	gr := uniseg.NewGraphemes(display)
+	offset := 0
+	for gr.Next() {
+		cluster := gr.Str()
+		startByte := offset
+		endByte := offset + len(cluster)
+		offset = endByte
+		width := uniseg.StringWidth(cluster)
+		clusters = append(clusters, Cluster{
+			StartByte: startByte,
+			EndByte:   endByte,
+			Width:     width,
+		})
+	}
+	return clusters
 }
 
 // ContentDisplay is the escaped display form of raw content bytes and
@@ -101,13 +147,15 @@ func EscapePath(raw []byte) PathDisplay {
 // EscapeContent escapes raw content bytes for safe display. LF and CRLF
 // are line terminators and are never displayed; their bytes map to the
 // end-of-line position. A standalone CR (not followed by LF) is escaped
-// as ^M. Tab renders as a single → placeholder cell (provisional until
-// Issue #16's eight-column-stop expansion). Other C0 controls and DEL
-// use caret notation. C1 controls use \u00XX escapes. Invalid UTF-8
-// renders as U+FFFD while the byte→cell map retains the raw-byte
-// mapping. Valid printable Unicode is preserved. The byte→cell map
-// records the display cell range for each original byte so highlight
-// rendering can cover all cells of an escaped form.
+// as ^M. Tabs expand to the next multiple of 8 source-display columns
+// (Issue #16), replacing Issue #5's provisional → placeholder; tab
+// stops count from the start of the line content (column 0), independent
+// of the gutter and horizontal pan. Other C0 controls and DEL use caret
+// notation. C1 controls use \u00XX escapes. Invalid UTF-8 renders as
+// U+FFFD while the byte→cell map retains the raw-byte mapping. Valid
+// printable Unicode is preserved. The byte→cell map records the display
+// cell range for each original byte so highlight rendering can cover all
+// cells of an escaped form.
 func EscapeContent(raw []byte) ContentDisplay {
 	var b strings.Builder
 	b.Grow(len(raw))
@@ -133,8 +181,15 @@ func EscapeContent(raw []byte) ContentDisplay {
 				b.WriteString("^M")
 				cell += 2
 			case c == '\t':
-				b.WriteString("→")
-				cell++
+				// Issue #16: expand tabs to the next multiple of 8
+				// source-display columns. Tab stops count from column
+				// 0 (start of line content), independent of the gutter
+				// and horizontal pan.
+				spaces := 8 - (cell % 8)
+				for j := 0; j < spaces; j++ {
+					b.WriteByte(' ')
+				}
+				cell += spaces
 			case c < 0x20:
 				b.WriteByte('^')
 				b.WriteByte(c + '@')
