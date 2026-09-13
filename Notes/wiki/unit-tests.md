@@ -948,3 +948,71 @@ replay-ordering assertions:
 - `TestReplayFilenameWithNewlineAndESC` — a diagnostic embedding a
   filename with `\n` and ESC is escaped and single-lined in the
   replayed stderr text through the Issue #6 utility.
+
+`pan_test.go` (Issue #18, external package `viewport_test`):
+
+- `TestPanRightOneColumn` / `TestPanLeftOneColumn` — `.`/`,` pan one
+  column right/left.
+- `TestPanRightTenColumns` / `TestPanLeftTenColumns` — `>`/`<` pan ten
+  columns right/left.
+- `TestPanRightHalfWidth` / `TestPanLeftHalfWidth` — `]`/`[` pan half
+  the text width right/left.
+- `TestHalfPanWidthMinOne` / `TestHalfPanWidthOdd` — `HalfPanWidth`
+  returns `max(1, floor(textWidth/2))` with min-one and odd-width cases.
+- `TestPanLeftAtZeroNoOp` / `TestPanRightAtMaxNoOp` — panning past the
+  `[0, max]` bounds is a no-op.
+- `TestPanNoOpInWrapMode` — `Pan` is a no-op in wrap mode.
+- `TestOffsetRetainedThroughWrapToggle` — the offset is retained
+  through wrap toggles; re-entry to run-off-edge mode re-clamps.
+- `TestReentryClampOnEveryReturnToRunOffEdge` — every return to
+  run-off-edge mode re-clamps against the current visible rows.
+- `TestResetHorizontalOnFileChange` — `ResetHorizontal` sets the
+  offset to zero.
+- `TestMaxOffsetShortLinesOnly` — short lines yield max `E-1` of the
+  widest line.
+- `TestMaxOffsetMixedWidthWhileVisible` / `TestMaxOffsetMixedWidthAfterScrollOut`
+  — a 300-cell line yields max 299 while visible, 9 after it scrolls
+  out.
+- `TestMaxOffsetEmptyBuffer` / `TestMaxOffsetAllEmptyLines` — empty
+  buffer, placeholder, and all-empty view clamp to zero.
+- `TestMaxOffsetTwoCellClusterEnd` / `TestTwoCellClusterFullyPaintedAtMax`
+  — a line ending in a two-cell cluster has max `E-2` and both cells
+  are fully painted at the maximum.
+- `TestMaxOffsetUnfittableFinalCluster` / `TestMaxOffsetNoClusterFits`
+  — a final cluster wider than the text width falls back to the last
+  fitting cluster start, or zero if none fit.
+- `TestReclampOnVerticalScroll` / `TestNoRestoreOnScrollBack` —
+  vertical scroll re-clamps leftward when the long line scrolls out;
+  returning does not restore the prior offset.
+- `TestReclampOnReveal` / `TestReclampOnResize` / `TestReclampOnTextWidthChange`
+  / `TestReclampOnTextWidthChangeShortLines` — reveal, resize, and
+  text-width changes re-clamp the offset.
+- `TestReclampOnEveryPan` / `TestPanAfterExtentsChanged` — every pan
+  recomputes the maximum from the current visible rows.
+- `TestUniformLinesAllHiddenLeft` — uniform lines with hidden-left
+  text at a nonzero offset still paint a fitting cluster, preserving
+  Issue #20 `_` indicator geometry.
+- `TestSplitClusterLeftClipBlank` / `TestSplitClusterRightClipBlank`
+  / `TestNoSplitWhenFullyVisible` — split clusters render blank cells;
+  fully visible clusters are not split.
+- `TestExtentEvaluationTouchesOnlyVisibleRows` / `TestClampOnPanTouchesOnlyVisibleRows`
+  — extent computation and clamping query only the visible row range.
+
+`pan_test.go` (Issue #18, external package `app_test`):
+
+- `TestPanRightOneColumn` / `TestPanLeftOneColumn` — `.`/`,` pan one
+  column via the app key routing.
+- `TestPanRightTenColumns` / `TestPanLeftTenColumns` — `>`/`<` pan ten
+  columns via the app key routing.
+- `TestPanRightHalfWidth` / `TestPanLeftHalfWidth` — `]`/`[` pan half
+  the text width via the app key routing.
+- `TestPanNoOpInWrapMode` — pan keys are no-ops in wrap mode via the
+  app.
+- `TestPanLeftAtZeroNoOp` — `,` at offset 0 does nothing.
+- `TestOffsetRetainedThroughWrapToggle` — `w` → `w` retains the
+  horizontal offset.
+- `TestHorizontalResetOnFileChange` — `n` into another file starts at
+  offset zero.
+- `TestSplitClusterBlankRender` — a half-clipped CJK glyph renders
+  blank rather than a broken glyph.
+- `TestPanAtMaxNoOp` — panning past the maximum does nothing.

@@ -686,6 +686,15 @@ func (m Model) ViewportOffset() int {
 	return m.viewport.Offset()
 }
 
+// ViewportHOffset returns the current horizontal pan offset for the
+// loaded file (Issue #18). Returns 0 when no viewport is active.
+func (m Model) ViewportHOffset() int {
+	if m.viewport == nil {
+		return 0
+	}
+	return m.viewport.HOffset()
+}
+
 // ViewportRowCount returns the total number of rendered rows in the
 // current viewport's row provider, or 0 when no viewport is active.
 func (m Model) ViewportRowCount() int {
@@ -955,14 +964,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the same file (wrap toggle, resize). When the viewport is
 		// nil (fresh load), restore the saved per-file anchor.
 		var oldAnchor viewport.Anchor
+		var oldHOffset int
 		sameFile := m.viewport != nil
 		if sameFile {
 			oldAnchor = m.viewport.Anchor()
+			oldHOffset = m.viewport.HOffset()
 		}
+		tw := viewport.TextWidth(m.width, m.buffer.GutterWidth, m.wrapMode)
 		m.viewport = viewport.New(msg.RowModel, m.height)
+		m.viewport.SetLayout(tw, m.wrapMode)
 		if sameFile {
 			m.viewport.SetAnchor(oldAnchor)
+			// Issue #18: carry over the horizontal offset. In wrap
+			// mode it is retained without clamping; in run-off-edge
+			// mode SetHOffset clamps to the new visible-rows max.
+			m.viewport.SetHOffset(oldHOffset)
 		} else {
+			// Issue #18: reset horizontal offset on file change.
+			m.viewport.ResetHorizontal()
 			offset := m.SavedOffset(m.currentPath)
 			if offset > 0 && offset < msg.RowModel.RowCount() {
 				m.viewport.SetAnchor(msg.RowModel.RowAnchor(offset))
@@ -1047,6 +1066,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+		// Issue #18: horizontal pan keys are active in the browse
+		// state when content is loaded. Panning is a no-op in wrap
+		// mode (the viewport ignores pan commands). Manual panning
+		// does not move the matched-line cursor.
+		if m.state == StateBrowse && m.viewport != nil {
+			if m.handlePanKey(msg) {
+				return m, nil
+			}
+		}
 		// Issue #13: n/p move the circular matched-line cursor. The
 		// cursor is the single global navigation anchor; current file
 		// and current matched line derive from it. Navigation remains
@@ -1117,6 +1145,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.buildViewport()
 		} else if m.viewport != nil {
 			m.viewport.SetPanelHeight(msg.Height)
+			// Issue #18: update the text width on resize so the
+			// horizontal clamp reflects the new dimensions.
+			if m.buffer != nil {
+				tw := viewport.TextWidth(m.width, m.buffer.GutterWidth, m.wrapMode)
+				m.viewport.SetLayout(tw, m.wrapMode)
+			}
 		}
 		return m, nil
 	}
@@ -1161,6 +1195,31 @@ func (m *Model) saveOffset() {
 		m.perFileOffset = make(map[string]int)
 	}
 	m.perFileOffset[string(m.currentPath)] = m.viewport.Offset()
+}
+
+// handlePanKey routes a horizontal pan key press to the viewport (Issue
+// #18). `,`/`.` pan one column left/right; `<`/`>` pan ten columns;
+// `[`/`]` pan half the text-area width (max(1, floor(textWidth/2))).
+// Panning is a no-op in wrap mode. Returns true if the key was handled
+// as a pan key, false otherwise.
+func (m Model) handlePanKey(msg tea.KeyPressMsg) bool {
+	switch {
+	case msg.Code == ',' && msg.Mod == 0:
+		m.viewport.Pan(-1)
+	case msg.Code == '.' && msg.Mod == 0:
+		m.viewport.Pan(1)
+	case msg.Code == '<' && msg.Mod == 0:
+		m.viewport.Pan(-10)
+	case msg.Code == '>' && msg.Mod == 0:
+		m.viewport.Pan(10)
+	case msg.Code == '[' && msg.Mod == 0:
+		m.viewport.Pan(-m.viewport.HalfPanWidth())
+	case msg.Code == ']' && msg.Mod == 0:
+		m.viewport.Pan(m.viewport.HalfPanWidth())
+	default:
+		return false
+	}
+	return true
 }
 
 // revealTarget applies the Issue #14 destination reveal to the current
@@ -1218,14 +1277,20 @@ func (m *Model) buildViewport() tea.Cmd {
 	if m.rowProviderFactory != nil {
 		rows := m.rowProviderFactory(m.buffer)
 		var oldAnchor viewport.Anchor
+		var oldHOffset int
 		sameFile := m.viewport != nil
 		if sameFile {
 			oldAnchor = m.viewport.Anchor()
+			oldHOffset = m.viewport.HOffset()
 		}
+		tw := viewport.TextWidth(m.width, m.buffer.GutterWidth, m.wrapMode)
 		m.viewport = viewport.New(rows, m.height)
+		m.viewport.SetLayout(tw, m.wrapMode)
 		if sameFile {
 			m.viewport.SetAnchor(oldAnchor)
+			m.viewport.SetHOffset(oldHOffset)
 		} else {
+			m.viewport.ResetHorizontal()
 			offset := m.SavedOffset(m.currentPath)
 			if rm, ok := rows.(*viewport.RowModel); ok && offset > 0 && offset < rm.RowCount() {
 				m.viewport.SetAnchor(rm.RowAnchor(offset))
@@ -1244,14 +1309,19 @@ func (m *Model) buildViewport() tea.Cmd {
 			// Cache hit: install immediately, no preparation.
 			m.rowModel = cached
 			var oldAnchor viewport.Anchor
+			var oldHOffset int
 			sameFile := m.viewport != nil
 			if sameFile {
 				oldAnchor = m.viewport.Anchor()
+				oldHOffset = m.viewport.HOffset()
 			}
 			m.viewport = viewport.New(cached, m.height)
+			m.viewport.SetLayout(key.TextWidth, m.wrapMode)
 			if sameFile {
 				m.viewport.SetAnchor(oldAnchor)
+				m.viewport.SetHOffset(oldHOffset)
 			} else {
+				m.viewport.ResetHorizontal()
 				offset := m.SavedOffset(m.currentPath)
 				if offset > 0 && offset < cached.RowCount() {
 					m.viewport.SetAnchor(cached.RowAnchor(offset))
@@ -2092,14 +2162,17 @@ func (m Model) renderContentPanel(escapedName string, currentLine int) string {
 		gw = 1
 	}
 	for _, line := range visible {
-		if line.Continuation {
+		// Issue #18: clip the line to the horizontal pan window with
+		// grapheme-safe blank cells before rendering.
+		clipped := m.viewport.ClipLine(line)
+		if clipped.Continuation {
 			// Issue #16: continuation rows have a blank gutter
 			// aligned with the first row's text.
 			b.WriteString(strings.Repeat(" ", gw+2))
 		} else {
-			b.WriteString(fmt.Sprintf("%*d  ", gw, line.Number))
+			b.WriteString(fmt.Sprintf("%*d  ", gw, clipped.Number))
 		}
-		b.WriteString(renderLineWithHighlights(line, m.theme, currentLine))
+		b.WriteString(renderLineWithHighlights(clipped, m.theme, currentLine))
 		b.WriteString("\n")
 	}
 	return b.String()

@@ -247,7 +247,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   the reveal intent as `pendingReveal` when the viewport is nil; the
   `LayoutReadyMsg` handler commits the pending reveal; `renderBrowse`
   limits the file-list iteration to `min(fileCount, terminalHeight)`
-  for the render-cost guard. See
+  for the render-cost guard. Issue #18 added horizontal panning:
+  `handlePanKey` routes `,`/`.`/`<`/`>`/`[`/`]` to `Viewport.Pan`;
+  `buildViewport` (all three paths) and the `LayoutReadyMsg` handler
+  carry over `Viewport.HOffset()` on same-file rebuilds and call
+  `ResetHorizontal` on file change; `SetLayout` is called on every
+  viewport installation; `WindowSizeMsg` updates the text width via
+  `SetLayout` when the factory test seam is in use; `renderContentPanel`
+  calls `Viewport.ClipLine` on each visible row before
+  `renderLineWithHighlights`; `ViewportHOffset()` exposes the offset.
+  See
   [search-collection-path](search-collection-path.md),
   [browse-tracer](browse-tracer.md),
   [outcome-contract](outcome-contract.md),
@@ -255,8 +264,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [manual-vertical-scrolling](manual-vertical-scrolling.md),
   [destination-reveal](destination-reveal.md),
   [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
-  and
-  [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md).
+  [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md),
+  and [horizontal-panning](horizontal-panning.md).
 
 ## internal/safepresentation
 
@@ -359,13 +368,27 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   with `Anchor()`, `SetAnchor`, and anchor-aware `SetRows`/
   `SetPanelHeight`/`SetOffset`; `syncAnchorToOffset` and
   `recomputeOffsetFromAnchor`; and lossy EOF-clamp anchor replacement.
+  Issue #18 added horizontal panning: `hOffset`, `textWidth`, and
+  `wrapMode` fields; `HOffset()`, `TextWidth()`, `SetLayout(textWidth,
+  wrapMode)` (re-clamps on text-width-only changes, defers the clamp
+  on wrap-mode changes to the next `SetRows`), `HalfPanWidth()`
+  (`max(1, floor(textWidth/2))`), `Pan(columns)` (no-op in wrap mode,
+  clamps to the paintable-boundary maximum), `ResetHorizontal()`,
+  `SetHOffset(n)` (carries the offset across rebuilds, clamps in
+  run-off-edge mode), `MaxHOffset()` (paintable-boundary maximum from
+  the widest visible line), `ClipLine(line)` (grapheme-safe clipping
+  with blank cells for split clusters); `clampHOffset` (no-op in wrap
+  mode), `computeMaxHOffset`, `widestLine`, `paintableMaxOffset`,
+  `clipLineToWindow`, and `clipHighlights` helpers; and
+  `clampHOffset()` calls in `SetAnchor`/`SetOffset`/`SetPanelHeight`/
+  `SetRows`/`Reveal`/all scroll methods for visible-set re-clamping.
   See
   [manual-vertical-scrolling](manual-vertical-scrolling.md),
   [browse-tracer](browse-tracer.md),
   [destination-reveal](destination-reveal.md),
   [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
-  and
-  [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md).
+  [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md),
+  and [horizontal-panning](horizontal-panning.md).
 
 ## internal/theme
 

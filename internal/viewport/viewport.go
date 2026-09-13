@@ -7,7 +7,11 @@
 // keyed by (path, content revision, text width, wrap mode).
 package viewport
 
-import "vrg/internal/filebuffer"
+import (
+	"strings"
+
+	"vrg/internal/filebuffer"
+)
 
 // WrapMode selects wrap or run-off-edge row-model construction.
 type WrapMode int
@@ -382,11 +386,21 @@ type RowProvider interface {
 // EOF clamping that pulls the top upward updates the anchor to the new
 // top; this clamp is intentionally lossy — a later shrink need not
 // restore the old top.
+//
+// Issue #18 adds the horizontal pan offset (hOffset), the text-area
+// width, and the current wrap mode. Panning applies only in
+// run-off-edge mode; in wrap mode it is a no-op and the offset is
+// retained. The offset is clamped to the paintable-boundary maximum
+// (maxHOffset) computed from the visible rows' extents, re-evaluated
+// whenever the visible line set changes and on every pan.
 type Viewport struct {
 	rows        RowProvider
 	panelHeight int
 	offset      int
 	anchor      Anchor
+	hOffset     int      // horizontal pan offset in cells (Issue #18)
+	textWidth   int      // text-area width in cells (Issue #18)
+	wrapMode    WrapMode // current wrap mode (Issue #18)
 }
 
 // New creates a viewport with the given row provider and panel height.
@@ -425,6 +439,273 @@ func (v *Viewport) Offset() int { return v.offset }
 // Anchor returns the current logical anchor (Issue #17).
 func (v *Viewport) Anchor() Anchor { return v.anchor }
 
+// HOffset returns the current horizontal pan offset in cells (Issue
+// #18). In wrap mode the offset is retained but not used for rendering.
+func (v *Viewport) HOffset() int { return v.hOffset }
+
+// TextWidth returns the text-area width in cells (Issue #18). This is
+// the width used for horizontal clamping and half-width pan units.
+func (v *Viewport) TextWidth() int { return v.textWidth }
+
+// SetLayout sets the text-area width and wrap mode, then re-clamps the
+// horizontal offset (Issue #18). When the wrap mode changes (wrap
+// toggle), the clamp is deferred to the next SetRows call so it uses
+// the new rows; when only the text width changes (list hide/show, gutter
+// growth), the clamp runs immediately against the current visible rows.
+// In wrap mode the offset is retained without clamping.
+func (v *Viewport) SetLayout(textWidth int, wrapMode WrapMode) {
+	modeChanged := v.wrapMode != wrapMode
+	v.textWidth = textWidth
+	v.wrapMode = wrapMode
+	if !modeChanged && wrapMode == WrapOff {
+		v.clampHOffset()
+	}
+}
+
+// HalfPanWidth returns the half-screen pan amount: max(1,
+// floor(textWidth / 2)) (Issue #18).
+func (v *Viewport) HalfPanWidth() int {
+	half := v.textWidth / 2
+	if half < 1 {
+		half = 1
+	}
+	return half
+}
+
+// Pan shifts the horizontal offset by the given number of cells (Issue
+// #18). Positive shifts right (text moves left); negative shifts left.
+// Panning is a no-op in wrap mode. The offset is clamped to
+// [0, maxHOffset] after the shift, recomputing the maximum from the
+// current visible rows.
+func (v *Viewport) Pan(columns int) {
+	if v.wrapMode == WrapOn {
+		return
+	}
+	v.hOffset += columns
+	v.clampHOffset()
+}
+
+// ResetHorizontal resets the horizontal offset to zero (Issue #18).
+// Called on file change before any horizontal reveal.
+func (v *Viewport) ResetHorizontal() {
+	v.hOffset = 0
+}
+
+// SetHOffset sets the horizontal offset directly and clamps it to the
+// paintable-boundary maximum (Issue #18). In wrap mode the offset is
+// set without clamping (retained for later re-entry). Used by the app
+// to carry the offset across wrap toggles and resize rebuilds.
+func (v *Viewport) SetHOffset(n int) {
+	v.hOffset = n
+	v.clampHOffset()
+}
+
+// MaxHOffset returns the paintable-boundary maximum horizontal offset
+// for the current visible rows (Issue #18). The maximum is max(0, S)
+// where S is the largest cell index at which a grapheme cluster of the
+// widest visible line starts and its cell width fits within the text
+// width. An empty buffer, placeholder, or all-empty view yields 0.
+// Only the visible row range is queried.
+func (v *Viewport) MaxHOffset() int {
+	return v.computeMaxHOffset()
+}
+
+// ClipLine clips a source line to the visible horizontal window
+// [hOffset, hOffset+textWidth) with grapheme-safe blank cells (Issue
+// #18). A cluster split by the left or right clip edge is replaced with
+// blank cells for its visible portion, so no half glyph is drawn. In
+// wrap mode the line is returned unchanged. Highlights are adjusted to
+// the visible window.
+func (v *Viewport) ClipLine(line filebuffer.Line) filebuffer.Line {
+	if v.wrapMode == WrapOn || v.textWidth < 1 {
+		return line
+	}
+	return clipLineToWindow(line, v.hOffset, v.textWidth)
+}
+
+// clampHOffset clamps the horizontal offset to [0, maxHOffset],
+// recomputing the maximum from the current visible rows (Issue #18). It
+// is a no-op in wrap mode, where the offset is retained without
+// clamping; the re-entry clamp happens when SetLayout enters
+// run-off-edge mode.
+func (v *Viewport) clampHOffset() {
+	if v.wrapMode == WrapOn {
+		return
+	}
+	max := v.computeMaxHOffset()
+	if v.hOffset < 0 {
+		v.hOffset = 0
+	}
+	if v.hOffset > max {
+		v.hOffset = max
+	}
+}
+
+// computeMaxHOffset computes the paintable-boundary maximum from the
+// visible rows only (Issue #18). It queries the row provider for the
+// visible range, finds the widest line, and returns the largest cluster
+// start index whose width fits the text width. Returns 0 for empty
+// buffers, placeholders, or all-empty views.
+func (v *Viewport) computeMaxHOffset() int {
+	if v.rows == nil || v.textWidth < 1 {
+		return 0
+	}
+	contentHeight := v.ContentHeight()
+	start := v.offset
+	if start < 0 {
+		start = 0
+	}
+	end := v.offset + contentHeight
+	rows := v.rows.Rows(start, end)
+	widestClusters, widestE := widestLine(rows)
+	if widestE == 0 {
+		return 0
+	}
+	return paintableMaxOffset(widestClusters, v.textWidth)
+}
+
+// widestLine returns the clusters and content extent of the widest
+// line among the given rows (Issue #18). The content extent is the sum
+// of cluster widths. Returns nil, 0 for empty or all-empty rows.
+func widestLine(rows []filebuffer.Line) ([]filebuffer.Cluster, int) {
+	var bestClusters []filebuffer.Cluster
+	bestE := 0
+	for _, row := range rows {
+		e := 0
+		for _, c := range row.Clusters {
+			e += c.Width
+		}
+		if e > bestE {
+			bestE = e
+			bestClusters = row.Clusters
+		}
+	}
+	return bestClusters, bestE
+}
+
+// paintableMaxOffset computes the paintable-boundary maximum for a
+// line's clusters at the given text width (Issue #18). It returns the
+// largest cell index at which a cluster starts and its width fits
+// within the text width, or 0 if no cluster fits.
+func paintableMaxOffset(clusters []filebuffer.Cluster, textWidth int) int {
+	cellIndex := 0
+	bestStart := 0
+	found := false
+	for _, c := range clusters {
+		if c.Width <= textWidth {
+			bestStart = cellIndex
+			found = true
+		}
+		cellIndex += c.Width
+	}
+	if !found {
+		return 0
+	}
+	if bestStart < 0 {
+		bestStart = 0
+	}
+	return bestStart
+}
+
+// clipLineToWindow clips a line's display text and clusters to the
+// window [hOffset, hOffset+textWidth) with grapheme-safe blank cells
+// (Issue #18). Clusters split by either edge become blank cells for
+// their visible portion. Highlights are shifted by -hOffset and clamped
+// to [0, textWidth).
+func clipLineToWindow(line filebuffer.Line, hOffset, textWidth int) filebuffer.Line {
+	if hOffset < 0 {
+		hOffset = 0
+	}
+	if textWidth < 1 {
+		textWidth = 1
+	}
+	windowEnd := hOffset + textWidth
+	var b strings.Builder
+	var clippedClusters []filebuffer.Cluster
+	cellIndex := 0
+	for _, c := range line.Clusters {
+		clusterStart := cellIndex
+		clusterEnd := cellIndex + c.Width
+		cellIndex = clusterEnd
+		// Skip clusters entirely left of the window.
+		if clusterEnd <= hOffset {
+			continue
+		}
+		// Skip clusters entirely right of the window.
+		if clusterStart >= windowEnd {
+			break
+		}
+		visibleStart := clusterStart
+		if visibleStart < hOffset {
+			visibleStart = hOffset
+		}
+		visibleEnd := clusterEnd
+		if visibleEnd > windowEnd {
+			visibleEnd = windowEnd
+		}
+		visibleCells := visibleEnd - visibleStart
+		if visibleCells <= 0 {
+			continue
+		}
+		if visibleStart == clusterStart && visibleEnd == clusterEnd {
+			// Fully visible: include the cluster's display text.
+			text := line.Display[c.StartByte:c.EndByte]
+			b.WriteString(text)
+			clippedClusters = append(clippedClusters, filebuffer.Cluster{
+				StartByte: b.Len() - len(text),
+				EndByte:   b.Len(),
+				Width:     c.Width,
+			})
+		} else {
+			// Split by a clip edge: render blank cells.
+			b.WriteString(strings.Repeat(" ", visibleCells))
+			for i := 0; i < visibleCells; i++ {
+				clippedClusters = append(clippedClusters, filebuffer.Cluster{
+					StartByte: b.Len() - visibleCells + i,
+					EndByte:   b.Len() - visibleCells + i + 1,
+					Width:     1,
+				})
+			}
+		}
+	}
+	clipped := filebuffer.Line{
+		Number:       line.Number,
+		Display:      b.String(),
+		Highlights:   clipHighlights(line.Highlights, hOffset, textWidth),
+		Clusters:     clippedClusters,
+		StartByte:    line.StartByte,
+		Continuation: line.Continuation,
+	}
+	return clipped
+}
+
+// clipHighlights shifts highlight cell ranges by -hOffset and clamps
+// them to [0, textWidth) (Issue #18).
+func clipHighlights(highlights [][2]int, hOffset, textWidth int) [][2]int {
+	if len(highlights) == 0 {
+		return nil
+	}
+	windowEnd := hOffset + textWidth
+	var result [][2]int
+	for _, hl := range highlights {
+		start := hl[0]
+		end := hl[1]
+		if end <= hOffset || start >= windowEnd {
+			continue
+		}
+		if start < hOffset {
+			start = hOffset
+		}
+		if end > windowEnd {
+			end = windowEnd
+		}
+		if start < end {
+			result = append(result, [2]int{start - hOffset, end - hOffset})
+		}
+	}
+	return result
+}
+
 // SetAnchor sets the logical anchor and recomputes the offset from it
 // (Issue #17). The offset becomes the row containing the anchor's text
 // location, clamped to [0, maxOffset]. If the clamp pulls the offset
@@ -433,6 +714,7 @@ func (v *Viewport) Anchor() Anchor { return v.anchor }
 func (v *Viewport) SetAnchor(a Anchor) {
 	v.anchor = a
 	v.recomputeOffsetFromAnchor()
+	v.clampHOffset()
 }
 
 // SetOffset sets the top row, clamped to [0, maxOffset], and replaces
@@ -441,6 +723,7 @@ func (v *Viewport) SetOffset(offset int) {
 	v.offset = offset
 	v.clampOffset()
 	v.syncAnchorToOffset()
+	v.clampHOffset()
 }
 
 // SetPanelHeight updates the panel height and recomputes the offset
@@ -450,6 +733,7 @@ func (v *Viewport) SetOffset(offset int) {
 func (v *Viewport) SetPanelHeight(panelHeight int) {
 	v.panelHeight = panelHeight
 	v.recomputeOffsetFromAnchor()
+	v.clampHOffset()
 }
 
 // SetRows updates the row provider and recomputes the offset from the
@@ -460,6 +744,7 @@ func (v *Viewport) SetPanelHeight(panelHeight int) {
 func (v *Viewport) SetRows(rows RowProvider) {
 	v.rows = rows
 	v.recomputeOffsetFromAnchor()
+	v.clampHOffset()
 }
 
 // Reveal adjusts the viewport offset so that the target row is
@@ -490,6 +775,7 @@ func (v *Viewport) Reveal(targetRow int) {
 	v.offset = targetRow - third
 	v.clampOffset()
 	v.syncAnchorToOffset()
+	v.clampHOffset()
 }
 
 // Visible returns the visible rows from the row provider. Only the
@@ -512,6 +798,7 @@ func (v *Viewport) ScrollDown() {
 	v.offset++
 	v.clampOffset()
 	v.syncAnchorToOffset()
+	v.clampHOffset()
 }
 
 // ScrollUp scrolls one rendered row up, clamped to 0, and replaces the
@@ -520,6 +807,7 @@ func (v *Viewport) ScrollUp() {
 	v.offset--
 	v.clampOffset()
 	v.syncAnchorToOffset()
+	v.clampHOffset()
 }
 
 // ScrollHalfDown scrolls half a page down: max(1, floor(contentHeight/2)),
@@ -528,6 +816,7 @@ func (v *Viewport) ScrollHalfDown() {
 	v.offset += halfPage(v.ContentHeight())
 	v.clampOffset()
 	v.syncAnchorToOffset()
+	v.clampHOffset()
 }
 
 // ScrollHalfUp scrolls half a page up: max(1, floor(contentHeight/2)),
@@ -536,6 +825,7 @@ func (v *Viewport) ScrollHalfUp() {
 	v.offset -= halfPage(v.ContentHeight())
 	v.clampOffset()
 	v.syncAnchorToOffset()
+	v.clampHOffset()
 }
 
 // ScrollPageDown scrolls a full page down: contentHeight rows, and
@@ -544,6 +834,7 @@ func (v *Viewport) ScrollPageDown() {
 	v.offset += v.ContentHeight()
 	v.clampOffset()
 	v.syncAnchorToOffset()
+	v.clampHOffset()
 }
 
 // ScrollPageUp scrolls a full page up: contentHeight rows, and replaces
@@ -552,6 +843,7 @@ func (v *Viewport) ScrollPageUp() {
 	v.offset -= v.ContentHeight()
 	v.clampOffset()
 	v.syncAnchorToOffset()
+	v.clampHOffset()
 }
 
 // maxOffset returns the maximum valid top row: max(0, rowCount -

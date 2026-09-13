@@ -585,3 +585,34 @@ Sources: `Notes/tasks/017-logical-anchor-through-rewrap-and-resize.md`,
 Resources and responsiveness), `internal/viewport/viewport.go`,
 `internal/viewport/anchor_test.go`, `internal/app/app.go`,
 `internal/app/anchor_test.go`, `internal/app/layout_test.go`.
+
+## [2026-09-11] ingest | Issue #18 horizontal panning
+
+Ingested the completed Issue #18 implementation: horizontal panning in
+run-off-edge mode with `,`/`.` (one column), `<`/`>` (ten columns), and
+`[`/`]` (half text width) pan units; the paintable-boundary maximum
+(`max(0, S)` where `S` is the largest cluster start of the widest
+visible line whose width fits the text width); three distinct width
+definitions (content extent, extent policy over visible rows only,
+maximum valid offset); visible-set re-clamping on vertical scroll,
+reveal, resize, list hide/show, gutter growth, and wrap-toggle
+re-entry; no restoration after destructive leftward clamping (lossy,
+mirroring the Issue #17 vertical EOF clamp); offset retention through
+wrap toggles with re-entry clamping; reset to zero on file change;
+grapheme-safe clipping with blank cells for split clusters at the clip
+edge; forward-compatible extent definition for the future Issue #23
+end-of-line marker cells; the visible-row render-cost guard (extent
+computation queries only `Viewport.Visible`); and app integration
+(`handlePanKey` routing, `SetLayout` on every viewport installation,
+`SetHOffset`/`ResetHorizontal` on rebuilds and file changes,
+`ClipLine` in `renderContentPanel`, `ViewportHOffset()` accessor).
+Created [horizontal-panning](horizontal-panning.md); updated
+[index](index.md), [source-code](source-code.md) (viewport and app
+entries), and [unit-tests](unit-tests.md) (pan_test.go viewport and
+app entries). Sources:
+`Notes/tasks/018-horizontal-panning.md`,
+`Notes/issues/018-horizontal-panning.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors;
+Layout and indicators), `internal/viewport/viewport.go`,
+`internal/viewport/pan_test.go`, `internal/app/app.go`,
+`internal/app/pan_test.go`.

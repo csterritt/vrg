@@ -85,6 +85,14 @@ Catalog of all wiki pages for the vrg project.
   navigation with matching-layout fast path, AC6 responsiveness during
   gated preparation, and render-cost guards for visible rows and
   file-list entries
+- [horizontal-panning.md](horizontal-panning.md) — Issue #18:
+  horizontal panning in run-off-edge mode (`,`.`<>` `[]` pan units),
+  paintable-boundary maximum from the widest visible line, three
+  distinct width definitions (content extent, extent policy, maximum
+  valid offset), visible-set re-clamping with no restoration after
+  destructive clamping, retention through wrap toggles with re-entry
+  clamping, reset on file change, grapheme-safe blank-cell clipping,
+  and the visible-row render-cost guard
 
 ## Catalogs
 

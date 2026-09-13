@@ -149,3 +149,12 @@ Usage
  Input tokens: 255164 tokens
  Output tokens: 44219 tokens
  Cached input tokens: 22063936 tokens
+
+----
+Task 018-horizontal-panning.md
+
+Usage
+ Agent messages: 186 messages
+ Input tokens: 200861 tokens
+ Output tokens: 69490 tokens
+ Cached input tokens: 19512192 tokens
