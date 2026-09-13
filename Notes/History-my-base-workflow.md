@@ -167,3 +167,12 @@ Usage
  Input tokens: 442364 tokens
  Output tokens: 87120 tokens
  Cached input tokens: 20202368 tokens
+
+----
+Task 020-hidden-content-indicators.md
+
+Usage
+ Agent messages: 105 messages
+ Input tokens: 251019 tokens
+ Output tokens: 74888 tokens
+ Cached input tokens: 8876160 tokens

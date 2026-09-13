@@ -101,6 +101,16 @@ Catalog of all wiki pages for the vrg project.
   panning loop; oversized matches reveal only the start cell; startup
   and navigation triggers through `revealTarget`; file-change reset
   ordering before reveal; `WithWrapMode` test seam
+- [hidden-content-indicators.md](hidden-content-indicators.md) —
+  Issue #20: run-off-edge hidden-content indicators — left `_`/`*` in
+  the first trailing gutter space (text hidden left vs. match entirely
+  hidden left), right `*` in the reserved column on the current
+  matched line's visible row when a match is entirely hidden right,
+  off-screen absence of the right indicator, no-overwrite guarantee,
+  partial visibility counts as visible, visibility over rendered
+  cells after grapheme clipping with the reserved column excluded,
+  split-glyph blanks do not count as visible, and wrap mode has no
+  indicators or reserved column
 
 ## Catalogs
 

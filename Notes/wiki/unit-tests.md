@@ -1070,3 +1070,34 @@ replay-ordering assertions:
 - `TestFileChangeResetOrdering` — the reset runs before the reveal,
   so a far match in the first file does not carry over to the second
   file's near match.
+
+`indicator_test.go` (Issue #20, external package `app_test`):
+
+- `TestIndicatorLeftUnderscoreHiddenText` — left `_` when text is
+  hidden left without a hidden match.
+- `TestIndicatorLeftStarHiddenMatch` — left `*` when a match is
+  entirely hidden left.
+- `TestIndicatorRightStarCurrentLine` — right `*` in the reserved
+  column on the current matched line when a match is entirely hidden
+  right.
+- `TestIndicatorRightStarAbsentOffScreen` — right indicator absent
+  when the current matched line is off-screen; other lines' left
+  indicators remain.
+- `TestIndicatorBothStarsTogether` — both left `*` and right `*` on
+  the same row.
+- `TestIndicatorPartialVisibilityLeftNoStar` — a partially visible
+  match on the left produces no left hidden-match indicator (stays
+  `_`).
+- `TestIndicatorPartialVisibilityRightNoStar` — a partially visible
+  match on the right produces no right hidden-match indicator.
+- `TestIndicatorLastCellMatchFarRightStar` — a visible last-cell match
+  with a farther-right hidden match produces a right `*` and a left
+  `_`.
+- `TestIndicatorSplitGlyphBlankHiddenLeft` — a split wide glyph
+  rendered as blanks does not count as visible (left `*`).
+- `TestIndicatorWrapModeNoIndicators` — wrap mode draws neither
+  indicators nor a reserved right column.
+- `TestIndicatorStyling` — the `*` indicator uses the theme's inverse
+  indicator style.
+- `TestIndicatorStylingUnderscore` — the `_` indicator uses the
+  theme's inverse indicator style.

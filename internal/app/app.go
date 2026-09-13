@@ -2184,6 +2184,16 @@ func (m Model) renderBrowse() string {
 // the viewport is active, only the visible row range is queried from
 // prepared data (Issue #12); the render path never scans the full
 // buffer per frame.
+//
+// Issue #20: in run-off-edge mode, the first trailing gutter space
+// shows inverse "_" when text is hidden left (upgraded to "*" when a
+// match/marker is entirely hidden left), and the reserved rightmost
+// column shows inverse "*" on the current matched line's visible row
+// when a match/marker is entirely hidden right. Wrap mode draws
+// neither. Visibility is derived from the actually rendered cells
+// after grapheme clipping: a split wide glyph rendered as blanks does
+// not count as visible match content, and the reserved column is
+// excluded from visibility calculations.
 func (m Model) renderContentPanel(escapedName string, currentLine int) string {
 	var b strings.Builder
 	b.WriteString("── " + escapedName + " ──")
@@ -2197,6 +2207,9 @@ func (m Model) renderContentPanel(escapedName string, currentLine int) string {
 	if gw < 1 {
 		gw = 1
 	}
+	runOff := m.wrapMode == viewport.WrapOff
+	hOffset := m.viewport.HOffset()
+	textWidth := m.viewport.TextWidth()
 	for _, line := range visible {
 		// Issue #18: clip the line to the horizontal pan window with
 		// grapheme-safe blank cells before rendering.
@@ -2205,13 +2218,125 @@ func (m Model) renderContentPanel(escapedName string, currentLine int) string {
 			// Issue #16: continuation rows have a blank gutter
 			// aligned with the first row's text.
 			b.WriteString(strings.Repeat(" ", gw+2))
+		} else if runOff {
+			// Issue #20: the first trailing gutter space carries
+			// the left hidden-content indicator.
+			b.WriteString(fmt.Sprintf("%*d", gw, clipped.Number))
+			b.WriteString(leftIndicator(line, m.theme, hOffset, textWidth))
+			b.WriteString(" ")
 		} else {
 			b.WriteString(fmt.Sprintf("%*d  ", gw, clipped.Number))
 		}
 		b.WriteString(renderLineWithHighlights(clipped, m.theme, currentLine))
+		if runOff && !clipped.Continuation {
+			// Issue #20: pad to the text width and render the
+			// reserved rightmost column. The text width already
+			// excludes the reserved column, so the indicator
+			// never overwrites text.
+			renderedCells := clusterCellWidth(clipped.Clusters)
+			if renderedCells < textWidth {
+				b.WriteString(strings.Repeat(" ", textWidth-renderedCells))
+			}
+			if clipped.Number == currentLine && hasHiddenMatchRight(line, hOffset, textWidth) {
+				b.WriteString(m.theme.Indicator("*"))
+			} else {
+				b.WriteString(" ")
+			}
+		}
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// leftIndicator returns the styled left gutter indicator for a line in
+// run-off-edge mode (Issue #20): inverse "*" if a match/marker is
+// entirely hidden left, inverse "_" if text is hidden left, or a blank
+// space otherwise. Visibility is derived from the actually rendered
+// cells after grapheme clipping.
+func leftIndicator(line filebuffer.Line, t theme.Theme, hOffset, textWidth int) string {
+	if hOffset <= 0 || !lineHasContent(line) {
+		return " "
+	}
+	windowEnd := hOffset + textWidth
+	for _, hl := range line.Highlights {
+		if !highlightHasVisibleCells(hl, line.Clusters, hOffset, windowEnd) && hl[0] < hOffset {
+			return t.Indicator("*")
+		}
+	}
+	return t.Indicator("_")
+}
+
+// hasHiddenMatchRight reports whether any match/marker on the line is
+// entirely hidden right of the visible window (Issue #20). A match is
+// entirely hidden right when it has no non-blank visible cells in the
+// window and extends past the right edge.
+func hasHiddenMatchRight(line filebuffer.Line, hOffset, textWidth int) bool {
+	windowEnd := hOffset + textWidth
+	for _, hl := range line.Highlights {
+		if !highlightHasVisibleCells(hl, line.Clusters, hOffset, windowEnd) && hl[1] > windowEnd {
+			return true
+		}
+	}
+	return false
+}
+
+// highlightHasVisibleCells reports whether any cell in the highlight
+// range [hl[0], hl[1]) is a non-blank rendered cell within the window
+// [hOffset, windowEnd) (Issue #20). A cell is non-blank only if it
+// belongs to a fully visible (non-split) cluster; a split wide glyph
+// rendered as blanks does not count.
+func highlightHasVisibleCells(hl [2]int, clusters []filebuffer.Cluster, hOffset, windowEnd int) bool {
+	inStart := hl[0]
+	if inStart < hOffset {
+		inStart = hOffset
+	}
+	inEnd := hl[1]
+	if inEnd > windowEnd {
+		inEnd = windowEnd
+	}
+	if inStart >= inEnd {
+		return false
+	}
+	cellPos := 0
+	for _, c := range clusters {
+		cs := cellPos
+		ce := cellPos + c.Width
+		cellPos = ce
+		if c.Width == 0 {
+			continue
+		}
+		// Fully visible (not split by either clip edge)?
+		if cs >= hOffset && ce <= windowEnd {
+			// Overlaps [inStart, inEnd)?
+			if cs < inEnd && ce > inStart {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// lineHasContent reports whether the line has any non-zero-width
+// grapheme clusters (Issue #20). Zero-width clusters (e.g. combining
+// marks) alone do not count as visible text.
+func lineHasContent(line filebuffer.Line) bool {
+	for _, c := range line.Clusters {
+		if c.Width > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// clusterCellWidth returns the total terminal cell width of the given
+// clusters (Issue #20). Used to pad the text area before the reserved
+// right-indicator column.
+func clusterCellWidth(clusters []filebuffer.Cluster) int {
+	w := 0
+	for _, c := range clusters {
+		w += c.Width
+	}
+	return w
 }
 
 // renderLineWithHighlights escapes the display text through the

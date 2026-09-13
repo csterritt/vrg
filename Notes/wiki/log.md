@@ -645,3 +645,34 @@ viewport and app entries). Sources:
 `internal/viewport/viewport.go`,
 `internal/viewport/reveal_horizontal_test.go`,
 `internal/app/app.go`, `internal/app/reveal_horizontal_test.go`.
+
+## [2026-09-12] ingest | Issue #20 hidden-content indicators
+
+Ingested the completed Issue #20 implementation: run-off-edge
+hidden-content indicators populating the column reserved by Issue #16.
+`renderContentPanel` (in `internal/app/app.go`) now emits, in
+run-off-edge mode only, a left `_`/`*` in the first trailing gutter
+space (text hidden left vs. match entirely hidden left) and a right
+`*` in the reserved rightmost column on the current matched line's
+visible row when a match is entirely hidden right. Helpers:
+`leftIndicator` (left `_`/`*`/blank), `hasHiddenMatchRight` (right
+`*` predicate), `highlightHasVisibleCells` (visibility over fully
+visible non-split clusters only), `lineHasContent` (non-zero-width
+cluster check), `clusterCellWidth` (text-area padding so the right
+indicator never overwrites text). Visibility is derived from the
+actually rendered cells after grapheme clipping — a split wide glyph
+rendered as blanks does not count as visible match content — and the
+reserved column is excluded from visibility calculations. Partial
+visibility on a side produces no hidden-match indicator for that side.
+The right indicator is absent when the current matched line is
+vertically off-screen; other lines' left indicators remain. Both
+indicators use `Theme.Indicator` (inverse match colours restored to
+base). Wrap mode draws neither indicators nor a reserved right
+column. Tests in `internal/app/indicator_test.go` cover all contracts
+through observable Bubble Tea `Update` and rendered output. Created
+[hidden-content-indicators](hidden-content-indicators.md); updated
+[index](index.md), [source-code](source-code.md) (internal/app entry),
+and [unit-tests](unit-tests.md) (indicator_test.go entry). Sources:
+`Notes/tasks/020-hidden-content-indicators.md`,
+`Notes/PRD-vrg.md` (Layout and indicators section),
+`internal/app/app.go`, `internal/app/indicator_test.go`.

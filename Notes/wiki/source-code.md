@@ -261,7 +261,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   mode, deriving the target cell from `line.ByteCells[sm.Start][0]` and
   the cluster width from `ClusterWidthAtCell`; `WithWrapMode` option
   and `wrapMode` config field for starting in run-off-edge mode in
-  tests. See
+  tests. Issue #20 added hidden-content indicators in run-off-edge
+  mode: `renderContentPanel` emits a left `_`/`*` in the first trailing
+  gutter space (text hidden left vs. match entirely hidden left) and a
+  right `*` in the reserved column on the current matched line's
+  visible row when a match is entirely hidden right; `leftIndicator`,
+  `hasHiddenMatchRight`, `highlightHasVisibleCells`, `lineHasContent`,
+  and `clusterCellWidth` derive visibility from the actually rendered
+  cells after grapheme clipping (split clusters do not count), exclude
+  the reserved column, and use `Theme.Indicator`; wrap mode draws
+  neither. See
   [search-collection-path](search-collection-path.md),
   [browse-tracer](browse-tracer.md),
   [outcome-contract](outcome-contract.md),
@@ -271,7 +280,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
   [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md),
   [horizontal-panning](horizontal-panning.md),
-  and [horizontal-reveal](horizontal-reveal.md).
+  [horizontal-reveal](horizontal-reveal.md),
+  and [hidden-content-indicators](hidden-content-indicators.md).
 
 ## internal/safepresentation
 
