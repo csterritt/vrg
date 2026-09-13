@@ -311,3 +311,12 @@ Usage
  Input tokens: 87233 tokens
  Output tokens: 30380 tokens
  Cached input tokens: 5326848 tokens
+
+----
+Run final audit
+
+Usage
+Agent messages: 33 messages
+Input tokens: 584131 tokens
+Output tokens: 19911 tokens
+Cached input tokens: 9393405 tokens
