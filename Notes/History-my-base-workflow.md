@@ -113,3 +113,12 @@ Usage
  Input tokens: 341902 tokens
  Output tokens: 73302 tokens
  Cached input tokens: 15404544 tokens
+
+----
+Task 014-vertical-destination-reveal.md
+
+Usage
+ Agent messages: 113 messages
+ Input tokens: 274885 tokens
+ Output tokens: 86571 tokens
+ Cached input tokens: 9922752 tokens

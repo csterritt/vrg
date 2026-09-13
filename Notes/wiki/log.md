@@ -395,3 +395,51 @@ Sources: `Notes/tasks/013-match-navigation-n-p-circular-cursor.md`,
 `internal/searchindex/searchindex.go`,
 `internal/searchindex/cursor_test.go`, `internal/app/app.go`,
 `internal/app/navigation_test.go`.
+
+## [2026-09-12] ingest | Issue #14 vertical destination reveal
+
+Implemented vertical destination reveal (Issue #14): navigating to a
+match adjusts the viewport so the rendered row containing the match's
+display target is visible, without unnecessary scrolling. The display
+target is the start cell of the first submatch on the destination line
+(the marker cell for a zero-width match); submatches are ordered by
+byte start, so the first identifies the target. The reveal targets the
+rendered row containing this target, not merely the source-line
+ordinal. Without wrapping (Issue #16 pending), the rendered row is the
+0-based source line index. If the target row is already visible, the
+viewport does not scroll. If hidden, the viewport is moved so the
+target lands at zero-based row `floor(contentHeight / 3)`, clamped to
+`[0, maxOffset]` so BOF and EOF available content takes precedence
+over one-third placement. On a file change, the starting viewport is
+the saved per-file offset (revisit) or 0 (first visit, including the
+startup file), then the reveal is applied. A reveal that moves the
+viewport replaces the saved per-file vertical state; a no-scroll reveal
+preserves the retained state. Reveal triggers: startup after the
+initial file load completes (owned by Issue #14; broader
+load-completion reveal owned by Issue #28), same-file `n`/`p`,
+cross-file `n`/`p` to a cached destination (immediately), and
+cross-file `n`/`p` to an uncached destination (when the load
+completes). Reload does not trigger a reveal. Horizontal reveal is
+owned by Issue #19. Added `viewport.Reveal(targetRow int)` and
+`app.Model.revealTarget()`/`targetRow(stop)` with a `needsReveal` flag
+gating the startup-after-load and uncached-cross-file-navigation
+triggers. Tests added: `internal/viewport/viewport_test.go` (visible
+no-scroll, hidden one-third placement, BOF clamp, EOF clamp, saved
+viewport visible/hidden, first-visit visible/hidden, exact one-third
+boundary, empty file) and `internal/app/reveal_test.go` (startup
+reveal after load, startup visible no-scroll, startup BOF/EOF clamp,
+same-file navigation reveal/back/visible no-scroll, cross-file
+navigation reveal cached/uncached, reveal moves replaces saved state,
+reveal no-scroll leaves saved state, saved viewport starting point,
+first visit starts at top, first submatch identification). Updated
+`TestNavigationRestoresSavedViewport` to reflect the new contract
+(saved offset is the starting point, then reveal applies). Updated
+[source-code](source-code.md) (internal/app and internal/viewport
+entries), [unit-tests](unit-tests.md) (viewport reveal tests and
+reveal_test.go catalog), and the index. Created
+[destination-reveal](destination-reveal.md). Sources:
+`Notes/tasks/014-vertical-destination-reveal.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors),
+`internal/viewport/viewport.go`, `internal/viewport/viewport_test.go`,
+`internal/app/app.go`, `internal/app/reveal_test.go`,
+`internal/app/navigation_test.go`.

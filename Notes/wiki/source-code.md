@@ -164,26 +164,47 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   selecting the first stop at startup; `handleNavigate(delta)` called
   for `n` (delta 1) and `p` (delta -1), moving the cursor circularly
   with strict no-op behavior for zero or one stop; on a same-file move
-  only the current matched line styling changes (destination reveal
-  belongs to Issue #14); on a cross-file move the departing file's
-  viewport offset is saved, the content panel switches immediately, a
-  cached destination is shown with its saved viewport restored (first
-  visit starts at the top), and an uncached destination requests a load
-  via `loadFileFor(path)`; a `fileCache map[string]*filebuffer.Buffer`
-  session cache keyed by raw path (no eviction) so a revisited file can
-  be shown immediately without a reload; `loadFile` now delegates to
-  `loadFileFor` with the cursor's current stop's raw path;
-  `CursorPosition()`/`CurrentPath()` accessors; `renderBrowse` derives
-  the current file and current matched line from the cursor so the
-  file list underline and current-match styling follow cursor
-  selection; manual scrolling does not move the cursor, so `n`/`p`
-  continue from the last selected stop; the file list remains passive
-  with no direct selection route. See
+  only the current matched line styling changes (Issue #14 now applies
+  a destination reveal - see below); on a cross-file move the
+  departing file's viewport offset is saved, the content panel
+  switches immediately, a cached destination is shown with its saved
+  viewport restored (first visit starts at the top), and an uncached
+  destination requests a load via `loadFileFor(path)`; a `fileCache
+  map[string]*filebuffer.Buffer` session cache keyed by raw path (no
+  eviction) so a revisited file can be shown immediately without a
+  reload; `loadFile` now delegates to `loadFileFor` with the cursor's
+  current stop's raw path; `CursorPosition()`/`CurrentPath()`
+  accessors; `renderBrowse` derives the current file and current
+  matched line from the cursor so the file list underline and
+  current-match styling follow cursor selection; manual scrolling does
+  not move the cursor, so `n`/`p` continue from the last selected
+  stop; the file list remains passive with no direct selection route.
+  Issue #14 added vertical destination reveal: a `needsReveal bool`
+  field gates the startup-after-load and
+  uncached-cross-file-navigation reveal triggers (set on
+  `SearchCompleteMsg` before the startup load and on cross-file
+  navigation to an uncached destination; cleared once applied; reload
+  does not set it, so a reload preserves the saved viewport anchor
+  without revealing a match); `revealTarget()` reads the cursor's
+  current stop, computes the rendered target row via
+  `targetRow(stop)`, records the offset before the reveal, calls
+  `viewport.Reveal(targetRow)`, and saves the new offset as per-file
+  state only if the reveal moved the viewport (a no-scroll reveal
+  preserves the retained state); `targetRow(stop)` returns the
+  0-based rendered row containing the display target - the start cell
+  of the first submatch on the destination line (submatches are
+  ordered by byte start, so the first identifies the target); without
+  wrapping (Issue #16 pending) the rendered row is the 0-based source
+  line index (`stop.LineNumber - 1`); the reveal is applied in
+  `FileLoadCompleteMsg` (when `needsReveal` is set), in same-file
+  `handleNavigate`, and in cross-file `handleNavigate` for a cached
+  destination. See
   [search-collection-path](search-collection-path.md),
   [browse-tracer](browse-tracer.md),
   [outcome-contract](outcome-contract.md),
-  [record-robustness](record-robustness.md), and
-  [manual-vertical-scrolling](manual-vertical-scrolling.md).
+  [record-robustness](record-robustness.md),
+  [manual-vertical-scrolling](manual-vertical-scrolling.md), and
+  [destination-reveal](destination-reveal.md).
 
 ## internal/safepresentation
 
@@ -249,10 +270,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `ScrollDown`/`ScrollUp` (one row), `ScrollHalfDown`/`ScrollHalfUp`
   (`max(1, floor(contentHeight/2))`), `ScrollPageDown`/`ScrollPageUp`
   (full `contentHeight`). `SetOffset`, `SetPanelHeight`, and `SetRows`
-  re-clamp the offset. `BufferRows(buf)` adapts a `filebuffer.Buffer` to
-  `RowProvider`. See
-  [manual-vertical-scrolling](manual-vertical-scrolling.md) and
-  [browse-tracer](browse-tracer.md).
+  re-clamp the offset. Issue #14 added `Reveal(targetRow int)`: if the
+  target row is already within the visible range, the offset is
+  unchanged (visible-target no-scroll); otherwise the viewport is
+  moved so the target lands at zero-based row `floor(contentHeight /
+  3)`, clamped to `[0, maxOffset]` so BOF and EOF available content
+  takes precedence over one-third placement. `BufferRows(buf)` adapts
+  a `filebuffer.Buffer` to `RowProvider`. See
+  [manual-vertical-scrolling](manual-vertical-scrolling.md),
+  [browse-tracer](browse-tracer.md), and
+  [destination-reveal](destination-reveal.md).
 
 ## internal/theme
 

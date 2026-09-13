@@ -47,6 +47,12 @@ Catalog of all wiki pages for the vrg project.
   no-op; per-file saved vertical viewport state; prepared-row
   rendering via RowProvider; and the visible-range-only render-cost
   guard
+- [destination-reveal.md](destination-reveal.md) — Issue #14: vertical
+  destination reveal; display target as the first submatch's start
+  cell; rendered-row reveal; visible-target no-scroll; one-third
+  placement with BOF/EOF precedence; saved viewport versus
+  top-of-file starting sequence; saved-state replacement for moving
+  and no-scroll reveals; startup-after-load and navigation triggers
 - [outcome-contract.md](outcome-contract.md) — Issue #9 (extended by
   Issues #10 and #11): stream-integrity accounting, separate
   process-success and stream-integrity assessment, the fatal/warning

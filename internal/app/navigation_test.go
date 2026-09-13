@@ -501,10 +501,12 @@ func TestNavigationSavesDepartingViewport(t *testing.T) {
 }
 
 // TestNavigationRestoresSavedViewport verifies that a revisited file
-// starts from its saved viewport offset.
+// starts from its saved viewport offset before applying the
+// destination reveal (Issue #14). When the destination target is
+// visible from the saved offset, the saved position is preserved.
 func TestNavigationRestoresSavedViewport(t *testing.T) {
 	idx := buildIndex(t, "/work",
-		textMatch("src/a.go", "x\n", 1, subSpec{"x", 0, 1}),
+		textMatch("src/a.go", "x\n", 10, subSpec{"x", 0, 1}),
 		textMatch("src/b.go", "x\n", 1, subSpec{"x", 0, 1}),
 	)
 	linesA := makeScrollLines(50)
@@ -515,7 +517,8 @@ func TestNavigationRestoresSavedViewport(t *testing.T) {
 	}
 	m := setupBrowseMulti(t, idx, bufs)
 
-	// Scroll down 7 rows in a.go.
+	// Scroll down 7 rows in a.go. The match on line 10 (row 9) is
+	// still visible from offset 7 (range [7, 30)).
 	for i := 0; i < 7; i++ {
 		m, _ = update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
 	}
@@ -533,9 +536,11 @@ func TestNavigationRestoresSavedViewport(t *testing.T) {
 	// Navigate back to a.go (p wraps or n wraps).
 	m, _ = update(t, m, keyPress('p'))
 	assertCurrentPath(t, m, "src/a.go")
-	// a.go's saved offset (7) should be restored.
+	// a.go's saved offset (7) is the starting point. The match on
+	// line 10 (row 9) is visible from offset 7 (range [7, 30)), so
+	// the reveal does not scroll and the saved offset is preserved.
 	if m.ViewportOffset() != 7 {
-		t.Fatalf("a.go ViewportOffset after revisit = %d, want 7 (restored)", m.ViewportOffset())
+		t.Fatalf("a.go ViewportOffset after revisit = %d, want 7 (saved offset preserved, visible target no-scroll)", m.ViewportOffset())
 	}
 }
 

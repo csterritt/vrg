@@ -359,6 +359,14 @@ type Model struct {
 	// a file revisited later can start from its saved position (Issue
 	// #12). The key is the string form of the raw path bytes.
 	perFileOffset map[string]int
+	// needsReveal is true when the next FileLoadCompleteMsg for the
+	// current file should apply a destination reveal (Issue #14). It is
+	// set for the startup load and for cross-file navigation to an
+	// uncached destination; it is cleared once the reveal is applied.
+	// Reload (r) does not set it, so a reload preserves the saved
+	// viewport anchor without revealing a match (PRD: "Reload by
+	// itself does not reveal a match").
+	needsReveal bool
 	// rowProviderFactory builds a RowProvider from a loaded buffer.
 	// When nil, viewport.BufferRows is used. This is a test seam for
 	// the render-cost guard: a counting fake proves the render path
@@ -652,6 +660,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// from the cursor.
 				m.cursor = searchindex.NewCursor(m.index)
 				m.loading = true
+				// Issue #14: the startup file's first load should
+				// apply a destination reveal once the content is
+				// available.
+				m.needsReveal = true
 				return m, m.loadFile()
 			}
 			return m, nil
@@ -695,6 +707,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			offset := m.SavedOffset(msg.Path)
 			m.viewport = viewport.New(rows, m.height)
 			m.viewport.SetOffset(offset)
+			// Issue #14: apply destination reveal after the starting
+			// viewport is set. A first visit (including the startup
+			// file) starts from the top; a revisit starts from the
+			// saved offset. The reveal then adjusts from there.
+			// Reload (r) does not set needsReveal, so a reload
+			// preserves the saved viewport anchor without revealing
+			// a match (PRD: "Reload by itself does not reveal a
+			// match").
+			if m.needsReveal {
+				m.needsReveal = false
+				m.revealTarget()
+			}
 		}
 		return m, nil
 
@@ -856,6 +880,45 @@ func (m *Model) saveOffset() {
 	m.perFileOffset[string(m.currentPath)] = m.viewport.Offset()
 }
 
+// revealTarget applies the Issue #14 destination reveal to the current
+// cursor target. The display target is the start cell of the first
+// submatch on the destination line; the reveal adjusts the viewport so
+// the rendered row containing that target is visible. If the target
+// is already visible, the viewport does not scroll and the saved
+// per-file state is left unchanged. If the reveal moves the viewport,
+// the new offset replaces the saved per-file state.
+func (m *Model) revealTarget() {
+	if m.viewport == nil || m.cursor == nil {
+		return
+	}
+	stop, ok := m.cursor.Stop()
+	if !ok {
+		return
+	}
+	targetRow := m.targetRow(stop)
+	before := m.viewport.Offset()
+	m.viewport.Reveal(targetRow)
+	// A reveal that moves the viewport replaces the saved vertical
+	// state; a no-scroll reveal does not discard it.
+	if m.viewport.Offset() != before {
+		m.saveOffset()
+	}
+}
+
+// targetRow returns the 0-based rendered row containing the display
+// target for the given stop. The display target is the start cell of
+// the first submatch on the destination line (the marker cell for a
+// zero-width match). Submatches are ordered by byte start then end by
+// the search index, so the first submatch identifies the target.
+// Without wrapping (Issue #16 pending), each source line is one
+// rendered row, so the rendered row is the 0-based source line index.
+// When wrapping is added, this mapping will consult the buffer's
+// row-from-byte information to find the sub-row containing the start
+// cell.
+func (m *Model) targetRow(stop searchindex.Stop) int {
+	return stop.LineNumber - 1
+}
+
 // handleNavigate moves the matched-line cursor by delta (1 for n, -1
 // for p) and wires the consequences (Issue #13). With zero or one stop
 // the cursor is a strict no-op: no state change, no load command, no
@@ -884,7 +947,8 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 	}
 	if !fileChanged {
 		// Same-file navigation: only the current matched line
-		// styling changes. Destination reveal belongs to Issue #14.
+		// styling changes. Issue #14: reveal the new target row.
+		m.revealTarget()
 		return m, nil
 	}
 	// Cross-file navigation. Save the departing file's viewport.
@@ -904,6 +968,10 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 		offset := m.SavedOffset(stop.RawPath)
 		m.viewport = viewport.New(rows, m.height)
 		m.viewport.SetOffset(offset)
+		// Issue #14: apply destination reveal after the starting
+		// viewport is set from the saved offset (or 0 for a first
+		// visit).
+		m.revealTarget()
 		return m, nil
 	}
 	// Uncached destination: request a load. The panel shows the
@@ -912,6 +980,9 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 	m.viewport = nil
 	m.loading = true
 	m.currentPath = stop.RawPath
+	// Issue #14: the load completion for this navigation should
+	// apply a destination reveal once the content is available.
+	m.needsReveal = true
 	return m, m.loadFileFor(stop.RawPath)
 }
 

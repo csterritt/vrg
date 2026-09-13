@@ -245,6 +245,28 @@ table, parser config, and generated help cannot drift.
 - `TestSetPanelHeight` / `TestSetPanelHeightClampsOffset` —
   `SetPanelHeight` updates the panel height and clamps the offset.
 
+`viewport_test.go` (Issue #14, external package `viewport_test`):
+
+- `TestRevealVisibleTargetNoScroll` — a target row already within the
+  visible range leaves the offset unchanged.
+- `TestRevealHiddenTargetOneThirdPlacement` — a hidden target lands at
+  zero-based row `floor(contentHeight / 3)`.
+- `TestRevealBOFClamp` — a hidden target near the top clamps to offset
+  0; BOF content takes precedence over one-third placement.
+- `TestRevealEOFClamp` — a hidden target near the bottom clamps to
+  `maxOffset`; EOF content takes precedence over one-third placement.
+- `TestRevealSavedViewportVisibleNoScroll` — a target visible from a
+  saved starting offset does not scroll.
+- `TestRevealFirstVisitVisibleNoScroll` — a target visible from offset
+  0 (first visit) does not scroll.
+- `TestRevealSavedViewportHiddenScrolls` — a target hidden from a
+  saved starting offset scrolls to one-third placement.
+- `TestRevealFirstVisitHiddenScrolls` — a target hidden from offset 0
+  (first visit) scrolls to one-third placement.
+- `TestRevealTargetAtExactOneThirdRow` — one-third placement for the
+  first hidden row at the visibility boundary.
+- `TestRevealEmptyFile` — `Reveal` on an empty file is a no-op.
+
 ## internal/theme
 
 `theme_test.go` (external package `theme_test`, Issue #7):
@@ -568,7 +590,9 @@ table, parser config, and generated help cannot drift.
 - `TestNavigationSavesDepartingViewport` — navigating away from a
   file saves that file's viewport offset as per-file state.
 - `TestNavigationRestoresSavedViewport` — a revisited file starts
-  from its saved viewport offset.
+  from its saved viewport offset before applying the destination
+  reveal; when the target is visible from the saved offset, the saved
+  position is preserved.
 - `TestNavigationFirstVisitStartsAtTop` — a first visit to a file
   starts at the top (offset 0).
 - `TestNavigationFileListPassive` — keys other than `n`/`p` do not
@@ -579,6 +603,38 @@ table, parser config, and generated help cannot drift.
 - `TestNavigationMultiFileMultiStop` — a full navigation sequence
   across multiple files with multiple stops each, checking cursor
   position and current file at each step, including wrap.
+
+`reveal_test.go` (Issue #14, external package `app_test`):
+
+- `TestStartupRevealAfterLoad` — the startup file's first match is
+  revealed at the one-third position when hidden from the top.
+- `TestStartupRevealVisibleNoScroll` — the startup first match
+  visible from the top does not scroll.
+- `TestStartupRevealBOFClamp` — a startup first match near the top
+  clamps to offset 0.
+- `TestStartupRevealEOFClamp` — a startup first match near the bottom
+  of a short file clamps to `maxOffset`.
+- `TestSameFileNavigationReveal` — `n` within the same file reveals
+  the new match at the one-third position when hidden.
+- `TestSameFileNavigationRevealBack` — `p` within the same file
+  reveals the previous match (BOF clamp).
+- `TestSameFileNavigationVisibleNoScroll` — `n` to an already-visible
+  target in the same file does not scroll.
+- `TestCrossFileNavigationRevealCached` — `n` to a cached file reveals
+  the destination match at one-third when hidden.
+- `TestCrossFileNavigationRevealUncached` — `n` to an uncached file
+  reveals the destination match after the load completes.
+- `TestRevealMovesReplacesSavedState` — a reveal that moves the
+  viewport replaces the saved per-file vertical state.
+- `TestRevealNoScrollLeavesSavedState` — a no-scroll reveal leaves
+  the saved per-file state unchanged.
+- `TestRevealSavedViewportStartingPoint` — a revisit starts from the
+  saved offset before applying the reveal.
+- `TestRevealFirstVisitStartsAtTop` — a first visit starts at the top
+  before applying the reveal.
+- `TestRevealIdentifiesFirstSubmatch` — the reveal targets the
+  rendered row of the first submatch's start cell, not merely a
+  source-line ordinal.
 
 ## cmd/vrg (subprocess boundary)
 

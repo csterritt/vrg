@@ -408,3 +408,151 @@ func TestSetPanelHeightClampsOffset(t *testing.T) {
 		t.Fatalf("Offset = %d, want 1 (still valid)", v.Offset())
 	}
 }
+
+// --- Reveal tests (Issue #14) ---
+
+// TestRevealVisibleTargetNoScroll verifies that Reveal leaves the
+// viewport offset unchanged when the target row is already visible.
+// An already-visible target row stays put; navigation avoids
+// unnecessary scrolling.
+func TestRevealVisibleTargetNoScroll(t *testing.T) {
+	v := viewport.New(fakeRows(makeLines(50)), 10) // contentHeight = 9
+	v.SetOffset(5)                                 // visible range [5, 14)
+	// Target row 10 is within [5, 14), so no scroll.
+	v.Reveal(10)
+	if v.Offset() != 5 {
+		t.Fatalf("Offset = %d, want 5 (visible target no-scroll)", v.Offset())
+	}
+}
+
+// TestRevealHiddenTargetOneThirdPlacement verifies that Reveal moves
+// the viewport so a hidden target lands at zero-based row
+// floor(contentHeight / 3).
+func TestRevealHiddenTargetOneThirdPlacement(t *testing.T) {
+	v := viewport.New(fakeRows(makeLines(50)), 10) // contentHeight = 9, floor(9/3) = 3
+	v.SetOffset(0)                                 // visible range [0, 9)
+	// Target row 20 is hidden. It should land at row 3, so offset = 20 - 3 = 17.
+	v.Reveal(20)
+	if v.Offset() != 17 {
+		t.Fatalf("Offset = %d, want 17 (one-third placement)", v.Offset())
+	}
+	// Verify the target is at the expected viewport position.
+	if 20-v.Offset() != 3 {
+		t.Fatalf("target viewport row = %d, want 3 (floor(contentHeight/3))", 20-v.Offset())
+	}
+}
+
+// TestRevealBOFClamp verifies that a hidden target near the top of the
+// file clamps the offset to 0 rather than placing the target at the
+// one-third row. At BOF, available content takes precedence over
+// one-third placement.
+func TestRevealBOFClamp(t *testing.T) {
+	v := viewport.New(fakeRows(makeLines(50)), 10) // contentHeight = 9, floor(9/3) = 3
+	v.SetOffset(10)                                // visible range [10, 19), target row 1 is hidden
+	// Target row 1: offset = 1 - 3 = -2, clamped to 0.
+	v.Reveal(1)
+	if v.Offset() != 0 {
+		t.Fatalf("Offset = %d, want 0 (BOF clamp)", v.Offset())
+	}
+	// The target is at viewport row 1, not 3. BOF takes precedence.
+	if 1-v.Offset() != 1 {
+		t.Fatalf("target viewport row = %d, want 1 (BOF precedence over one-third)", 1-v.Offset())
+	}
+}
+
+// TestRevealEOFClamp verifies that a hidden target near the bottom of
+// the file clamps the offset to maxOffset rather than placing the
+// target at the one-third row. At EOF, available content takes
+// precedence over one-third placement.
+func TestRevealEOFClamp(t *testing.T) {
+	v := viewport.New(fakeRows(makeLines(20)), 10) // contentHeight = 9, maxOffset = 11
+	v.SetOffset(0)                                 // visible range [0, 9), target row 18 is hidden
+	// Target row 18: offset = 18 - 3 = 15, but maxOffset = 11, clamped to 11.
+	v.Reveal(18)
+	if v.Offset() != 11 {
+		t.Fatalf("Offset = %d, want 11 (EOF clamp)", v.Offset())
+	}
+	// The target is at viewport row 7, not 3. EOF takes precedence.
+	if 18-v.Offset() != 7 {
+		t.Fatalf("target viewport row = %d, want 7 (EOF precedence over one-third)", 18-v.Offset())
+	}
+}
+
+// TestRevealSavedViewportVisibleNoScroll verifies that Reveal respects
+// a saved starting offset: when the target is visible from the saved
+// offset, the viewport does not scroll. A revisit preserves context
+// when the destination is already on-screen.
+func TestRevealSavedViewportVisibleNoScroll(t *testing.T) {
+	v := viewport.New(fakeRows(makeLines(50)), 10) // contentHeight = 9
+	v.SetOffset(15)                                // saved viewport, visible range [15, 24)
+	// Target row 20 is within [15, 24), so no scroll.
+	v.Reveal(20)
+	if v.Offset() != 15 {
+		t.Fatalf("Offset = %d, want 15 (saved viewport, visible target no-scroll)", v.Offset())
+	}
+}
+
+// TestRevealFirstVisitVisibleNoScroll verifies that Reveal on a first
+// visit (offset 0) leaves the viewport unchanged when the target is
+// visible from the top of the file.
+func TestRevealFirstVisitVisibleNoScroll(t *testing.T) {
+	v := viewport.New(fakeRows(makeLines(50)), 10) // contentHeight = 9
+	// First visit: offset starts at 0, visible range [0, 9).
+	// Target row 5 is within [0, 9), so no scroll.
+	v.Reveal(5)
+	if v.Offset() != 0 {
+		t.Fatalf("Offset = %d, want 0 (first visit, visible target no-scroll)", v.Offset())
+	}
+}
+
+// TestRevealSavedViewportHiddenScrolls verifies that Reveal on a
+// revisit with a saved offset scrolls when the target is hidden from
+// the saved offset. The saved viewport is the starting point, but
+// destination reveal takes precedence over it.
+func TestRevealSavedViewportHiddenScrolls(t *testing.T) {
+	v := viewport.New(fakeRows(makeLines(50)), 10) // contentHeight = 9, floor(9/3) = 3
+	v.SetOffset(15)                                // saved viewport, visible range [15, 24)
+	// Target row 40 is hidden from [15, 24). Reveal: offset = 40 - 3 = 37.
+	v.Reveal(40)
+	if v.Offset() != 37 {
+		t.Fatalf("Offset = %d, want 37 (saved viewport, hidden target scrolls)", v.Offset())
+	}
+}
+
+// TestRevealFirstVisitHiddenScrolls verifies that Reveal on a first
+// visit (offset 0) scrolls when the target is hidden from the top of
+// the file.
+func TestRevealFirstVisitHiddenScrolls(t *testing.T) {
+	v := viewport.New(fakeRows(makeLines(50)), 10) // contentHeight = 9, floor(9/3) = 3
+	// First visit: offset 0, visible range [0, 9).
+	// Target row 30 is hidden. Reveal: offset = 30 - 3 = 27.
+	v.Reveal(30)
+	if v.Offset() != 27 {
+		t.Fatalf("Offset = %d, want 27 (first visit, hidden target scrolls)", v.Offset())
+	}
+}
+
+// TestRevealTargetAtExactOneThirdRow verifies the one-third placement
+// when the target is exactly at the boundary of visibility.
+func TestRevealTargetAtExactOneThirdRow(t *testing.T) {
+	v := viewport.New(fakeRows(makeLines(50)), 7) // contentHeight = 6, floor(6/3) = 2
+	v.SetOffset(0)                                // visible range [0, 6)
+	// Target row 6 is the first hidden row (visible range is [0, 6)).
+	// Reveal: offset = 6 - 2 = 4.
+	v.Reveal(6)
+	if v.Offset() != 4 {
+		t.Fatalf("Offset = %d, want 4 (one-third for first hidden row)", v.Offset())
+	}
+	if 6-v.Offset() != 2 {
+		t.Fatalf("target viewport row = %d, want 2 (floor(6/3))", 6-v.Offset())
+	}
+}
+
+// TestRevealEmptyFile verifies that Reveal on an empty file is a no-op.
+func TestRevealEmptyFile(t *testing.T) {
+	v := viewport.New(fakeRows(makeLines(0)), 10)
+	v.Reveal(0)
+	if v.Offset() != 0 {
+		t.Fatalf("Offset = %d, want 0 (empty file reveal no-op)", v.Offset())
+	}
+}

@@ -76,6 +76,32 @@ func (v *Viewport) SetRows(rows RowProvider) {
 	v.clampOffset()
 }
 
+// Reveal adjusts the viewport offset so that the target row is
+// visible. If the target row is already within the visible range, the
+// offset is unchanged (visible-target no-scroll). Otherwise the
+// viewport is moved so the target lands at zero-based row
+// floor(contentHeight / 3), clamped to valid top positions. At BOF and
+// EOF, available content takes precedence over one-third placement:
+// the computed offset is clamped to [0, maxOffset], so a target near
+// the top stays near the top and a target near the bottom stays near
+// the bottom rather than forcing the one-third row.
+func (v *Viewport) Reveal(targetRow int) {
+	if v.rows == nil {
+		return
+	}
+	contentHeight := v.ContentHeight()
+	// If the target is already visible, do not scroll.
+	if targetRow >= v.offset && targetRow < v.offset+contentHeight {
+		return
+	}
+	// Place the target at zero-based row floor(contentHeight / 3) by
+	// moving the viewport. Clamping to [0, maxOffset] gives BOF and
+	// EOF precedence over one-third placement.
+	third := contentHeight / 3
+	v.offset = targetRow - third
+	v.clampOffset()
+}
+
 // Visible returns the visible rows from the row provider. Only the
 // [offset, offset+contentHeight) range is queried, not the full buffer.
 // If the file is shorter than the viewport, the returned slice is
