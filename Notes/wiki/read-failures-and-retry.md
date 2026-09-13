@@ -78,9 +78,15 @@ overlay:
 - When a read-failure overlay is already open (a re-entry retry
   failed again), the new diagnostic occurrence is appended to
   `overlayText` without resetting `overlayScroll`.
-- A search-complete overlay takes precedence: if one is already
-  open, the read failure is recorded in `failedPaths` and the panel
-  state is updated, but the search overlay is not changed.
+- Issue #32 generalized the append to any open error or warning
+  overlay (not just read-failure overlays): a read failure while a
+  search-complete error or warning overlay is open now appends to
+  it rather than being suppressed. The overlay is marked as a
+  read-failure overlay so `r` (Issue #27) can retry.
+- Issue #32 added error-suspends-help: when help is open, a read
+  failure suspends help (saving its scroll position) and opens the
+  error overlay. Dismissing the error restores help at its saved
+  scroll position. See [overlay-precedence](overlay-precedence.md).
 - The file-change pop-up is cancelled when opening a read-failure
   overlay.
 
@@ -190,10 +196,9 @@ Load failures never change the fixed search-derived exit status:
 - Load-completion reveal is owned by Issue #28.
 - Stale validation is owned by Issue #29.
 - Unsupported encodings are owned by Issue #30.
-- The generalized overlay append primitive (all appended errors,
-  help/precedence semantics) is owned by Issue #32. Issue #26
-  implements only the minimal append-preserving-scroll primitive
-  needed for the re-entry retry failure case.
+- The generalized overlay append primitive (all appended errors),
+  help/precedence semantics, and the dismissal-outcome table are owned
+  by Issue #32. See [overlay-precedence](overlay-precedence.md).
 
 ## Testing
 

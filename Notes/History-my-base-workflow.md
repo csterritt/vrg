@@ -275,3 +275,12 @@ Usage
  Input tokens: 277705 tokens
  Output tokens: 41655 tokens
  Cached input tokens: 11933952 tokens
+
+----
+Task 032-overlay-precedence-esc-semantics.md
+
+Usage
+ Agent messages: 71 messages
+ Input tokens: 208036 tokens
+ Output tokens: 39561 tokens
+ Cached input tokens: 7336704 tokens

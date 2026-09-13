@@ -585,10 +585,17 @@ type Model struct {
 	// the browse state with the "(unreadable)" placeholder. When a
 	// re-entry retry fails again, the new diagnostic is appended to the
 	// open read-failure overlay without resetting the scroll position.
-	// A search-complete overlay takes precedence: a load failure while a
-	// search-complete overlay is open does not open or append to a
-	// read-failure overlay.
+	// Issue #32 generalizes the append-preserving-scroll primitive to
+	// all appended errors: a read failure while any error/warning
+	// overlay is open appends to it and marks the overlay as a
+	// read-failure overlay so r (Issue #27) can retry.
 	overlayReadFailure bool
+	// suspendedHelp is true when the help overlay has been suspended by
+	// a modal error overlay (Issue #32). A new error while help is open
+	// suspends help—saving its scroll position—rather than closing it.
+	// Dismissing the error restores help at its saved scroll position.
+	suspendedHelp       bool
+	suspendedHelpScroll int
 
 	// File-change pop-up state (Issue #15). The pop-up starts at
 	// selection time (when navigation crosses a file boundary), not
@@ -884,6 +891,12 @@ func (m Model) OverlayText() string { return m.overlayText }
 // OverlayScroll returns the current vertical scroll offset of the
 // open overlay (Issue #26). Returns 0 when no overlay is open.
 func (m Model) OverlayScroll() int { return m.overlayScroll }
+
+// HelpSuspended reports whether the help overlay has been suspended by
+// a modal error overlay (Issue #32). When true, dismissing the error
+// restores help at its saved scroll position rather than returning to
+// the base state.
+func (m Model) HelpSuspended() bool { return m.suspendedHelp }
 
 // IsLoading reports whether the current file's content is loading
 // (Issue #26). When true, the panel shows the "Loading…" placeholder
@@ -2100,29 +2113,38 @@ func (m Model) handleReload() (tea.Model, tea.Cmd) {
 	return m, loadCmd
 }
 
-// openReadFailureOverlay opens or appends to the read-failure overlay
-// for the current file (Issue #26). When no overlay is open, a fresh
-// non-fatal error overlay is opened with the diagnostic. When a
-// read-failure overlay is already open (re-entry retry failure), the
-// new diagnostic is appended to the overlay text without resetting the
-// scroll position (the minimal append-preserving-scroll primitive owned
-// by this issue). When a search-complete overlay is already open, it
-// takes precedence: the read failure is still collected as a diagnostic
-// and the panel shows "(unreadable)", but no read-failure overlay is
-// opened or appended.
+// openReadFailureOverlay opens or appends to the error overlay for the
+// current file (Issue #26, generalized by Issue #32). When no overlay
+// is open, a fresh non-fatal error overlay is opened with the
+// diagnostic. When help is open, the error suspends help—saving its
+// scroll position—so dismissing the error restores help (Issue #32).
+// When any error/warning overlay is already open, the new diagnostic is
+// appended without resetting the scroll position (the
+// append-preserving-scroll primitive, generalized from Issue #26
+// re-entry retries to all appended errors by Issue #32).
 func (m *Model) openReadFailureOverlay(diag string) {
-	if m.overlayOpen && !m.overlayReadFailure {
-		// A search-complete overlay takes precedence. The read
-		// failure is collected as a diagnostic and the panel shows
-		// "(unreadable)", but the overlay is not changed.
+	sanitized := sanitizeDiagnostic(diag)
+	if m.overlayOpen && m.overlay == OverlayHelp {
+		// Issue #32: a new error while help is open suspends help,
+		// saving its scroll position. Dismissing the error restores
+		// help at that position.
+		m.suspendedHelp = true
+		m.suspendedHelpScroll = m.overlayScroll
+		m.overlay = OverlayError
+		m.overlayText = sanitized
+		m.overlayFatal = false
+		m.overlayScroll = 0
+		m.overlayReadFailure = true
+		m.cancelPopup()
 		return
 	}
-	sanitized := sanitizeDiagnostic(diag)
-	if m.overlayOpen && m.overlayReadFailure {
-		// Re-entry retry failure: append the new diagnostic to
-		// the open overlay without resetting the scroll position
-		// (the append-preserving-scroll primitive).
+	if m.overlayOpen {
+		// Issue #32: append to any open error/warning overlay without
+		// resetting the scroll position (generalized from the Issue
+		// #26 re-entry-retry append to all appended errors). Mark the
+		// overlay as a read-failure overlay so r (Issue #27) can retry.
 		m.overlayText += "\n" + sanitized
+		m.overlayReadFailure = true
 		return
 	}
 	// Fresh read-failure overlay: non-fatal, dismissible to browse.
@@ -2142,6 +2164,8 @@ func (m *Model) openReadFailureOverlay(diag string) {
 // footer slot (HelpFooter). Opening help cancels any active Issue #15
 // file-change pop-up with no return on close. The help overlay is
 // non-fatal: closing (q/Esc/h/?) returns to the underlying base state.
+// Issue #32: opening help clears any suspended-help state from a
+// previously dismissed error-over-help sequence.
 func (m Model) openHelp() (tea.Model, tea.Cmd) {
 	m.overlay = OverlayHelp
 	m.overlayOpen = true
@@ -2149,6 +2173,8 @@ func (m Model) openHelp() (tea.Model, tea.Cmd) {
 	m.overlayFatal = false
 	m.overlayScroll = 0
 	m.overlayReadFailure = false
+	m.suspendedHelp = false
+	m.suspendedHelpScroll = 0
 	m.cancelPopup()
 	return m, nil
 }
@@ -2162,6 +2188,9 @@ func (m Model) openHelp() (tea.Model, tea.Cmd) {
 // failure or clears the panel on success.
 // Issue #31: h and ? close the help overlay (but are ignored by the
 // error/warning overlays).
+// Issue #32: dismissing a non-fatal error overlay that was suspended
+// over help restores help at its saved scroll position rather than
+// returning to the base state.
 func (m Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.Code == tea.KeyUp:
@@ -2180,31 +2209,9 @@ func (m Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case msg.Code == 'q' && msg.Mod == 0:
-		if m.overlayFatal {
-			// Fatal no-results overlay: dismissal exits 2.
-			m.cancelled = true
-			m.cancelProcess()
-			m.cancelLoad()
-			return m, tea.Quit
-		}
-		// Non-fatal overlay: dismiss to the base state.
-		m.overlayOpen = false
-		m.overlayReadFailure = false
-		return m, nil
+		return m.dismissOverlay()
 	case msg.Code == tea.KeyEscape:
-		if m.overlayFatal {
-			// Fatal no-results overlay: Esc exits 2 (the one case
-			// where Esc terminates, because there is no underlying
-			// state).
-			m.cancelled = true
-			m.cancelProcess()
-			m.cancelLoad()
-			return m, tea.Quit
-		}
-		// Non-fatal overlay: dismiss to the base state.
-		m.overlayOpen = false
-		m.overlayReadFailure = false
-		return m, nil
+		return m.dismissOverlay()
 	case (msg.Code == 'h' || msg.Code == '?') && msg.Mod == 0:
 		// Issue #31: h and ? close the help overlay. For error
 		// and warning overlays, h and ? are ignored (fall through
@@ -2212,6 +2219,8 @@ func (m Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.overlay == OverlayHelp {
 			m.overlayOpen = false
 			m.overlayReadFailure = false
+			m.suspendedHelp = false
+			m.suspendedHelpScroll = 0
 			return m, nil
 		}
 		return m, nil
@@ -2219,6 +2228,38 @@ func (m Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Other keys are ignored by the overlay.
 		return m, nil
 	}
+}
+
+// dismissOverlay handles q and Esc dismissal of the open overlay (Issue
+// #32). A fatal no-results overlay exits 2 because there is no
+// underlying state. A non-fatal error overlay suspended over help
+// restores help at its saved scroll position. Any other non-fatal
+// overlay dismisses to the base state.
+func (m Model) dismissOverlay() (tea.Model, tea.Cmd) {
+	if m.overlayFatal {
+		// Fatal no-results overlay: dismissal exits 2 (the one case
+		// where Esc terminates, because there is no underlying state).
+		m.cancelled = true
+		m.cancelProcess()
+		m.cancelLoad()
+		return m, tea.Quit
+	}
+	if m.suspendedHelp {
+		// Issue #32: dismissing an error overlay that was suspended
+		// over help restores help at its saved scroll position.
+		m.overlay = OverlayHelp
+		m.overlayText = helpText()
+		m.overlayFatal = false
+		m.overlayScroll = m.suspendedHelpScroll
+		m.overlayReadFailure = false
+		m.suspendedHelp = false
+		m.suspendedHelpScroll = 0
+		return m, nil
+	}
+	// Non-fatal overlay: dismiss to the base state.
+	m.overlayOpen = false
+	m.overlayReadFailure = false
+	return m, nil
 }
 
 // View renders the current state.

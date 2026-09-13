@@ -1129,3 +1129,46 @@ entries). Sources:
 `Notes/PRD-vrg.md` (Colours, overlays, and key precedence),
 `internal/app/app.go`,
 `internal/app/help_overlay_test.go`.
+
+## [2026-09-12] ingest | Issue #32 overlay precedence and Esc semantics
+
+Ingested the completed Issue #32 implementation: the full overlay
+precedence stack (`ctrl+c` over modal error over help over pop-up over
+base keys), error-suspends-help with scroll position restoration,
+generalized append-preserving-scroll for all appended errors, pop-up
+cancellation by help and error with no return, `Esc` no-op with no
+overlay, and the dismissal-outcome table for both `q` and `Esc`.
+`internal/app` added `suspendedHelp`/`suspendedHelpScroll` fields and
+the `HelpSuspended()` accessor. `openReadFailureOverlay` was
+generalized: a read failure while help is open suspends help (saving
+its scroll position) and opens the error overlay; a read failure while
+any error/warning overlay is open appends to it without resetting the
+scroll position and marks the overlay as a read-failure overlay so `r`
+(Issue #27) can retry (replacing the Issue #26 rule that a
+search-complete overlay takes precedence over read failures).
+`handleOverlayKey` was refactored to delegate `q`/`Esc` dismissal to a
+new `dismissOverlay()` helper: a fatal no-results overlay exits 2; a
+non-fatal error overlay suspended over help restores help at its saved
+scroll position; any other non-fatal overlay dismisses to the base
+state. `openHelp` clears any suspended-help state. Tests added in
+`internal/app/overlay_precedence_test.go`: error-suspends-help with
+scroll restoration for `q` and `Esc`; append-preserving-scroll via `r`
+retry; error cancels pop-up with no return; `Esc` no-overlay dismisses
+pop-up; the dismissal-outcome table for `q` and `Esc` (browse + error,
+browse + help, browse + error-over-help, no-results + warning,
+no-results + help, fatal no-results, record-loss no-results);
+error-first key routing; the full three-key error-over-help sequence
+for `q` and `Esc`; and `Esc` no-op in no-results. Created
+[overlay-precedence](overlay-precedence.md); updated
+[help-overlay](help-overlay.md) (cross-reference),
+[outcome-contract](outcome-contract.md) (Issue #32 generalization
+note and cross-reference),
+[read-failures-and-retry](read-failures-and-retry.md) (generalized
+append and error-suspends-help notes, out-of-scope update),
+[index](index.md) (overlay-precedence entry),
+[source-code](source-code.md) (internal/app Issue #32 entry), and
+[unit-tests](unit-tests.md) (overlay_precedence_test.go entries).
+Sources: `Notes/tasks/032-overlay-precedence-esc-semantics.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence; Outcome and
+exit-status contract), `internal/app/app.go`,
+`internal/app/overlay_precedence_test.go`.

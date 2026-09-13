@@ -120,6 +120,7 @@ footer) is routed through the Issue #6 utility.
 
 - [Issue #31](../issues/031-help-overlay.md)
 - [PRD: Colours, overlays, and key precedence](../PRD-vrg.md)
+- [Overlay precedence (Issue #32)](overlay-precedence.md)
 - [Outcome contract (Issue #9 error overlay)](outcome-contract.md)
 - [Browse tracer (Issue #15 pop-up)](browse-tracer.md)
 - [Safe presentation (Issue #6)](safe-presentation.md)

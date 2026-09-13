@@ -124,6 +124,13 @@ When the overlay is closed, the base state handles keys: `q` quits with
 the fixed exit status; `Esc` is a no-op; `ctrl+c` exits 130; `c`
 toggles the theme in browse.
 
+Issue #32 generalized the overlay behavior with the full precedence
+stack, error-suspends-help with scroll restoration, the generalized
+append-preserving-scroll primitive, and the dismissal-outcome table
+for both `q` and `Esc`. See
+[overlay-precedence](overlay-precedence.md) for the complete
+precedence and dismissal semantics.
+
 ## Diagnostics
 
 The overlay text is the captured stderr. When a failed process supplies

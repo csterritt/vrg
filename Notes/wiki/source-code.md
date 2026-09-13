@@ -419,6 +419,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   sizes the overlay is clipped to the terminal without a borderless
   mode and restored on growth; rendering does not panic at 25×8. See
   [help-overlay](help-overlay.md).
+  Issue #32 established the full overlay precedence stack (`ctrl+c`
+  over modal error over help over pop-up over base keys), error-suspends-help
+  with scroll restoration (`suspendedHelp`/`suspendedHelpScroll` fields,
+  `HelpSuspended()` accessor), generalized append-preserving-scroll to
+  all appended errors (a read failure while any error/warning overlay is
+  open appends without resetting scroll and marks the overlay as a
+  read-failure overlay so `r` can retry), pop-up cancellation by help and
+  error with no return, `Esc` no-op with no overlay, the
+  `dismissOverlay()` helper consolidating `q`/`Esc` dismissal, and the
+  dismissal-outcome table for both `q` and `Esc` (fatal no-results exits
+  2; error-over-help restores help at its saved scroll position; a second
+  `q` from a still-running base state exits the fixed status; a second
+  `Esc` leaves the state running). See
+  [overlay-precedence](overlay-precedence.md).
 
 ## internal/safepresentation
 

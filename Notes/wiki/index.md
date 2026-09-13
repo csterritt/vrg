@@ -212,6 +212,13 @@ Catalog of all wiki pages for the vrg project.
   data source for rendering and Issue #34 documentation tests; footer
   slot reserved for Issue #34; pop-up cancellation on open with no
   return; tiny-size clipping without borderless mode; sink-safety row
+- [overlay-precedence.md](overlay-precedence.md) — Issue #32: overlay
+  precedence stack (`ctrl+c` over error over help over pop-up over
+  base keys), error-suspends-help with scroll position restoration,
+  generalized append-preserving-scroll for all appended errors, pop-up
+  cancellation by help and error with no return, `Esc` no-op with no
+  overlay, and the dismissal-outcome table for `q` and `Esc` including
+  the fatal-overlay exit-2 route
 
 ## Catalogs
 

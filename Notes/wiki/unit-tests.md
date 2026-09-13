@@ -1746,3 +1746,42 @@ replay-ordering assertions:
   colours (dark: white on black).
 - `TestHelpRendersBorder` — the help overlay view contains a
   single-line border (same plain border as the error overlay).
+
+`overlay_precedence_test.go` (Issue #32, external package `app_test`):
+
+- `TestErrorSuspendsHelpScrollRestoredQ` — a new error while help is
+  open at scroll position S suspends help; dismissing the error with
+  `q` restores help at S.
+- `TestErrorSuspendsHelpScrollRestoredEsc` — same as above but
+  dismissing with `Esc` restores help at S.
+- `TestAppendErrorPreservesScroll` — a second error appended to an
+  overlay the reader has scrolled to position P keeps the reader at P
+  with the new text reachable (generalized from Issue #26's
+  re-entry-retry append to all appended errors via `r` retry).
+- `TestErrorCancelsPopup` — opening an error overlay cancels an
+  active Issue #15 file-change pop-up with no return after dismissal.
+- `TestEscNoOverlayDismissesPopup` — `Esc` with no overlay dismisses
+  a pop-up (its only effect) and otherwise does nothing in browsing.
+- `TestDismissalOutcomeTableQ` — the dismissal-outcome table for `q`
+  as the dismissal key: browse + error → browse; browse + help →
+  browse; browse + error-over-help → help restored; no-results +
+  warning → no-results; no-results + help → no-results; fatal
+  no-results → exit 2; record-loss no-results → exit 2. A second `q`
+  from a still-running base state exits the fixed status.
+- `TestDismissalOutcomeTableEsc` — the dismissal-outcome table for
+  `Esc` as the dismissal key: same rows as `q`, but a second `Esc`
+  leaves the base state running (no exit).
+- `TestErrorFirstKeyRouting` — keys route to the error when both
+  help and error are open; scrolling the error does not affect the
+  suspended help's scroll position; dismissing the error with `q`
+  restores help at its original scroll position.
+- `TestErrorOverHelpEscRestoresHelp` — the full three-key sequence
+  for error-over-help with `Esc`: Esc closes the error and restores
+  help, the next Esc closes help to browsing, a third Esc is a no-op,
+  and only a further `q` exits with the fixed status.
+- `TestErrorOverHelpQRestoresHelp` — the full three-key sequence
+  for error-over-help with `q`: `q` closes the error and restores
+  help, the next `q` closes help to browsing, and a third `q` exits
+  with the fixed status.
+- `TestEscNoOpNoResults` — `Esc` with no overlay on the no-results
+  screen does nothing.
