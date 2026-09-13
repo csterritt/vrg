@@ -185,6 +185,16 @@ Catalog of all wiki pages for the vrg project.
   without consuming or mutating the intent; reveal decisions deferred
   to the matching layout installation so `targetRow` sees the correct
   rows
+- [stale-match-validation.md](stale-match-validation.md) — Issue #29:
+  best-effort per-submatch validation against original line bytes
+  (including terminators, BOM-adjusted); per-submatch drops with stale
+  marking and surviving-highlight retention; three fallback reveal
+  landing rules (first survivor, clamped recorded start with
+  end-of-line cell clamping, last source line); persistent
+  "file changed since search" filename-row note through the Issue #24
+  slot with no timer; reload recomputation; two-stage fallback reveal
+  through the Issue #28 path; fixed search-derived exit status never
+  altered by stale content; UTF-16/UTF-32 excluded (Issue #30)
 
 ## Catalogs
 

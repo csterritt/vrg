@@ -1,6 +1,7 @@
 package filebuffer
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"sort"
@@ -25,6 +26,13 @@ type Buffer struct {
 	// back to raw-file coordinates (e.g. Issue #29 stale validation).
 	// Zero when no leading BOM is present; 3 (EF BB BF) otherwise.
 	BOMOffset int
+	// Stale is true when at least one submatch was dropped by stale
+	// validation on this load (Issue #29). Stale entries remain
+	// navigation stops; surviving submatches keep their highlights.
+	// The filename row shows "file changed since search" while Stale
+	// is true. Reload recomputes Stale: it clears only when the newly
+	// loaded content passes validation for every retained submatch.
+	Stale bool
 }
 
 // Cluster is one grapheme cluster within a display string: its byte
@@ -57,6 +65,33 @@ type Line struct {
 	// of their source line. The renderer shows a blank gutter for
 	// continuation rows. Set by the viewport row model.
 	Continuation bool
+	// RawBytes are the original line bytes including terminators, in
+	// rg-line coordinates (BOM stripped for line 1). Retained for
+	// stale-match validation (Issue #29): each submatch's range and
+	// byte equality are checked against these bytes, not the stripped
+	// display text.
+	RawBytes []byte
+	// ContentWidth is the display content width before any end-of-line
+	// marker extension (Issue #29). The end-of-line position for a
+	// clamped-start fallback reveal target; when there is no marker
+	// cell, the fallback clamps to the last rendered cell
+	// (ContentWidth-1).
+	ContentWidth int
+	// HasMarker is true when an end-of-line zero-width marker cell was
+	// appended to the display (Issue #29). Used by the end-of-line
+	// fallback to distinguish the marker cell from a past-content
+	// position.
+	HasMarker bool
+	// ValidStarts are the Start byte offsets of submatches that
+	// passed stale validation on this line, in recorded order (Issue
+	// #29). The first entry is the reveal target when survivors exist.
+	// Empty when no submatches survived.
+	ValidStarts []int
+	// FirstRecordedStart is the first recorded submatch's Start on
+	// this line, used as the fallback reveal target when no submatches
+	// survived (Issue #29). RevealTarget clamps it to the available
+	// line bytes.
+	FirstRecordedStart int
 }
 
 // Load reads, decodes, and maps a file's bytes into a display-ready
@@ -92,6 +127,46 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		stopsByLine[s.LineNumber] = append(stopsByLine[s.LineNumber], s)
 	}
 
+	// Issue #29: best-effort stale validation. For each stop, check
+	// every submatch against the original line bytes (including
+	// terminators, in rg-line coordinates with the BOM stripped for
+	// line 1): line existence, range validity, and byte equality with
+	// the recorded match bytes. Any failure drops that submatch and
+	// marks the buffer stale; surviving submatches keep their
+	// highlights. Validation runs on first load and every reload
+	// (both call Load), so staleness recomputes each time. This is
+	// best-effort correspondence, not a snapshot or regex re-evaluation;
+	// same-text moves and changes outside matched spans can remain
+	// undetected. UTF-16/32 files are excluded (Issue #30).
+	stale := false
+	validStopsByLine := make(map[int][]searchindex.Stop, len(stopsByLine))
+	validStartsByLine := make(map[int][]int, len(stopsByLine))
+	firstStartByLine := make(map[int]int, len(stopsByLine))
+	for lineNum, lineStops := range stopsByLine {
+		var rawLine []byte
+		if lineNum >= 1 && lineNum <= lineCount {
+			rawLine = rawLines[lineNum-1]
+		}
+		for _, s := range lineStops {
+			filtered := s
+			filtered.Submatches = nil
+			var validStarts []int
+			for _, sm := range s.Submatches {
+				if !submatchValid(rawLine, sm, lineNum, lineCount) {
+					stale = true
+					continue
+				}
+				filtered.Submatches = append(filtered.Submatches, sm)
+				validStarts = append(validStarts, sm.Start)
+			}
+			validStopsByLine[lineNum] = append(validStopsByLine[lineNum], filtered)
+			validStartsByLine[lineNum] = append(validStartsByLine[lineNum], validStarts...)
+			if len(s.Submatches) > 0 {
+				firstStartByLine[lineNum] = s.Submatches[0].Start
+			}
+		}
+	}
+
 	lines := make([]Line, 0, lineCount)
 	for i, rawLine := range rawLines {
 		lineNum := i + 1
@@ -108,7 +183,9 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		// receives a visible fallback cell so the highlight is never
 		// zero cells.
 		byteCells := expandedByteCells(d.ByteCells, d.ByteOffsets, clusters)
-		highlights := expandedHighlights(d.ByteOffsets, d.ByteCells, clusters, stopsByLine[lineNum])
+		// Issue #29: compute highlights from validated stops only so
+		// dropped submatches produce no highlight.
+		highlights := expandedHighlights(d.ByteOffsets, d.ByteCells, clusters, validStopsByLine[lineNum])
 
 		// Issue #23: zero-width submatches (Start == End) render as
 		// one inverse-video cell at their mapped display location.
@@ -124,8 +201,9 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		// range [cell, cell+1) that participates in clipping, indicators,
 		// and reveal like any other highlight. The terminator-only $
 		// marker is an ordinary marker with no special cases.
+		// Issue #29: markers come from validated stops only.
 		display := d.Text
-		markerCells := markerCellsForStops(stopsByLine[lineNum], byteCells, clusters)
+		markerCells := markerCellsForStops(validStopsByLine[lineNum], byteCells, clusters)
 		eolCell := clusterContentWidth(clusters)
 		eolMarkerAdded := false
 		for _, mc := range markerCells {
@@ -148,11 +226,16 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		})
 
 		lines = append(lines, Line{
-			Number:     lineNum,
-			Display:    display,
-			ByteCells:  byteCells,
-			Highlights: highlights,
-			Clusters:   clusters,
+			Number:             lineNum,
+			Display:            display,
+			ByteCells:          byteCells,
+			Highlights:         highlights,
+			Clusters:           clusters,
+			RawBytes:           rawLine,
+			ContentWidth:       eolCell,
+			HasMarker:          eolMarkerAdded,
+			ValidStarts:        validStartsByLine[lineNum],
+			FirstRecordedStart: firstStartByLine[lineNum],
 		})
 	}
 
@@ -161,7 +244,30 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		LineCount:   lineCount,
 		GutterWidth: gw,
 		BOMOffset:   bomOffset,
+		Stale:       stale,
 	}, nil
+}
+
+// submatchValid checks one submatch against the original line bytes
+// (Issue #29). The rawLine is the original line bytes including
+// terminators in rg-line coordinates (BOM stripped for line 1), so rg
+// offsets align directly. lineNum and lineCount determine line
+// existence: a missing line (lineNum outside [1, lineCount]) fails
+// every submatch. Range validity requires Start <= End and
+// [Start, End) within [0, len(rawLine)]. Byte equality requires
+// rawLine[Start:End] to equal the recorded match bytes. Both JSON
+// encodings (text and base64) are already decoded by searchindex, so
+// the comparison is plain byte equality. A zero-width submatch
+// (Start == End) validates when Start is in range and the match bytes
+// are empty.
+func submatchValid(rawLine []byte, sm searchindex.Submatch, lineNum, lineCount int) bool {
+	if lineNum < 1 || lineNum > lineCount {
+		return false
+	}
+	if sm.Start < 0 || sm.End < sm.Start || sm.End > len(rawLine) {
+		return false
+	}
+	return bytes.Equal(rawLine[sm.Start:sm.End], sm.Match)
 }
 
 // splitLines splits file bytes into lines, each including its terminator.
@@ -462,4 +568,90 @@ func clusterContentWidth(clusters []safepresentation.Cluster) int {
 		w += c.Width
 	}
 	return w
+}
+
+// RevealTarget returns the validated reveal target for a navigation
+// stop (Issue #29). It returns the 0-based source-line index, the byte
+// offset within that line, and the display cell of the target.
+//
+// For a stop whose line exists and has surviving submatches, the
+// target is the first survivor's start. For a stop whose line exists
+// but has no survivors, the target is the first recorded start clamped
+// to the available line bytes, with the display cell clamped to the
+// last rendered cell when the byte maps to the end-of-line position
+// and there is no marker cell. For a stop whose line is gone, the
+// target is the last source line's start. For an empty file, lineIdx
+// is -1 indicating no target.
+//
+// Fallbacks never invent highlights or markers: they only position the
+// reveal. The byte offset feeds the vertical row lookup; the display
+// cell feeds the horizontal reveal.
+func (b *Buffer) RevealTarget(stop searchindex.Stop) (lineIdx, byteStart, cell int) {
+	lineIdx = stop.LineNumber - 1
+	if lineIdx < 0 || lineIdx >= len(b.Lines) {
+		// Missing line: land at the last source line's start.
+		if b.LineCount == 0 {
+			// Empty file: zero-line panel, no target.
+			return -1, 0, 0
+		}
+		return b.LineCount - 1, 0, 0
+	}
+	line := b.Lines[lineIdx]
+	// When the buffer was not validated (e.g. test buffers built with
+	// makeBuf that lack RawBytes), fall back to the first recorded
+	// submatch directly so existing behavior is preserved.
+	if line.RawBytes == nil {
+		if len(stop.Submatches) > 0 {
+			byteStart = stop.Submatches[0].Start
+			if byteStart >= 0 && byteStart < len(line.ByteCells) {
+				cell = line.ByteCells[byteStart][0]
+			}
+		}
+		return lineIdx, byteStart, cell
+	}
+	if len(line.ValidStarts) > 0 {
+		byteStart = line.ValidStarts[0]
+	} else {
+		// No survivors: clamp the first recorded start to the
+		// available line bytes.
+		byteStart = line.FirstRecordedStart
+		if byteStart < 0 {
+			byteStart = 0
+		}
+		if byteStart > len(line.RawBytes) {
+			byteStart = len(line.RawBytes)
+		}
+	}
+	cell = revealCellForByte(line, byteStart)
+	return lineIdx, byteStart, cell
+}
+
+// revealCellForByte maps a byte offset to a display cell with the
+// end-of-line fallback (Issue #29). When the byte maps to the
+// end-of-line position (the content width, past the last content
+// cell) and there is no marker cell, the cell clamps to the last
+// rendered cell. When there is a marker cell, the end-of-line position
+// is the marker cell and no clamping is needed.
+func revealCellForByte(line Line, byteStart int) int {
+	if byteStart >= 0 && byteStart < len(line.ByteCells) {
+		cell := line.ByteCells[byteStart][0]
+		if cell >= line.ContentWidth && !line.HasMarker {
+			// End-of-line fallback: clamp to the last rendered
+			// content cell.
+			if line.ContentWidth > 0 {
+				return line.ContentWidth - 1
+			}
+			return 0
+		}
+		return cell
+	}
+	// Byte at or past the end of the line. Map to the end-of-line
+	// position, then apply the marker/fallback rule.
+	if line.HasMarker {
+		return line.ContentWidth
+	}
+	if line.ContentWidth > 0 {
+		return line.ContentWidth - 1
+	}
+	return 0
 }

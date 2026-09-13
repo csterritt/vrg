@@ -382,8 +382,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `commitLoadIntent()`. Navigation during a pending reload replaces
   `IntentReloadAnchor` with `IntentReveal`. Stale layouts are
   discarded without consuming or mutating the intent. `LoadIntent()`
-  exposes the intent for tests. See
-  [load-completion-two-stage](load-completion-two-stage.md).
+  exposes the intent for tests. Issue #29 integrated stale-match
+  validation: `revealTarget` calls `Buffer.RevealTarget(stop)` for the
+  validated `(lineIdx, byteStart, cell)` instead of reading
+  `stop.Submatches[0]` directly; `targetRow` accepts the validated
+  line/byte and falls back to `stop.LineNumber - 1` only when the
+  buffer provides no target; `renderFilenameRow` shows
+  `file changed since search` in the Issue #24 status slot when
+  `m.buffer.Stale`. See
+  [load-completion-two-stage](load-completion-two-stage.md) and
+  [stale-match-validation](stale-match-validation.md).
 
 ## internal/safepresentation
 
@@ -479,11 +487,23 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   each marker cell is appended to `Highlights` as `[cell, cell+1)` and
   `Highlights` are sorted by start cell so rendering processes them in
   cell order. The terminator-only `$` marker is an ordinary marker with
-  no special cases. See [browse-tracer](browse-tracer.md),
+  no special cases. Issue #29 added best-effort stale-match
+  validation: `Load` validates every submatch against the original
+  line bytes (including terminators, BOM-adjusted) via `submatchValid`
+  (line existence, range validity, byte equality), drops invalid
+  submatches individually, marks `Buffer.Stale` on any failure, and
+  computes highlights/markers from the validated stops only;
+  `Buffer.RevealTarget(stop)` returns the validated reveal target
+  (first surviving submatch, clamped recorded start with end-of-line
+  cell clamping, or last source line); `Line` carries `RawBytes`
+  (original line bytes), `ContentWidth`, `HasMarker`, `ValidStarts`,
+  and `FirstRecordedStart` for the fallback computation. See
+  [browse-tracer](browse-tracer.md),
   [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
   [grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md),
   [structural-line-handling](structural-line-handling.md),
-  and [zero-width-match-markers](zero-width-match-markers.md).
+  [zero-width-match-markers](zero-width-match-markers.md), and
+  [stale-match-validation](stale-match-validation.md).
 
 ## internal/viewport
 

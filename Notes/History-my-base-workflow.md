@@ -248,3 +248,12 @@ Usage
  Input tokens: 326399 tokens
  Output tokens: 74913 tokens
  Cached input tokens: 16327360 tokens
+
+----
+Task 029-stale-match-validation-and-file-changed-note.md
+
+Usage
+ Agent messages: 129 messages
+ Input tokens: 263790 tokens
+ Output tokens: 68998 tokens
+ Cached input tokens: 12618752 tokens

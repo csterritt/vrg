@@ -1025,3 +1025,36 @@ discarded without consuming or mutating the intent. Created
 consistency), `internal/app/app.go`,
 `internal/app/two_stage_test.go`,
 `internal/app/reload_intent_test.go`.
+
+## [2026-09-12] ingest | Issue #29 stale-match validation and file-changed note
+
+Ingested the completed Issue #29 implementation: best-effort
+per-submatch stale-match validation in `filebuffer.Load`, a
+`Buffer.Stale` flag, per-line survivor and fallback metadata
+(`Line.RawBytes`, `ContentWidth`, `HasMarker`, `ValidStarts`,
+`FirstRecordedStart`), a `Buffer.RevealTarget(stop)` method exposing
+the validated reveal target (first surviving submatch, clamped
+recorded start with end-of-line cell clamping, or last source line),
+integration of the `file changed since search` note into the Issue #24
+filename-row status slot (persistent, no timer, cleared only by a
+reload that fully validates), and integration of the validated reveal
+target into the Issue #28 two-stage reveal path (`revealTarget` and
+`targetRow` now use the buffer's `RevealTarget` instead of
+`stop.Submatches[0]`). Validation checks line existence, range
+validity, and byte equality against the original line bytes
+(including terminators, BOM-adjusted per Issue #22); invalid
+submatches are dropped individually, surviving submatches keep their
+highlights, and the buffer is marked stale. The fixed search-derived
+exit status is never altered by stale content (all-stale
+outcome-matrix row keeps exit 0). UTF-16/UTF-32 are excluded (Issue
+#30). Created [stale-match-validation](stale-match-validation.md);
+updated [index](index.md), [source-code](source-code.md)
+(internal/filebuffer and internal/app Issue #29 entries), and
+[unit-tests](unit-tests.md) (stale_validation_test.go and
+stale_note_test.go entries). Sources:
+`Notes/tasks/029-stale-match-validation-and-file-changed-note.md`,
+`Notes/PRD-vrg.md` (Encodings and stale-content validation),
+`internal/filebuffer/filebuffer.go`,
+`internal/filebuffer/stale_validation_test.go`,
+`internal/app/app.go`,
+`internal/app/stale_note_test.go`.

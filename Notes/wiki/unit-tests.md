@@ -1549,3 +1549,89 @@ replay-ordering assertions:
   reload-anchor intent is committed (and the anchor asserted) only
   after the matching prepared layout installs, not at load
   completion.
+
+`stale_validation_test.go` (Issue #29, external package
+`filebuffer_test`):
+
+- `TestStaleValidSubmatchNotStale` — a file whose content matches the
+  recorded search bytes is not stale and keeps its highlight.
+- `TestStaleNoStopsNotStale` — a file with no stops is not stale.
+- `TestStaleOutOfBoundsSubmatchDropped` — a submatch whose `End`
+  exceeds the original line bytes is dropped; the buffer is stale;
+  no highlight is produced.
+- `TestStaleNegativeStartDropped` — a submatch with a negative
+  `Start` is dropped; the buffer is stale.
+- `TestStaleSameLengthReplacementDropped` — a same-length
+  replacement (`hit` → `hat`) fails byte equality, is dropped, and
+  marks the buffer stale.
+- `TestStalePartialSurvival` — when a line has multiple submatches
+  and only some validate, the valid ones keep highlights, the
+  invalid ones are dropped, and the buffer is stale.
+- `TestStalePartialSurvivalRevealTarget` — a stale stop with
+  surviving submatches exposes the first survivor as the reveal
+  target.
+- `TestStaleClampedStartFallback` — a stop whose line exists but
+  has no survivors exposes the first recorded start clamped to the
+  available line bytes.
+- `TestStaleClampedStartEOLFallback` — when the clamped start maps
+  to the end-of-line position and there is no marker cell, the
+  reveal cell clamps to the last rendered cell.
+- `TestStaleClampedStartEOLWithMarker` — when there is a marker
+  cell (from a surviving zero-width submatch), the survivor takes
+  precedence and the reveal targets the marker.
+- `TestStaleClampedStartPastEnd` — a first recorded start past the
+  end of the line bytes is clamped down to the line byte length.
+- `TestStaleMissingLineFallback` — a stop whose line is gone lands
+  at the last source line's start.
+- `TestStaleEmptyFileRemainsZeroLines` — an empty file with a stop
+  remains a zero-line panel and `RevealTarget` returns `lineIdx -1`.
+- `TestStaleReloadRecomputes` — after a reload with content that
+  validates, the note clears and highlights return.
+- `TestStaleReloadReintroducesStaleness` — a reload can reintroduce
+  staleness after a previously valid load.
+- `TestStaleValidationAgainstOriginalBytes` — validation compares
+  against original line bytes including terminators, not stripped
+  display text.
+- `TestStaleCRLFTerminatorOnlyMatchValidates` — a zero-width
+  terminator-only match on a CRLF line validates.
+- `TestStaleLFTerminatorOnlyMatchValidates` — a zero-width
+  terminator-only match on an LF line validates.
+- `TestStaleBOMFirstLineValidates` — a BOM file's first-line match
+  validates correctly (BOM-adjusted coordinates).
+- `TestStaleBOMFirstLineMismatchDropped` — a BOM file's first-line
+  mismatch is detected and dropped.
+- `TestStaleRetainsRawBytes` — the original line bytes including
+  terminators are retained on each `Line.RawBytes`.
+- `TestStaleZeroWidthValidates` — a zero-width submatch with a
+  valid start validates and is not dropped.
+- `TestStaleZeroWidthOutOfBoundDropped` — a zero-width submatch
+  with a start past the line bytes is dropped.
+
+`stale_note_test.go` (Issue #29, external package `app_test`):
+
+- `TestStaleNoteShown` — the exact text "file changed since search"
+  appears in the filename row when the buffer is stale.
+- `TestStaleNoteNotShownWhenValid` — the stale note does not appear
+  when the buffer is valid.
+- `TestStaleNoteShownEveryDisplay` — the stale note is shown on
+  every display (persistent, no timer).
+- `TestStaleNoteOrdinaryWidth` — the stale note appears at ordinary
+  widths without overflow.
+- `TestStaleNoteConstrainedWidth` — the stale note appears at
+  constrained widths with the path truncating and no overflow.
+- `TestStaleNoteNoNegativeDimensions` — the stale note at very
+  constrained widths never produces negative dimensions.
+- `TestStaleNoteClearsOnReload` — the stale note clears after a
+  reload that validates the content.
+- `TestStaleRevealFirstSurvivingSubmatch` — when the first
+  recorded submatch is dropped, the reveal targets the first
+  surviving submatch through the two-stage path.
+- `TestStaleRevealClampedFallbackAllDropped` — a stop whose line
+  exists but has no survivors reveals the clamped first recorded
+  start with no highlight invented.
+- `TestStaleRevealMissingLineLandsAtLastLine` — a stop whose line
+  is missing lands at the last source line.
+- `TestStaleAllDroppedOutcomeMatrixRow` — an all-stale index
+  keeps the fixed exit status unchanged (browse, exit 0).
+- `TestStaleNoInventedHighlight` — a stale buffer with all
+  submatches dropped does not invent highlights.

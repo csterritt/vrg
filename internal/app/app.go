@@ -1632,7 +1632,16 @@ func (m *Model) revealTarget() {
 	if !ok {
 		return
 	}
-	targetRow := m.targetRow(stop)
+	// Issue #29: when the buffer is available, use the validated
+	// reveal target (first surviving submatch, clamped fallback, or
+	// last source line). This replaces the direct read of
+	// stop.Submatches[0] so dropped submatches do not position the
+	// reveal at a stale byte. Fallbacks never invent highlights.
+	targetLineIdx, targetByte, targetCell := -1, 0, 0
+	if m.buffer != nil {
+		targetLineIdx, targetByte, targetCell = m.buffer.RevealTarget(stop)
+	}
+	targetRow := m.targetRow(stop, targetLineIdx, targetByte)
 	before := m.viewport.Offset()
 	m.viewport.Reveal(targetRow)
 	// A reveal that moves the viewport replaces the saved vertical
@@ -1647,15 +1656,18 @@ func (m *Model) revealTarget() {
 	// derived from the line's grapheme clusters at that cell. The
 	// vertical reveal runs first so the target row is visible and
 	// the horizontal clamp uses the correct visible rows.
-	if m.wrapMode == viewport.WrapOff && m.buffer != nil && len(stop.Submatches) > 0 {
-		lineIdx := stop.LineNumber - 1
-		if lineIdx >= 0 && lineIdx < len(m.buffer.Lines) {
-			line := m.buffer.Lines[lineIdx]
-			sm := stop.Submatches[0]
-			if sm.Start >= 0 && sm.Start < len(line.ByteCells) {
-				targetCell := line.ByteCells[sm.Start][0]
-				m.viewport.RevealHorizontal(line, targetCell)
-			}
+	// Issue #29: use the validated target cell from the buffer's
+	// RevealTarget so dropped submatches do not position the
+	// horizontal reveal at a stale cell.
+	if m.wrapMode == viewport.WrapOff && m.buffer != nil && targetLineIdx >= 0 && targetLineIdx < len(m.buffer.Lines) {
+		line := m.buffer.Lines[targetLineIdx]
+		// Only reveal horizontally when the line has byte-to-cell
+		// mapping (validated buffers from Load, or test buffers
+		// with ByteCells populated). Buffers without ByteCells
+		// skip the horizontal reveal, matching pre-Issue #29
+		// behavior.
+		if len(line.ByteCells) > 0 {
+			m.viewport.RevealHorizontal(line, targetCell)
 		}
 	}
 }
@@ -1765,21 +1777,31 @@ func (m *Model) buildViewport() tea.Cmd {
 	}
 }
 
-// targetRow returns the 0-based rendered row containing the display
-// target for the given stop. The display target is the start cell of
-// the first submatch on the destination line (the marker cell for a
-// zero-width match). Submatches are ordered by byte start then end by
-// the search index, so the first submatch identifies the target.
-// Issue #16: when wrapping is on, the rendered row is found via the
-// row model's RowFromByte, which maps the source line index and byte
-// offset to the wrapped row containing the match start. In run-off-
-// edge mode, each source line is one rendered row.
-func (m *Model) targetRow(stop searchindex.Stop) int {
-	if m.rowModel != nil && len(stop.Submatches) > 0 {
-		byteOffset := stop.Submatches[0].Start
-		if row := m.rowModel.RowFromByte(stop.LineNumber-1, byteOffset); row >= 0 {
+// targetRow returns the viewport row for the given stop's reveal
+// target. Issue #29: when the buffer provides a validated target
+// (targetLineIdx >= 0), the byte offset comes from the validated
+// target rather than stop.Submatches[0].Start, so dropped submatches
+// do not position the reveal at a stale byte. When the buffer does
+// not provide a target (targetLineIdx < 0, e.g. empty file or no
+// buffer), the row falls back to stop.LineNumber - 1.
+func (m *Model) targetRow(stop searchindex.Stop, targetLineIdx, targetByte int) int {
+	if m.rowModel != nil {
+		lineIdx := targetLineIdx
+		byteOffset := targetByte
+		if lineIdx < 0 {
+			lineIdx = stop.LineNumber - 1
+			if len(stop.Submatches) > 0 {
+				byteOffset = stop.Submatches[0].Start
+			} else {
+				byteOffset = 0
+			}
+		}
+		if row := m.rowModel.RowFromByte(lineIdx, byteOffset); row >= 0 {
 			return row
 		}
+	}
+	if targetLineIdx >= 0 {
+		return targetLineIdx
 	}
 	return stop.LineNumber - 1
 }
@@ -2742,6 +2764,12 @@ func (m Model) renderFilenameRow(escapedName string) string {
 	} else if m.readFailed {
 		// Issue #26: the real status note for the unreadable state.
 		note = "(unreadable)"
+	} else if m.buffer != nil && m.buffer.Stale {
+		// Issue #29: persistent stale-content note. Shown on every
+		// display (no timer) while the current buffer's content does
+		// not validate against the recorded search bytes. Cleared
+		// only by a reload that fully validates.
+		note = "file changed since search"
 	}
 	if note == "" {
 		// No status note: truncate the path to fit the panel width.
