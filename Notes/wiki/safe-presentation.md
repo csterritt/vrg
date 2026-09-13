@@ -147,10 +147,12 @@ stripping.
 ### Styled assertion method
 
 With styles enabled (`theme.New()`), ANSI ESCs are legitimate (from
-`Underline` and `Reverse`). The styled assertion checks that the
-fixture's distinctive payload never appears immediately after an
-unescaped ESC — if it did, the fixture's ESC was not escaped and the
-payload could form a dangerous terminal sequence.
+the Issue #7 style set: `Base`, `Match`, `CurrentMatch`, `Indicator`,
+`Underline`, `Gutter`, `FileList`, `FilenameRule`, `Overlay`). The
+styled assertion checks that the fixture's distinctive payload never
+appears immediately after an unescaped ESC — if it did, the fixture's
+ESC was not escaped and the payload could form a dangerous terminal
+sequence.
 
 ### Future sink ownership
 

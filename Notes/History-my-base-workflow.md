@@ -50,3 +50,12 @@ Usage
  Input tokens: 299881 tokens
  Output tokens: 58314 tokens
  Cached input tokens: 14496896 tokens
+
+----
+Task 007-theme-colour-toggle-and-match-styles.md
+
+Usage
+ Agent messages: 127 messages
+ Input tokens: 232701 tokens
+ Output tokens: 62485 tokens
+ Cached input tokens: 13653632 tokens

@@ -127,7 +127,17 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 ## internal/theme
 
 - `internal/theme/theme.go` — Issue #5: visual style configuration.
-  `New()` returns a default theme; `NoStyle()` disables all ANSI
-  sequences for sink-safety testing. `Underline(s)` and `Reverse(s)`
-  wrap strings in ANSI sequences (no-op with no-style theme). See
-  [browse-tracer](browse-tracer.md).
+  Issue #7: expanded to own the active colour scheme and full PRD
+  style set. `New()` returns a theme with the dark scheme active
+  (white on black); `NoStyle()` disables all ANSI sequences for
+  sink-safety testing. `Scheme()` reports the active scheme;
+  `Toggle()` flips between dark and light with no persistence.
+  `Base(s)` wraps in the base colour pair; `Match(s)` wraps in the
+  true-inverse match colours; `CurrentMatch(s)` adds underline;
+  `Indicator(s)` uses the inverse style; `Underline(s)` wraps in SGR
+  4; `Gutter(s)` and `FileList(s)` use base colours;
+  `FilenameRule(name)` embeds the name in a base-coloured horizontal
+  rule; `Overlay(s)` wraps with base colours and a plain single-line
+  border. Match, CurrentMatch, Indicator, and Underline restore the
+  base colours after the styled span. See
+  [theme-module](theme-module.md) and [browse-tracer](browse-tracer.md).

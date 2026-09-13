@@ -132,3 +132,32 @@ updated cli-foundation, source-code, unit-tests, and index. Sources:
 `internal/app/app.go`, `internal/app/app_test.go`,
 `internal/app/browse_test.go`,
 `cmd/vrg/main.go`, `cmd/vrg/main_test.go`.
+
+## [2026-09-11] ingest | Issue #7 theme colour toggle and match styles
+
+Ingested the completed Issue #7 implementation: the theme module now
+owns the active colour scheme (dark/light) and the full PRD style set.
+`New()` starts dark (white on black); `Toggle()` flips between dark
+and light with no persistence; `NoStyle()` disables all ANSI sequences
+for sink-safety testing. The style set: `Base`, `Gutter`, `Match`
+(true inverse of base), `CurrentMatch` (true inverse + underline),
+`Indicator` (inverse), `Underline`, `FileList`, `FilenameRule`,
+`Overlay` (base colours + plain single-line border). Match,
+CurrentMatch, Indicator, and Underline restore the base colours after
+the styled span. The App handles the `c` keypress in browse state by
+calling `theme.Toggle()`. Browse rendering wraps each composed line in
+`theme.Base()` and uses `theme.Match`/`theme.CurrentMatch` for
+highlights depending on whether the line is the current matched line
+(the first stop for the current file until Issue #13 adds
+navigation). Issue #5's `theme.Reverse` (SGR 7) is replaced by explicit
+true-inverse colour pairs. Created [theme-module](theme-module.md);
+updated [browse-tracer](browse-tracer.md) (Theme section, Rendering
+section, key handling), [source-code](source-code.md) (internal/theme),
+[unit-tests](unit-tests.md) (internal/theme, Issue #7 app tests),
+[safe-presentation](safe-presentation.md) (styled assertion method),
+and [index](index.md). Sources:
+`Notes/tasks/007-theme-colour-toggle-and-match-styles.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence; Module
+Design → Theme), `internal/theme/theme.go`,
+`internal/theme/theme_test.go`, `internal/app/app.go`,
+`internal/app/browse_test.go`.

@@ -1,0 +1,15 @@
+#!/bin/bash
+# Fake rg that emits a valid JSON stream for theme-toggle demonstration.
+# Emits matches for two files in raw-path order, then a summary.
+# Paths are relative to the working directory (the walkthrough directory).
+cat <<'EOF'
+{"type":"begin","data":{"path":{"text":"fixtures/src/alpha.txt"}}}
+{"type":"match","data":{"path":{"text":"fixtures/src/alpha.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}],"absolute_offset":0}}
+{"type":"match","data":{"path":{"text":"fixtures/src/alpha.txt"},"lines":{"text":"foo bar baz\n"},"line_number":3,"submatches":[{"match":{"text":"foo"},"start":0,"end":3}],"absolute_offset":20}}
+{"type":"end","data":{"path":{"text":"fixtures/src/alpha.txt"}}}
+{"type":"begin","data":{"path":{"text":"fixtures/src/zebra.txt"}}}
+{"type":"match","data":{"path":{"text":"fixtures/src/zebra.txt"},"lines":{"text":"world hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":6,"end":11}],"absolute_offset":40}}
+{"type":"end","data":{"path":{"text":"fixtures/src/zebra.txt"}}}
+{"type":"summary","data":{"elapsed_total":{"secs":0,"nanos":1000,"human":"1µs"},"stats":{"matches":3,"matches_with_matches":2}}}
+EOF
+exit 0

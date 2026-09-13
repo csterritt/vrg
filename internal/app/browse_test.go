@@ -404,7 +404,8 @@ func TestBrowseNoBorders(t *testing.T) {
 }
 
 // TestBrowseInverseVideo verifies that matched spans are rendered with
-// inverse video styling.
+// the true-inverse match style (Issue #7: replaces Issue #5's SGR 7
+// reverse video with explicit inverse colour pairs).
 func TestBrowseInverseVideo(t *testing.T) {
 	idx := buildIndex(t, "/work",
 		textMatch("src/a.go", "hello world\n", 1, subSpec{"hello", 0, 5}),
@@ -415,9 +416,11 @@ func TestBrowseInverseVideo(t *testing.T) {
 	buf := makeBuf(lines, 1, 3)
 	m := setupBrowse(t, idx, buf)
 	view := viewContent(m)
-	// Inverse video uses SGR 7.
-	if !strings.Contains(view, "\x1b[7m") {
-		t.Fatalf("View does not contain inverse video ANSI sequence: %q", view)
+	// Dark scheme match: black on white (true inverse of white on
+	// black). The current matched line (line 1) uses the current-match
+	// sequence with underline, so check for the colour parameters.
+	if !strings.Contains(view, "30;47") {
+		t.Fatalf("View does not contain true-inverse match colours (30;47): %q", view)
 	}
 }
 
@@ -433,9 +436,9 @@ func TestBrowseInverseVideoCoversEscapedForm(t *testing.T) {
 	buf := makeBuf(lines, 1, 3)
 	m := setupBrowse(t, idx, buf)
 	view := viewContent(m)
-	// The inverse video sequence should be present.
-	if !strings.Contains(view, "\x1b[7m") {
-		t.Fatalf("View does not contain inverse video for escaped form: %q", view)
+	// The true-inverse match colours should be present.
+	if !strings.Contains(view, "30;47") {
+		t.Fatalf("View does not contain true-inverse match colours for escaped form: %q", view)
 	}
 }
 
@@ -632,6 +635,178 @@ func TestSinkSafetyAllSinksHostile(t *testing.T) {
 	view := viewContent(m)
 	if !noControlBytes(view) {
 		t.Fatalf("raw control byte in hostile all-sinks output: %q", view)
+	}
+}
+
+// --- Issue #7 theme toggle tests ---
+
+// TestBrowseCToggleThemeDarkToLight verifies that pressing `c` in the
+// browse state toggles the theme from dark to light, changing the
+// composed View() styling. The dark scheme uses white on black; the
+// light scheme uses black on white.
+func TestBrowseCToggleThemeDarkToLight(t *testing.T) {
+	idx := buildIndex(t, "/work",
+		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+	)
+	lines := []filebuffer.Line{
+		ml(1, "hello", [2]int{0, 5}),
+	}
+	buf := makeBuf(lines, 1, 3)
+	m := setupBrowse(t, idx, buf)
+	view := viewContent(m)
+	// Dark scheme base: white on black.
+	if !strings.Contains(view, "\x1b[37;40m") {
+		t.Fatalf("dark view does not contain dark base sequence: %q", view)
+	}
+	// Press `c` to toggle to light.
+	m, _ = update(t, m, keyPress('c'))
+	view = viewContent(m)
+	// Light scheme base: black on white.
+	if !strings.Contains(view, "\x1b[30;47m") {
+		t.Fatalf("light view does not contain light base sequence: %q", view)
+	}
+}
+
+// TestBrowseCToggleThemeLightToDark verifies that pressing `c` again
+// toggles back to dark.
+func TestBrowseCToggleThemeLightToDark(t *testing.T) {
+	idx := buildIndex(t, "/work",
+		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+	)
+	lines := []filebuffer.Line{
+		ml(1, "hello", [2]int{0, 5}),
+	}
+	buf := makeBuf(lines, 1, 3)
+	m := setupBrowse(t, idx, buf)
+	// Toggle to light.
+	m, _ = update(t, m, keyPress('c'))
+	// Toggle back to dark.
+	m, _ = update(t, m, keyPress('c'))
+	view := viewContent(m)
+	// Dark scheme base: white on black.
+	if !strings.Contains(view, "\x1b[37;40m") {
+		t.Fatalf("dark view after two toggles does not contain dark base sequence: %q", view)
+	}
+}
+
+// TestBrowseCToggleNoPersistence verifies that toggling the theme does
+// not persist across models: a fresh model always starts dark.
+func TestBrowseCToggleNoPersistence(t *testing.T) {
+	idx := buildIndex(t, "/work",
+		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+	)
+	buf := makeBuf(nil, 0, 3)
+	m := setupBrowse(t, idx, buf)
+	m, _ = update(t, m, keyPress('c'))
+	// A fresh model should start dark.
+	m2 := setupBrowse(t, idx, buf)
+	view := viewContent(m2)
+	if !strings.Contains(view, "\x1b[37;40m") {
+		t.Fatalf("fresh model after toggling another does not start dark: %q", view)
+	}
+}
+
+// TestBrowseCDoesNotQuit verifies that pressing `c` in the browse state
+// does not quit or change the app state.
+func TestBrowseCDoesNotQuit(t *testing.T) {
+	idx := buildIndex(t, "/work",
+		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+	)
+	buf := makeBuf(nil, 0, 3)
+	m := setupBrowse(t, idx, buf)
+	m, cmd := update(t, m, keyPress('c'))
+	if m.State() != app.StateBrowse {
+		t.Fatalf("after `c`, State = %v, want StateBrowse", m.State())
+	}
+	if cmd != nil {
+		msg := execCmd(t, cmd)
+		if _, ok := msg.(tea.QuitMsg); ok {
+			t.Fatal("`c` in browse produced a quit command")
+		}
+	}
+}
+
+// TestBrowseMatchTrueInverseDark verifies that in the dark scheme,
+// matches use the true inverse of the base colours (black on white).
+func TestBrowseMatchTrueInverseDark(t *testing.T) {
+	idx := buildIndex(t, "/work",
+		textMatch("src/a.go", "hello world\n", 1, subSpec{"hello", 0, 5}),
+	)
+	lines := []filebuffer.Line{
+		ml(1, "hello world", [2]int{0, 5}),
+		ml(2, "foo bar", [2]int{0, 3}),
+	}
+	buf := makeBuf(lines, 2, 3)
+	m := setupBrowse(t, idx, buf)
+	view := viewContent(m)
+	// Dark match: black on white (true inverse of white on black).
+	// The current matched line (line 1) uses CurrentMatch (30;47;4m);
+	// line 2 uses Match (30;47m). Check for the colour parameters.
+	if !strings.Contains(view, "30;47") {
+		t.Fatalf("dark view does not contain true-inverse match colours (30;47): %q", view)
+	}
+}
+
+// TestBrowseMatchTrueInverseLight verifies that in the light scheme,
+// matches use the true inverse of the base colours (white on black).
+func TestBrowseMatchTrueInverseLight(t *testing.T) {
+	idx := buildIndex(t, "/work",
+		textMatch("src/a.go", "hello world\n", 1, subSpec{"hello", 0, 5}),
+	)
+	lines := []filebuffer.Line{
+		ml(1, "hello world", [2]int{0, 5}),
+		ml(2, "foo bar", [2]int{0, 3}),
+	}
+	buf := makeBuf(lines, 2, 3)
+	m := setupBrowse(t, idx, buf)
+	// Toggle to light.
+	m, _ = update(t, m, keyPress('c'))
+	view := viewContent(m)
+	// Light match: white on black (true inverse of black on white).
+	if !strings.Contains(view, "37;40") {
+		t.Fatalf("light view does not contain true-inverse match colours (37;40): %q", view)
+	}
+}
+
+// TestBrowseCurrentMatchUnderlineDark verifies that in the dark
+// scheme, the current matched line's highlights add underline to the
+// true inverse match.
+func TestBrowseCurrentMatchUnderlineDark(t *testing.T) {
+	idx := buildIndex(t, "/work",
+		textMatch("src/a.go", "hello world\n", 1, subSpec{"hello", 0, 5}),
+	)
+	lines := []filebuffer.Line{
+		ml(1, "hello world", [2]int{0, 5}),
+	}
+	buf := makeBuf(lines, 1, 3)
+	m := setupBrowse(t, idx, buf)
+	view := viewContent(m)
+	// The current match (first stop, line 1) should have underline +
+	// true inverse: \x1b[30;47;4m
+	if !strings.Contains(view, "\x1b[30;47;4m") {
+		t.Fatalf("dark view does not contain current-match underline sequence: %q", view)
+	}
+}
+
+// TestBrowseCurrentMatchUnderlineLight verifies that in the light
+// scheme, the current matched line's highlights add underline to the
+// true inverse match.
+func TestBrowseCurrentMatchUnderlineLight(t *testing.T) {
+	idx := buildIndex(t, "/work",
+		textMatch("src/a.go", "hello world\n", 1, subSpec{"hello", 0, 5}),
+	)
+	lines := []filebuffer.Line{
+		ml(1, "hello world", [2]int{0, 5}),
+	}
+	buf := makeBuf(lines, 1, 3)
+	m := setupBrowse(t, idx, buf)
+	// Toggle to light.
+	m, _ = update(t, m, keyPress('c'))
+	view := viewContent(m)
+	// The current match (first stop, line 1) should have underline +
+	// true inverse: \x1b[37;40;4m
+	if !strings.Contains(view, "\x1b[37;40;4m") {
+		t.Fatalf("light view does not contain current-match underline sequence: %q", view)
 	}
 }
 

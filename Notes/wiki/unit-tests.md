@@ -134,6 +134,38 @@ table, parser config, and generated help cannot drift.
 - Invalid UTF-8 and control bytes safely escaped in display.
 - Nonexistent files return an error.
 
+## internal/theme
+
+`theme_test.go` (external package `theme_test`, Issue #7):
+
+- Scheme tests: `New()` starts dark; `Toggle()` flips dark→light and
+  light→dark; toggle has no persistence (fresh `New()` is always dark);
+  `NoStyle()` reports no-style; `NoStyle().Toggle()` is a no-op.
+- Base colour pair tests: dark `Base` uses white on black
+  (`\x1b[37;40m`); light `Base` uses black on white (`\x1b[30;47m`);
+  `Base` ends with reset.
+- True-inverse match tests: dark `Match` starts with black on white
+  (`\x1b[30;47m`, true inverse of dark base); light `Match` starts
+  with white on black (`\x1b[37;40m`, true inverse of light base);
+  `Match` restores base colours after the span.
+- Current-match underline tests: dark `CurrentMatch` contains
+  true-inverse colours (30;47) + underline attribute (;4m); light
+  `CurrentMatch` contains true-inverse colours (37;40) + underline;
+  `CurrentMatch` restores base.
+- Indicator tests: dark `Indicator` uses inverse colours (30;47);
+  light `Indicator` uses inverse colours (37;40).
+- Underline tests: `Underline` contains SGR 4; restores base in both
+  schemes.
+- Gutter and file-list tests: `Gutter` and `FileList` use base colours
+  in both schemes.
+- Filename-rule tests: `FilenameRule` embeds the name in a horizontal
+  rule; uses base colours in both schemes.
+- Overlay tests: `Overlay` uses base colours in both schemes; wraps
+  content with a plain single-line border (┌┐└┘─│); preserves content.
+- No-style tests: every style method on `NoStyle()` returns the input
+  unchanged (or plain formatting for `FilenameRule`); no ANSI escape
+  sequences produced by any method.
+
 ## internal/app
 
 `app_test.go` (external package `app_test`):
@@ -188,7 +220,9 @@ table, parser config, and generated help cannot drift.
   different digit counts.
 - `TestBrowseNoBorders` — no box-drawing border characters around the
   panel.
-- `TestBrowseInverseVideo` — matched spans rendered with inverse video.
+- `TestBrowseInverseVideo` — matched spans rendered with the
+  true-inverse match style (Issue #7: replaces Issue #5's SGR 7 reverse
+  video with explicit inverse colour pairs).
 - `TestBrowseInverseVideoCoversEscapedForm` — highlight over an ESC
   byte covers both cells of `^[`.
 - Sink-safety tests (`TestSinkSafetyFileList`,
@@ -207,6 +241,26 @@ table, parser config, and generated help cannot drift.
   filename-rule, and panel-content sinks. The no-style path asserts no
   raw control bytes survive; the styled path asserts the fixture
   payload never appears immediately after an unescaped ESC.
+
+`browse_test.go` (Issue #7, external package `app_test`):
+
+- `TestBrowseCToggleThemeDarkToLight` — pressing `c` in browse state
+  toggles the theme from dark (white on black) to light (black on
+  white), changing the composed `View()` styling.
+- `TestBrowseCToggleThemeLightToDark` — pressing `c` again toggles
+  back to dark.
+- `TestBrowseCToggleNoPersistence` — toggling one model does not
+  persist; a fresh model always starts dark.
+- `TestBrowseCDoesNotQuit` — `c` does not quit or change the app
+  state.
+- `TestBrowseMatchTrueInverseDark` — dark scheme matches use the
+  true inverse of the base colours (black on white, 30;47).
+- `TestBrowseMatchTrueInverseLight` — light scheme matches use the
+  true inverse of the base colours (white on black, 37;40).
+- `TestBrowseCurrentMatchUnderlineDark` — dark current matched line
+  highlights add underline to the true inverse (30;47;4m).
+- `TestBrowseCurrentMatchUnderlineLight` — light current matched line
+  highlights add underline to the true inverse (37;40;4m).
 
 ## cmd/vrg (subprocess boundary)
 

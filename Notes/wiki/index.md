@@ -19,15 +19,20 @@ Catalog of all wiki pages for the vrg project.
   drainage, SearchIndex parsing, the searching/summary TUI lifecycle,
   cancellation, child termination/reaping, terminal restoration, and
   controlled-failure cleanup
-- [browse-tracer.md](browse-tracer.md) — Issue #5: two-pane browse view
-  with file list, filename rule, gutter, inverse-video highlights,
-  async file loading with "Loading…" placeholder, safe-presentation
-  core for paths and content, and hostile-fixture sink-safety method
+- [browse-tracer.md](browse-tracer.md) — Issue #5 (extended by Issue #7):
+  two-pane browse view with file list, filename rule, gutter, true-inverse
+  match highlights, current-match underline, async file loading with
+  "Loading…" placeholder, safe-presentation core for paths and content,
+  theme toggle (`c`), and hostile-fixture sink-safety method
 - [safe-presentation.md](safe-presentation.md) — Issue #6: shared
   safe-presentation utility for every output sink (path, content,
   diagnostic escaping), unified cli.Escape, shared sink-safety table
   and hostile fixtures, no-style composition method, and future-issue
   sink ownership rule
+- [theme-module.md](theme-module.md) — Issue #7: active colour scheme
+  (dark/light), `c` toggle with no persistence, true-inverse match
+  styling, current-match underline, current-file underline, indicator,
+  overlay, filename-rule, file-list, and base/gutter styles
 
 ## Catalogs
 

@@ -314,6 +314,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case msg.Code == 'c' && msg.Mod == tea.ModCtrl:
 			return m.cancel()
+		case msg.Code == 'c' && msg.Mod == 0:
+			if m.state == StateBrowse {
+				m.theme = m.theme.Toggle()
+			}
+			return m, nil
 		case msg.Code == 'q' && msg.Mod == 0:
 			switch m.state {
 			case StateSearching:
@@ -499,10 +504,12 @@ func groupByFile(stops []searchindex.Stop) []fileGroup {
 }
 
 // renderBrowse renders the two-pane browse view: file list on the left,
-// content panel on the right.
+// content panel on the right. Each line is wrapped in the theme's base
+// colours; styled spans within (matches, current-file underline) restore
+// the base so text after them remains in base.
 func (m Model) renderBrowse() string {
 	if m.index == nil || m.index.Files() == 0 {
-		return "No results"
+		return m.theme.Base("No results")
 	}
 
 	groups := groupByFile(m.index.Stops())
@@ -522,10 +529,17 @@ func (m Model) renderBrowse() string {
 	// Content panel (right pane).
 	current := groups[m.browseIdx]
 	escapedName := safepresentation.EscapePath(current.path)
-	panel := m.renderContentPanel(escapedName.Text)
+	// The current matched line is the first stop for the current file
+	// (the first stop until Issue #13 adds navigation).
+	currentLine := 0
+	if len(current.stops) > 0 {
+		currentLine = current.stops[0].LineNumber
+	}
+	panel := m.renderContentPanel(escapedName.Text, currentLine)
 
 	// Join horizontally: pad each file-list line to listWidth, then
-	// append the corresponding content-panel line.
+	// append the corresponding content-panel line. Each composed line
+	// is wrapped in the theme's base colours.
 	panelLines := strings.Split(panel, "\n")
 	maxLines := len(listLines)
 	if len(panelLines) > maxLines {
@@ -544,9 +558,8 @@ func (m Model) renderBrowse() string {
 		if w := visibleWidth(listEntry); w < listWidth {
 			listEntry += strings.Repeat(" ", listWidth-w)
 		}
-		b.WriteString(listEntry)
-		b.WriteString(" ")
-		b.WriteString(panelLine)
+		line := listEntry + " " + panelLine
+		b.WriteString(m.theme.Base(line))
 		if i < maxLines-1 {
 			b.WriteString("\n")
 		}
@@ -555,10 +568,11 @@ func (m Model) renderBrowse() string {
 }
 
 // renderContentPanel renders the right pane: filename rule followed by
-// content rows or the loading placeholder.
-func (m Model) renderContentPanel(escapedName string) string {
+// content rows or the loading placeholder. The currentLine parameter
+// identifies the current matched line for current-match styling.
+func (m Model) renderContentPanel(escapedName string, currentLine int) string {
 	var b strings.Builder
-	b.WriteString(renderFilenameRule(escapedName))
+	b.WriteString("── " + escapedName + " ──")
 	b.WriteString("\n")
 	if m.loading || m.buffer == nil {
 		b.WriteString("Loading…")
@@ -570,26 +584,24 @@ func (m Model) renderContentPanel(escapedName string) string {
 			gw = 1
 		}
 		b.WriteString(fmt.Sprintf("%*d  ", gw, line.Number))
-		b.WriteString(renderLineWithHighlights(line, m.theme))
+		b.WriteString(renderLineWithHighlights(line, m.theme, currentLine))
 		b.WriteString("\n")
 	}
 	return b.String()
 }
 
-// renderFilenameRule embeds the escaped filename in a horizontal rule.
-func renderFilenameRule(escapedName string) string {
-	return "── " + escapedName + " ──"
-}
-
 // renderLineWithHighlights escapes the display text through the
-// safe-presentation core and applies inverse video to highlighted
-// cell ranges. With the no-style theme, no ANSI sequences are produced.
-func renderLineWithHighlights(line filebuffer.Line, t theme.Theme) string {
+// safe-presentation core and applies the true-inverse match style to
+// highlighted cell ranges. On the current matched line (line.Number ==
+// currentLine), the current-match style adds underline. With the
+// no-style theme, no ANSI sequences are produced.
+func renderLineWithHighlights(line filebuffer.Line, t theme.Theme, currentLine int) string {
 	escaped := safepresentation.EscapeContent([]byte(line.Display))
 	display := escaped.Text
 	if t.IsNoStyle() || len(line.Highlights) == 0 {
 		return display
 	}
+	isCurrent := line.Number == currentLine
 	cellCount := visibleWidth(display)
 	var b strings.Builder
 	bytePos := 0
@@ -612,7 +624,11 @@ func renderLineWithHighlights(line filebuffer.Line, t theme.Theme) string {
 			b.WriteString(display[bytePos:startByte])
 		}
 		if endByte > startByte {
-			b.WriteString(t.Reverse(display[startByte:endByte]))
+			if isCurrent {
+				b.WriteString(t.CurrentMatch(display[startByte:endByte]))
+			} else {
+				b.WriteString(t.Match(display[startByte:endByte]))
+			}
 		}
 		bytePos = endByte
 		cellPos = endCell

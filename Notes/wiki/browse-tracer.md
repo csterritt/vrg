@@ -84,18 +84,32 @@ cursor tracking, and reveal-on-match.
 
 ## Theme
 
-`internal/theme/theme.go` holds the visual style configuration:
+`internal/theme/theme.go` owns the active colour scheme and styles.
+Issue #7 expanded the Issue #5 minimal seam into the full PRD style
+set. See [theme-module](theme-module.md) for the complete contracts.
 
-- `New()` — default theme with styling enabled.
+- `New()` — default theme with the dark scheme active (white on
+  black) and styling enabled.
 - `NoStyle()` — disables all ANSI sequences for sink-safety testing.
-- `Underline(s)` — wraps `s` in the ANSI underline sequence
-  (`\x1b[4m…\x1b[0m`); no-op with the no-style theme.
-- `Reverse(s)` — wraps `s` in the ANSI inverse-video sequence
-  (`\x1b[7m…\x1b[0m`); no-op with the no-style theme.
+- `Scheme()` — reports the active scheme (`SchemeDark` or
+  `SchemeLight`).
+- `Toggle()` — flips the scheme between dark and light with no
+  persistence.
+- `Base(s)` — wraps s in the base colour pair and resets.
+- `Match(s)` — wraps s in the true-inverse match colours and
+  restores base.
+- `CurrentMatch(s)` — true-inverse match colours + underline,
+  restores base.
+- `Indicator(s)` — inverse indicator style (same colours as Match),
+  restores base.
+- `Underline(s)` — SGR 4 underline, restores base.
+- `Gutter(s)`, `FileList(s)` — base colours, reset.
+- `FilenameRule(name)` — base-coloured horizontal rule with the name.
+- `Overlay(s)` — base colours with a plain single-line border.
 
 The no-style theme produces no ANSI escape sequences, so any control
-byte in the output must come from unsanitized external data. This is the
-sink-safety testing path.
+byte in the output must come from unsanitized external data. This is
+the sink-safety testing path.
 
 ## App browse composition
 
@@ -164,6 +178,8 @@ Key handling in browse state:
 - `q` — exits with code 0 through the Issue #4 cleanup path (cancels
   process and load, quits).
 - `ctrl+c` — exits with code 130 through the Issue #4 cancellation path.
+- `c` — toggles the theme between dark and light (Issue #7), no
+  persistence.
 - Other keys and resize — handled without blocking, even while a load
   is pending.
 
@@ -171,6 +187,8 @@ Key handling in browse state:
 
 `View` renders `StateBrowse` via `renderBrowse`:
 
+- **Base colours** — each composed line is wrapped in `theme.Base()`
+  for the active scheme's base colour pair (Issue #7).
 - **File list (left pane)** — each file's raw path escaped through
   `safepresentation.EscapePath`, in raw-path order (the index's
   unsigned byte ordering). The current file is underlined via
@@ -181,17 +199,32 @@ Key handling in browse state:
   `Loading…` while the buffer is unavailable.
 - **Gutter** — right-justified line number padded to the digit count of
   the largest line number, followed by two spaces.
-- **Highlights** — matched spans rendered in inverse video via
-  `theme.Reverse`, applied over the escaped display text using the
-  byte→cell maps from the safe-presentation core.
+- **Highlights** — matched spans rendered in true-inverse colours via
+  `theme.Match` (non-current lines) or `theme.CurrentMatch` (current
+  matched line, adds underline), applied over the escaped display
+  text using the byte→cell maps from the safe-presentation core
+  (Issue #7: replaces Issue #5's `theme.Reverse` SGR 7 reverse video
+  with explicit inverse colour pairs).
+- **Current matched line** — the first stop for the current file
+  (the first stop until Issue #13 adds navigation); its highlights use
+  `CurrentMatch` (true inverse + underline).
 - **No borders** — no box-drawing border characters around the panel.
 - **Layout** — file-list lines padded to the list width, then joined
   with the corresponding content-panel lines.
 
 `renderLineWithHighlights` re-escapes the display text through
-`safepresentation.EscapeContent`, then applies `theme.Reverse` to each
-highlight cell range. With the no-style theme, no ANSI sequences are
-produced.
+`safepresentation.EscapeContent`, then applies `theme.Match` or
+`theme.CurrentMatch` to each highlight cell range depending on whether
+the line is the current matched line. With the no-style theme, no ANSI
+sequences are produced.
+
+### Theme toggle (Issue #7)
+
+The `c` keypress in the browse state calls `theme.Toggle()` on the
+model's theme, flipping the composed `View()` styling between the dark
+scheme (white on black) and the light scheme (black on white) with no
+persistence. `ctrl+c` (cancel) retains global precedence over plain
+`c`.
 
 ### Cancellation and cleanup
 
