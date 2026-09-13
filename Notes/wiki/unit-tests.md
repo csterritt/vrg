@@ -1785,3 +1785,68 @@ replay-ordering assertions:
   with the fixed status.
 - `TestEscNoOpNoResults` — `Esc` with no overlay on the no-results
   screen does nothing.
+
+`too_small_test.go` (Issue #33, external package `app_test`):
+
+- `TestTooSmallWidthBelow20` — a terminal width below 20 columns
+  triggers the too-small screen with the centred message.
+- `TestTooSmallHeightBelow3` — a terminal height below 3 rows triggers
+  the too-small screen.
+- `TestTooSmallBoundary20x3NotTooSmall` — exactly 20×3 is the minimum
+  usable size; the too-small screen is not shown.
+- `TestTooSmallRecoveryRestoresView` — growing back from too-small
+  restores the normal browse view.
+- `TestTooSmallQDuringSearchingExits130` — `q` on too-small while
+  searching exits 130.
+- `TestTooSmallQWhileBrowsingExitsFixedStatus` — `q` on too-small
+  while browsing exits with the fixed search-derived status (0).
+- `TestTooSmallQOnNoResultsExits1` — `q` on too-small on the
+  no-results screen exits 1.
+- `TestTooSmallQFatalNoResultsOverlayExits2` — `q` on too-small with
+  a fatal no-results overlay logically open exits 2 (not merely
+  dismissing).
+- `TestTooSmallQBrowseErrorOverlayExitsProgram` — `q` on too-small
+  with a browse error overlay logically open exits the program with
+  the fixed status (2) rather than merely dismissing.
+- `TestTooSmallCtrlCExits130` — `ctrl+c` on too-small exits 130.
+- `TestTooSmallEscWithOverlayIsNoOp` — `Esc` on too-small with an
+  overlay logically open is a no-op; the overlay is still open after
+  recovery at the same scroll position.
+- `TestTooSmallOtherKeysAreNoOps` — `n`/`p`/`w`/`c`/`r`/`h`/`?` and
+  scroll keys are all no-ops on too-small.
+- `TestTooSmallRoundTripPreservesCursor` — a too-small round trip
+  preserves the cursor selection (position and current file).
+- `TestTooSmallRoundTripPreservesViewportAndAnchor` — a too-small
+  round trip preserves the per-file viewport offset and logical
+  reading anchor.
+- `TestTooSmallRoundTripPreservesHorizontalOffset` — a too-small
+  round trip preserves the horizontal pan offset in run-off-edge mode.
+- `TestTooSmallRoundTripPreservesListVisibility` — a too-small round
+  trip preserves the file-list visibility preference.
+- `TestTooSmallRoundTripPreservesWrapMode` — a too-small round trip
+  preserves the wrap mode setting.
+- `TestTooSmallRoundTripPreservesColourSetting` — a too-small round
+  trip preserves the colour scheme setting.
+- `TestTooSmallRoundTripPreservesScrolledHelpOverlay` — a too-small
+  round trip preserves a scrolled help overlay at its prior scroll
+  position.
+- `TestTooSmallRoundTripPreservesScrolledErrorOverlay` — a too-small
+  round trip preserves a scrolled error overlay at its prior scroll
+  position.
+- `TestTooSmallRoundTripPreservesErrorOverHelpStack` — a too-small
+  round trip preserves an error-over-help stack; dismissing the error
+  after recovery restores help at the saved scroll.
+- `TestTooSmallResizeWhollyWithinPreservesState` — a resize sequence
+  wholly within too-small (19×2 → 10×1 → 25×8) installs no ordinary
+  layout at 10×1, mutates no anchors, performs no partial modal
+  restoration, and recovers at 25×8 with a scrolled help overlay and
+  nontrivial viewport state preserved.
+- `TestTooSmallResizeWhollyWithinErrorOverHelpStack` — same resize
+  sequence preserving an error-over-help stack without loss;
+  dismissing the error after recovery restores help at the saved
+  scroll.
+- `TestTooSmallPopupTimerContinuesAndExpiryDismisses` — an active
+  pop-up's timer continues during too-small; an expiry during
+  too-small dismisses it so it is absent after recovery.
+- `TestTooSmallPopupNotDisplayed` — the pop-up is never displayed on
+  the too-small screen, even while the timer is still running.

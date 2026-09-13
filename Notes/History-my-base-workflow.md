@@ -284,3 +284,12 @@ Usage
  Input tokens: 208036 tokens
  Output tokens: 39561 tokens
  Cached input tokens: 7336704 tokens
+
+----
+Task 033-terminal-too-small-with-state-recovery.md
+
+Usage
+ Agent messages: 84 messages
+ Input tokens: 170873 tokens
+ Output tokens: 43356 tokens
+ Cached input tokens: 8844736 tokens

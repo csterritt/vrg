@@ -220,15 +220,16 @@ func TestStaleNoteNoNegativeDimensions(t *testing.T) {
 		app.WithFileLoader(realLoader),
 		app.WithPopupDuration(0),
 	)
-	// Very narrow terminal: 10 columns.
-	m, _ = update(t, m, tea.WindowSizeMsg{Width: 10, Height: 5})
+	// Very narrow terminal: 20 columns (the Issue #33 minimum; below
+	// 20 the too-small screen replaces the browse view).
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 20, Height: 5})
 	m, cmd := update(t, m, app.SearchCompleteMsg{Files: idx.Files(), Lines: idx.Len(), Index: idx})
 	if cmd != nil {
 		m = deliverLoad(t, m, cmd)
 	}
 	view := viewContent(m)
-	if !noLineExceedsWidth(view, 10) {
-		t.Fatalf("View has a line exceeding width 10:\n%s", view)
+	if !noLineExceedsWidth(view, 20) {
+		t.Fatalf("View has a line exceeding width 20:\n%s", view)
 	}
 }
 

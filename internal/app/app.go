@@ -623,6 +623,15 @@ type Model struct {
 	listOffset       int
 	longestPathWidth int
 	statusNote       func() string
+
+	// tooSmall is true when the terminal is below the 20x3 minimum
+	// (Issue #33). Set by the WindowSizeMsg handler from the current
+	// dimensions. When true, the View shows the centred "Terminal too
+	// small" message, only q and ctrl+c are active, and the full state
+	// is preserved for recovery on resize. Resizes wholly within the
+	// too-small state keep the gate installed and defer recovery to
+	// the final dimensions.
+	tooSmall bool
 }
 
 type config struct {
@@ -897,6 +906,22 @@ func (m Model) OverlayScroll() int { return m.overlayScroll }
 // restores help at its saved scroll position rather than returning to
 // the base state.
 func (m Model) HelpSuspended() bool { return m.suspendedHelp }
+
+// SuspendedHelpScroll returns the saved scroll position of the help
+// overlay that was suspended by a modal error overlay (Issue #32).
+// When the error is dismissed, help is restored at this scroll
+// position. Returns 0 when help is not suspended.
+func (m Model) SuspendedHelpScroll() int { return m.suspendedHelpScroll }
+
+// TooSmall reports whether the terminal is below the 20x3 minimum and
+// the too-small screen is active (Issue #33). When true, only q and
+// ctrl+c are active; all other input is a no-op and the full state is
+// preserved for recovery on resize.
+func (m Model) TooSmall() bool { return m.tooSmall }
+
+// Theme returns the active colour theme (Issue #33). The scheme is
+// toggled by the c key and preserved across too-small round trips.
+func (m Model) Theme() theme.Theme { return m.theme }
 
 // IsLoading reports whether the current file's content is loading
 // (Issue #26). When true, the panel shows the "Loading…" placeholder
@@ -1451,6 +1476,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Code == 'c' && msg.Mod == tea.ModCtrl {
 			return m.cancel()
 		}
+		// Issue #33: the too-small screen restricts active keys to q
+		// and ctrl+c. q exits with the state-applicable outcome (130
+		// if searching, else the fixed status), taking precedence
+		// over Issue #32's dismissal semantics — q exits even if a
+		// modal overlay is logically open. Esc and every other key
+		// are no-ops; a logically open overlay remains open for
+		// recovery.
+		if m.tooSmall {
+			if msg.Code == 'q' && msg.Mod == 0 {
+				return m.quitTooSmall()
+			}
+			return m, nil
+		}
 		// When the overlay is open, it captures key routing.
 		if m.overlayOpen {
 			return m.handleOverlayKey(msg)
@@ -1578,6 +1616,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		// Issue #33: set the too-small gate from the current
+		// dimensions. When too-small, preserve all state and defer
+		// recovery to the next non-too-small resize. No ordinary
+		// layout is installed, no anchors are mutated, and no partial
+		// modal restoration occurs while the gate is installed.
+		m.tooSmall = msg.Width < 20 || msg.Height < 3
+		if m.tooSmall {
+			return m, nil
+		}
 		// Recompute the viewport layout from the new dimensions
 		// without losing the reading position (Issue #12). Issue #16:
 		// rebuild the row model when the text width changes so wrapping
@@ -2264,6 +2311,16 @@ func (m Model) dismissOverlay() (tea.Model, tea.Cmd) {
 
 // View renders the current state.
 func (m Model) View() tea.View {
+	// Issue #33: when the terminal is below the 20x3 minimum, show
+	// the centred "Terminal too small" message. The overlay and pop-up
+	// are not displayed on the too-small screen, even if logically
+	// open; their state is preserved for recovery.
+	if m.tooSmall {
+		content := centerText("Terminal too small", m.width, m.height)
+		v := tea.NewView(content)
+		v.AltScreen = true
+		return v
+	}
 	var content string
 	switch m.state {
 	case StateSearching:
@@ -2683,6 +2740,26 @@ func (m Model) cancel() (tea.Model, tea.Cmd) {
 	m.state = StateCancelled
 	m.cancelled = true
 	m.exitCode = 130
+	m.cancelProcess()
+	m.cancelLoad()
+	return m, tea.Quit
+}
+
+// quitTooSmall handles q on the too-small screen (Issue #33). q exits
+// with the state-applicable outcome, taking precedence over Issue
+// #32's dismissal semantics: even if a modal overlay is logically
+// open, q exits the program rather than dismissing the overlay. The
+// exit code is 130 if still searching, else the fixed status decided
+// at completion (0 for a clean browse, 1 for no-results, 2 for a
+// fatal or browse-error overlay).
+func (m Model) quitTooSmall() (tea.Model, tea.Cmd) {
+	if m.state == StateSearching {
+		return m.cancel()
+	}
+	if m.state == StateSummary {
+		m.exitCode = 0
+	}
+	m.cancelled = true
 	m.cancelProcess()
 	m.cancelLoad()
 	return m, tea.Quit

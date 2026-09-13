@@ -433,6 +433,21 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `q` from a still-running base state exits the fixed status; a second
   `Esc` leaves the state running). See
   [overlay-precedence](overlay-precedence.md).
+  Issue #33 added the too-small terminal gate: a `tooSmall` field set
+  by the `WindowSizeMsg` handler when the terminal is below 20 columns
+  or 3 rows, a `TooSmall()` accessor, and a `Theme()` accessor. The
+  `View` renders the centred "Terminal too small" message (via
+  `centerText`) when the gate is active, suppressing the overlay and
+  pop-up. The `KeyPressMsg` handler gates all keys after `ctrl+c`:
+  `q` calls `quitTooSmall()` (exits 130 if searching, else the fixed
+  status — taking precedence over Issue #32 dismissal semantics so `q`
+  exits even if a modal overlay is logically open), and every other key
+  (including `Esc`) is a no-op. The `WindowSizeMsg` handler skips
+  `buildViewport` while too-small, preserving all state (cursor,
+  viewport, anchors, list visibility, wrap, colour, horizontal offset,
+  modal state with scroll positions, pop-up timer); resizes wholly
+  within too-small defer recovery to the final dimensions. See
+  [too-small-screen](too-small-screen.md).
 
 ## internal/safepresentation
 

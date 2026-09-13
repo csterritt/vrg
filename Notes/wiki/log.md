@@ -1172,3 +1172,45 @@ Sources: `Notes/tasks/032-overlay-precedence-esc-semantics.md`,
 `Notes/PRD-vrg.md` (Colours, overlays, and key precedence; Outcome and
 exit-status contract), `internal/app/app.go`,
 `internal/app/overlay_precedence_test.go`.
+
+## [2026-09-12] ingest | Issue #33 terminal too-small screen with state recovery
+
+Ingested the completed Issue #33 implementation: the 20×3 minimum
+terminal size gate showing centred "Terminal too small", with only `q`
+and `ctrl+c` active. `q` exits with the state-applicable outcome (130
+if searching, else the fixed status) taking precedence over Issue
+#32's dismissal semantics — `q` exits even if a modal overlay is
+logically open, rather than dismissing it. `Esc` and every other key
+are no-ops; a logically open overlay remains open after recovery.
+`internal/app` added a `tooSmall` field set by the `WindowSizeMsg`
+handler from the current dimensions, a `TooSmall()` accessor, a
+`Theme()` accessor, a `SuspendedHelpScroll()` accessor, and a
+`quitTooSmall()` helper. The `View` renders the centred message via
+`centerText` when too-small, suppressing the overlay and pop-up. The
+`KeyPressMsg` handler gates all keys after `ctrl+c`: `q` calls
+`quitTooSmall()` and every other key is a no-op. The `WindowSizeMsg`
+handler skips `buildViewport` while too-small, preserving all state
+(cursor, viewport, anchors, list visibility, wrap, colour, horizontal
+offset, modal state with scroll positions, pop-up timer); resizes
+wholly within too-small defer recovery to the final dimensions. Tests
+added in `internal/app/too_small_test.go`: threshold and display
+(width below 20, height below 3, 20×3 boundary, recovery); exit
+semantics (q during searching → 130, browsing → fixed status,
+no-results → 1, fatal no-results overlay → 2, browse error overlay →
+exits program, ctrl+c → 130); Esc and other-key no-ops with overlay
+preservation; round-trip restoration of cursor, viewport/anchor,
+horizontal offset, list visibility, wrap, colour, scrolled help
+overlay, scrolled error overlay, and error-over-help stack; resize
+wholly within too-small (19×2 → 10×1 → 25×8) with state preservation;
+and pop-up timer continuation with expiry dismissal and no display.
+Two existing tests updated for the 20×3 minimum:
+`TestPopupResizeRecentresAndRetruncates` (width 15 → 20) and
+`TestStaleNoteNoNegativeDimensions` (width 10 → 20). Created
+[too-small-screen](too-small-screen.md); updated
+[overlay-precedence](overlay-precedence.md) (cross-reference via
+precedence rule), [index](index.md) (too-small-screen entry),
+[source-code](source-code.md) (internal/app Issue #33 entry), and
+[unit-tests](unit-tests.md) (too_small_test.go entries). Sources:
+`Notes/tasks/033-terminal-too-small-with-state-recovery.md`,
+`Notes/PRD-vrg.md` (Layout and indicators — minimum-size bullet),
+`internal/app/app.go`, `internal/app/too_small_test.go`.

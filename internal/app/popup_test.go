@@ -677,7 +677,9 @@ func TestPopupResizeRecentresAndRetruncates(t *testing.T) {
 	}
 
 	// Resize to a narrow width. The path should be truncated with ….
-	m, _ = update(t, m, tea.WindowSizeMsg{Width: 15, Height: 24})
+	// Issue #33: widths below 20 trigger the too-small screen, so use
+	// the minimum usable width (20) to test pop-up truncation.
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 20, Height: 24})
 	view = viewContent(m)
 	lines = strings.Split(view, "\n")
 	if len(lines) <= 11 {
@@ -685,10 +687,10 @@ func TestPopupResizeRecentresAndRetruncates(t *testing.T) {
 	}
 	popupLine = stripANSI(lines[11])
 	if !strings.HasPrefix(strings.TrimLeft(popupLine, " "), "…") {
-		t.Fatalf("popup line not truncated at width 15: %q", popupLine)
+		t.Fatalf("popup line not truncated at width 20: %q", popupLine)
 	}
-	if w := popupVisibleWidth(popupLine); w > 15 {
-		t.Fatalf("popup line width = %d after resize, want <= 15: %q", w, popupLine)
+	if w := popupVisibleWidth(popupLine); w > 20 {
+		t.Fatalf("popup line width = %d after resize, want <= 20: %q", w, popupLine)
 	}
 }
 

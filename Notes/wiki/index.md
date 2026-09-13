@@ -219,6 +219,15 @@ Catalog of all wiki pages for the vrg project.
   cancellation by help and error with no return, `Esc` no-op with no
   overlay, and the dismissal-outcome table for `q` and `Esc` including
   the fatal-overlay exit-2 route
+- [too-small-screen.md](too-small-screen.md) — Issue #33: the 20×3
+  minimum terminal size gate showing centred "Terminal too small";
+  only `q` and `ctrl+c` active with `q` exiting the state-applicable
+  outcome (taking precedence over Issue #32 dismissal semantics);
+  `Esc` and all other keys no-ops; full state preservation (cursor,
+  viewport, anchors, list visibility, wrap, colour, horizontal offset,
+  modal state with scroll positions, pop-up timer) across too-small
+  round trips; resizes wholly within too-small deferring recovery to
+  the final dimensions; and pop-up timer continuation without display
 
 ## Catalogs
 
