@@ -20,10 +20,11 @@ current file's contents with matches highlighted.
 ## Layout
 
 Six internal packages mirror the PRD Module Design: `cli`,
-`searchindex`, `filebuffer`, `viewport`, `theme`, `app` — all under
-`internal/`, plus the thin entry point `cmd/vrg`. Only `cli` and `cmd/vrg`
-carry behavior so far (Issue #1); the rest are documented package
-boundaries awaiting their issues.
+`searchindex`, `filebuffer`, `viewport`, `theme`, `app`, `docs` — all under
+`internal/`, plus the thin entry point `cmd/vrg`. The user-facing
+documentation lives in the repository-root `README.md` (Issue #34),
+synchronized with the implementation by `internal/docs` tests. See
+[documentation-sync](documentation-sync.md).
 
 See [source-code.md](source-code.md) for the file catalog and
 [unit-tests.md](unit-tests.md) for the test catalog.

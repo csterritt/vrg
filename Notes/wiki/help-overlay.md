@@ -101,11 +101,15 @@ returns the slice covering:
 ## Footer slot
 
 `HelpFooter()` returns the footer text displayed at the bottom of the
-help overlay. The footer slot is reserved for [Issue #34's
-documentation scale and memory-limits text](#); it is currently empty so
-the help renderer and documentation tests can consume it as a defined
-API without depending on Issue #34's content. When non-empty, the
-footer is appended after a blank line.
+help overlay. Issue #34 fills the footer slot with the scale,
+record-limit, and memory statements from the PRD's *Resources and
+responsiveness* section. The footer is the shared `scaleLimitsText`
+constant — the same text that appears in the README's scale section —
+so neither sink can drift from the other. The footer is fixed
+app-authored text (no runtime-string substitution points), so it needs
+no sanitization; the Issue #6 sink-safety row verifies the rendered
+output is safe. When non-empty, the footer is appended after a blank
+line. See [documentation-sync](documentation-sync.md).
 
 ## Sink safety
 

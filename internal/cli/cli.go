@@ -454,6 +454,65 @@ func HelpText() string {
 	return renderHelp()
 }
 
+// OptionDecl is the exported form of one command-line option declaration,
+// for documentation tests (Issue #34) that assert the README and help
+// footer list every allow-listed flag and local help option from the same
+// shared declarations that configure mow.cli and validate the raw-token
+// scan.
+type OptionDecl struct {
+	Short        byte   // short option letter, as in -h; 0 for long-only
+	Long         string // long option name, as in --help; "" for short-only
+	Help         bool   // local help option: never forwarded to ripgrep
+	Search       bool   // allow-listed no-argument search flag
+	Unrestricted bool   // counts toward the cumulative -u limit
+	Desc         string
+}
+
+// OptionDecls returns the shared option declarations — the single source
+// for mow.cli configuration, raw-token recognition, generated help, and
+// Issue #34 documentation synchronization. Documentation tests iterate
+// this slice to verify the README lists every allow-listed flag and
+// local help option in short and long form with the exact no-argument
+// spellings.
+func OptionDecls() []OptionDecl {
+	out := make([]OptionDecl, 0, len(optionDecls))
+	for _, d := range optionDecls {
+		out = append(out, OptionDecl{
+			Short:        d.short,
+			Long:         d.long,
+			Help:         d.help,
+			Search:       d.search,
+			Unrestricted: d.unrestricted,
+			Desc:         d.desc,
+		})
+	}
+	return out
+}
+
+// ArgDecls returns the shared positional argument declarations — the
+// single source for the parser spec, generated help, and Issue #34
+// documentation synchronization.
+type ArgDecl struct {
+	Name       string
+	Optional   bool
+	DefaultVal string
+	Desc       string
+}
+
+// ArgDecls returns the shared positional argument declarations.
+func ArgDecls() []ArgDecl {
+	out := make([]ArgDecl, 0, len(argDecls))
+	for _, a := range argDecls {
+		out = append(out, ArgDecl{
+			Name:       a.name,
+			Optional:   a.optional,
+			DefaultVal: a.defaultVal,
+			Desc:       a.desc,
+		})
+	}
+	return out
+}
+
 // renderHelp generates the command-line help from the shared declarations.
 // It contains no external substitutions: the application name and every
 // description string are fixed.

@@ -448,6 +448,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   modal state with scroll positions, pop-up timer); resizes wholly
   within too-small defer recovery to the final dimensions. See
   [too-small-screen](too-small-screen.md).
+  Issue #34 filled the `HelpFooter()` footer slot (reserved by Issue
+  #31) with the `scaleLimitsText` constant — the shared structured
+  source for the scale, record-limit, and memory statements from the
+  PRD's *Resources and responsiveness* section. Both the help overlay
+  footer and the README render from this source so neither sink can
+  drift. See [documentation-sync](documentation-sync.md).
 
 ## internal/safepresentation
 
@@ -665,3 +671,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   border. Match, CurrentMatch, Indicator, and Underline restore the
   base colours after the styled span. See
   [theme-module](theme-module.md) and [browse-tracer](browse-tracer.md).
+
+## internal/docs
+
+- `internal/docs/docs_test.go` — Issue #34 documentation synchronization
+  tests (package `docs_test`). Reads the committed `README.md` at the
+  repository root and asserts it contains every key binding from
+  `app.KeyBindings()`, every allow-listed flag and local help option
+  from `cli.OptionDecls()` (short and long form, exact no-argument
+  spellings), the complete exit-status table (0, 1, 2, 130) agreeing
+  with `app.DecideOutcome`, the help-only exit-0 path distinct from the
+  TUI help dialog, the flags-only usage error, the ripgrep 15.x and
+  `--no-config` statements, and the scale, record-limit, and memory
+  statements. Asserts the help overlay footer (`app.HelpFooter()`)
+  carries the same scale/record-limit/memory tokens as the README.
+  See [documentation-sync](documentation-sync.md).

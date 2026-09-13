@@ -133,13 +133,30 @@ func KeyBindings() []KeyBinding {
 	}
 }
 
+// scaleLimitsText is the shared structured source for the scale,
+// record-limit, and memory statements from the PRD's Resources and
+// responsiveness section. Both the help overlay footer and the README
+// render from this source so neither sink can drift from the other.
+// The Issue #34 documentation synchronization tests assert the same
+// required tokens appear in both the README and the footer.
+const scaleLimitsText = `Scale examples (independent, not simultaneous capacity guarantees):
+~10,000 matched files, ~100,000 matched lines, individual files ~50 MB.
+The ~50 MB example assumes UTF-8 with ordinary line lengths; base64
+bytes expansion can push a single match record over the 64 MiB limit;
+oversized records are skipped, and the diagnostic names the path when
+recoverable.
+Buffers are retained for the session with no eviction and no
+aggregate memory bound. No reliable OOM recovery or forced termination
+cleanup is guaranteed.`
+
 // HelpFooter returns the footer text displayed at the bottom of the help
-// overlay (Issue #31). The footer slot is reserved for Issue #34's
-// documentation scale and memory-limits text; it is currently empty so
-// the help renderer and documentation tests can consume it as a defined
-// API without depending on Issue #34's content.
+// overlay (Issue #31). Issue #34 fills the footer slot with the scale,
+// record-limit, and memory statements from the PRD's Resources and
+// responsiveness section. The footer is fixed app-authored text (no
+// runtime-string substitution points), so it needs no sanitization;
+// the Issue #6 sink-safety row verifies the rendered output is safe.
 func HelpFooter() string {
-	return ""
+	return scaleLimitsText
 }
 
 // helpText builds the help overlay text from the single binding table

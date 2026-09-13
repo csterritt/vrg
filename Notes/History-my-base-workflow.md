@@ -293,3 +293,12 @@ Usage
  Input tokens: 170873 tokens
  Output tokens: 43356 tokens
  Cached input tokens: 8844736 tokens
+
+----
+Task 034-documentation-scale-and-memory-limits.md
+
+Usage
+ Agent messages: 97 messages
+ Input tokens: 246068 tokens
+ Output tokens: 78318 tokens
+ Cached input tokens: 9245440 tokens

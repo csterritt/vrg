@@ -1850,3 +1850,59 @@ replay-ordering assertions:
   too-small dismisses it so it is absent after recovery.
 - `TestTooSmallPopupNotDisplayed` — the pop-up is never displayed on
   the too-small screen, even while the timer is still running.
+
+### Issue #34 help footer sink-safety (`help_footer_test.go`)
+
+- `TestHelpFooterNonEmpty` — the help overlay footer is non-empty
+  (Issue #34 fills the slot reserved by Issue #31).
+- `TestHelpFooterNoDangerousControls` — the footer text contains no
+  dangerous control bytes.
+- `TestHelpFooterSinkSafetyNoStyle` — the rendered help overlay with
+  footer passes the no-style composition path: no dangerous control
+  bytes in raw output.
+- `TestHelpFooterSinkSafetyStyled` — with styles enabled, no fixture
+  payload appears after an unescaped ESC.
+- `TestHelpFooterRenderedInOverlay` — the rendered help overlay
+  contains footer tokens (verified at 80×50 so the footer is visible).
+
+## internal/docs
+
+`docs_test.go` (external package `docs_test`):
+
+- `TestREADMEContainsEveryBinding` — iterates `app.KeyBindings()` and
+  asserts each binding's key and description appear in the README.
+- `TestREADMEContainsEveryAllowListedFlag` — iterates
+  `cli.OptionDecls()` and asserts each search flag's short and long
+  form appear in the README.
+- `TestREADMEContainsLocalHelpOptions` — asserts the local help
+  options (`-h`/`--help`) appear in the README.
+- `TestREADMEFlagDocsFromSharedDeclarations` — asserts every declared
+  option (help and search) appears in the README in short and long
+  form with the exact no-argument spellings.
+- `TestREADMEExitStatusAgreesWithOutcomeFunction` — calls
+  `app.DecideOutcome` for exit 0, 1, 2, and record-loss-2 cases and
+  asserts the README documents each exit status.
+- `TestREADMEDocumentsCancellationTriggers` — asserts the README
+  documents `ctrl+c` and exit 130 for cancellation.
+- `TestREADMEDocumentsPreTUIFailures` — asserts the README documents
+  usage, root validation, and start failures (exit 2).
+- `TestREADMEDocumentsHelpOnlyPath` — asserts the README documents
+  bare `vrg`, `-h`/`--help`, stdout, and the TUI help dialog
+  distinction.
+- `TestREADMEDocumentsFlagsOnlyUsageError` — asserts the README
+  documents the pattern requirement (flags-only → exit 2).
+- `TestREADMEDocumentsRipgrep15x` — asserts the README identifies
+  ripgrep 15.x.
+- `TestREADMEDocumentsNoConfig` — asserts the README states
+  `--no-config` and the config file reference.
+- `TestREADMEScaleExamples` — asserts the three scale examples and
+  the independence qualification.
+- `TestREADMERecordLimit` — asserts the 64 MiB limit, base64 caveat,
+  oversized diagnostic, and recoverable path.
+- `TestREADMEMemoryLimits` — asserts session retention, eviction,
+  aggregate memory bound, OOM, and forced termination.
+- `TestHelpFooterCarriesSameStatements` — asserts the help footer
+  contains every scale/record-limit/memory token.
+- `TestREADMEAndFooterBothCarryAllScaleLimitTokens` — asserts both
+  the README and the footer contain every token, so deleting any
+  statement from either sink fails the suite.

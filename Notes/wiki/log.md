@@ -1214,3 +1214,31 @@ precedence rule), [index](index.md) (too-small-screen entry),
 `Notes/tasks/033-terminal-too-small-with-state-recovery.md`,
 `Notes/PRD-vrg.md` (Layout and indicators — minimum-size bullet),
 `internal/app/app.go`, `internal/app/too_small_test.go`.
+
+## [2026-09-12] ingest | Issue #34 documentation scale and memory limits
+
+Ingested the completed Issue #34 implementation: the user-facing
+`README.md` at the repository root (invocation, flags, key bindings,
+exit-status table, help-only behaviour, ripgrep 15.x and `--no-config`,
+scale/record-limit/memory statements); the filled help overlay footer
+(`app.HelpFooter()` returns the shared `scaleLimitsText` constant —
+the same text as the README's scale section — so neither sink drifts);
+the `internal/docs/docs_test.go` synchronization tests (binding table,
+allow-list, local help options, shared declarations, exit-status
+agreement with `app.DecideOutcome`, help-only path, flags-only error,
+ripgrep 15.x, `--no-config`, scale examples, record limit, memory
+limits, footer carries the same tokens); and the
+`internal/app/help_footer_test.go` Issue #6 sink-safety row for the
+rendered help footer (no-style raw output, styled no-payload-after-ESC,
+footer rendered in overlay). Created
+[documentation-sync](documentation-sync.md); updated
+[help-overlay](help-overlay.md) (footer slot filled by Issue #34),
+[source-code](source-code.md) (internal/app Issue #34 footer entry,
+internal/docs section), [unit-tests](unit-tests.md) (help footer
+sink-safety row, internal/docs section), and [index](index.md)
+(documentation-sync entry). Sources:
+`Notes/tasks/034-documentation-scale-and-memory-limits.md`,
+`Notes/PRD-vrg.md` (Resources and responsiveness, Out of Scope,
+Outcome and exit-status contract), `README.md`,
+`internal/app/app.go`, `internal/docs/docs_test.go`,
+`internal/app/help_footer_test.go`.

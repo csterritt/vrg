@@ -228,6 +228,17 @@ Catalog of all wiki pages for the vrg project.
   modal state with scroll positions, pop-up timer) across too-small
   round trips; resizes wholly within too-small deferring recovery to
   the final dimensions; and pop-up timer continuation without display
+- [documentation-sync.md](documentation-sync.md) — Issue #34: the README
+  as the single user-facing documentation artifact; synchronization
+  tests against the CLI shared declarations and Issue #31 binding
+  table; scale examples (10,000 files, 100,000 lines, ~50 MB) as
+  independent, not simultaneous capacity guarantees; 64 MiB record
+  limit with base64 caveat and oversized-record diagnostic; session-long
+  buffer retention with no eviction, no aggregate memory bound, no
+  reliable OOM recovery, and no forced-termination cleanup guarantee;
+  exit-status table agreement with the Issue #9 outcome function;
+  help overlay footer filled with the shared scale/record-limit/memory
+  text; Issue #6 sink-safety row for the rendered help footer
 
 ## Catalogs
 
