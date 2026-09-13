@@ -32,7 +32,7 @@ fi
 ` + extraScript + `
 # Output a valid ripgrep JSON stream
 echo '{"type":"begin","data":{"path":{"text":"test.txt"}}}'
-echo '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
 echo '{"type":"end","data":{"path":{"text":"test.txt"},"binary_offset":null}}'
 echo '{"type":"summary","data":{}}'
 # Signal completion so the test can send q after the stream is done.
@@ -319,7 +319,7 @@ while [ $i -lt 100 ]; do
 	head -c 10240 /dev/zero | tr '\0' 'E' >&2
 	# Valid JSON record to stdout
 	echo '{"type":"begin","data":{"path":{"text":"test.txt"}}}'
-	echo '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+	printf '%s\n' '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
 	echo '{"type":"end","data":{"path":{"text":"test.txt"},"binary_offset":null}}'
 	i=$((i + 1))
 done
@@ -356,10 +356,10 @@ exit 0
 		t.Fatalf("handshake file missing: fake rg did not finish writing both pipes: %v", err)
 	}
 
-	// Verify the stdout stream was collected completely: the summary
-	// must be present in vrg's output.
-	if !strings.Contains(stdout, "files") || !strings.Contains(stdout, "matched lines") {
-		t.Fatalf("vrg stdout does not contain the summary (stdout stream lost): %q", stdout)
+	// Verify the stdout stream was collected completely: the browse
+	// view must be present in vrg's output (the matched file appears).
+	if !strings.Contains(stdout, "test.txt") {
+		t.Fatalf("vrg stdout does not contain the browse view (stdout stream lost): %q", stdout)
 	}
 }
 
@@ -376,7 +376,7 @@ echo "warning: some diagnostic" >&2
 echo "another warning line" >&2
 # Output valid ripgrep JSON to stdout
 echo '{"type":"begin","data":{"path":{"text":"test.txt"}}}'
-echo '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
 echo '{"type":"end","data":{"path":{"text":"test.txt"},"binary_offset":null}}'
 echo '{"type":"summary","data":{}}'
 touch "$VRG_TEST_HANDSHAKE"
@@ -403,8 +403,8 @@ exit 0
 		t.Fatalf("vrg exited %d, want 0", exitCode)
 	}
 
-	// vrg should have completed successfully.
-	if !strings.Contains(stdout, "files") || !strings.Contains(stdout, "matched lines") {
-		t.Fatalf("vrg stdout does not contain the summary: %q", stdout)
+	// vrg should have completed successfully and show the browse view.
+	if !strings.Contains(stdout, "test.txt") {
+		t.Fatalf("vrg stdout does not contain the browse view: %q", stdout)
 	}
 }

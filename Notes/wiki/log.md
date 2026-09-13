@@ -161,3 +161,28 @@ and [index](index.md). Sources:
 Design → Theme), `internal/theme/theme.go`,
 `internal/theme/theme_test.go`, `internal/app/app.go`,
 `internal/app/browse_test.go`.
+
+## [2026-09-12] ingest | Issue #8 no-results screen and binary exclusion
+
+Ingested the completed Issue #8 implementation: binary-file exclusion
+during ripgrep result indexing and a distinct no-results TUI outcome.
+`internal/searchindex` now drops a file and all its previously collected
+matches when an `end` event carries a non-null `binary_offset`, counts
+the file as a distinct excluded file, and drops later matches for the
+same file. `Index.ExcludedFiles()` exposes the distinct excluded-file
+count. `internal/app` added `StateNoResults`: a centred no-results
+screen shown after a complete successful search (rg exit 0 or 1) with
+no usable results, with the optional `(N binary files skipped)` suffix
+when every matched file was excluded. The outcome logic consumes the
+retained stop count after binary filtering as the single usable-results
+value. `q` from no-results exits 1 through the Issue #4 cleanup path;
+`Esc` is a no-op; `ctrl+c` exits 130. Mixed streams (one file excluded,
+one retained) transition to ordinary browsing. Updated
+[search-collection-path](search-collection-path.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources: `Notes/tasks/008-no-results-screen-and-binary-exclusion.md`,
+`Notes/PRD-vrg.md` (Result index contract, Outcome and exit-status
+contract), `internal/searchindex/searchindex.go`,
+`internal/searchindex/searchindex_test.go`, `internal/app/app.go`,
+`internal/app/browse_test.go`, `cmd/vrg/search_test.go`,
+`cmd/vrg/cancel_test.go`.

@@ -79,6 +79,41 @@ func buildIndex(t *testing.T, workdir string, records ...string) *searchindex.In
 	return b.Build()
 }
 
+// endRecord builds an end record. binaryOffset may be nil, an int, or
+// any json value.
+func endRecord(path string, binaryOffset any) string {
+	data := map[string]any{
+		"path":          map[string]any{"text": path},
+		"binary_offset": binaryOffset,
+	}
+	rec := map[string]any{"type": "end", "data": data}
+	b, _ := json.Marshal(rec)
+	return string(b)
+}
+
+// summaryRecord builds a summary record with a data object.
+func summaryRecord() string {
+	rec := map[string]any{
+		"type": "summary",
+		"data": map[string]any{
+			"elapsed_total": map[string]any{"human": "0.001s", "nanos": 1000000, "secs": 0},
+			"stats":         map[string]any{"matches": 1, "matched_lines": 1},
+		},
+	}
+	b, _ := json.Marshal(rec)
+	return string(b)
+}
+
+// textBegin builds a begin record with a text-encoded path.
+func textBegin(path string) string {
+	rec := map[string]any{
+		"type": "begin",
+		"data": map[string]any{"path": map[string]any{"text": path}},
+	}
+	b, _ := json.Marshal(rec)
+	return string(b)
+}
+
 // makeBuf creates a prepared filebuffer.Buffer for testing.
 func makeBuf(lines []filebuffer.Line, lineCount, gutterWidth int) *filebuffer.Buffer {
 	return &filebuffer.Buffer{Lines: lines, LineCount: lineCount, GutterWidth: gutterWidth}
@@ -941,5 +976,194 @@ func TestSinkSafetyTablePanelContentStyled(t *testing.T) {
 				t.Fatalf("fixture payload after unescaped ESC in panel-content for %s: %q", fx.Name, view)
 			}
 		})
+	}
+}
+
+// --- Issue #8 no-results screen and binary exclusion tests ---
+
+// setupNoResults creates a model in the no-results state from a
+// SearchCompleteMsg carrying the given index. The index must have zero
+// usable stops (Len() == 0).
+func setupNoResults(t *testing.T, idx *searchindex.Index) app.Model {
+	t.Helper()
+	m := app.New([]string{"--json", "--no-config", "--", "foo", "."}, "/work")
+	m, _ = update(t, m, app.SearchCompleteMsg{
+		Files: idx.Files(), Lines: idx.Len(), Index: idx,
+	})
+	if m.State() != app.StateNoResults {
+		t.Fatalf("State = %v, want StateNoResults", m.State())
+	}
+	return m
+}
+
+// TestNoResultsEmptyStream verifies that a complete successful search
+// with no matches and no binary exclusions presents the "No results
+// found" screen. This is the rg-1 emptiness case.
+func TestNoResultsEmptyStream(t *testing.T) {
+	idx := buildIndex(t, "/work", summaryRecord())
+	m := setupNoResults(t, idx)
+	view := viewContent(m)
+	if !strings.Contains(view, "No results found") {
+		t.Fatalf("View = %q, want it to contain 'No results found'", view)
+	}
+	if strings.Contains(view, "binary files skipped") {
+		t.Fatalf("View = %q, should not contain binary skip suffix when no files excluded", view)
+	}
+}
+
+// TestNoResultsAllBinary verifies that a search where every matched
+// file is binary-excluded presents "No results found (N binary files
+// skipped)". This is the rg-0 all-filtered case.
+func TestNoResultsAllBinary(t *testing.T) {
+	idx := buildIndex(t, "/work",
+		textBegin("src/a.go"),
+		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+		endRecord("src/a.go", 42),
+		textBegin("src/b.go"),
+		textMatch("src/b.go", "world\n", 1, subSpec{"world", 0, 5}),
+		endRecord("src/b.go", 99),
+		summaryRecord(),
+	)
+	m := setupNoResults(t, idx)
+	view := viewContent(m)
+	if !strings.Contains(view, "No results found") {
+		t.Fatalf("View = %q, want it to contain 'No results found'", view)
+	}
+	if !strings.Contains(view, "2 binary files skipped") {
+		t.Fatalf("View = %q, want it to contain '2 binary files skipped'", view)
+	}
+}
+
+// TestNoResultsSingleBinary verifies the binary skip suffix with a
+// count of 1.
+func TestNoResultsSingleBinary(t *testing.T) {
+	idx := buildIndex(t, "/work",
+		textBegin("src/a.go"),
+		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+		endRecord("src/a.go", 42),
+		summaryRecord(),
+	)
+	m := setupNoResults(t, idx)
+	view := viewContent(m)
+	if !strings.Contains(view, "1 binary files skipped") {
+		t.Fatalf("View = %q, want it to contain '1 binary files skipped'", view)
+	}
+}
+
+// TestNoResultsQExitsOne verifies that pressing q from the no-results
+// screen exits with code 1 through the Issue #4 cleanup path.
+func TestNoResultsQExitsOne(t *testing.T) {
+	idx := buildIndex(t, "/work", summaryRecord())
+	m := setupNoResults(t, idx)
+	m, cmd := update(t, m, keyPress('q'))
+	assertQuit(t, cmd)
+	if m.ExitCode() != 1 {
+		t.Fatalf("ExitCode = %d, want 1", m.ExitCode())
+	}
+}
+
+// TestNoResultsQExitsOneAllBinary verifies that pressing q from the
+// no-results screen with binary exclusions also exits with code 1.
+func TestNoResultsQExitsOneAllBinary(t *testing.T) {
+	idx := buildIndex(t, "/work",
+		textBegin("src/a.go"),
+		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+		endRecord("src/a.go", 42),
+		summaryRecord(),
+	)
+	m := setupNoResults(t, idx)
+	m, cmd := update(t, m, keyPress('q'))
+	assertQuit(t, cmd)
+	if m.ExitCode() != 1 {
+		t.Fatalf("ExitCode = %d, want 1", m.ExitCode())
+	}
+}
+
+// TestNoResultsEscIsNoOp verifies that Esc from the no-results screen is
+// a no-op: the state stays no-results and no quit command is produced.
+func TestNoResultsEscIsNoOp(t *testing.T) {
+	idx := buildIndex(t, "/work", summaryRecord())
+	m := setupNoResults(t, idx)
+	m, cmd := update(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.State() != app.StateNoResults {
+		t.Fatalf("after Esc, State = %v, want StateNoResults", m.State())
+	}
+	if cmd != nil {
+		msg := execCmd(t, cmd)
+		if _, ok := msg.(tea.QuitMsg); ok {
+			t.Fatal("Esc from no-results produced a quit command")
+		}
+	}
+}
+
+// TestNoResultsCtrlCExits130 verifies that ctrl+c from the no-results
+// screen exits with code 130.
+func TestNoResultsCtrlCExits130(t *testing.T) {
+	idx := buildIndex(t, "/work", summaryRecord())
+	m := setupNoResults(t, idx)
+	m, cmd := update(t, m, ctrlC())
+	assertQuit(t, cmd)
+	if m.ExitCode() != 130 {
+		t.Fatalf("ExitCode = %d, want 130", m.ExitCode())
+	}
+}
+
+// TestMixedRetentionBrowses verifies that a mixed stream where one
+// file is binary-excluded and one is retained browses with usable
+// results of 1, not the no-results screen.
+func TestMixedRetentionBrowses(t *testing.T) {
+	idx := buildIndex(t, "/work",
+		textBegin("src/binary.go"),
+		textMatch("src/binary.go", "match1\n", 1, subSpec{"match1", 0, 6}),
+		endRecord("src/binary.go", 100),
+		textBegin("src/text.go"),
+		textMatch("src/text.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+		endRecord("src/text.go", nil),
+		summaryRecord(),
+	)
+	buf := makeBuf(nil, 0, 3)
+	m := setupBrowse(t, idx, buf)
+	if m.State() != app.StateBrowse {
+		t.Fatalf("State = %v, want StateBrowse (usable results of 1)", m.State())
+	}
+	view := viewContent(m)
+	if !strings.Contains(view, "text.go") {
+		t.Fatalf("View = %q, want it to contain retained file 'text.go'", view)
+	}
+	if strings.Contains(view, "binary.go") {
+		t.Fatalf("View = %q, should not contain excluded file 'binary.go'", view)
+	}
+}
+
+// TestNoResultsDoesNotShowSearching verifies that the no-results view
+// does not contain "Searching".
+func TestNoResultsDoesNotShowSearching(t *testing.T) {
+	idx := buildIndex(t, "/work", summaryRecord())
+	m := setupNoResults(t, idx)
+	view := viewContent(m)
+	if strings.Contains(view, "Searching") {
+		t.Fatalf("no-results View contains 'Searching': %q", view)
+	}
+}
+
+// TestNoResultsCancelledRejectsLateCompletion verifies that a late
+// SearchCompleteMsg arriving after cancellation from the no-results
+// screen does not revive the UI.
+func TestNoResultsCancelledRejectsLateCompletion(t *testing.T) {
+	idx := buildIndex(t, "/work", summaryRecord())
+	m := setupNoResults(t, idx)
+	m, cmd := update(t, m, keyPress('q'))
+	assertQuit(t, cmd)
+	if m.ExitCode() != 1 {
+		t.Fatalf("ExitCode = %d, want 1", m.ExitCode())
+	}
+	// A late SearchCompleteMsg must not revive the UI by transitioning
+	// to a new state or changing the exit code.
+	m2, _ := update(t, m, app.SearchCompleteMsg{Files: 3, Lines: 10})
+	if m2.State() == app.StateSummary {
+		t.Fatal("late SearchCompleteMsg revived the cancelled no-results UI (transitioned to summary)")
+	}
+	if m2.ExitCode() != 1 {
+		t.Fatalf("after late completion, ExitCode = %d, want 1 (fixed)", m2.ExitCode())
 	}
 }

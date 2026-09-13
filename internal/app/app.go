@@ -36,6 +36,11 @@ const (
 	// search with results: a file list on the left and a matched-file
 	// content panel on the right.
 	StateBrowse
+	// StateNoResults is the centred no-results screen shown after a
+	// complete successful search (rg exit 0 or 1) with no usable
+	// results. The optional "(N binary files skipped)" suffix is
+	// appended when every matched file was excluded.
+	StateNoResults
 	// StateStartFailed is the state when rg could not be started. The
 	// entry point should print the diagnostic to stderr and exit 2.
 	StateStartFailed
@@ -123,14 +128,15 @@ type FileLoader func(path []byte, stops []searchindex.Stop) (*filebuffer.Buffer,
 
 // Model is the Bubble Tea model for the vrg app.
 type Model struct {
-	state      State
-	width      int
-	height     int
-	files      int
-	lines      int
-	diagnostic string
-	exitCode   int
-	cancelled  bool
+	state         State
+	width         int
+	height        int
+	files         int
+	lines         int
+	excludedFiles int
+	diagnostic    string
+	exitCode      int
+	cancelled     bool
 
 	childArgs []string
 	workdir   string
@@ -269,7 +275,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cancelled {
 			return m, nil
 		}
-		if msg.Index != nil && msg.Index.Files() > 0 {
+		if msg.Index != nil && msg.Index.Len() > 0 {
 			m.state = StateBrowse
 			m.files = msg.Files
 			m.lines = msg.Lines
@@ -277,6 +283,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.browseIdx = 0
 			m.loading = true
 			return m, m.loadFile()
+		}
+		if msg.Index != nil {
+			// Complete successful search with no usable results:
+			// present the no-results screen.
+			m.state = StateNoResults
+			m.excludedFiles = msg.Index.ExcludedFiles()
+			return m, nil
 		}
 		m.state = StateSummary
 		m.files = msg.Files
@@ -326,6 +339,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case StateSummary:
 				m.exitCode = 0
 				return m, tea.Quit
+			case StateNoResults:
+				m.exitCode = 1
+				m.cancelled = true
+				m.cancelProcess()
+				m.cancelLoad()
+				return m, tea.Quit
 			case StateBrowse:
 				m.exitCode = 0
 				m.cancelled = true
@@ -356,6 +375,14 @@ func (m Model) View() tea.View {
 		v := tea.NewView(fmt.Sprintf("%d files, %d matched lines", m.files, m.lines))
 		v.AltScreen = true
 		return v
+	case StateNoResults:
+		text := "No results found"
+		if m.excludedFiles > 0 {
+			text += fmt.Sprintf(" (%d binary files skipped)", m.excludedFiles)
+		}
+		v := tea.NewView(centerText(text, m.width, m.height))
+		v.AltScreen = true
+		return v
 	case StateBrowse:
 		v := tea.NewView(m.renderBrowse())
 		v.AltScreen = true
@@ -363,6 +390,29 @@ func (m Model) View() tea.View {
 	default:
 		return tea.NewView("")
 	}
+}
+
+// centerText pads text with leading newlines and spaces to centre it
+// vertically and horizontally within the given dimensions. When width
+// or height is zero (no WindowSizeMsg received yet), the text is
+// returned without padding.
+func centerText(text string, width, height int) string {
+	textWidth := visibleWidth(text)
+	leftPad := 0
+	if width > textWidth {
+		leftPad = (width - textWidth) / 2
+	}
+	topPad := 0
+	if height > 1 {
+		topPad = (height - 1) / 2
+	}
+	var b strings.Builder
+	for i := 0; i < topPad; i++ {
+		b.WriteString("\n")
+	}
+	b.WriteString(strings.Repeat(" ", leftPad))
+	b.WriteString(text)
+	return b.String()
 }
 
 // SearchCompleteMsg signals that collection and index preparation are

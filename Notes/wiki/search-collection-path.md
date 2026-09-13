@@ -1,4 +1,4 @@
-# Search collection path (Issue #3, extended by Issue #4)
+# Search collection path (Issue #3, extended by Issues #4 and #8)
 
 The ripgrep execution and result-collection pipeline delivered by
 [Issue #3](../issues/003-spawn-rg-collect-results-searching-screen.md),
@@ -6,11 +6,13 @@ replacing the Issue #2 stub with real subprocess execution, JSON
 stream collection, and an interim searching/summary TUI.
 [Issue #4](../issues/004-cancellation-child-cleanup-terminal-restore.md)
 added cancellation, child termination/reaping, terminal restoration,
-and controlled-failure cleanup. Relevant PRD sections: *Implementation
-Decisions → Invocation and child arguments*, *Module Design → CLI /
-SearchIndex / App*, *Testing Decisions → CLI / SearchIndex / App /
-Subprocess boundary / Responsiveness boundaries*, and *Outcome and
-exit-status contract*.
+and controlled-failure cleanup. [Issue #8](../issues/008-no-results-screen-and-binary-exclusion.md)
+added binary-file exclusion during indexing and a distinct no-results
+TUI outcome for searches that complete successfully but yield no usable
+results. Relevant PRD sections: *Implementation Decisions → Invocation
+and child arguments*, *Module Design → CLI / SearchIndex / App*,
+*Testing Decisions → CLI / SearchIndex / App / Subprocess boundary /
+Responsiveness boundaries*, and *Outcome and exit-status contract*.
 
 ## Process boundary
 
@@ -54,7 +56,10 @@ Recognized event types:
 - `begin` — opens a file; carries the path.
 - `match` — a matched line; carries path, line number, line text/bytes,
   and submatches.
-- `end` — closes a file.
+- `end` — closes a file. Carries `binary_offset`: a null value means the
+  file is text (Issue #8 retains its matches); a non-null nonnegative
+  integer means ripgrep detected binary content, and Issue #8 drops the
+  file and all its previously collected matches.
 - `summary` — final stream record (currently carries no data we index).
 - `context` — recognized but ignored (Issue #3 does not display context
   lines).
@@ -64,6 +69,22 @@ content. Text and bytes representations of the same logical value produce
 identical index entries. Raw non-UTF-8 bytes are retained when ripgrep
 reports the `bytes` encoding, so path identity and line content are
 preserved exactly.
+
+### Binary exclusion (Issue #8)
+
+A valid `end` event with a non-null `binary_offset` excludes its file:
+
+- All previously collected matches for that file are dropped from the
+  builder.
+- The file is counted as a distinct excluded file.
+- Match records arriving after the binary `end` for the same file are
+  also dropped.
+- Matches for other files are unaffected.
+
+A missing `end` event does not confirm nonbinary status; existing
+matches are retained. The usable-results value is the retained stop
+count after binary filtering, never the raw received match-event
+count. This is the single value the app outcome logic consumes.
 
 ## SearchIndex
 
@@ -105,7 +126,9 @@ raw path bytes, so non-UTF-8 paths sort after ASCII paths by byte value.
 
 - `Index.Len()` — number of stops (matched lines).
 - `Index.Stops()` — a copy of the stops slice (caller-safe).
-- `Index.Files()` — number of distinct files with matches.
+- `Index.Files()` — number of distinct files with retained matches.
+- `Index.ExcludedFiles()` (Issue #8) — number of distinct files dropped
+  by a non-null `binary_offset` in their `end` event.
 
 ## App model
 
@@ -133,7 +156,14 @@ raw path bytes, so non-UTF-8 paths sort after ASCII paths by byte value.
 - `StateSearching` — initial state while rg is running and results are
   being collected.
 - `StateSummary` — collection and index preparation are complete; the
-  interim summary is shown.
+  interim summary is shown (backward-compatible path when no index is
+  available).
+- `StateBrowse` — two-pane browse state shown after a completed search
+  with usable results.
+- `StateNoResults` (Issue #8) — centred no-results screen shown after a
+  complete successful search (rg exit 0 or 1) with no usable results.
+  The optional `(N binary files skipped)` suffix is appended when every
+  matched file was excluded.
 - `StateStartFailed` — rg could not be started; the entry point should
   print the diagnostic and exit 2.
 - `StateFailed` (Issue #4) — controlled application failure after the
@@ -169,23 +199,32 @@ a `ControlledFailureMsg` when it fires.
 
 `Update` handles:
 
-- `SearchCompleteMsg` — if not cancelled, transitions to `StateSummary`,
-  records file and line counts. If cancelled, ignores the message
-  (late-completion rejection).
+- `SearchCompleteMsg` — if not cancelled, transitions based on the
+  index: with usable results (Len > 0) to `StateBrowse` and loads the
+  first file; with no usable results and a non-nil index (Issue #8) to
+  `StateNoResults`, recording the excluded-file count for the binary
+  skip suffix; with a nil index (backward-compatible path) to
+  `StateSummary`. If cancelled, ignores the message (late-completion
+  rejection).
 - `SearchFailedMsg` — transitions to `StateStartFailed`, records the
   sanitized diagnostic, sets exit code 2, and quits.
 - `ControlledFailureMsg` (Issue #4) — transitions to `StateFailed`,
   records the sanitized diagnostic, sets exit code 2, cancels the
   collection goroutine, and quits.
 - `tea.KeyPressMsg` — `q` while searching cancels (exit 130); `q` from
-  summary quits (exit 0); Ctrl-C in any state cancels (exit 130);
-  escape is a no-op.
+  summary quits (exit 0); `q` from no-results (Issue #8) quits with exit
+  1 through the same cleanup path as browse; `q` from browse quits
+  (exit 0); Ctrl-C in any state cancels (exit 130); escape is a no-op.
 - `tea.WindowSizeMsg` — records width and height.
 
 `View` renders:
 
 - `StateSearching` — `Searching…` (alt screen enabled).
 - `StateSummary` — `N files, M matched lines` (alt screen enabled).
+- `StateNoResults` (Issue #8) — centred `No results found`, with the
+  optional `(N binary files skipped)` suffix appended when every matched
+  file was excluded and `N > 0` (alt screen enabled).
+- `StateBrowse` — two-pane browse view (alt screen enabled).
 - other states — empty.
 
 ### Cancellation (Issue #4)
@@ -222,6 +261,31 @@ path:
 4. The diagnostic is never written both directly and through a later
    replay mechanism (exactly-once across mechanisms).
 5. Exit status is 2.
+
+### No-results outcome (Issue #8)
+
+A complete successful search with no usable results presents the
+no-results screen. This covers two cases:
+
+- ripgrep exit status 1 with an empty stream (no matches at all).
+- ripgrep exit status 0 where every matched file was binary-excluded.
+
+The screen shows centred `No results found`. When every matched file
+was excluded, the suffix `(N binary files skipped)` is appended, where
+`N` is the distinct excluded-file count from the index. The
+usable-results value is the retained stop count after binary
+filtering, exposed as the single value the outcome logic consumes.
+
+Key behavior from the no-results screen:
+
+- `q` dismisses the screen and exits 1 through the same Issue #4
+  cleanup path as browse (process cancellation, child reaping,
+  terminal restoration).
+- `Esc` is a no-op.
+- `ctrl+c` exits 130 through the existing cancellation/cleanup paths.
+
+Mixed streams (one file excluded, one retained) transition to ordinary
+browsing with the retained stops; the no-results screen is not shown.
 
 ### Terminal restoration (Issue #4)
 

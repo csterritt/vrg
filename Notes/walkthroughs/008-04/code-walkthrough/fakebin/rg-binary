@@ -1,0 +1,12 @@
+#!/bin/bash
+# Fake rg that emits a stream where every matched file is binary-excluded.
+# Emits matches for one file, then an end event with a non-null
+# binary_offset, then a summary. Exits 0 (rg found matches but the file
+# was binary).
+cat <<'EOF'
+{"type":"begin","data":{"path":{"text":"fixtures/src/binary.bin"}}}
+{"type":"match","data":{"path":{"text":"fixtures/src/binary.bin"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}],"absolute_offset":0}}
+{"type":"end","data":{"path":{"text":"fixtures/src/binary.bin"},"binary_offset":42}}
+{"type":"summary","data":{"elapsed_total":{"secs":0,"nanos":1000,"human":"1µs"},"stats":{"matches":1,"matches_with_matches":1}}}
+EOF
+exit 0

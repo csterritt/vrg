@@ -15,10 +15,11 @@ Catalog of all wiki pages for the vrg project.
   flag allow-list, ordered exact-spelling scan records, combined shorts,
   cumulative `-u`, assignment rejection, exact child argv
 - [search-collection-path.md](search-collection-path.md) — Issue #3
-  (extended by Issue #4): ripgrep subprocess execution, dual-pipe
-  drainage, SearchIndex parsing, the searching/summary TUI lifecycle,
-  cancellation, child termination/reaping, terminal restoration, and
-  controlled-failure cleanup
+  (extended by Issues #4 and #8): ripgrep subprocess execution,
+  dual-pipe drainage, SearchIndex parsing with binary-file exclusion,
+  the searching/summary/no-results TUI lifecycle, cancellation, child
+  termination/reaping, terminal restoration, and controlled-failure
+  cleanup
 - [browse-tracer.md](browse-tracer.md) — Issue #5 (extended by Issue #7):
   two-pane browse view with file list, filename rule, gutter, true-inverse
   match highlights, current-match underline, async file loading with

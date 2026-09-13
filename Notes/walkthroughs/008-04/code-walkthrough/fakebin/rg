@@ -1,0 +1,4 @@
+#!/bin/bash
+# Fake rg that emits an empty result stream (no matches, exit 1).
+# This simulates ripgrep exit status 1 with no matches.
+exit 1

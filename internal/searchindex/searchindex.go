@@ -17,6 +17,9 @@ import (
 // unsigned raw path bytes then ascending line number.
 type Index struct {
 	stops []Stop
+	// excludedFiles is the count of distinct files dropped by a
+	// non-null binary_offset in their end event.
+	excludedFiles int
 }
 
 // Stops returns a copy of the navigation stops ordered by unsigned raw
@@ -49,6 +52,16 @@ func (idx *Index) Files() int {
 		seen[string(s.RawPath)] = true
 	}
 	return len(seen)
+}
+
+// ExcludedFiles returns the number of distinct files dropped by a
+// non-null binary_offset in their end event. These files and all
+// their previously collected matches were removed from the index.
+func (idx *Index) ExcludedFiles() int {
+	if idx == nil {
+		return 0
+	}
+	return idx.excludedFiles
 }
 
 // Stop is one navigation stop: one matched source line in one file.
@@ -98,6 +111,12 @@ type Range struct {
 type Builder struct {
 	workdir string
 	stops   map[stopKey]*stopAccum
+	// excluded tracks raw paths dropped by a non-null binary_offset in
+	// their end event. Matches for these paths are dropped and not
+	// re-added.
+	excluded map[string]bool
+	// excludedCount is the number of distinct excluded files.
+	excludedCount int
 }
 
 // stopKey identifies one navigation stop by raw path bytes and line
@@ -122,8 +141,9 @@ type stopAccum struct {
 // unchanged.
 func NewBuilder(workdir string) *Builder {
 	return &Builder{
-		workdir: workdir,
-		stops:   make(map[stopKey]*stopAccum),
+		workdir:  workdir,
+		stops:    make(map[stopKey]*stopAccum),
+		excluded: make(map[string]bool),
 	}
 }
 
@@ -190,6 +210,10 @@ func (b *Builder) parseMatch(data json.RawMessage) error {
 	if err != nil {
 		return fmt.Errorf("match: path: %w", err)
 	}
+	// Drop matches for files already excluded by a binary end event.
+	if b.excluded[string(rawPath)] {
+		return nil
+	}
 	line, err := d.Lines.decode()
 	if err != nil {
 		return fmt.Errorf("match: lines: %w", err)
@@ -226,6 +250,9 @@ func (b *Builder) parseMatch(data json.RawMessage) error {
 }
 
 // parseEnd validates an end record's path and binary_offset fields.
+// A non-null binary_offset drops that file and all its previously
+// collected matches from the builder and counts it as a distinct
+// excluded file.
 func (b *Builder) parseEnd(data json.RawMessage) error {
 	var d struct {
 		Path         textBytes       `json:"path"`
@@ -234,7 +261,8 @@ func (b *Builder) parseEnd(data json.RawMessage) error {
 	if err := json.Unmarshal(data, &d); err != nil {
 		return fmt.Errorf("end: invalid data: %w", err)
 	}
-	if _, err := d.Path.decode(); err != nil {
+	rawPath, err := d.Path.decode()
+	if err != nil {
 		return fmt.Errorf("end: path: %w", err)
 	}
 	if len(d.BinaryOffset) == 0 {
@@ -248,8 +276,25 @@ func (b *Builder) parseEnd(data json.RawMessage) error {
 		if n < 0 {
 			return fmt.Errorf("end: binary_offset %d < 0", n)
 		}
+		// Non-null binary_offset: exclude this file and drop its
+		// previously collected matches.
+		pathKey := string(rawPath)
+		if !b.excluded[pathKey] {
+			b.excluded[pathKey] = true
+			b.excludedCount++
+		}
+		b.dropStops(pathKey)
 	}
 	return nil
+}
+
+// dropStops removes all stops for the given raw path from the builder.
+func (b *Builder) dropStops(pathKey string) {
+	for key := range b.stops {
+		if key.path == pathKey {
+			delete(b.stops, key)
+		}
+	}
 }
 
 // parseSummary validates that a summary record has a data object.
@@ -292,7 +337,7 @@ func (b *Builder) Build() *Index {
 		}
 		return stops[i].LineNumber < stops[j].LineNumber
 	})
-	return &Index{stops: stops}
+	return &Index{stops: stops, excludedFiles: b.excludedCount}
 }
 
 // resolvePath joins a relative raw path with the working directory

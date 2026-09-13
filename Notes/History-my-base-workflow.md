@@ -59,3 +59,12 @@ Usage
  Input tokens: 232701 tokens
  Output tokens: 62485 tokens
  Cached input tokens: 13653632 tokens
+
+----
+Task 008-no-results-screen-and-binary-exclusion.md
+
+Usage
+ Agent messages: 175 messages
+ Input tokens: 235627 tokens
+ Output tokens: 67439 tokens
+ Cached input tokens: 16769984 tokens

@@ -174,7 +174,7 @@ if [ -n "$VRG_TEST_READY" ]; then
 	touch "$VRG_TEST_READY"
 fi
 echo '{"type":"begin","data":{"path":{"text":"test.txt"}}}'
-echo '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
 echo '{"type":"end","data":{"path":{"text":"test.txt"},"binary_offset":null}}'
 echo '{"type":"summary","data":{}}'
 if [ -n "$VRG_TEST_HANDSHAKE" ]; then

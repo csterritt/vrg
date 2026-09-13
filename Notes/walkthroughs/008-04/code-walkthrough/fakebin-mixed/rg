@@ -1,0 +1,13 @@
+#!/bin/bash
+# Fake rg that emits a mixed stream: one binary-excluded file and one
+# retained text file. Exits 0.
+cat <<'EOF'
+{"type":"begin","data":{"path":{"text":"fixtures/src/binary.bin"}}}
+{"type":"match","data":{"path":{"text":"fixtures/src/binary.bin"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}],"absolute_offset":0}}
+{"type":"end","data":{"path":{"text":"fixtures/src/binary.bin"},"binary_offset":42}}
+{"type":"begin","data":{"path":{"text":"fixtures/src/text.txt"}}}
+{"type":"match","data":{"path":{"text":"fixtures/src/text.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}],"absolute_offset":0}}
+{"type":"end","data":{"path":{"text":"fixtures/src/text.txt"},"binary_offset":null}}
+{"type":"summary","data":{"elapsed_total":{"secs":0,"nanos":1000,"human":"1µs"},"stats":{"matches":2,"matches_with_matches":2}}}
+EOF
+exit 0

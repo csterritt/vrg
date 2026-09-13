@@ -998,3 +998,150 @@ func TestPathIdentityForMerging(t *testing.T) {
 		t.Fatalf("Len = %d, want 2 (different raw paths do not merge even if they resolve to the same file)", idx.Len())
 	}
 }
+
+// --- Issue #8 binary exclusion tests ---
+
+// TestBinaryExclusionDropsMatches verifies that a valid end event with a
+// non-null binary_offset drops that file and all its previously collected
+// matches from the index, and that ExcludedFiles counts the distinct
+// excluded file.
+func TestBinaryExclusionDropsMatches(t *testing.T) {
+	idx := build(t, "/work",
+		textBegin("src/a.go"),
+		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+		textMatch("src/a.go", "world\n", 3, subSpec{"world", 0, 5}),
+		endRecord("src/a.go", 42),
+		summaryRecord(),
+	)
+	if idx.Len() != 0 {
+		t.Fatalf("Len = %d, want 0 (binary end must drop all matches for the file)", idx.Len())
+	}
+	if idx.ExcludedFiles() != 1 {
+		t.Fatalf("ExcludedFiles = %d, want 1", idx.ExcludedFiles())
+	}
+}
+
+// TestBinaryExclusionRetainsOtherFiles verifies that a binary end event
+// for one file does not affect matches from other files.
+func TestBinaryExclusionRetainsOtherFiles(t *testing.T) {
+	idx := build(t, "/work",
+		textBegin("src/a.go"),
+		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+		endRecord("src/a.go", 42),
+		textBegin("src/b.go"),
+		textMatch("src/b.go", "world\n", 1, subSpec{"world", 0, 5}),
+		endRecord("src/b.go", nil),
+		summaryRecord(),
+	)
+	if idx.Len() != 1 {
+		t.Fatalf("Len = %d, want 1 (retained file's matches must survive)", idx.Len())
+	}
+	if idx.ExcludedFiles() != 1 {
+		t.Fatalf("ExcludedFiles = %d, want 1", idx.ExcludedFiles())
+	}
+	stops := idx.Stops()
+	if len(stops) != 1 || string(stops[0].RawPath) != "src/b.go" {
+		t.Fatalf("stops = %v, want only src/b.go", stops)
+	}
+}
+
+// TestBinaryExclusionDistinctFileCount verifies that excluding two
+// distinct files counts both in ExcludedFiles.
+func TestBinaryExclusionDistinctFileCount(t *testing.T) {
+	idx := build(t, "/work",
+		textBegin("src/a.go"),
+		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+		endRecord("src/a.go", 10),
+		textBegin("src/b.go"),
+		textMatch("src/b.go", "world\n", 1, subSpec{"world", 0, 5}),
+		endRecord("src/b.go", 20),
+		summaryRecord(),
+	)
+	if idx.Len() != 0 {
+		t.Fatalf("Len = %d, want 0 (both files excluded)", idx.Len())
+	}
+	if idx.ExcludedFiles() != 2 {
+		t.Fatalf("ExcludedFiles = %d, want 2 (distinct excluded files counted)", idx.ExcludedFiles())
+	}
+}
+
+// TestBinaryExclusionNullOffsetRetainsMatches verifies that an end
+// event with a null binary_offset does not exclude the file.
+func TestBinaryExclusionNullOffsetRetainsMatches(t *testing.T) {
+	idx := build(t, "/work",
+		textBegin("src/a.go"),
+		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+		endRecord("src/a.go", nil),
+		summaryRecord(),
+	)
+	if idx.Len() != 1 {
+		t.Fatalf("Len = %d, want 1 (null binary_offset must not exclude)", idx.Len())
+	}
+	if idx.ExcludedFiles() != 0 {
+		t.Fatalf("ExcludedFiles = %d, want 0", idx.ExcludedFiles())
+	}
+}
+
+// TestBinaryExclusionMixedRetention verifies that in a mixed stream
+// where one file is binary-excluded and one is retained, the retained
+// file's matches survive and the excluded count is 1. This is the
+// usable-results value the outcome logic consumes: retained stops after
+// filtering, never received match events.
+func TestBinaryExclusionMixedRetention(t *testing.T) {
+	idx := build(t, "/work",
+		textBegin("src/binary.go"),
+		textMatch("src/binary.go", "match1\n", 1, subSpec{"match1", 0, 6}),
+		textMatch("src/binary.go", "match2\n", 5, subSpec{"match2", 0, 6}),
+		endRecord("src/binary.go", 100),
+		textBegin("src/text.go"),
+		textMatch("src/text.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+		endRecord("src/text.go", nil),
+		summaryRecord(),
+	)
+	if idx.Len() != 1 {
+		t.Fatalf("Len = %d, want 1 (usable results = retained stops after filtering)", idx.Len())
+	}
+	if idx.Files() != 1 {
+		t.Fatalf("Files = %d, want 1 (only retained file counted)", idx.Files())
+	}
+	if idx.ExcludedFiles() != 1 {
+		t.Fatalf("ExcludedFiles = %d, want 1", idx.ExcludedFiles())
+	}
+	stops := idx.Stops()
+	if len(stops) != 1 || string(stops[0].RawPath) != "src/text.go" {
+		t.Fatalf("stops = %v, want only src/text.go", stops)
+	}
+}
+
+// TestBinaryExclusionNoExcludedFilesForEmptyStream verifies that an
+// empty stream with no matches and no binary exclusions reports zero
+// excluded files.
+func TestBinaryExclusionNoExcludedFilesForEmptyStream(t *testing.T) {
+	idx := build(t, "/work",
+		summaryRecord(),
+	)
+	if idx.Len() != 0 {
+		t.Fatalf("Len = %d, want 0", idx.Len())
+	}
+	if idx.ExcludedFiles() != 0 {
+		t.Fatalf("ExcludedFiles = %d, want 0", idx.ExcludedFiles())
+	}
+}
+
+// TestBinaryExclusionMatchAfterEndDropped verifies that a match record
+// arriving after a binary end event for the same file is also dropped.
+func TestBinaryExclusionMatchAfterEndDropped(t *testing.T) {
+	idx := build(t, "/work",
+		textBegin("src/a.go"),
+		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+		endRecord("src/a.go", 42),
+		textMatch("src/a.go", "late\n", 2, subSpec{"late", 0, 4}),
+		summaryRecord(),
+	)
+	if idx.Len() != 0 {
+		t.Fatalf("Len = %d, want 0 (match after binary end must be dropped)", idx.Len())
+	}
+	if idx.ExcludedFiles() != 1 {
+		t.Fatalf("ExcludedFiles = %d, want 1", idx.ExcludedFiles())
+	}
+}

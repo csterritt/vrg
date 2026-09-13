@@ -89,6 +89,17 @@ table, parser config, and generated help cannot drift.
 - Schema matrix conformance, multiple files and lines, empty indexes,
   line terminator retention, reusable builders, copy semantics from
   `Stops()`.
+- Issue #8 binary exclusion tests (`TestBinaryExclusionDropsMatches`,
+  `TestBinaryExclusionRetainsOtherFiles`,
+  `TestBinaryExclusionDistinctFileCount`,
+  `TestBinaryExclusionNullOffsetRetainsMatches`,
+  `TestBinaryExclusionMixedRetention`,
+  `TestBinaryExclusionNoExcludedFilesForEmptyStream`,
+  `TestBinaryExclusionMatchAfterEndDropped`) — a non-null `binary_offset`
+  in an `end` event drops the file and all its previously collected
+  matches, counts the file as a distinct excluded file, drops later
+  matches for the same file, retains matches for other files, and
+  reports the retained stop count as the usable-results value.
 
 ## internal/safepresentation
 
@@ -261,6 +272,33 @@ table, parser config, and generated help cannot drift.
   highlights add underline to the true inverse (30;47;4m).
 - `TestBrowseCurrentMatchUnderlineLight` — light current matched line
   highlights add underline to the true inverse (37;40;4m).
+
+`browse_test.go` (Issue #8, external package `app_test`):
+
+- `TestNoResultsEmptyStream` — a complete successful search with no
+  matches and no binary exclusions presents the centred `No results
+  found` screen (rg-1 emptiness case).
+- `TestNoResultsAllBinary` — a search where every matched file is
+  binary-excluded presents `No results found (N binary files skipped)`
+  (rg-0 all-filtered case).
+- `TestNoResultsSingleBinary` — the binary skip suffix with a count
+  of 1.
+- `TestNoResultsQExitsOne` — `q` from the no-results screen exits 1
+  through the Issue #4 cleanup path.
+- `TestNoResultsQExitsOneAllBinary` — `q` from the no-results screen
+  with binary exclusions also exits 1.
+- `TestNoResultsEscIsNoOp` — `Esc` from the no-results screen is a
+  no-op.
+- `TestNoResultsCtrlCExits130` — `ctrl+c` from the no-results screen
+  exits 130.
+- `TestMixedRetentionBrowses` — a mixed stream (one file excluded, one
+  retained) browses with usable results of 1, not the no-results
+  screen.
+- `TestNoResultsDoesNotShowSearching` — the no-results view does not
+  contain `Searching`.
+- `TestNoResultsCancelledRejectsLateCompletion` — a late
+  `SearchCompleteMsg` after cancellation from the no-results screen
+  does not revive the UI.
 
 ## cmd/vrg (subprocess boundary)
 

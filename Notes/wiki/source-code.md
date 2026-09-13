@@ -38,7 +38,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   raw non-UTF-8 path and line bytes, merges same-line matches, sorts and
   merges overlapping/adjacent submatch ranges, resolves relative paths
   against the working directory without canonicalization, and orders
-  files by unsigned byte ordering of raw path bytes. See
+  files by unsigned byte ordering of raw path bytes. Issue #8 added
+  binary exclusion: a non-null `binary_offset` in an `end` event drops
+  the file and all its previously collected matches from the builder,
+  counts the file as a distinct excluded file, and drops later matches
+  for the same file. `Index.ExcludedFiles()` exposes the distinct
+  excluded-file count. See
   [search-collection-path](search-collection-path.md).
 
 ## internal/app
@@ -67,7 +72,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `sanitizeDiagnostic` (which only mapped ESC and C1 CSI to spaces)
   with a delegate to `safepresentation.EscapeDiagnostic`, satisfying
   the full diagnostic contract: line preservation, tab expansion, and
-  complete control escaping. See
+  complete control escaping. Issue #8 added `StateNoResults`: a
+  centred no-results screen shown after a complete successful search
+  (rg exit 0 or 1) with no usable results, with the optional
+  `(N binary files skipped)` suffix when every matched file was
+  excluded. The outcome logic consumes the retained stop count after
+  binary filtering as the single usable-results value. `q` from
+  no-results exits 1 through the Issue #4 cleanup path; `Esc` is a
+  no-op; `ctrl+c` exits 130. See
   [search-collection-path](search-collection-path.md) and
   [browse-tracer](browse-tracer.md).
 
