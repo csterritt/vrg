@@ -188,12 +188,13 @@ func TestContinuationGutterBlank(t *testing.T) {
 // row is beyond the visible range from the top, forcing a reveal.
 func TestWrappedTargetRevealLongLine(t *testing.T) {
 	// 1000-char line with a match at byte 500.
-	// At terminal width 50, fileListWidth(50)=20, so panel width =
-	// 50 - 20 - 1 = 29. Gutter 4 → text width 25.
-	// 1000 chars at width 25 = 40 rows. Match at byte 500 → row 20.
+	// At terminal width 50, the Issue #24 list width formula gives
+	// min(8+2, floor(0.4*50), 50-(4+10+0)) = min(10, 20, 36) = 10.
+	// Panel width = 50-10-1 = 39. Gutter 4 → text width 35.
+	// 1000 chars at width 35 = 29 rows. Match at byte 500 → row 14.
 	// Height 10 → contentHeight 9, floor(9/3) = 3.
-	// Row 20 is not visible from top (20 >= 9).
-	// Reveal: offset = 20 - 3 = 17. maxOffset = 40 - 9 = 31. 17 ≤ 31.
+	// Row 14 is not visible from top (14 >= 9).
+	// Reveal: offset = 14 - 3 = 11. maxOffset = 29 - 9 = 20. 11 ≤ 20.
 	idx := buildIndex(t, "/work",
 		textMatch("src/a.go", strings.Repeat("x", 500)+"TARGET"+strings.Repeat("x", 494)+"\n", 1,
 			subSpec{"TARGET", 500, 506}),
@@ -202,10 +203,10 @@ func TestWrappedTargetRevealLongLine(t *testing.T) {
 	line := ml(1, display)
 	buf := makeBuf([]filebuffer.Line{line}, 1, 4)
 	m := setupBrowseWithSize(t, idx, buf, 50, 10)
-	// The match at byte 500 is in wrapped row 20.
-	// Reveal: offset = 20 - 3 = 17.
-	if m.ViewportOffset() != 17 {
-		t.Fatalf("ViewportOffset = %d, want 17 (wrapped target reveal at one-third)", m.ViewportOffset())
+	// The match at byte 500 is in wrapped row 14.
+	// Reveal: offset = 14 - 3 = 11.
+	if m.ViewportOffset() != 11 {
+		t.Fatalf("ViewportOffset = %d, want 11 (wrapped target reveal at one-third)", m.ViewportOffset())
 	}
 }
 

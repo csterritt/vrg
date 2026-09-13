@@ -817,3 +817,48 @@ Sources: `Notes/tasks/023-zero-width-match-markers.md`,
 `internal/filebuffer/marker_test.go`,
 `internal/viewport/marker_test.go`,
 `internal/app/marker_indicator_test.go`.
+
+## [2026-09-13] ingest | Issue #24 file list layout, truncation, and toggle
+
+Issue #24: replaced the Issue #5 placeholder file-list width with a
+responsive formula and added hide/show toggles, grapheme-safe left
+truncation, active-entry auto-scroll, and a filename-row buffer-status
+note slot. `ComputeListWidth(termWidth, longestPathWidth, gutterWidth,
+reservedIndicator, visible)` returns the nonnegative minimum of
+`longestPathWidth+2`, `floor(0.40×termWidth)`, and
+`termWidth−(gutterWidth+10+reservedIndicator)`; 0 when not visible.
+`longestPathWidth` is computed from sanitized index paths measured
+through the shared grapheme policy. The visibility preference
+(`listVisible`, initially true) is distinct from the computed width:
+a computed zero width draws no list cells but does not change the
+preference or auto-toggle. Toggles: `left`/`tab` hide, `right`/
+`shift+tab` show. `toggleListVisible` rebuilds via `buildViewport` so
+the relayout goes through Issue #17's prepared-layout path with anchor
+preservation. `TruncateLeftGrapheme(s, maxCells)` left-truncates with
+a leading `…` via `safepresentation.GraphemeClusters`, never splitting
+grapheme clusters. `updateListOffset`/`currentFileIndex` keep the
+active entry visible on navigation and render. `renderBrowse` queries
+only the visible file-list window. `renderFilenameRow` adds a
+buffer-status note slot (path truncated to fit the panel width), with
+the real note texts owned by Issues #26/#29/#30 and a synthetic
+`WithStatusNote` test seam. `LayoutKey()` uses `m.ListWidth()` so
+every text-width change flows through Issue #17. Removed the old
+placeholder `fileListWidth` function. Updated
+`TestViewportAnchorOnResize` and `TestWrappedTargetRevealLongLine` for
+the new width formula. Tests in `internal/app/filelist_layout_test.go`
+cover the formula (each term winning, 40% floor rounding, zero when
+hidden, nonnegative clamp), grapheme-safe truncation (ASCII, wide,
+combining, no-truncate-when-fits), toggles (tab/left hide,
+shift+tab/right show), anchor preservation through toggle and resize,
+zero-width visibility preference, active-entry auto-scroll,
+visible-window render-cost guard, filename-row status-note slot, and
+list-entry/filename-row truncation. Created
+[file-list-layout](file-list-layout.md); updated [index](index.md),
+[source-code](source-code.md) (internal/app entry), and
+[unit-tests](unit-tests.md) (filelist_layout_test.go entry). Sources:
+`Notes/tasks/024-file-list-layout-width-truncation-toggle.md`,
+`Notes/PRD-vrg.md` (Layout and indicators; Navigation, viewport, and
+logical anchors; Resources and responsiveness; Text, graphemes, and
+safe presentation), `internal/app/app.go`,
+`internal/app/filelist_layout_test.go`,
+`internal/app/anchor_test.go`, `internal/app/wrap_test.go`.

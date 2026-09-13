@@ -203,3 +203,12 @@ Usage
  Input tokens: 222825 tokens
  Output tokens: 86755 tokens
  Cached input tokens: 15662784 tokens
+
+----
+Task 024-file-list-layout-width-truncation-toggle.md
+
+Usage
+ Agent messages: 121 messages
+ Input tokens: 191363 tokens
+ Output tokens: 61277 tokens
+ Cached input tokens: 12545024 tokens

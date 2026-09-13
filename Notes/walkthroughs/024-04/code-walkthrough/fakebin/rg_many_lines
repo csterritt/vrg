@@ -1,0 +1,10 @@
+#!/bin/sh
+# Fake rg that emits a match in a file with 10000 lines so the gutter
+# grows to 5 digits (10000) + 2 spaces = 7 cells. Simulates
+# `rg 'line 5000' demo_artifacts/many_lines.txt`.
+path="demo_artifacts/many_lines.txt"
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"'"$path"'"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"line 5000\n"},"line_number":5000,"submatches":[{"match":{"text":"line 5000"},"start":0,"end":9}]}}'
+printf '%s\n' '{"type":"end","data":{"path":{"text":"'"$path"'"},"binary_offset":null}}'
+printf '%s\n' '{"type":"summary","data":{}}'
+exit 0

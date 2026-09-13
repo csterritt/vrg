@@ -270,7 +270,31 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   and `clusterCellWidth` derive visibility from the actually rendered
   cells after grapheme clipping (split clusters do not count), exclude
   the reserved column, and use `Theme.Indicator`; wrap mode draws
-  neither. See
+  neither. Issue #24 replaced the placeholder `fileListWidth`
+  function with the responsive file-list layout: `listVisible bool`
+  (initially true), `listOffset int`, `longestPathWidth int`, and
+  `statusNote func() string` fields; `ListVisible()`/`ListWidth()`/
+  `ListOffset()`/`ViewportAnchor()` accessors;
+  `ComputeListWidth(termWidth, longestPathWidth, gutterWidth,
+  reservedIndicator, visible)` (nonnegative minimum of
+  `longestPathWidth+2`, `floor(0.40×termWidth)`, and
+  `termWidth−(gutterWidth+10+reservedIndicator)`; 0 when not visible);
+  `TruncateLeftGrapheme(s, maxCells)` (grapheme-safe left truncation
+  with leading `…` via `safepresentation.GraphemeClusters`);
+  `computeLongestPathWidth` (measures sanitized index paths through
+  the shared grapheme policy); `toggleListVisible(visible)` (updates
+  preference and rebuilds via `buildViewport`); `updateListOffset`
+  and `currentFileIndex` (active-entry auto-scroll on navigation
+  and render); `renderFilenameRow` (filename row with a buffer-
+  status note slot, path truncated to fit the panel width);
+  `graphemeCellWidthString` helper; `LayoutKey()` uses
+  `m.ListWidth()` for the panel width; `handleNavigate` calls
+  `updateListOffset` on every actual navigation; `renderBrowse`
+  uses `m.ListWidth()`, auto-scrolls, queries only visible provider
+  entries, applies `TruncateLeftGrapheme`, and skips list rendering
+  for zero width; `renderContentPanel` delegates its first line to
+  `renderFilenameRow`; `WithStatusNote(func() string)` test seam for
+  the synthetic status note. See
   [search-collection-path](search-collection-path.md),
   [browse-tracer](browse-tracer.md),
   [outcome-contract](outcome-contract.md),
@@ -281,7 +305,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md),
   [horizontal-panning](horizontal-panning.md),
   [horizontal-reveal](horizontal-reveal.md),
-  and [hidden-content-indicators](hidden-content-indicators.md).
+  [hidden-content-indicators](hidden-content-indicators.md),
+  and [file-list-layout](file-list-layout.md).
 
 ## internal/safepresentation
 

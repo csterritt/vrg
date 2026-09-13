@@ -81,16 +81,18 @@ func TestViewportAnchorOnResize(t *testing.T) {
 	idx := buildIndex(t, "/work",
 		textMatch("src/a.go", strings.Repeat("x", 500)+"\n", 1, subSpec{"x", 0, 1}),
 	)
-	// 500-char line. At terminal width 30, fileListWidth(30)=20, panel
-	// width = 30-20-1 = 9, gutter 4 → text width 5 (wrap mode).
-	// 500 chars at width 5 = 100 rows. contentHeight = 9, maxOffset = 91.
+	// 500-char line. At terminal width 30, the Issue #24 list width
+	// formula gives min(8+2, floor(0.4*30), 30-(4+10+0)) = min(10, 12,
+	// 16) = 10. Panel width = 30-10-1 = 19, gutter 4 → text width 15
+	// (wrap mode). 500 chars at width 15 = 34 rows. contentHeight = 9,
+	// maxOffset = 25.
 	display := strings.Repeat("x", 500)
 	line := ml(1, display)
 	buf := makeBuf([]filebuffer.Line{line}, 1, 4)
 	m := setupBrowseWithSize(t, idx, buf, 30, 10)
 
-	// Scroll down 5 rows. At width 5, row 5 covers cells 25-29 of line 0.
-	// The anchor should be (0, 25).
+	// Scroll down 5 rows. At width 15, row 5 covers cells 75-89 of
+	// line 0. The anchor should be (0, 75).
 	for i := 0; i < 5; i++ {
 		m, _ = update(t, m, keyPress(tea.KeyDown))
 	}
@@ -98,13 +100,14 @@ func TestViewportAnchorOnResize(t *testing.T) {
 		t.Fatalf("after 5 down, ViewportOffset = %d, want 5", m.ViewportOffset())
 	}
 
-	// Widen to terminal width 50. fileListWidth(50)=20, panel width = 29,
-	// gutter 4 → text width 25 (wrap mode). 500 chars at width 25 = 20 rows.
-	// contentHeight = 9, maxOffset = 11. Old ordinal 5 is valid (5 <= 11).
-	// But the anchor (0, 25) maps to row 1 (cells 25-49) at width 25.
-	// The offset should be 1, not 5 (the old ordinal).
+	// Widen to terminal width 50. List width = min(10, 20, 36) = 10.
+	// Panel width = 50-10-1 = 39, gutter 4 → text width 35 (wrap
+	// mode). 500 chars at width 35 = 15 rows. contentHeight = 9,
+	// maxOffset = 6. Old ordinal 5 is valid (5 <= 6). But the anchor
+	// (0, 75) maps to row 2 (cells 70-104) at width 35. The offset
+	// should be 2, not 5 (the old ordinal).
 	m = resize(t, m, 50, 10)
-	if m.ViewportOffset() != 1 {
-		t.Fatalf("after widen, ViewportOffset = %d, want 1 (anchor (0, 25) → row 1 at width 25, not old ordinal 5)", m.ViewportOffset())
+	if m.ViewportOffset() != 2 {
+		t.Fatalf("after widen, ViewportOffset = %d, want 2 (anchor (0, 75) → row 2 at width 35, not old ordinal 5)", m.ViewportOffset())
 	}
 }

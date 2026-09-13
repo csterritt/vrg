@@ -1,0 +1,14 @@
+#!/bin/sh
+# Fake rg that emits matches in files with long paths so the file
+# list must left-truncate entries. Simulates `rg 'hello' demo_artifacts/src`.
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"demo_artifacts/src/very/long/path/to/a/file/that/is/much/longer/than/the/list/width/allows.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"demo_artifacts/src/very/long/path/to/a/file/that/is/much/longer/than/the/list/width/allows.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+printf '%s\n' '{"type":"end","data":{"path":{"text":"demo_artifacts/src/very/long/path/to/a/file/that/is/much/longer/than/the/list/width/allows.txt"},"binary_offset":null}}'
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"demo_artifacts/src/short/a.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"demo_artifacts/src/short/a.txt"},"lines":{"text":"short file\n"},"line_number":1,"submatches":[{"match":{"text":"short"},"start":0,"end":5}]}}'
+printf '%s\n' '{"type":"end","data":{"path":{"text":"demo_artifacts/src/short/a.txt"},"binary_offset":null}}'
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"demo_artifacts/src/short/b.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"demo_artifacts/src/short/b.txt"},"lines":{"text":"another\n"},"line_number":1,"submatches":[{"match":{"text":"another"},"start":0,"end":7}]}}'
+printf '%s\n' '{"type":"end","data":{"path":{"text":"demo_artifacts/src/short/b.txt"},"binary_offset":null}}'
+printf '%s\n' '{"type":"summary","data":{}}'
+exit 0

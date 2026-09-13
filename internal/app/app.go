@@ -448,6 +448,18 @@ type Model struct {
 	popupPath     []byte
 	popupInstance uint64
 	popupDuration time.Duration
+
+	// File-list layout state (Issue #24). listVisible is the user's
+	// visibility preference (initially true). listOffset is the
+	// 0-based top row of the visible file-list window, adjusted to
+	// keep the active entry visible. longestPathWidth is the display
+	// cell width of the longest sanitized path, computed once when
+	// the search completes. statusNote is the test seam for the
+	// filename-row buffer-status slot.
+	listVisible      bool
+	listOffset       int
+	longestPathWidth int
+	statusNote       func() string
 }
 
 type config struct {
@@ -484,6 +496,10 @@ type config struct {
 	// is viewport.WrapOn (the production default). Tests may set this
 	// to viewport.WrapOff to verify horizontal reveal at startup.
 	wrapMode viewport.WrapMode
+	// statusNote returns the buffer-status note for the current file
+	// (Issue #24). This is a test seam for the filename-row status
+	// slot; the real note texts are owned by Issues #26, #29, and #30.
+	statusNote func() string
 }
 
 // RowProviderFactory builds a viewport.RowProvider from a loaded
@@ -625,6 +641,14 @@ func WithWrapMode(mode viewport.WrapMode) Option {
 	return func(c *config) { c.wrapMode = mode }
 }
 
+// WithStatusNote sets a function that returns the buffer-status note
+// for the current file, or "" when no note applies (Issue #24). This is
+// a test seam for the filename-row status slot; the real note texts are
+// owned by Issues #26, #29, and #30.
+func WithStatusNote(f func() string) Option {
+	return func(c *config) { c.statusNote = f }
+}
+
 // New creates a new app model for a search invocation. The model starts
 // in the searching state.
 func New(childArgs []string, workdir string, opts ...Option) Model {
@@ -656,6 +680,8 @@ func New(childArgs []string, workdir string, opts ...Option) Model {
 		loadCancel:         make(chan struct{}),
 		popupDuration:      cfg.popupDuration,
 		wrapMode:           cfg.wrapMode,
+		listVisible:        true,
+		statusNote:         cfg.statusNote,
 	}
 }
 
@@ -741,7 +767,7 @@ func (m Model) LayoutKey() viewport.RowModelKey {
 		return viewport.RowModelKey{}
 	}
 	gw := m.buffer.GutterWidth
-	panelWidth := m.width - fileListWidth(m.width) - 1
+	panelWidth := m.width - m.ListWidth() - 1
 	tw := viewport.TextWidth(panelWidth, gw, m.wrapMode)
 	return viewport.RowModelKey{
 		Path:      string(m.currentPath),
@@ -784,6 +810,46 @@ func (m Model) CurrentPath() []byte {
 		return nil
 	}
 	return s.RawPath
+}
+
+// ListVisible reports whether the file list is requested visible (Issue
+// #24). The list is initially shown; left/tab hide it and right/shift+tab
+// show it. A computed zero width does not change this preference.
+func (m Model) ListVisible() bool { return m.listVisible }
+
+// ListWidth returns the current computed file-list width in cells
+// (Issue #24). Returns 0 when the list is hidden or a computed zero
+// width. The width is the nonnegative minimum of: longest sanitized
+// path width plus two, floor(0.40 × terminal width), and terminal
+// width minus (gutter width + 10 + reserved indicator width).
+func (m Model) ListWidth() int {
+	return ComputeListWidth(m.width, m.longestPathWidth, m.currentGutterWidth(), viewport.ReservedWidth(m.wrapMode), m.listVisible)
+}
+
+// ListOffset returns the 0-based top row of the visible file-list
+// window (Issue #24). The list scrolls to keep the active entry
+// visible.
+func (m Model) ListOffset() int { return m.listOffset }
+
+// ViewportAnchor returns the current logical reading anchor (Issue
+// #24). The anchor is a width-independent (source line, display-column)
+// position preserved through rewrap, wrap toggle, resize, and list
+// hide/show relayouts.
+func (m Model) ViewportAnchor() viewport.Anchor {
+	if m.viewport == nil {
+		return viewport.Anchor{}
+	}
+	return m.viewport.Anchor()
+}
+
+// currentGutterWidth returns the gutter width of the loaded buffer, or
+// a minimum of 3 (one digit plus two spaces) when no buffer is loaded
+// (Issue #24).
+func (m Model) currentGutterWidth() int {
+	if m.buffer != nil {
+		return m.buffer.GutterWidth
+	}
+	return 3
 }
 
 // PopupOpen reports whether the file-change pop-up is currently shown
@@ -859,6 +925,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lines = msg.Lines
 			m.index = msg.Index
 			m.excludedFiles = msg.Index.ExcludedFiles()
+			// Issue #24: compute the longest sanitized path width
+			// once when the search completes. This is term 1 of the
+			// file-list width formula and does not change until a new
+			// search.
+			m.longestPathWidth = computeLongestPathWidth(msg.Index)
 			m.overlay = oc.Overlay
 			m.overlayOpen = oc.Overlay != OverlayNone
 			m.overlayText = sanitizeDiagnostic(oc.OverlayText)
@@ -1103,6 +1174,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.handleNavigate(-1)
 			}
 		}
+		// Issue #24: left/tab hide the file list; right/shift+tab
+		// show it. The toggle changes the list visibility preference,
+		// which changes the panel text width and triggers a relayout
+		// through the Issue #17 prepared-layout path, preserving the
+		// logical reading anchor.
+		if m.state == StateBrowse {
+			if msg.Code == tea.KeyTab && msg.Mod == 0 {
+				return m.toggleListVisible(false)
+			}
+			if msg.Code == tea.KeyTab && msg.Mod == tea.ModShift {
+				return m.toggleListVisible(true)
+			}
+			if msg.Code == tea.KeyLeft && msg.Mod == 0 {
+				return m.toggleListVisible(false)
+			}
+			if msg.Code == tea.KeyRight && msg.Mod == 0 {
+				return m.toggleListVisible(true)
+			}
+		}
 		switch {
 		case msg.Code == 'w' && msg.Mod == 0:
 			if m.state == StateBrowse && m.buffer != nil {
@@ -1232,6 +1322,59 @@ func (m Model) handlePanKey(msg tea.KeyPressMsg) bool {
 		return false
 	}
 	return true
+}
+
+// toggleListVisible sets the file-list visibility preference and
+// triggers a relayout through the Issue #17 prepared-layout path when
+// the resulting text width changes (Issue #24). The logical reading
+// anchor is preserved through the relayout. A no-op toggle (setting
+// the preference to its current value) does not trigger a relayout.
+func (m Model) toggleListVisible(visible bool) (Model, tea.Cmd) {
+	if m.listVisible == visible {
+		return m, nil
+	}
+	m.listVisible = visible
+	// Recompute the layout only when a buffer is loaded; otherwise
+	// the next load will compute it.
+	if m.buffer != nil {
+		return m, m.buildViewport()
+	}
+	return m, nil
+}
+
+// updateListOffset adjusts the file-list scroll offset to keep the
+// active entry visible (Issue #24). The list offset is the 0-based top
+// row of the visible file-list window. If the current file is above
+// the visible window, scroll up to include it. If it is below, scroll
+// down to include it at the bottom of the window.
+func (m *Model) updateListOffset(currentFileIdx, visibleRows int) {
+	listOffset := m.listOffset
+	if currentFileIdx < listOffset {
+		listOffset = currentFileIdx
+	}
+	if visibleRows > 0 && currentFileIdx >= listOffset+visibleRows {
+		listOffset = currentFileIdx - visibleRows + 1
+		if listOffset < 0 {
+			listOffset = 0
+		}
+	}
+	m.listOffset = listOffset
+}
+
+// currentFileIndex returns the 0-based file-group index for the given
+// raw path (Issue #24). Used to compute the active entry for list
+// auto-scroll.
+func (m Model) currentFileIndex(path []byte) int {
+	if m.index == nil {
+		return 0
+	}
+	groups := groupByFile(m.index.Stops())
+	for i, g := range groups {
+		if bytes.Equal(g.path, path) {
+			return i
+		}
+	}
+	return 0
 }
 
 // revealTarget applies the Issue #14 destination reveal to the current
@@ -1433,6 +1576,10 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 		// Zero or one stop: strict no-op. No pop-up, no reload.
 		return m, nil
 	}
+	// Issue #24: auto-scroll the file list to keep the active entry
+	// visible. Compute the current file index from the new cursor
+	// position and update the list offset.
+	m.updateListOffset(m.currentFileIndex(stop.RawPath), m.height)
 	if !fileChanged {
 		// Same-file navigation: only the current matched line
 		// styling changes. Issue #14: reveal the new target row.
@@ -2105,41 +2252,50 @@ func (m Model) renderBrowse() string {
 
 	// File list (left pane). Issue #17: limit the file-list iteration
 	// to the visible range (terminal height) so the render path never
-	// queries the file-list provider beyond the visible rows.
-	listWidth := fileListWidth(m.width)
+	// queries the file-list provider beyond the visible rows. Issue
+	// #24: use the computed list width (zero when hidden), auto-scroll
+	// to keep the active entry visible, and left-truncate paths that
+	// exceed the list width at a grapheme boundary with a leading ….
+	listWidth := m.ListWidth()
 	visibleRows := m.height
 	if visibleRows < 0 {
 		visibleRows = 0
 	}
+	// Issue #24: auto-scroll the list to keep the active entry
+	// visible.
+	m.updateListOffset(currentFileIdx, visibleRows)
+	listOffset := m.listOffset
 	var listLines []string
-	if m.fileListProvider != nil {
-		fileCount := m.fileListProvider.FileCount()
-		limit := fileCount
-		if limit > visibleRows {
-			limit = visibleRows
-		}
-		for i := 0; i < limit; i++ {
-			path := m.fileListProvider.FilePath(i)
-			escaped := safepresentation.EscapePath(path)
-			entry := escaped.Text
-			if i == currentFileIdx {
-				entry = m.theme.Underline(entry)
+	if listWidth > 0 {
+		if m.fileListProvider != nil {
+			fileCount := m.fileListProvider.FileCount()
+			end := listOffset + visibleRows
+			if end > fileCount {
+				end = fileCount
 			}
-			listLines = append(listLines, entry)
-		}
-	} else {
-		limit := len(groups)
-		if limit > visibleRows {
-			limit = visibleRows
-		}
-		for i := 0; i < limit; i++ {
-			g := groups[i]
-			escaped := safepresentation.EscapePath(g.path)
-			entry := escaped.Text
-			if i == currentFileIdx {
-				entry = m.theme.Underline(entry)
+			for i := listOffset; i < end; i++ {
+				path := m.fileListProvider.FilePath(i)
+				escaped := safepresentation.EscapePath(path)
+				entry := TruncateLeftGrapheme(escaped.Text, listWidth)
+				if i == currentFileIdx {
+					entry = m.theme.Underline(entry)
+				}
+				listLines = append(listLines, entry)
 			}
-			listLines = append(listLines, entry)
+		} else {
+			end := listOffset + visibleRows
+			if end > len(groups) {
+				end = len(groups)
+			}
+			for i := listOffset; i < end; i++ {
+				g := groups[i]
+				escaped := safepresentation.EscapePath(g.path)
+				entry := TruncateLeftGrapheme(escaped.Text, listWidth)
+				if i == currentFileIdx {
+					entry = m.theme.Underline(entry)
+				}
+				listLines = append(listLines, entry)
+			}
 		}
 	}
 
@@ -2178,6 +2334,59 @@ func (m Model) renderBrowse() string {
 	return b.String()
 }
 
+// renderFilenameRow renders the filename row: a horizontal rule
+// embedding the safe path, with a buffer-status note slot at the right
+// (Issue #24). The path is left-truncated to make room for the status
+// note where possible. When no status note is set, the row is the
+// plain "── path ──" form, with the path truncated to fit the panel
+// width if needed. The real note texts are owned by Issues #26
+// (unreadable), #29 (stale), and #30 (unsupported); this issue
+// implements and tests the slot and truncation with a synthetic
+// status string.
+func (m Model) renderFilenameRow(escapedName string) string {
+	panelWidth := m.width - m.ListWidth() - 1
+	if panelWidth < 1 {
+		panelWidth = 1
+	}
+	note := ""
+	if m.statusNote != nil {
+		note = m.statusNote()
+	}
+	if note == "" {
+		// No status note: truncate the path to fit the panel width.
+		// The "── path ──" format uses 6 cells for separators and
+		// spaces.
+		availForPath := panelWidth - 6
+		if availForPath < 1 {
+			availForPath = 1
+		}
+		truncated := TruncateLeftGrapheme(escapedName, availForPath)
+		return "── " + truncated + " ──"
+	}
+	// Reserve space for the note plus a separating space. The note
+	// is placed at the right of the filename row.
+	noteWidth := graphemeCellWidthString(note)
+	// The filename row format is "── <path> ── <note>". The
+	// separators and spaces consume 6 cells ("── " + " ── ").
+	// Truncate the path so the total fits the panel width.
+	availForPath := panelWidth - 6 - noteWidth
+	if availForPath < 1 {
+		availForPath = 1
+	}
+	truncated := TruncateLeftGrapheme(escapedName, availForPath)
+	return "── " + truncated + " ── " + note
+}
+
+// graphemeCellWidthString returns the terminal cell width of s using
+// the shared grapheme policy (Issue #24).
+func graphemeCellWidthString(s string) int {
+	w := 0
+	for _, c := range safepresentation.GraphemeClusters(s) {
+		w += c.Width
+	}
+	return w
+}
+
 // renderContentPanel renders the right pane: filename rule followed by
 // content rows or the loading placeholder. The currentLine parameter
 // identifies the current matched line for current-match styling. When
@@ -2196,7 +2405,7 @@ func (m Model) renderBrowse() string {
 // excluded from visibility calculations.
 func (m Model) renderContentPanel(escapedName string, currentLine int) string {
 	var b strings.Builder
-	b.WriteString("── " + escapedName + " ──")
+	b.WriteString(m.renderFilenameRow(escapedName))
 	b.WriteString("\n")
 	if m.loading || m.buffer == nil || m.viewport == nil {
 		b.WriteString("Loading…")
@@ -2424,18 +2633,112 @@ func visibleWidth(s string) int {
 	return w
 }
 
-// fileListWidth returns a simple fixed width for the file list. Issue
-// #24 owns the real formula.
-func fileListWidth(termWidth int) int {
-	const min = 20
-	if termWidth <= 80 {
-		return min
+// ComputeListWidth computes the file-list width from the given inputs
+// (Issue #24). Returns the nonnegative minimum of: longestPathWidth+2,
+// floor(0.40×termWidth), and termWidth−(gutterWidth+10+reservedIndicator).
+// Returns 0 when visible is false.
+func ComputeListWidth(termWidth, longestPathWidth, gutterWidth, reservedIndicator int, visible bool) int {
+	if !visible {
+		return 0
 	}
-	w := termWidth / 4
-	if w < min {
-		w = min
+	// Term 1: longest sanitized path width plus two.
+	term1 := longestPathWidth + 2
+	// Term 2: floor(0.40 × terminal width).
+	term2 := (termWidth * 2) / 5
+	// Term 3: terminal width minus (gutter width + 10 + reserved
+	// indicator width). The 10 is the minimum text width reserved for
+	// the content panel.
+	term3 := termWidth - (gutterWidth + 10 + reservedIndicator)
+	// The width is the minimum of the three terms.
+	w := term1
+	if term2 < w {
+		w = term2
+	}
+	if term3 < w {
+		w = term3
+	}
+	// Nonnegative clamping for pathological dimensions.
+	if w < 0 {
+		w = 0
 	}
 	return w
+}
+
+// TruncateLeftGrapheme left-truncates s to fit width cells with a
+// leading … at a grapheme boundary (Issue #24). If s fits within width,
+// it is returned unchanged. Grapheme clusters are never split.
+func TruncateLeftGrapheme(s string, width int) string {
+	if width <= 0 || s == "" {
+		return ""
+	}
+	clusters := safepresentation.GraphemeClusters(s)
+	totalWidth := 0
+	for _, c := range clusters {
+		totalWidth += c.Width
+	}
+	if totalWidth <= width {
+		return s
+	}
+	// Reserve one cell for the leading …, so the trailing portion
+	// must fit in width-1 cells.
+	remaining := width - 1
+	if remaining <= 0 {
+		return "…"
+	}
+	// Walk clusters from the end, accumulating width, until adding
+	// the next cluster would exceed the remaining budget. The kept
+	// run is the trailing clusters from startIdx onward.
+	used := 0
+	startIdx := len(clusters)
+	for i := len(clusters) - 1; i >= 0; i-- {
+		cw := clusters[i].Width
+		if used+cw > remaining {
+			break
+		}
+		used += cw
+		startIdx = i
+	}
+	if startIdx >= len(clusters) {
+		// No cluster fit in the remaining space; return just ….
+		return "…"
+	}
+	return "…" + s[clusters[startIdx].StartByte:]
+}
+
+// GraphemeClustersForTest segments s into grapheme clusters for test
+// helpers (Issue #24). This delegates to the shared safe-presentation
+// policy.
+func GraphemeClustersForTest(s string) []filebuffer.Cluster {
+	return filebufferClusterSegments(s)
+}
+
+// filebufferClusterSegments segments s into grapheme clusters using
+// the shared safe-presentation policy (Issue #24).
+func filebufferClusterSegments(s string) []filebuffer.Cluster {
+	return safepresentation.GraphemeClusters(s)
+}
+
+// computeLongestPathWidth returns the display cell width of the
+// longest sanitized path in the index (Issue #24). This is term 1 of
+// the file-list width formula. Paths are escaped through
+// safepresentation.EscapePath and measured with the shared grapheme
+// cell-width policy.
+func computeLongestPathWidth(idx *searchindex.Index) int {
+	if idx == nil {
+		return 0
+	}
+	longest := 0
+	for _, stop := range idx.Stops() {
+		escaped := safepresentation.EscapePath(stop.RawPath)
+		w := 0
+		for _, c := range safepresentation.GraphemeClusters(escaped.Text) {
+			w += c.Width
+		}
+		if w > longest {
+			longest = w
+		}
+	}
+	return longest
 }
 
 // collectResults drains both pipes concurrently, parses stdout JSON

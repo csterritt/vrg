@@ -1,0 +1,10 @@
+#!/bin/sh
+# Fake rg that emits a match in a file with a 1500-char line so the
+# line wraps and the anchor can be tested through tab/shift+tab and
+# resize. Simulates `rg 'x' demo_artifacts/long_line.txt`.
+path="demo_artifacts/long_line.txt"
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"'"$path"'"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"'"$path"'"},"lines":{"text":"'"$(python3 -c "print('x'*1500)")"'\n"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}'
+printf '%s\n' '{"type":"end","data":{"path":{"text":"'"$path"'"},"binary_offset":null}}'
+printf '%s\n' '{"type":"summary","data":{}}'
+exit 0

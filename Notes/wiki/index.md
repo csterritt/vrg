@@ -137,6 +137,14 @@ Catalog of all wiki pages for the vrg project.
   clip, extent, pan clamping, reveal, and Issue #20 indicators like
   any other cell; terminator-only `$` marker is an ordinary marker
   with no special cases
+- [file-list-layout.md](file-list-layout.md) — Issue #24: responsive
+  file-list width formula (longest path + 2, 40% cap, leave 10 cells
+  plus reserved indicator), hide/show toggles (`left`/`tab` hide,
+  `right`/`shift+tab` show, initially shown), grapheme-safe left
+  truncation with leading `…`, active-entry auto-scroll, visible-window
+  rendering only, filename-row buffer-status note slot with synthetic
+  test seam, pathological-dimension clamping, and Issue #17 prepared-
+  layout routing with anchor preservation
 
 ## Catalogs
 

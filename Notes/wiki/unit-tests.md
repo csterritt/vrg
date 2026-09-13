@@ -1270,3 +1270,68 @@ replay-ordering assertions:
   fill the wrap row stays on the same row.
 - `TestMarkerEOLRevealHorizontal` — `RevealHorizontal` can target the
   EOL marker cell and make it visible.
+
+`filelist_layout_test.go` (Issue #24, external package `app_test`):
+
+- `TestComputeListWidthLongestPathWins` — the `longestPathWidth+2`
+  term wins when it is the smallest.
+- `TestComputeListWidthFortyPercentCapWins` — the `floor(0.40×
+  termWidth)` term wins when it is the smallest.
+- `TestComputeListWidthFortyPercentFloorRounding` — the 40% cap uses
+  integer floor rounding.
+- `TestComputeListWidthTenCellMinimumWins` — the
+  `termWidth−(gutterWidth+10+reservedIndicator)` term wins when it is
+  the smallest (leaves ten content text cells plus the reserved
+  indicator).
+- `TestComputeListWidthGutterGrowthReduces` — gutter growth after
+  file loading narrows the third term.
+- `TestComputeListWidthZeroAllocation` — a computed zero width
+  allocation while the visibility preference remains visible.
+- `TestComputeListWidthNeverNegative` — the result is clamped to be
+  nonnegative for pathological dimensions.
+- `TestComputeListWidthHiddenReturnsZero` — the result is 0 when
+  `visible` is false.
+- `TestComputeListWidthIndicatorAffectsThirdTerm` — the reserved
+  indicator width (1 in run-off-edge, 0 in wrap) affects the third
+  term.
+- `TestTruncateLeftGraphemeFits` — no truncation when the string
+  fits.
+- `TestTruncateLeftGraphemeTruncates` — ASCII truncation inserts a
+  leading `…` and keeps the trailing portion.
+- `TestTruncateLeftGraphemeNarrowWidth` — a narrow width truncates
+  to the leading `…` plus the last fitting cluster(s).
+- `TestTruncateLeftGraphemeGraphemeSafe` — wide glyphs and
+  combining marks are never split; a cluster that does not fit moves
+  entirely out of the kept window.
+- `TestTruncateLeftGraphemeEmpty` — empty input and zero/negative
+  `maxCells` produce empty output.
+- `TestListInitiallyShown` — the list is visible at startup.
+- `TestTabHidesList` / `TestLeftHidesList` — `tab`/`left` hide the
+  list.
+- `TestShiftTabShowsList` / `TestRightShowsList` — `shift+tab`/
+  `right` show the list.
+- `TestListToggleTriggersRelayout` — toggling visibility triggers a
+  layout command (Issue #17 prepared-layout path).
+- `TestZeroWidthListRetainsPreference` — a computed zero width
+  draws no list cells and leaves the visibility preference unchanged.
+- `TestListAutoScrollActiveEntry` — navigating to a file below the
+  visible window scrolls the list to include it.
+- `TestAnchorSurvivesTabShiftTab` — `tab` and `shift+tab` preserve
+  the logical reading anchor through the relayout.
+- `TestAnchorSurvivesResize` — a terminal resize that changes the
+  list width preserves the anchor through the relayout.
+- `TestRenderCostGuardFileListVisibleEntries` — a frame render
+  queries the file-list provider only for the visible range.
+- `TestFilenameRowStatusNote` — a synthetic status note appears in
+  the filename row.
+- `TestFilenameRowPathTruncationForStatus` — the path is truncated
+  to make room for the status note.
+- `TestFilenameRowNoStatusNote` — without a status note the path is
+  still truncated to fit the panel width.
+- `TestListWidthRecomputedAfterGutterGrowth` — the list width is
+  recomputed when the gutter grows after a file load.
+- `TestListWidthInRender` — the rendered view reflects the computed
+  list width.
+- `TestListEntryTruncation` — long file-list paths are left-
+  truncated with a leading `…` and the filename row path is truncated
+  to fit the panel width.
