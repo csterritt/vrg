@@ -302,3 +302,12 @@ Usage
  Input tokens: 246068 tokens
  Output tokens: 78318 tokens
  Cached input tokens: 9245440 tokens
+
+----
+Task 035-final-integration-verification.md
+
+Usage
+ Agent messages: 67 messages
+ Input tokens: 87233 tokens
+ Output tokens: 30380 tokens
+ Cached input tokens: 5326848 tokens

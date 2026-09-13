@@ -1242,3 +1242,37 @@ sink-safety row, internal/docs section), and [index](index.md)
 Outcome and exit-status contract), `README.md`,
 `internal/app/app.go`, `internal/docs/docs_test.go`,
 `internal/app/help_footer_test.go`.
+
+## [2026-09-12] ingest | Issue #35 final integration verification
+
+Ingested the completed Issue #35 closing verification pass. From a
+clean checkout with Go build and test caches cleared, `go build ./...`,
+`go vet ./...`, and `go test ./...` all passed (every package green,
+including `cmd/vrg`, all six `internal/` packages, and `internal/docs`).
+The PTY/subprocess boundary suites for Issues #4, #9, and #11 (all in
+`cmd/vrg`) were re-run with caching disabled (`go test -count=1 -v
+./cmd/vrg/ -timeout 120s`) so every critical boundary test executed:
+Issue #4 search/subprocess tests, Issue #9 outcome matrix tests, Issue
+#11 stderr-replay tests, Issue #4 cancellation/reap tests, and the
+help-only process-boundary tests — all PASS. The final `vrg` binary was
+built and smoke-run through the five representative outcomes with the
+Issue #4 fake-rg harness under a real PTY: (1) successful browse with
+`q` exiting 0; (2) no-results search with `q` exiting 1 and the
+collected `warn` diagnostic replayed to stderr after terminal
+restoration; (3) fatal fake-rg with no usable results exiting 2 on
+dismissal with both `q` and `Esc`; (4) cancellation while searching
+exiting 130 with the child terminated and reaped (reap evidence
+present, child PID gone), terminal restoration verified (cursor-show
+sequence, alt-screen exit, termios restored), for both `q` and
+`ctrl+c`; (5) help-only invocation (bare `vrg`, `-h`, `--help`) printing
+exactly one help copy to stdout with empty stderr and exit 0, run with
+ripgrep unavailable on `PATH` and a sentinel fake rg available but
+never invoked (marker file never appeared). No regressions were found;
+no production code was changed; no focused test was patched, weakened,
+or deleted. Created [final-verification](final-verification.md);
+updated [index](index.md) (final-verification entry). Sources:
+`Notes/tasks/035-final-integration-verification.md`,
+`Notes/PRD-vrg.md` (Testing Decisions, Outcome and exit-status
+contract), `cmd/vrg/main.go`, `cmd/vrg/search_test.go`,
+`cmd/vrg/outcome_test.go`, `cmd/vrg/replay_test.go`,
+`cmd/vrg/cancel_test.go`, `cmd/vrg/main_test.go`.

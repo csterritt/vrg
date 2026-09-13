@@ -239,6 +239,14 @@ Catalog of all wiki pages for the vrg project.
   exit-status table agreement with the Issue #9 outcome function;
   help overlay footer filled with the shared scale/record-limit/memory
   text; Issue #6 sink-safety row for the rendered help footer
+- [final-verification.md](final-verification.md) — Issue #35: the clean
+  repository-wide build/vet/test pass, the explicit no-cache rerun of
+  the PTY/subprocess suites from Issues #4, #9, and #11, and the
+  final-binary smoke run through the five representative outcomes
+  (browse 0, no-results 1, fatal 2 with q and Esc, cancellation 130
+  with child reaped and terminal restored, help-only 0 with ripgrep
+  unavailable and a sentinel fake rg never invoked); no regressions
+  found
 
 ## Catalogs
 
