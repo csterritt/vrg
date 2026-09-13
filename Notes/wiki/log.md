@@ -103,3 +103,32 @@ presentation, Module Design → FileBuffer / Viewport / Theme / App),
 `internal/filebuffer/filebuffer_test.go`,
 `internal/viewport/viewport.go`, `internal/theme/theme.go`,
 `internal/app/app.go`, `internal/app/browse_test.go`.
+
+## [2026-09-12] ingest | Issue #6 shared safe-presentation utility
+
+Ingested the completed Issue #6 implementation: the shared
+safe-presentation utility generalized from the Issue #5 path/content
+core, the new `EscapeDiagnostic` escaper (preserves LF line boundaries,
+normalizes CRLF to LF, expands tabs to eight-column stops, escapes
+other controls with caret notation / `\u00XX` / `\xNN`, does not escape
+backslashes so embedded filenames escaped through `EscapePath` are not
+double-escaped), the replacement of the Issue #1 `cli.Escape` escaper
+with a one-line wrapper around `safepresentation.EscapePath`, the
+replacement of the `internal/app` `sanitizeDiagnostic` (which only
+mapped ESC and C1 CSI to spaces) with a delegate to
+`EscapeDiagnostic`, the `app.EscapePathForDiagnostic` helper for
+embedding filenames in diagnostics, and the shared
+`internal/sinkfixtures` package with the hostile-fixture set and
+sink-safety assertion helpers (`NoControlBytes`, `NoDangerousControls`,
+`NoPayloadAfterESC`). Created [safe-presentation](safe-presentation.md);
+updated cli-foundation, source-code, unit-tests, and index. Sources:
+`Notes/tasks/006-safe-presentation-utility-for-all-sinks.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation),
+`internal/safepresentation/safepresentation.go`,
+`internal/safepresentation/safepresentation_test.go`,
+`internal/safepresentation/doc.go`,
+`internal/sinkfixtures/sinkfixtures.go`,
+`internal/cli/cli.go`, `internal/cli/cli_test.go`,
+`internal/app/app.go`, `internal/app/app_test.go`,
+`internal/app/browse_test.go`,
+`cmd/vrg/main.go`, `cmd/vrg/main_test.go`.

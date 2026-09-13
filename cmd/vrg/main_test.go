@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"vrg/internal/sinkfixtures"
 )
 
 // binPath is the real cmd/vrg binary built once per test run; subprocess
@@ -311,5 +313,40 @@ func TestFlagContractUsageErrors(t *testing.T) {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			assertUsageError(t, runVrg(t, args...), args)
 		})
+	}
+}
+
+// --- Issue #6 shared sink-safety table: process-boundary sinks ---
+
+// TestSinkSafetyTableUsageErrorProcessBoundary verifies that the
+// usage-error stderr sink at the process boundary produces no dangerous
+// control bytes when hostile fixture bytes appear in an operand. The
+// stderr includes the diagnostic line followed by the generated help
+// block (which uses tabs for formatting), so the assertion allows tabs
+// and newlines while rejecting ESC and other terminal-control bytes.
+func TestSinkSafetyTableUsageErrorProcessBoundary(t *testing.T) {
+	for _, fx := range sinkfixtures.Fixtures {
+		t.Run(fx.Name, func(t *testing.T) {
+			res := runVrg(t, "foo", string(fx.Raw))
+			if res.code != 2 {
+				t.Fatalf("exit code = %d, want 2 for %s", res.code, fx.Name)
+			}
+			if !sinkfixtures.NoDangerousControls(res.stderr) {
+				t.Fatalf("dangerous control byte in usage-error stderr for %s: %q", fx.Name, res.stderr)
+			}
+		})
+	}
+}
+
+// TestSinkSafetyTableHelpStdoutProcessBoundary verifies that the
+// CLI-help stdout sink at the process boundary produces no dangerous
+// control bytes.
+func TestSinkSafetyTableHelpStdoutProcessBoundary(t *testing.T) {
+	res := runVrg(t, "--help")
+	if res.code != 0 {
+		t.Fatalf("exit code = %d, want 0", res.code)
+	}
+	if !sinkfixtures.NoDangerousControls(res.stdout) {
+		t.Fatalf("dangerous control byte in CLI-help stdout: %q", res.stdout)
 	}
 }

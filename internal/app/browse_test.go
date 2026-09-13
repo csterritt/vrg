@@ -12,6 +12,7 @@ import (
 	"vrg/internal/app"
 	"vrg/internal/filebuffer"
 	"vrg/internal/searchindex"
+	"vrg/internal/sinkfixtures"
 	"vrg/internal/theme"
 )
 
@@ -631,5 +632,139 @@ func TestSinkSafetyAllSinksHostile(t *testing.T) {
 	view := viewContent(m)
 	if !noControlBytes(view) {
 		t.Fatalf("raw control byte in hostile all-sinks output: %q", view)
+	}
+}
+
+// --- Issue #6 shared sink-safety table tests ---
+//
+// These tests restructure the Issue #5 hostile fixture set into the
+// shared, extensible sink-safety table from internal/sinkfixtures. Each
+// sink is a row; later issues add rows without duplicating fixtures.
+// The no-style path asserts no fixture control byte survives in raw
+// output (before any ANSI stripping). The styled path asserts the
+// fixture's distinctive payload never appears immediately after an
+// unescaped ESC.
+
+// setupBrowseSink creates a browse model with a single file whose path
+// or content is the fixture, rendered through the given theme. The
+// file load completes immediately.
+func setupBrowseSink(t *testing.T, path []byte, content string, themed theme.Theme) app.Model {
+	t.Helper()
+	idx := buildIndex(t, "/work",
+		bytesMatch(path, []byte(content+"\n"), 1, subSpec{content, 0, len(content)}),
+	)
+	lines := []filebuffer.Line{
+		{Number: 1, Display: content},
+	}
+	buf := makeBuf(lines, 1, 3)
+	gate := make(chan struct{})
+	close(gate)
+	loader := func(p []byte, stops []searchindex.Stop) (*filebuffer.Buffer, error) {
+		return buf, nil
+	}
+	m := app.New([]string{"--json", "--", "foo", "."}, "/work",
+		app.WithFileLoadGate(gate),
+		app.WithFileLoader(loader),
+		app.WithTheme(themed),
+	)
+	m, cmd := update(t, m, app.SearchCompleteMsg{
+		Files: idx.Files(), Lines: idx.Len(), Index: idx,
+	})
+	if cmd != nil {
+		msg := execCmd(t, cmd)
+		if lc, ok := msg.(app.FileLoadCompleteMsg); ok {
+			m, _ = update(t, m, lc)
+		}
+	}
+	return m
+}
+
+// TestSinkSafetyTableFileListNoStyle verifies that the file-list sink
+// produces no raw control bytes for every shared fixture, rendered
+// through the no-style composition path.
+func TestSinkSafetyTableFileListNoStyle(t *testing.T) {
+	for _, fx := range sinkfixtures.Fixtures {
+		t.Run(fx.Name, func(t *testing.T) {
+			m := setupBrowseSink(t, fx.Raw, "hello", theme.NoStyle())
+			view := viewContent(m)
+			if !sinkfixtures.NoControlBytes(view) {
+				t.Fatalf("raw control byte in file-list for %s: %q", fx.Name, view)
+			}
+		})
+	}
+}
+
+// TestSinkSafetyTableFilenameRuleNoStyle verifies that the filename-rule
+// sink produces no raw control bytes for every shared fixture, rendered
+// through the no-style composition path.
+func TestSinkSafetyTableFilenameRuleNoStyle(t *testing.T) {
+	for _, fx := range sinkfixtures.Fixtures {
+		t.Run(fx.Name, func(t *testing.T) {
+			m := setupBrowseSink(t, fx.Raw, "hello", theme.NoStyle())
+			view := viewContent(m)
+			if !sinkfixtures.NoControlBytes(view) {
+				t.Fatalf("raw control byte in filename-rule for %s: %q", fx.Name, view)
+			}
+		})
+	}
+}
+
+// TestSinkSafetyTablePanelContentNoStyle verifies that the panel-content
+// sink produces no raw control bytes for every shared fixture, rendered
+// through the no-style composition path.
+func TestSinkSafetyTablePanelContentNoStyle(t *testing.T) {
+	for _, fx := range sinkfixtures.Fixtures {
+		t.Run(fx.Name, func(t *testing.T) {
+			m := setupBrowseSink(t, []byte("src/a.go"), string(fx.Raw), theme.NoStyle())
+			view := viewContent(m)
+			if !sinkfixtures.NoControlBytes(view) {
+				t.Fatalf("raw control byte in panel-content for %s: %q", fx.Name, view)
+			}
+		})
+	}
+}
+
+// TestSinkSafetyTableFileListStyled verifies that with styles enabled,
+// the fixture's distinctive payload never appears immediately after an
+// unescaped ESC in the file-list sink.
+func TestSinkSafetyTableFileListStyled(t *testing.T) {
+	for _, fx := range sinkfixtures.Fixtures {
+		t.Run(fx.Name, func(t *testing.T) {
+			m := setupBrowseSink(t, fx.Raw, "hello", theme.New())
+			view := viewContent(m)
+			if !sinkfixtures.NoPayloadAfterESC(view, fx.Payload) {
+				t.Fatalf("fixture payload after unescaped ESC in file-list for %s: %q", fx.Name, view)
+			}
+		})
+	}
+}
+
+// TestSinkSafetyTableFilenameRuleStyled verifies that with styles
+// enabled, the fixture's distinctive payload never appears immediately
+// after an unescaped ESC in the filename-rule sink.
+func TestSinkSafetyTableFilenameRuleStyled(t *testing.T) {
+	for _, fx := range sinkfixtures.Fixtures {
+		t.Run(fx.Name, func(t *testing.T) {
+			m := setupBrowseSink(t, fx.Raw, "hello", theme.New())
+			view := viewContent(m)
+			if !sinkfixtures.NoPayloadAfterESC(view, fx.Payload) {
+				t.Fatalf("fixture payload after unescaped ESC in filename-rule for %s: %q", fx.Name, view)
+			}
+		})
+	}
+}
+
+// TestSinkSafetyTablePanelContentStyled verifies that with styles
+// enabled, the fixture's distinctive payload never appears immediately
+// after an unescaped ESC in the panel-content sink.
+func TestSinkSafetyTablePanelContentStyled(t *testing.T) {
+	for _, fx := range sinkfixtures.Fixtures {
+		t.Run(fx.Name, func(t *testing.T) {
+			m := setupBrowseSink(t, []byte("src/a.go"), string(fx.Raw), theme.New())
+			view := viewContent(m)
+			if !sinkfixtures.NoPayloadAfterESC(view, fx.Payload) {
+				t.Fatalf("fixture payload after unescaped ESC in panel-content for %s: %q", fx.Name, view)
+			}
+		})
 	}
 }

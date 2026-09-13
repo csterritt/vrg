@@ -18,9 +18,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	mowcli "github.com/jawher/mow.cli"
+
+	"vrg/internal/safepresentation"
 )
 
 // appName is the fixed executable name used for the mow.cli application so
@@ -501,49 +502,11 @@ func (d optionDecl) spellings() string {
 }
 
 // Escape renders external data safe for a single-line diagnostic or stub
-// substitution. Backslashes double; newline, carriage return, and tab
-// become \n, \r, \t; other C0 controls and DEL use caret notation; C1
-// controls use \u escapes; invalid UTF-8 bytes use \xNN. Printable text
-// passes through. This is the minimal Issue 1 escaper; Issue 6 generalizes
-// safe presentation for every sink.
+// substitution. It delegates to safepresentation.EscapePath, the shared
+// safe-presentation utility for path-style single-line escaping:
+// backslashes double; newline, carriage return, and tab become \n, \r,
+// \t; other C0 controls and DEL use caret notation; C1 controls use \u
+// escapes; invalid UTF-8 bytes use \xNN. Printable text passes through.
 func Escape(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); {
-		c := s[i]
-		if c < utf8.RuneSelf {
-			switch {
-			case c == '\\':
-				b.WriteString(`\\`)
-			case c == '\n':
-				b.WriteString(`\n`)
-			case c == '\r':
-				b.WriteString(`\r`)
-			case c == '\t':
-				b.WriteString(`\t`)
-			case c < 0x20:
-				b.WriteByte('^')
-				b.WriteByte(c + '@')
-			case c == 0x7f:
-				b.WriteString(`^?`)
-			default:
-				b.WriteByte(c)
-			}
-			i++
-			continue
-		}
-		r, size := utf8.DecodeRuneInString(s[i:])
-		if r == utf8.RuneError && size == 1 {
-			fmt.Fprintf(&b, `\x%02x`, c)
-			i++
-			continue
-		}
-		if r >= 0x80 && r < 0xa0 {
-			fmt.Fprintf(&b, `\u%04x`, r)
-		} else {
-			b.WriteString(s[i : i+size])
-		}
-		i += size
-	}
-	return b.String()
+	return safepresentation.EscapePath([]byte(s)).Text
 }

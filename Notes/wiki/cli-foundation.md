@@ -93,11 +93,15 @@ argv, instead of maintaining a separate allow-list; see
 
 ## Sanitization
 
-`cli.Escape` is the interim single-line escaper (Issue #6 generalizes):
-`\\` doubles, `\n`/`\r`/`\t` become escape spellings, other C0 controls
-and DEL use caret notation (`ESC` → `^[`), C1 controls use `\u` escapes,
-invalid UTF-8 bytes use `\xNN`. It covers usage diagnostics and the
-success stub; generated help contains only fixed text.
+`cli.Escape` is the single-line escaper for usage diagnostics and the
+success stub. Issue #6 replaced the duplicated implementation with a
+one-line wrapper around `safepresentation.EscapePath`, the shared
+safe-presentation utility: `\\` doubles, `\n`/`\r`/`\t` become escape
+spellings, other C0 controls and DEL use caret notation (`ESC` → `^[`),
+C1 controls use `\u` escapes, invalid UTF-8 bytes use `\xNN`. Generated
+help contains only fixed text. See
+[safe-presentation.md](safe-presentation.md) for the full path,
+content, and diagnostic contracts.
 
 ## Tests consumed by later tasks
 

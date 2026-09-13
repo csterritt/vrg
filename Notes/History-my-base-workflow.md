@@ -41,3 +41,12 @@ Usage
  Input tokens: 204245 tokens
  Output tokens: 143182 tokens
  Cached input tokens: 12476544 tokens
+
+----
+Task 006-safe-presentation-utility-for-all-sinks.md
+
+Usage
+ Agent messages: 142 messages
+ Input tokens: 299881 tokens
+ Output tokens: 58314 tokens
+ Cached input tokens: 14496896 tokens

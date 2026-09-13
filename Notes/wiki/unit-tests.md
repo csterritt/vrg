@@ -51,6 +51,16 @@ externally observable behavior only.
   operands.
 - `TestUsageDiagnosticSafety` — hostile bytes escaped in diagnostics.
 - `TestDiagnosticsAreSpecific` — no bare `incorrect usage`.
+- Issue #6 shared sink-safety table (`TestSinkSafetyTableUsageErrorStderr`,
+  `TestSinkSafetyTableUsageErrorStderrStyled`,
+  `TestSinkSafetyTableHelpStdout`,
+  `TestSinkSafetyTableHelpStdoutStyled`) — the shared
+  `internal/sinkfixtures` fixture set driven through the usage-error
+  stderr and CLI-help stdout sinks. The usage-error path asserts no
+  raw control bytes survive in the diagnostic; the help path asserts no
+  dangerous control bytes (tabs and newlines allowed as formatting).
+  The styled path asserts the fixture payload never appears
+  immediately after an unescaped ESC.
 
 `internal_test.go` (same package): `TestAppUsesContinueOnError` pins
 `flag.ContinueOnError` on the adapter's app;
@@ -95,6 +105,22 @@ table, parser config, and generated help cannot drift.
   covering an ESC byte highlights both `^` and `[`.
 - CSI input `\x1b[2J` displays as `^[[2J` (ESC → `^[`, literal `[`
   preserved).
+- Issue #6 diagnostic escaping (`EscapeDiagnostic`): LF preserved as
+  line boundary, CRLF normalized to LF, tabs expanded to eight-column
+  stops (column resets at newline), C0/DEL → caret notation, C1 →
+  `\u00XX`, invalid UTF-8 → `\xNN`, standalone CR → `^M`, backslash not
+  escaped (so embedded filenames escaped through `EscapePath` are not
+  double-escaped), printable Unicode preserved, empty input → empty
+  output.
+- Issue #6 embedded filename single-line rule: a filename with a
+  newline escaped through `EscapePath` then embedded in a diagnostic
+  escaped through `EscapeDiagnostic` produces no real newline and
+  retains the literal `\n`.
+- Issue #6 shared sink-safety table (`TestSinkSafetyTableEscapePath`,
+  `TestSinkSafetyTableEscapeContent`, `TestSinkSafetyTableEscapeDiagnostic`)
+  — every shared fixture from `internal/sinkfixtures` driven through
+  each escaper, asserting no raw control bytes survive (except
+  preserved LF in diagnostics).
 
 ## internal/filebuffer
 
@@ -128,6 +154,13 @@ table, parser config, and generated help cannot drift.
   `SearchCompleteMsg` after `ctrl+c` does not revive the UI.
 - Issue #4: `TestQDuringGateHeldExits130` — `q` while gate-held
   preparation is cancellation (130), not a browse quit.
+- Issue #6 diagnostic tests (`TestStartFailureDiagnosticPreservesLine-
+  Boundaries`, `TestStartFailureDiagnosticExpandsTabs`,
+  `TestStartFailureDiagnosticEscapesControls`,
+  `TestStartFailureDiagnosticSingleLinedFilename`) — verify the
+  diagnostic escaper preserves LF line boundaries, expands tabs to
+  eight-column stops, escapes C0/DEL with caret notation, and does not
+  double-escape filenames already escaped through `EscapePath`.
 
 `browse_test.go` (Issue #5, external package `app_test`):
 
@@ -164,6 +197,16 @@ table, parser config, and generated help cannot drift.
   DEL, standalone CR, invalid UTF-8, embedded newline/tab, backslash)
   driven through the real composition path via a no-style theme,
   asserting no fixture control byte survives verbatim in raw output.
+- Issue #6 shared sink-safety table (`TestSinkSafetyTableFileListNoStyle`,
+  `TestSinkSafetyTableFilenameRuleNoStyle`,
+  `TestSinkSafetyTablePanelContentNoStyle`,
+  `TestSinkSafetyTableFileListStyled`,
+  `TestSinkSafetyTableFilenameRuleStyled`,
+  `TestSinkSafetyTablePanelContentStyled`) — the shared
+  `internal/sinkfixtures` fixture set driven through the file-list,
+  filename-rule, and panel-content sinks. The no-style path asserts no
+  raw control bytes survive; the styled path asserts the fixture
+  payload never appears immediately after an unescaped ESC.
 
 ## cmd/vrg (subprocess boundary)
 
@@ -189,6 +232,13 @@ stdout/stderr/status separately:
   with a fake rg and a PTY.
 - `TestHelpAssignmentSpellingsAreNotHelp` — `--help=false`/`-h=false`
   are usage errors (status pinned by Issue #2).
+- Issue #6 shared sink-safety table
+  (`TestSinkSafetyTableUsageErrorProcessBoundary`,
+  `TestSinkSafetyTableHelpStdoutProcessBoundary`) — the shared
+  `internal/sinkfixtures` fixture set driven through the process
+  boundary. The usage-error path asserts exit 2 and no dangerous
+  control bytes on stderr; the help path asserts no dangerous control
+  bytes on stdout.
 
 `search_test.go` (Issue #3) uses a fake `rg` shell script and a PTY
 (`github.com/creack/pty`) to drive the Bubble Tea program:

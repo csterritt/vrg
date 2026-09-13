@@ -1,0 +1,23 @@
+#!/bin/bash
+# Fake rg that emits a hostile fixture: a filename containing a newline
+# and an ESC byte, with a matching line containing an OSC sequence.
+# Uses base64 encoding for the hostile bytes.
+#
+# Hostile path: "file\x1b\nname" (file, ESC, newline, name)
+# Hostile content: "\x1b]0;pwned\x07" (OSC sequence)
+# Match: the ESC byte at offset 0
+
+# Base64 of "file\x1b\nname" = file<ESC><LF>name
+PATH_B64=$(printf 'file\x1b\nname' | base64)
+# Base64 of "\x1b]0;pwned\x07" = OSC sequence
+LINE_B64=$(printf '\x1b]0;pwned\x07' | base64)
+# Base64 of "\x1b" = ESC (the match)
+MATCH_B64=$(printf '\x1b' | base64)
+
+cat <<EOF
+{"type":"begin","data":{"path":{"bytes":"$PATH_B64"}}}
+{"type":"match","data":{"path":{"bytes":"$PATH_B64"},"lines":{"bytes":"$LINE_B64"},"line_number":1,"submatches":[{"match":{"bytes":"$MATCH_B64"},"start":0,"end":1}],"absolute_offset":0}}
+{"type":"end","data":{"path":{"bytes":"$PATH_B64"}}}
+{"type":"summary","data":{"elapsed_total":{"secs":0,"nanos":1000,"human":"1µs"},"stats":{"matches":1,"matches_with_matches":1}}}
+EOF
+exit 0

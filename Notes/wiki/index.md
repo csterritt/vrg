@@ -23,6 +23,11 @@ Catalog of all wiki pages for the vrg project.
   with file list, filename rule, gutter, inverse-video highlights,
   async file loading with "Loading…" placeholder, safe-presentation
   core for paths and content, and hostile-fixture sink-safety method
+- [safe-presentation.md](safe-presentation.md) — Issue #6: shared
+  safe-presentation utility for every output sink (path, content,
+  diagnostic escaping), unified cli.Escape, shared sink-safety table
+  and hostile fixtures, no-style composition method, and future-issue
+  sink ownership rule
 
 ## Catalogs
 

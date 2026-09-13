@@ -178,3 +178,78 @@ func EscapeContent(raw []byte) ContentDisplay {
 	}
 	return ContentDisplay{Text: b.String(), ByteCells: cells}
 }
+
+// EscapeDiagnostic escapes raw diagnostic bytes for safe display while
+// preserving real line boundaries. LF is preserved as a line boundary;
+// CRLF is normalized to LF (the CR is consumed, the LF is retained) so
+// no raw CR control byte survives. Tabs are expanded to eight-column
+// stops with the column counter resetting at each newline. Other C0
+// controls and DEL use caret notation. C1 controls use \u00XX escapes.
+// Invalid UTF-8 bytes use \xNN escapes. Backslashes are not escaped so
+// that filenames already escaped through EscapePath can be embedded
+// without double-escaping. Valid printable Unicode is preserved.
+// Callers that embed filenames in diagnostics must first escape the
+// filename through EscapePath so filename newlines cannot become
+// diagnostic paragraph breaks.
+func EscapeDiagnostic(raw []byte) string {
+	var b strings.Builder
+	b.Grow(len(raw))
+	col := 0
+	for i := 0; i < len(raw); {
+		c := raw[i]
+		if c == '\r' && i+1 < len(raw) && raw[i+1] == '\n' {
+			b.WriteByte('\n')
+			col = 0
+			i += 2
+			continue
+		}
+		if c == '\n' {
+			b.WriteByte('\n')
+			col = 0
+			i++
+			continue
+		}
+		if c == '\t' {
+			spaces := 8 - (col % 8)
+			for j := 0; j < spaces; j++ {
+				b.WriteByte(' ')
+			}
+			col += spaces
+			i++
+			continue
+		}
+		if c < utf8.RuneSelf {
+			switch {
+			case c < 0x20:
+				b.WriteByte('^')
+				b.WriteByte(c + '@')
+				col += 2
+			case c == 0x7f:
+				b.WriteString("^?")
+				col += 2
+			default:
+				b.WriteByte(c)
+				col++
+			}
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRune(raw[i:])
+		if r == utf8.RuneError && size == 1 {
+			fmt.Fprintf(&b, `\x%02x`, c)
+			col += 4
+			i++
+			continue
+		}
+		if r >= 0x80 && r < 0xa0 {
+			fmt.Fprintf(&b, `\u%04x`, r)
+			col += 6
+			i += size
+			continue
+		}
+		b.Write(raw[i : i+size])
+		col++
+		i += size
+	}
+	return b.String()
+}

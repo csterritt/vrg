@@ -11,10 +11,11 @@ and *Outcome and exit-status contract*.
 
 ## Safe-presentation core
 
-`internal/safepresentation` is the focused safe-presentation source
-Issue #5 lands ahead of the first arbitrary-data render. Issue #6 will
-unify it with the Issue #1 `cli.Escape` escaper into the shared
-all-sink utility.
+`internal/safepresentation` is the shared safe-presentation utility
+for every output sink. Issue #5 landed the path and content rules;
+Issue #6 added the diagnostic escaper and unified the Issue #1
+`cli.Escape` escaper onto `EscapePath`. See
+[safe-presentation](safe-presentation.md) for the full contracts.
 
 ### Path escaping
 

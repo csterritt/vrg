@@ -242,6 +242,61 @@ func TestStartFailureSanitizesDiagnostic(t *testing.T) {
 	}
 }
 
+// TestStartFailureDiagnosticPreservesLineBoundaries verifies that the
+// diagnostic escaper preserves real LF line boundaries (Issue #6).
+func TestStartFailureDiagnosticPreservesLineBoundaries(t *testing.T) {
+	m := app.New([]string{"--json", "--no-config", "--", "foo", "."}, "/work")
+	m, _ = update(t, m, app.SearchFailedMsg{Diagnostic: "line1\nline2"})
+	diag := m.Diagnostic()
+	if diag != "line1\nline2" {
+		t.Fatalf("Diagnostic = %q, want %q (LF preserved)", diag, "line1\nline2")
+	}
+}
+
+// TestStartFailureDiagnosticExpandsTabs verifies that the diagnostic
+// escaper expands tabs to eight-column stops (Issue #6).
+func TestStartFailureDiagnosticExpandsTabs(t *testing.T) {
+	m := app.New([]string{"--json", "--no-config", "--", "foo", "."}, "/work")
+	m, _ = update(t, m, app.SearchFailedMsg{Diagnostic: "a\tb"})
+	diag := m.Diagnostic()
+	if diag != "a       b" {
+		t.Fatalf("Diagnostic = %q, want %q (tab expanded)", diag, "a       b")
+	}
+}
+
+// TestStartFailureDiagnosticEscapesControls verifies that the
+// diagnostic escaper escapes C0 controls and DEL with caret notation
+// (Issue #6).
+func TestStartFailureDiagnosticEscapesControls(t *testing.T) {
+	m := app.New([]string{"--json", "--no-config", "--", "foo", "."}, "/work")
+	m, _ = update(t, m, app.SearchFailedMsg{Diagnostic: "a\x1bb\x7fc"})
+	diag := m.Diagnostic()
+	if diag != "a^[b^?c" {
+		t.Fatalf("Diagnostic = %q, want %q (controls escaped)", diag, "a^[b^?c")
+	}
+}
+
+// TestStartFailureDiagnosticSingleLinedFilename verifies that a
+// filename embedded in a diagnostic is first escaped through EscapePath
+// (making it single-line), then the diagnostic is escaped through
+// EscapeDiagnostic. The composition must not double-escape (Issue #6).
+func TestStartFailureDiagnosticSingleLinedFilename(t *testing.T) {
+	m := app.New([]string{"--json", "--no-config", "--", "foo", "."}, "/work")
+	// Simulate a caller that escapes the filename through EscapePath
+	// before embedding it in the diagnostic.
+	rawFilename := "file\nname"
+	escapedName := app.EscapePathForDiagnostic(rawFilename)
+	diag := "oversized record skipped for " + escapedName
+	m, _ = update(t, m, app.SearchFailedMsg{Diagnostic: diag})
+	got := m.Diagnostic()
+	if strings.Contains(got, "\n") {
+		t.Fatalf("diagnostic contains a real newline from the filename: %q", got)
+	}
+	if !strings.Contains(got, `\n`) {
+		t.Fatalf("diagnostic does not contain the escaped newline \\n: %q", got)
+	}
+}
+
 // TestGateOption verifies that the WithGate option is accepted by New
 // without panicking.
 func TestGateOption(t *testing.T) {

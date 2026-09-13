@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"vrg/internal/cli"
+	"vrg/internal/sinkfixtures"
 )
 
 // failStat is a sentinel proving root validation never runs on paths that
@@ -626,6 +627,68 @@ func TestDiagnosticsAreSpecific(t *testing.T) {
 		}
 		if strings.Contains(res.Diagnostic, "incorrect usage") {
 			t.Fatalf("Parse(%q) surfaced the library diagnostic: %q", args, res.Diagnostic)
+		}
+	}
+}
+
+// --- Issue #6 shared sink-safety table: CLI sinks ---
+
+// TestSinkSafetyTableUsageErrorStderr verifies that the usage-error
+// stderr sink produces no raw control bytes when hostile fixture bytes
+// appear in an operand. Each fixture is used as a hostile root operand
+// so the escaper must render it safe in the diagnostic.
+func TestSinkSafetyTableUsageErrorStderr(t *testing.T) {
+	for _, fx := range sinkfixtures.Fixtures {
+		t.Run(fx.Name, func(t *testing.T) {
+			res, _ := parse(t, []string{"foo", string(fx.Raw)}, os.Stat)
+			if res.Kind != cli.KindUsageError {
+				t.Fatalf("Parse with hostile root %s: kind = %v, want KindUsageError", fx.Name, res.Kind)
+			}
+			if !sinkfixtures.NoControlBytes(res.Diagnostic) {
+				t.Fatalf("raw control byte in usage-error stderr for %s: %q", fx.Name, res.Diagnostic)
+			}
+		})
+	}
+}
+
+// TestSinkSafetyTableUsageErrorStderrStyled verifies that with styles
+// enabled (the diagnostic is a plain string with no ANSI sequences),
+// the fixture's distinctive payload never appears immediately after
+// an unescaped ESC in the usage-error stderr sink.
+func TestSinkSafetyTableUsageErrorStderrStyled(t *testing.T) {
+	for _, fx := range sinkfixtures.Fixtures {
+		t.Run(fx.Name, func(t *testing.T) {
+			res, _ := parse(t, []string{"foo", string(fx.Raw)}, os.Stat)
+			if res.Kind != cli.KindUsageError {
+				t.Fatalf("Parse with hostile root %s: kind = %v, want KindUsageError", fx.Name, res.Kind)
+			}
+			if !sinkfixtures.NoPayloadAfterESC(res.Diagnostic, fx.Payload) {
+				t.Fatalf("fixture payload after unescaped ESC in usage-error stderr for %s: %q", fx.Name, res.Diagnostic)
+			}
+		})
+	}
+}
+
+// TestSinkSafetyTableHelpStdout verifies that the CLI-help stdout sink
+// produces no dangerous control bytes. The help text is fixed (no
+// external substitutions) but uses tabs and newlines for formatting,
+// so the assertion allows those while rejecting ESC and other
+// terminal-control bytes.
+func TestSinkSafetyTableHelpStdout(t *testing.T) {
+	help := cli.HelpText()
+	if !sinkfixtures.NoDangerousControls(help) {
+		t.Fatalf("dangerous control byte in CLI-help stdout: %q", help)
+	}
+}
+
+// TestSinkSafetyTableHelpStdoutStyled verifies that the CLI-help stdout
+// sink contains no ESC bytes at all (the help text is plain text with
+// no ANSI sequences), so no fixture payload can appear after an ESC.
+func TestSinkSafetyTableHelpStdoutStyled(t *testing.T) {
+	help := cli.HelpText()
+	for _, fx := range sinkfixtures.Fixtures {
+		if !sinkfixtures.NoPayloadAfterESC(help, fx.Payload) {
+			t.Fatalf("fixture payload after ESC in CLI-help stdout for %s: %q", fx.Name, help)
 		}
 	}
 }

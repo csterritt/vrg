@@ -235,6 +235,16 @@ func (m Model) ExitCode() int { return m.exitCode }
 // after the model has received a SearchFailedMsg or ControlledFailureMsg.
 func (m Model) Diagnostic() string { return m.diagnostic }
 
+// EscapePathForDiagnostic escapes a raw filename for safe embedding in a
+// diagnostic. It delegates to safepresentation.EscapePath, the shared
+// single-line path escaper, so filename newlines become literal \n
+// sequences and cannot become diagnostic paragraph breaks. The caller
+// then embeds the result in a diagnostic string before
+// EscapeDiagnostic processes the whole diagnostic.
+func EscapePathForDiagnostic(raw string) string {
+	return safepresentation.EscapePath([]byte(raw)).Text
+}
+
 // Init returns the initial command. If a process was injected, the
 // command drains both pipes, collects results, and prepares the index.
 // If a failure signal was injected, a watcher command is also returned.
@@ -725,14 +735,15 @@ func (m Model) collectResults() tea.Cmd {
 	}
 }
 
-// sanitizeDiagnostic removes raw control bytes from a diagnostic string
-// so it is safe to write to stderr.
+// sanitizeDiagnostic escapes raw diagnostic bytes for safe display while
+// preserving real line boundaries. It delegates to
+// safepresentation.EscapeDiagnostic, the shared safe-presentation
+// utility for diagnostic escaping: LF is preserved as a line boundary;
+// CRLF is normalized to LF; tabs are expanded to eight-column stops;
+// other C0 controls and DEL use caret notation; C1 controls use \u00XX
+// escapes; invalid UTF-8 bytes use \xNN. Backslashes are not escaped so
+// that filenames already escaped through EscapePath can be embedded
+// without double-escaping.
 func sanitizeDiagnostic(s string) string {
-	s = strings.Map(func(r rune) rune {
-		if r == 0x1b || r == 0x9b {
-			return ' '
-		}
-		return r
-	}, s)
-	return strings.TrimSpace(s)
+	return safepresentation.EscapeDiagnostic([]byte(s))
 }

@@ -1,9 +1,11 @@
 package safepresentation_test
 
 import (
+	"strings"
 	"testing"
 
 	"vrg/internal/safepresentation"
+	"vrg/internal/sinkfixtures"
 )
 
 // cellRange is a test helper for readability.
@@ -522,5 +524,234 @@ func TestContentNoRawControls(t *testing.T) {
 				t.Fatalf("raw control byte 0x%02x in content display for %q: %q", b, fx, d.Text)
 			}
 		}
+	}
+}
+
+// --- Diagnostic escaping tests (Issue #6) ---
+
+// TestEscapeDiagnosticPreservesLFLineBoundaries verifies that LF in a
+// diagnostic is preserved as a real line boundary, not escaped.
+func TestEscapeDiagnosticPreservesLFLineBoundaries(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic([]byte("line1\nline2"))
+	if got != "line1\nline2" {
+		t.Fatalf("EscapeDiagnostic = %q, want %q", got, "line1\nline2")
+	}
+}
+
+// TestEscapeDiagnosticPreservesCRLFLineBoundaries verifies that CRLF is
+// preserved as a line boundary: the CR is consumed and the LF is
+// preserved, so the line boundary stays without a raw CR control byte.
+func TestEscapeDiagnosticPreservesCRLFLineBoundaries(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic([]byte("line1\r\nline2"))
+	if got != "line1\nline2" {
+		t.Fatalf("EscapeDiagnostic = %q, want %q", got, "line1\nline2")
+	}
+}
+
+// TestEscapeDiagnosticExpandsTabs verifies that tabs are expanded to
+// 8-column stops (spaces), with the column counter resetting at each
+// newline.
+func TestEscapeDiagnosticExpandsTabs(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic([]byte("a\tb"))
+	// 'a' is at column 0, tab advances to column 8, so 7 spaces.
+	if got != "a       b" {
+		t.Fatalf("EscapeDiagnostic(%q) = %q, want %q", "a\tb", got, "a       b")
+	}
+}
+
+// TestEscapeDiagnosticExpandsTabsToColumn8 verifies that a tab at
+// column 0 expands to 8 spaces.
+func TestEscapeDiagnosticExpandsTabsToColumn8(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic([]byte("\tx"))
+	if got != "        x" {
+		t.Fatalf("EscapeDiagnostic(%q) = %q, want %q", "\tx", got, "        x")
+	}
+}
+
+// TestEscapeDiagnosticTabResetsAfterNewline verifies that the tab column
+// counter resets at each newline.
+func TestEscapeDiagnosticTabResetsAfterNewline(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic([]byte("aaaaa\tb\n\tx"))
+	// Line 1: 'a'*5 at columns 0-4, tab at col 5 → col 8 (3 spaces), 'b'.
+	// Line 2: tab at col 0 → col 8 (8 spaces), 'x'.
+	want := "aaaaa   b\n        x"
+	if got != want {
+		t.Fatalf("EscapeDiagnostic(%q) = %q, want %q", "aaaaa\tb\n\tx", got, want)
+	}
+}
+
+// TestEscapeDiagnosticC0Controls verifies that C0 controls (except LF)
+// use caret notation. ESC becomes ^[, BEL becomes ^G.
+func TestEscapeDiagnosticC0Controls(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic([]byte("a\x1bb"))
+	if got != "a^[b" {
+		t.Fatalf("EscapeDiagnostic = %q, want %q", got, "a^[b")
+	}
+	got = safepresentation.EscapeDiagnostic([]byte("a\x07b"))
+	if got != "a^Gb" {
+		t.Fatalf("EscapeDiagnostic = %q, want %q", got, "a^Gb")
+	}
+}
+
+// TestEscapeDiagnosticDEL verifies that DEL (0x7f) is escaped as ^?.
+func TestEscapeDiagnosticDEL(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic([]byte("a\x7fb"))
+	if got != "a^?b" {
+		t.Fatalf("EscapeDiagnostic = %q, want %q", got, "a^?b")
+	}
+}
+
+// TestEscapeDiagnosticC1Control verifies that C1 controls use \u00XX
+// escapes.
+func TestEscapeDiagnosticC1Control(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic([]byte("a\xc2\x85b"))
+	if got != `a\u0085b` {
+		t.Fatalf("EscapeDiagnostic = %q, want %q", got, `a\u0085b`)
+	}
+}
+
+// TestEscapeDiagnosticInvalidUTF8 verifies that invalid UTF-8 bytes
+// are escaped as \xNN.
+func TestEscapeDiagnosticInvalidUTF8(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic([]byte("a\xffb"))
+	if got != `a\xffb` {
+		t.Fatalf("EscapeDiagnostic = %q, want %q", got, `a\xffb`)
+	}
+}
+
+// TestEscapeDiagnosticStandaloneCR verifies that a standalone CR (not
+// followed by LF) is escaped as ^M, not treated as a line boundary.
+func TestEscapeDiagnosticStandaloneCR(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic([]byte("a\rb"))
+	if got != "a^Mb" {
+		t.Fatalf("EscapeDiagnostic = %q, want %q", got, "a^Mb")
+	}
+}
+
+// TestEscapeDiagnosticNoBackslashEscape verifies that backslashes are
+// not escaped in diagnostics. The caller escapes embedded filenames
+// through EscapePath first; EscapeDiagnostic must not double-escape
+// the already-escaped filename.
+func TestEscapeDiagnosticNoBackslashEscape(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic([]byte(`a\nb`))
+	if got != `a\nb` {
+		t.Fatalf("EscapeDiagnostic = %q, want %q (backslash must not be escaped)", got, `a\nb`)
+	}
+	got = safepresentation.EscapeDiagnostic([]byte(`a\\b`))
+	if got != `a\\b` {
+		t.Fatalf("EscapeDiagnostic = %q, want %q (backslash must not be escaped)", got, `a\\b`)
+	}
+}
+
+// TestEscapeDiagnosticPreservesPrintableUnicode verifies that valid
+// printable Unicode passes through unchanged.
+func TestEscapeDiagnosticPreservesPrintableUnicode(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic([]byte("café 文件"))
+	if got != "café 文件" {
+		t.Fatalf("EscapeDiagnostic = %q, want %q", got, "café 文件")
+	}
+}
+
+// TestEscapeDiagnosticEmpty verifies that empty input produces empty
+// output.
+func TestEscapeDiagnosticEmpty(t *testing.T) {
+	got := safepresentation.EscapeDiagnostic(nil)
+	if got != "" {
+		t.Fatalf("EscapeDiagnostic(nil) = %q, want empty", got)
+	}
+}
+
+// TestEscapeDiagnosticSingleLinedFilename verifies that a filename
+// embedded in a diagnostic is first escaped through EscapePath (making
+// it single-line), then the diagnostic is escaped through
+// EscapeDiagnostic. The composition must not double-escape: the \n
+// from EscapePath passes through EscapeDiagnostic unchanged because
+// EscapeDiagnostic does not escape backslashes.
+func TestEscapeDiagnosticSingleLinedFilename(t *testing.T) {
+	rawFilename := []byte("file\nname")
+	escapedName := safepresentation.EscapePath(rawFilename)
+	// escapedName.Text is "file\nname" (with literal backslash-n).
+	diag := "oversized record skipped for " + escapedName.Text
+	got := safepresentation.EscapeDiagnostic([]byte(diag))
+	// The diagnostic should contain the escaped filename with \n (not
+	// a real newline) and no raw control bytes.
+	if strings.Contains(got, "\n") {
+		t.Fatalf("diagnostic contains a real newline from the filename: %q", got)
+	}
+	if !strings.Contains(got, `\n`) {
+		t.Fatalf("diagnostic does not contain the escaped newline \\n: %q", got)
+	}
+}
+
+// TestEscapeDiagnosticNoRawControls verifies that no raw C0, C1, or DEL
+// bytes survive in the escaped diagnostic, except LF which is a
+// preserved line boundary.
+func TestEscapeDiagnosticNoRawControls(t *testing.T) {
+	fixtures := [][]byte{
+		[]byte("\x1b]0;x\x07"),   // OSC
+		[]byte("\x1b[2J"),        // CSI
+		[]byte("\x07\x08\x1b"),   // C0
+		[]byte("\xc2\x85"),       // C1 (NEL)
+		[]byte("\x7f"),           // DEL
+		[]byte("\r"),             // standalone CR
+		[]byte("foo\xff\xfebar"), // invalid UTF-8
+		[]byte("file\nname"),     // embedded newline (LF preserved)
+	}
+	for _, fx := range fixtures {
+		got := safepresentation.EscapeDiagnostic(fx)
+		for i := 0; i < len(got); i++ {
+			b := got[i]
+			if b == '\n' {
+				continue // LF is a preserved line boundary.
+			}
+			if b < 0x20 || b == 0x7f {
+				t.Fatalf("raw control byte 0x%02x in diagnostic for %q: %q", b, fx, got)
+			}
+		}
+	}
+}
+
+// --- Shared sink-safety table tests (Issue #6) ---
+
+// TestSinkSafetyTableEscapePath verifies that the path sink (EscapePath)
+// produces no raw control bytes for every shared fixture, rendered
+// through the no-style composition path (EscapePath produces no ANSI
+// sequences, so any control byte is unsanitized external data).
+func TestSinkSafetyTableEscapePath(t *testing.T) {
+	for _, fx := range sinkfixtures.Fixtures {
+		t.Run(fx.Name, func(t *testing.T) {
+			d := safepresentation.EscapePath(fx.Raw)
+			if !sinkfixtures.NoControlBytes(d.Text) {
+				t.Fatalf("raw control byte in path display for %s: %q", fx.Name, d.Text)
+			}
+		})
+	}
+}
+
+// TestSinkSafetyTableEscapeContent verifies that the content sink
+// (EscapeContent) produces no raw control bytes for every shared
+// fixture, rendered through the no-style composition path.
+func TestSinkSafetyTableEscapeContent(t *testing.T) {
+	for _, fx := range sinkfixtures.Fixtures {
+		t.Run(fx.Name, func(t *testing.T) {
+			d := safepresentation.EscapeContent(fx.Raw)
+			if !sinkfixtures.NoControlBytes(d.Text) {
+				t.Fatalf("raw control byte in content display for %s: %q", fx.Name, d.Text)
+			}
+		})
+	}
+}
+
+// TestSinkSafetyTableEscapeDiagnostic verifies that the diagnostic sink
+// (EscapeDiagnostic) produces no raw control bytes (except preserved
+// LF) for every shared fixture.
+func TestSinkSafetyTableEscapeDiagnostic(t *testing.T) {
+	for _, fx := range sinkfixtures.Fixtures {
+		t.Run(fx.Name, func(t *testing.T) {
+			got := safepresentation.EscapeDiagnostic(fx.Raw)
+			if !sinkfixtures.NoControlBytes(got) {
+				t.Fatalf("raw control byte in diagnostic for %s: %q", fx.Name, got)
+			}
+		})
 	}
 }

@@ -22,8 +22,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   v1.2.0 adapter. Contains the shared `optionDecls`/`argDecls` table
   (parser config + raw-token recognition + generated help), the ordered
   `scanArgs`/`scanOption` preflight with ordered flag records and the
-  cumulative `-u` count, `renderHelp`, `checkRoot`, the `Escape`
-  sanitizer, and the `Result`/`Kind`/`ErrorKind`/`Env` contract.
+  cumulative `-u` count, `renderHelp`, `checkRoot`, and the `Escape`
+  sanitizer (Issue #6: now a one-line wrapper around
+  `safepresentation.EscapePath`, eliminating the duplicated escaper),
+  and the `Result`/`Kind`/`ErrorKind`/`Env` contract.
   See [cli-foundation.md](cli-foundation.md) and
   [cli-flag-forwarding.md](cli-flag-forwarding.md).
 
@@ -61,24 +63,47 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `WithTheme`/`WithFileLoader`/`WithFileLoadGate` options, async file
   loading off the update path, inverse-video highlights, the
   safe-presentation core for all visible strings, and browse `q` exit 0
-  through the Issue #4 cleanup path. See
+  through the Issue #4 cleanup path. Issue #6 replaced the local
+  `sanitizeDiagnostic` (which only mapped ESC and C1 CSI to spaces)
+  with a delegate to `safepresentation.EscapeDiagnostic`, satisfying
+  the full diagnostic contract: line preservation, tab expansion, and
+  complete control escaping. See
   [search-collection-path](search-collection-path.md) and
   [browse-tracer](browse-tracer.md).
 
 ## internal/safepresentation
 
-- `internal/safepresentation/safepresentation.go` — Issue #5: the
-  focused safe-presentation core for paths and content. `EscapePath`
-  escapes raw path bytes for safe single-line display (backslash
-  escapes for `\n`/`\r`/`\t`/`\\`, `\xNN` for invalid UTF-8, caret
-  notation for C0/DEL, `\u00XX` for C1, valid printable Unicode
-  preserved). `EscapeContent` escapes raw content bytes for safe display
-  (U+FFFD for invalid UTF-8, caret notation for C0/DEL, `\u00XX` for C1,
-  LF/CRLF as terminators, `^M` for standalone CR, `→` for tab). Both
-  expose `ByteCells` byte→cell mappings so highlight rendering can cover
-  all cells of an escaped form. Issue #6 will unify this with the
-  Issue #1 `cli.Escape` escaper. See
+- `internal/safepresentation/safepresentation.go` — the shared
+  safe-presentation utility for every output sink. Issue #5 landed the
+  path and content rules; Issue #6 added the diagnostic escaper and
+  unified `cli.Escape` onto `EscapePath`. `EscapePath(raw []byte)
+  PathDisplay` escapes raw path bytes for safe single-line display
+  (backslash escapes for `\n`/`\r`/`\t`/`\\`, `\xNN` for invalid
+  UTF-8, caret notation for C0/DEL, `\u00XX` for C1, valid printable
+  Unicode preserved). `EscapeContent(raw []byte) ContentDisplay`
+  escapes raw content bytes for safe display (U+FFFD for invalid UTF-8,
+  caret notation for C0/DEL, `\u00XX` for C1, LF/CRLF as terminators,
+  `^M` for standalone CR, `→` for tab). `EscapeDiagnostic(raw []byte)
+  string` escapes raw diagnostic bytes for safe display while
+  preserving real line boundaries (LF preserved, CRLF normalized to LF,
+  tabs expanded to eight-column stops, other controls escaped).
+  `PathDisplay`/`ContentDisplay` expose `ByteCells` byte→cell mappings
+  so highlight rendering can cover all cells of an escaped form. See
+  [safe-presentation](safe-presentation.md) and
   [browse-tracer](browse-tracer.md).
+
+## internal/sinkfixtures
+
+- `internal/sinkfixtures/sinkfixtures.go` — Issue #6: the shared
+  hostile-fixture set and sink-safety assertion helpers. `Fixtures` is
+  the shared slice covering OSC, CSI, C0, C1, DEL, standalone CR,
+  invalid UTF-8, and embedded filename newline. Each fixture has a
+  `Name`, `Raw`, and `Payload`. `NoControlBytes` asserts no C0/DEL
+  survive (excluding newlines). `NoDangerousControls` asserts no
+  dangerous C0/DEL survive (excluding newlines and tabs, for fixed-text
+  sinks like generated help). `NoPayloadAfterESC` is the styled
+  assertion: the fixture's payload must never appear immediately after
+  an unescaped ESC. See [safe-presentation](safe-presentation.md).
 
 ## internal/filebuffer
 
