@@ -359,6 +359,21 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   accessors `OverlayFatal()`, `OverlayText()`, `OverlayScroll()`,
   `IsLoading()`, and `ReadFailed()`. See
   [read-failures-and-retry](read-failures-and-retry.md).
+  Issue #27 added explicit reload: `handleReload` rereads the current
+  file on `r` (from browse or through a read-failure overlay) without
+  rerunning ripgrep or changing cursor stops, recording the path in
+  `reloadingPaths map[string]bool` so the `FileLoadCompleteMsg`
+  handler increments the per-path content revision in
+  `revisions map[string]int` (default `1`, incremented only for
+  reloads); `LayoutKey()` now uses `contentRevision(path)` instead of
+  the hardcoded `1` so stale cached layouts from a prior revision are
+  discarded by the Issue #17 installation guard; a
+  `pendingReloadAnchor bool` model field carries the reload-anchor
+  intent (preserve the anchor, no reveal) from load completion to the
+  matching layout installation, where it is cleared; `handleOverlayKey`
+  routes `r` through a read-failure overlay so the user can retry
+  without dismissing it; `HasPendingReloadAnchor()` exposes the
+  intent for tests. See [explicit-reload](explicit-reload.md).
 
 ## internal/safepresentation
 

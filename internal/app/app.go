@@ -441,6 +441,28 @@ type Model struct {
 	// (navigation or load completion), the intent is preserved and
 	// committed once the layout installs.
 	pendingReveal bool
+	// pendingReloadAnchor is true when a reload-anchor intent is
+	// carried for the next matching layout installation (Issue #27).
+	// When a reload's load completes, the anchor is preserved (no
+	// reveal) and committed once the new revision's matching layout
+	// installs. This seam is owned by Issue #27; Issue #28 later
+	// generalizes it into the full two-stage reveal-versus-reload
+	// arbitration for all load completions.
+	pendingReloadAnchor bool
+	// revisions tracks per-path content revisions (Issue #27). Each
+	// reload of a path increments its revision, which feeds the
+	// layout key so stale layouts from a prior revision are
+	// discarded by the Issue #17 installation guard. The default
+	// revision for a first load is 1 (zero value absent from the
+	// map).
+	revisions map[string]int
+	// reloadingPaths tracks which paths have an active reload request
+	// (Issue #27). When a reload completes, the revision for that
+	// path is incremented. This is distinct from loadingPaths (Issue
+	// #25) which tracks all in-flight loads; reloadingPaths records
+	// only those started by r so the revision increment is applied
+	// only to reloads, not to navigation or startup loads.
+	reloadingPaths map[string]bool
 	// layoutCache stores installed RowModels per file path (Issue
 	// #17). When navigating to a cached file, the model checks
 	// whether the cached RowModel's key matches the current
@@ -818,6 +840,24 @@ func (m Model) PendingLayoutKey() viewport.RowModelKey { return m.pendingLayoutK
 // the next matching layout installation (Issue #17).
 func (m Model) HasPendingReveal() bool { return m.pendingReveal }
 
+// HasPendingReloadAnchor returns true when a reload-anchor intent is
+// carried for the next matching layout installation (Issue #27).
+func (m Model) HasPendingReloadAnchor() bool { return m.pendingReloadAnchor }
+
+// contentRevision returns the content revision for the given raw path
+// (Issue #27). The default revision for a first load is 1; each
+// reload increments it so the layout key invalidates stale cached
+// layouts.
+func (m Model) contentRevision(path string) int {
+	if m.revisions == nil {
+		return 1
+	}
+	if r, ok := m.revisions[path]; ok && r > 0 {
+		return r
+	}
+	return 1
+}
+
 // LayoutKey returns the current layout key for the loaded file (Issue
 // #17), or the zero value when no buffer is loaded.
 func (m Model) LayoutKey() viewport.RowModelKey {
@@ -829,7 +869,7 @@ func (m Model) LayoutKey() viewport.RowModelKey {
 	tw := viewport.TextWidth(panelWidth, gw, m.wrapMode)
 	return viewport.RowModelKey{
 		Path:      string(m.currentPath),
-		Revision:  1,
+		Revision:  m.contentRevision(string(m.currentPath)),
 		TextWidth: tw,
 		WrapMode:  m.wrapMode,
 	}
@@ -1087,6 +1127,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.failedPaths[string(msg.Path)] = sanitizeDiagnostic(diag)
 			m.collectDiagnostic(diag)
 		}
+		// Issue #27: when this load is a reload (started by r),
+		// increment the content revision for this path. This
+		// happens before the current-path check so the revision is
+		// updated even if the user navigated away while the reload
+		// was in flight. The new revision feeds the layout key,
+		// invalidating stale cached layouts from the prior revision.
+		isReload := m.reloadingPaths != nil && m.reloadingPaths[string(msg.Path)]
+		if isReload {
+			delete(m.reloadingPaths, string(msg.Path))
+			if m.revisions == nil {
+				m.revisions = make(map[string]int)
+			}
+			m.revisions[string(msg.Path)] = m.contentRevision(string(msg.Path)) + 1
+		}
 		// Issue #25: a completion changes the visible panel only when
 		// its path is still the current path. A late completion for a
 		// non-current file updates only that file's cache, leaving
@@ -1114,6 +1168,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// position (Issue #12).
 		if msg.Buffer != nil {
 			layoutCmd := m.buildViewport()
+			// Issue #27: when this is a reload, record the
+			// reload-anchor pending intent — preserve the anchor,
+			// no reveal — committed when the new revision's
+			// matching prepared layout installs through the
+			// existing Issue #17 installation path.
+			if isReload {
+				m.pendingReloadAnchor = true
+			}
 			// Issue #14: apply destination reveal after the starting
 			// viewport is set. A first visit (including the startup
 			// file) starts from the top; a revisit starts from the
@@ -1189,6 +1251,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.pendingReveal {
 			m.pendingReveal = false
 			m.revealTarget()
+		}
+		// Issue #27: commit the reload-anchor pending intent. The
+		// same-file path above already preserved the anchor (clamped
+		// to new content via SetAnchor). Clear the flag so it does
+		// not persist beyond the matching installation. This seam is
+		// owned by Issue #27; Issue #28 later generalizes it into
+		// the full two-stage reveal-versus-reload arbitration.
+		if m.pendingReloadAnchor {
+			m.pendingReloadAnchor = false
 		}
 		return m, nil
 
@@ -1288,6 +1359,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Code == 'p' && msg.Mod == 0 {
 				return m.handleNavigate(-1)
 			}
+		}
+		// Issue #27: r rereads the current file without rerunning the
+		// search or changing cursor stops. It shows "Loading…" and
+		// issues exactly one reread via startLoad, which enforces the
+		// one-load-per-path rule (duplicates dropped, not queued). The
+		// reload does not set needsReveal, so the anchor is preserved
+		// without revealing a match. A failed reload replaces the old
+		// display with "(unreadable)" through the Issue #26 overlay.
+		if m.state == StateBrowse && msg.Code == 'r' && msg.Mod == 0 {
+			return m.handleReload()
 		}
 		// Issue #24: left/tab hide the file list; right/shift+tab
 		// show it. The toggle changes the list visibility preference,
@@ -1779,6 +1860,39 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(popupCmd, loadCmd)
 }
 
+// handleReload rereads the current file without rerunning the search
+// or changing cursor stops (Issue #27). It shows "Loading…" and issues
+// exactly one reread via startLoad, which enforces the one-load-per-path
+// rule (duplicates dropped, not queued). The reload does not set
+// needsReveal, so the anchor is preserved without revealing a match.
+// The path is recorded in reloadingPaths so the FileLoadCompleteMsg
+// handler increments the content revision, producing a new layout key
+// that invalidates stale cached layouts from the prior revision.
+func (m Model) handleReload() (tea.Model, tea.Cmd) {
+	if m.currentPath == nil {
+		return m, nil
+	}
+	// Issue #27: record this path as a reload so the completion
+	// handler increments the content revision.
+	if m.reloadingPaths == nil {
+		m.reloadingPaths = make(map[string]bool)
+	}
+	m.reloadingPaths[string(m.currentPath)] = true
+	// Show "Loading…" and clear any prior read-failure state so the
+	// panel switches from "(unreadable)" to "Loading…" on retry.
+	m.loading = true
+	m.readFailed = false
+	// Reload does not set needsReveal: the anchor is preserved
+	// without revealing a match (PRD: "Reload by itself does not
+	// reveal a match").
+	m.needsReveal = false
+	// Issue #25: at most one load may be in flight per raw path.
+	// If a load is already in flight, startLoad drops the request.
+	var loadCmd tea.Cmd
+	m, loadCmd = m.startLoad(m.currentPath)
+	return m, loadCmd
+}
+
 // openReadFailureOverlay opens or appends to the read-failure overlay
 // for the current file (Issue #26). When no overlay is open, a fresh
 // non-fatal error overlay is opened with the diagnostic. When a
@@ -1817,6 +1931,10 @@ func (m *Model) openReadFailureOverlay(diag string) {
 // handleOverlayKey routes a key press to the open overlay. up/down
 // scroll; q and Esc dismiss (or exit 2 for a fatal no-results overlay);
 // ctrl+c is handled before this is reached; other keys are ignored.
+// Issue #27: r is allowed through a read-failure overlay so the user
+// can retry a failed file without dismissing the overlay first. The
+// overlay stays open; the retry's completion appends on a second
+// failure or clears the panel on success.
 func (m Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.Code == tea.KeyUp:
@@ -1826,6 +1944,13 @@ func (m Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case msg.Code == tea.KeyDown:
 		m.overlayScroll++
+		return m, nil
+	case msg.Code == 'r' && msg.Mod == 0:
+		// Issue #27: r retries through a read-failure overlay.
+		// The overlay stays open; the panel shows "Loading…".
+		if m.overlayReadFailure {
+			return m.handleReload()
+		}
 		return m, nil
 	case msg.Code == 'q' && msg.Mod == 0:
 		if m.overlayFatal {

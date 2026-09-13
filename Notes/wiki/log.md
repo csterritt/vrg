@@ -962,3 +962,43 @@ Issue #26 entry), and [unit-tests](unit-tests.md)
 consistency), `internal/app/app.go`,
 `internal/app/read_failure_test.go`,
 `internal/app/reentry_test.go`.
+
+## [2026-05-20] ingest | Issue #27 explicit reload (r)
+
+Issue #27 added the `r` explicit reload: pressing `r` rereads the
+current file exactly once without rerunning ripgrep, without changing
+cursor stops, and without revealing a match. The reload shows the
+`Loading…` placeholder while pending, replaces stale content on
+failure with `(unreadable)`, supports retries and the one-stop index,
+and discards superseded layouts safely through content revisions and
+the Issue #17 installation guard. Implementation in
+`internal/app/app.go`: `handleReload` records the path in
+`reloadingPaths` so the `FileLoadCompleteMsg` handler increments the
+per-path content revision in `revisions` (default `1`, incremented
+only for reloads); `LayoutKey()` now uses `contentRevision(path)`
+instead of the hardcoded `1` so stale cached layouts from a prior
+revision are discarded by the Issue #17 installation guard; a
+`pendingReloadAnchor` model field carries the reload-anchor intent
+(preserve the anchor, no reveal) from load completion to the matching
+layout installation; `handleOverlayKey` routes `r` through a
+read-failure overlay so the user can retry without dismissing it;
+`HasPendingReloadAnchor()` exposes the intent for tests. Tests in
+`internal/app/reload_test.go` cover the reload lifecycle, dropped
+duplicate reloads, dropped re-entry while the same path is loading,
+the `Loading…` placeholder, exactly one reread, no cursor-stop
+changes, anchor preservation after the matching new layout installs,
+clamping on content shrink, failure replacement with
+`(unreadable)`, the current-file failure overlay, second-failure
+append with overlay scroll preserved, the one-stop index route, no
+reload on simulated disk change, the filename row retaining the
+path, content revision advancement, and the Issue #17
+revision-supersession discard of a gated pre-reload layout released
+after reload completion. Created [explicit-reload](explicit-reload.md);
+updated [index](index.md), [source-code](source-code.md)
+(internal/app Issue #27 entry), and [unit-tests](unit-tests.md)
+(reload_test.go entry). Sources:
+`Notes/tasks/027-explicit-reload-r.md`,
+`Notes/issues/027-explicit-reload-r.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency), `internal/app/app.go`,
+`internal/app/reload_test.go`.

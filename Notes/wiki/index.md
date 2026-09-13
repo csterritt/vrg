@@ -163,6 +163,18 @@ Catalog of all wiki pages for the vrg project.
   robustness through Issue #24's slot, and load failures never
   changing the fixed search-derived exit status (all-fail fixed-0,
   current-file fixed-2, composed all-fail-with-fixed-2)
+- [explicit-reload.md](explicit-reload.md) — Issue #27: `r` rereads
+  the current file without rerunning ripgrep or changing cursor stops,
+  `Loading…` placeholder while pending, dropped (not queued) duplicate
+  reloads and re-entry under the one-load-per-path rule, placeholder
+  transition as the only completion signal, per-path content revisions
+  feeding the layout key, reload-anchor pending intent committed when
+  the new revision's matching prepared layout installs, anchor
+  preservation clamped to new content, failure replacement with
+  `(unreadable)` through the Issue #26 overlay, second-failure
+  append-preserving-scroll, one-stop index route, cache stability
+  until explicit `r`, and superseded-layout discard through the Issue
+  #17 installation guard
 
 ## Catalogs
 

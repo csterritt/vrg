@@ -230,3 +230,12 @@ Usage
  Input tokens: 127585 tokens
  Output tokens: 64259 tokens
  Cached input tokens: 15589760 tokens
+
+----
+Task 027-explicit-reload-r.md
+
+Usage
+ Agent messages: 121 messages
+ Input tokens: 196454 tokens
+ Output tokens: 73349 tokens
+ Cached input tokens: 13050944 tokens

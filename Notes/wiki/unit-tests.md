@@ -1444,3 +1444,48 @@ replay-ordering assertions:
 - `TestReentryOneRetryWhileInFlight` — if a retry is already in
   flight, a second re-entry request is dropped under Issue #25's
   one-load-per-path rule; the loader call count does not increase.
+
+`reload_test.go` (Issue #27, external package `app_test`):
+
+- `TestReloadShowsLoadingAndRereads` — `r` shows `Loading…`, issues
+  exactly one reread of the current file (loader call count increases
+  by exactly one), preserves the cursor position, and shows the new
+  content after completion.
+- `TestReloadDropsDuplicateWhileInFlight` — a duplicate `r` while the
+  path's load is already in flight is dropped (loader call count does
+  not increase); after completion, another `r` starts a new load.
+- `TestReloadDropsReentryWhileInFlight` — re-entry (n/p navigation
+  away and back) while a reload is in flight is dropped under the
+  one-load-per-path rule; the loader call count does not increase.
+- `TestReloadPreservesAnchorClamped` — a reload preserves the cursor
+  and logical viewport anchor after the new revision's matching
+  prepared layout installs (50-line file, scrolled down 10 rows).
+- `TestReloadPreservesAnchorClampedOnShrink` — a reload with fewer
+  lines (50 to 5) clamps the anchor to the new content's max offset
+  (offset 0 for 5 lines at this content height).
+- `TestReloadFailureReplacesWithUnreadable` — a failed reload
+  replaces the old display with `(unreadable)`, opens the
+  current-file failure overlay (non-fatal `OverlayError`), and does
+  not show the old content or `Loading…`.
+- `TestReloadSecondFailureAppends` — a second consecutive reload
+  failure appends exactly one new diagnostic occurrence to the open
+  overlay text (two occurrences total) and preserves the reader's
+  overlay scroll position.
+- `TestReloadOneStopIndex` — `r` works with a one-stop index (a
+  single matched line in a single file); the new content is shown
+  after completion.
+- `TestNoReloadOnDiskChange` — a simulated disk change (the loader
+  would return new content) does not trigger a reload on its own; the
+  cached content remains stable until `r` is pressed, after which the
+  new content appears.
+- `TestReloadFilenameRowIdentifiesPath` — the filename row keeps
+  identifying the path after a reload.
+- `TestReloadRevisionSupersedesGatedLayout` (Issue #17
+  revision-supersession) — a reload produces a new content revision;
+  a gated pre-reload layout (from a resize) released after the reload
+  completes is discarded (key mismatch) without replacing the
+  reloaded content or its anchor; the reload's matching layout
+  installs and shows the new content.
+- `TestReloadPreservesAnchorAfterLayoutInstall` — the anchor is
+  asserted after the new revision's matching prepared layout installs
+  (gated layout preparation), not against the old revision's layout.
