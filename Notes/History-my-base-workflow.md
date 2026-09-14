@@ -401,3 +401,12 @@ Agent messages: 27 messages
 Input tokens: 260975 tokens
 Output tokens: 62917 tokens
 Cached input tokens: 1853817 tokens
+
+----
+New task critique
+
+Usage
+Agent messages: 12 messages
+Input tokens: 103863 tokens
+Output tokens: 11401 tokens
+Cached input tokens: 671344 tokens
