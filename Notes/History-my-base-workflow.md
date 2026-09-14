@@ -392,3 +392,12 @@ Agent messages: 11 messages
 Input tokens: 37700 tokens
 Output tokens: 9146 tokens
 Cached input tokens: 374592 tokens
+
+----
+Initial task build
+
+Usage
+Agent messages: 27 messages
+Input tokens: 260975 tokens
+Output tokens: 62917 tokens
+Cached input tokens: 1853817 tokens
