@@ -1276,3 +1276,7 @@ updated [index](index.md) (final-verification entry). Sources:
 contract), `cmd/vrg/main.go`, `cmd/vrg/search_test.go`,
 `cmd/vrg/outcome_test.go`, `cmd/vrg/replay_test.go`,
 `cmd/vrg/cancel_test.go`, `cmd/vrg/main_test.go`.
+
+## [2026-09-14] ingest | Issue #49 dependency removal decision
+
+Recorded the product owner's decision to remove unused Bubbles and Lip Gloss requirements. The active TUI stack now uses Bubble Tea directly with VRG's existing theme and rendering primitives; current PRD, project-overview, wiki-scope, and coding-skill instructions no longer prescribe the removed libraries. Updated the dependency manifests through `go mod tidy`; token imports are explicitly rejected. Sources: `Notes/issues/049-tidy-dependency-manifests.md`, `Notes/tasks/049-tidy-dependency-manifests.md`, `Notes/PRD-vrg.md`, `go.mod`, `go.sum`, `Notes/wiki/project-overview.md`, `Notes/wiki/AGENTS.md`, `Notes/skills/code-writing/styling-tui.md`, `Notes/skills/AGENTS.md`.

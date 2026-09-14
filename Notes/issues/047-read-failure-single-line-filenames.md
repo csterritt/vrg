@@ -19,8 +19,8 @@ See PRD *Text, graphemes, and safe presentation* (sanitizers) and *File loading,
 
 ### How to verify
 
-- **Manual**: create files named with embedded newline, tab, invalid UTF-8, and ESC bytes; arrange a read failure (e.g. permission removal after indexing) → each failure surfaces as exactly one diagnostic line with the path escaped inline, in both the overlay and the exit stderr replay.
-- **Automated**: tests driving real load failures for filenames containing newline, tab, invalid UTF-8, and ESC, asserting the produced diagnostic is a single line containing the `EscapePath`-escaped filename and a sanitized reason with no raw path repetition; assert the same holds through the overlay row set and the replay buffer.
+- **Manual**: inside a disposable temporary directory, create files named with embedded newline, tab, invalid UTF-8, and ESC bytes; index each file, then deterministically remove or rename it before a gated real read attempt → each failure surfaces as exactly one diagnostic line with the path escaped inline, in both the overlay and the exit stderr replay. If demonstrating permission denial too, restore modes through a cleanup trap and report environments where elevated privileges/ACLs still permit the read.
+- **Automated**: tests drive real load failures for filenames containing newline, tab, invalid UTF-8, and ESC from disposable temporary fixtures, synchronizing indexing and removal/rename through an explicit load gate rather than relying on permissions. Assert the produced diagnostic is a single line containing the `EscapePath`-escaped filename and a sanitized reason with no raw path repetition; assert the same holds through the overlay row set and the replay buffer, with cleanup on every outcome.
 
 ### Acceptance criteria
 

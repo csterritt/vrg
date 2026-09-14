@@ -340,7 +340,7 @@ Exact Go signatures, message payloads, and the grapheme-mapping representation r
 
 ## Further Notes
 
-- Greenfield Go project using Bubble Tea, Bubbles, and Lip Gloss, with `github.com/jawher/mow.cli` for command-line parsing and generated help. ripgrep 15.x is the reference family; local 15.2.0 checks confirmed default UTF-16 transcoding, UTF-8 BOM removal, CRLF end-position offsets, and cumulative unrestricted semantics.
+- Greenfield Go project using Bubble Tea for the TUI and `github.com/jawher/mow.cli` for command-line parsing and generated help. Bubbles and Lip Gloss are intentionally not dependencies because the implementation does not import them. ripgrep 15.x is the reference family; local 15.2.0 checks confirmed default UTF-16 transcoding, UTF-8 BOM removal, CRLF end-position offsets, and cumulative unrestricted semantics.
 - Startup defaults: dark scheme, wrapping on, file list requested visible, first matched line selected and its first match revealed, horizontal offset initially zero.
 - Retained refinements from earlier interviews: optional root; restricted flag forwarding; matched-line rather than submatch navigation; circular ordering; passive list; per-file vertical state; inverse colours and current-match underline; modal help/errors; non-streaming results.
 - Revision-3 changes include a regular-file root, explicit reload, 40% list cap with minimum-content reservation, target-row reveal, width-independent anchors with acknowledged EOF loss, complete outcomes/cancellation, async selection isolation, match-text validation, encoding placeholders, consistent marker/grapheme mapping, raw path identity, safe all-diagnostic replay, and resource qualifications.

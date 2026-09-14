@@ -3,7 +3,7 @@
 Parent issue: #45
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: none — must land before Issues #46 and #48, which consume this seam
-**Acceptance criteria**: AC1, AC4 → Tasks 1–2; AC2, AC3, AC5 → Task 2
+**Acceptance criteria**: AC1, AC4 → Tasks 1–2; AC2 → Tasks 1–2; AC3, AC5 → Task 2
 **Manual verification**: Task 4 owns the issue's manual checks.
 
 ## Tasks
@@ -11,12 +11,12 @@ Parent PRD: PRD-vrg.md
 ### 1. Specify the clean production artifact
 
 **Type**: RED  
-**Output**: A failing production-boundary test builds an untagged binary, probes every name in the explicit vrg-consumed hook manifest with no behavioural change, and finds none of the hook strings in the artifact.  
+**Output**: Failing boundary tests prove both halves of the topology: an untagged binary ignores every explicit vrg-consumed hook and contains none of their strings, while a `vrg_testhooks` build can inject every valid/invalid final-model and nil/non-nil-error tuple required by Issue #46 at the executable's actual program-runner call site.
 **Depends on**: none
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md` and the build-constraint conventions in `Notes/skills/code-writing/production-code-and-build-constraints.md`.
 
-Add a failing boundary test in `cmd/vrg` that builds an **untagged** production binary (`go build -o <tempdir>/vrg .` into a temp dir), sets each name in the explicit vrg-consumed hook manifest — `VRG_TEST_REAP`, `VRG_TEST_GATE`, `VRG_TEST_FAIL_TRIGGER`, `VRG_TEST_FAIL_DIAGNOSTIC`, `VRG_TEST_DIAGNOSTIC_TRIGGER`, `VRG_TEST_DIAGNOSTIC_TEXT`, `VRG_TEST_COLLECT_ACK`, plus the runner controls `VRG_TEST_RUN_FINAL_MODEL` and `VRG_TEST_RUN_ERROR` (extend the list when Issue #48 adds acknowledgement hooks to the manifest) — and asserts no behavioural change; then inspect the artifact (e.g. `strings`/`bytes.Contains` on the binary) for those names. Derive the probed list only from this explicit manifest — never by grepping every `VRG_TEST_*` occurrence, because fake-rg fixture variables are not vrg behaviour and are renamed `FAKE_RG_*` by Issue #50. The test proves the released artifact is clean, not merely that the tag defaults off; it fails on the current code, where the env-var seams are compiled into the production binary. Keep this task test-only.
+Add a failing boundary test in `cmd/vrg` that builds an **untagged** production binary (`go build -o <tempdir>/vrg .` into a temp dir), sets each name in the explicit vrg-consumed hook manifest — `VRG_TEST_REAP`, `VRG_TEST_GATE`, `VRG_TEST_FAIL_TRIGGER`, `VRG_TEST_FAIL_DIAGNOSTIC`, `VRG_TEST_DIAGNOSTIC_TRIGGER`, `VRG_TEST_DIAGNOSTIC_TEXT`, `VRG_TEST_COLLECT_ACK`, plus the runner controls `VRG_TEST_RUN_FINAL_MODEL` and `VRG_TEST_RUN_ERROR` (extend the list when Issue #48 adds acknowledgement hooks to the manifest) — and asserts no behavioural change; then inspect the artifact (e.g. `strings`/`bytes.Contains` on the binary) for those names. Derive the probed list only from this explicit manifest — never by grepping every `VRG_TEST_*` occurrence, because fake-rg fixture variables are not vrg behaviour and are renamed `FAKE_RG_*` by Issue #50. The test proves the released artifact is clean, not merely that the tag defaults off; it fails on the current code, where the env-var seams are compiled into the production binary. In the same RED task, add focused tagged-runner boundary tests that build with `vrg_testhooks`, select every tuple Issue #46 needs through `VRG_TEST_RUN_FINAL_MODEL` and `VRG_TEST_RUN_ERROR` — valid model, nil/invalid model, nil error, and non-nil error in the required combinations — and prove the tuple reaches the executable's actual runner return site unchanged. These tests specify only seam reachability and tuple fidelity; Issue #46 remains responsible for shutdown order, replay, cleanup, and exit-status behavior. Keep this task test-only.
 
 ---
 

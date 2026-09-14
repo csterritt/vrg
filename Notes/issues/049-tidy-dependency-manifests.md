@@ -1,7 +1,7 @@
-## Issue 49: Tidy dependency manifests — decide the fate of Bubbles and Lip Gloss
+## Issue 49: Tidy dependency manifests — remove unused Bubbles and Lip Gloss requirements
 
-**Type**: HITL — the keep-or-remove decision on Bubbles/Lip Gloss is a human call (they are in the PRD's stated stack but currently unimported)
-**Blocked by**: None — the decision and tidy can start immediately; see the adoption branch below for the ordering rules that keep a keep-decision from colliding with Issues 38–41
+**Type**: AFK — removal selected by the product owner on 2026-09-14; Bubbles and Lip Gloss are unused
+**Blocked by**: None — the selected removal and tidy can start immediately
 
 ### Parent PRD
 
@@ -11,12 +11,9 @@
 
 Resolve the dependency-manifest drift reported by `go mod tidy -diff` (`go.mod:5-27`, `go.sum:1-54`): direct imports marked indirect, required test dependencies absent from the declared graph, and unused requirements on Bubbles and Lip Gloss (`charm.land/bubbles/v2`, `charm.land/lipgloss/v2`) that tidy would remove because the implementation does not import them.
 
-**Decision (HITL)** — exactly one of two bounded outcomes:
+**Decision (selected 2026-09-14): Removal.** Bubbles and Lip Gloss are not imported by the implementation and will not be retained through token imports. Let tidy drop both modules, and update every current stated-stack/instruction reference to match — the PRD *Further Notes* stated-stack line, `Notes/wiki/project-overview.md`, the Scope paragraph in `Notes/wiki/AGENTS.md`, `Notes/skills/code-writing/styling-tui.md`, and the corresponding entry in `Notes/skills/AGENTS.md`. This issue closes once the manifests and current documentation/instructions agree and tidy is clean.
 
-- **Removal**: accept that tidy drops both modules, and update every stated-stack reference to match — at minimum the PRD *Further Notes* stated-stack line (`Notes/PRD-vrg.md` *Further Notes*, "using Bubble Tea, Bubbles, and Lip Gloss"), `Notes/wiki/project-overview.md` (the pinned-stack bullet), and the Scope paragraph in `Notes/wiki/AGENTS.md`. This issue then closes once the manifests and documentation agree and tidy is clean.
-- **Adoption**: record — in this issue or a `Notes/decisions/` entry — the concrete component/API each library will own (e.g. which viewport, list, theme, overlay, or width code it replaces or implements). Then create separately scoped implementation issue(s) for that adoption, each declaring dependencies on the audit-fix issues it touches (Issues 38–41 and any others), so adoption work cannot invalidate in-flight render fixes. Token imports whose sole purpose is retaining a manifest entry are not adoption and are rejected. Under this outcome Issue 49 stays open until the adoption issues land and `go mod tidy -diff` is clean on the final state.
-
-Whichever branch is chosen, commit a clean `go mod tidy` result with correct direct/indirect marking and test dependencies declared. Verify that state directly in this issue with `go mod tidy -diff`. Issue 50 exclusively owns creation of `scripts/verify.sh` and will incorporate this direct check into the persistent closing gate after Issue 49 has closed; Issue 49 neither creates nor partially owns that script.
+Commit a clean `go mod tidy` result for the selected removal outcome with correct direct/indirect marking and test dependencies declared. Verify that state directly in this issue with `go mod tidy -diff`. Issue 50 exclusively owns creation of `scripts/verify.sh` and will incorporate this direct check into the persistent closing gate after Issue 49 has closed; Issue 49 neither creates nor partially owns that script.
 
 ### How to verify
 
@@ -25,9 +22,8 @@ Whichever branch is chosen, commit a clean `go mod tidy` result with correct dir
 
 ### Acceptance criteria
 
-- [ ] Given the removal decision, then the go.mod/go.sum entries are dropped and the PRD *Further Notes* stated stack, `Notes/wiki/project-overview.md`, and `Notes/wiki/AGENTS.md` Scope paragraph are updated to match — a finite, reviewable documentation diff.
-- [ ] Given the adoption decision, then the concrete component/API each library will own is recorded, separately scoped implementation issues exist with dependencies on the relevant audit fixes, and this issue closes only after they land with tidy clean.
-- [ ] Given either decision, then no import exists solely to retain a manifest entry.
+- [ ] Given the selected removal decision, then the Bubbles/Lip Gloss `go.mod` and `go.sum` entries are dropped and the PRD *Further Notes* stack line, `Notes/wiki/project-overview.md`, `Notes/wiki/AGENTS.md` Scope paragraph, `Notes/skills/code-writing/styling-tui.md`, and its `Notes/skills/AGENTS.md` entry are updated to match.
+- [ ] Given the tidied implementation, then no import exists solely to retain a manifest entry.
 - [ ] Given `go mod tidy -diff`, then it reports no drift on the committed manifests.
 - [ ] Given the tidied graph, then `go build ./...`, `go vet ./...`, and `go test ./...` all pass.
 - [ ] Given this issue closes before Issue 50 starts, then direct `go mod tidy -diff` verification is green and Issue 50 remains the sole owner of creating the standard verification suite that will make this check permanent.

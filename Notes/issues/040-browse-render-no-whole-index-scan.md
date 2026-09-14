@@ -1,7 +1,7 @@
 ## Issue 40: Browse rendering drops the per-frame whole-index scan
 
 **Type**: AFK
-**Blocked by**: None — can start immediately
+**Blocked by**: Issue 39 — consume its shared grapheme/cell helper and cluster-safe path geometry rather than rewriting `renderBrowse` in parallel
 
 ### Parent PRD
 
@@ -11,7 +11,7 @@
 
 Remove whole-index work from the render path (`internal/app/app.go:2917-2936`, `2938-3013`). Every `View()` call currently invokes `m.index.Stops()` — copying every stop — and `groupByFile` — scanning and allocating groups for the entire index — before rendering only a small visible window of the file list. At the documented scale of roughly 100,000 matched lines this directly violates the requirement that frame rendering not scan the whole file list, and it puts constant-factor index-sized work on every keystroke.
 
-- Prepare immutable per-file groups, current-file indexes, and **width-independent** display metadata **once**, when the search completes and the index is finalized — not per frame. Width-independent metadata means: the escaped path text (`safepresentation.EscapePath`), its grapheme-cluster boundaries, and its full cell width. The final *truncated* path string cannot be precomputed: the allotted list width changes on terminal resize, gutter growth, wrap-mode indicator changes, and list hide/show, and the PRD requires left truncation against the *current* allocation without splitting graphemes.
+- Prepare immutable per-file groups, current-file indexes, and **width-independent** display metadata **once**, when the search completes and the index is finalized — not per frame. Width-independent metadata means: the escaped path text (`safepresentation.EscapePath`), its grapheme-cluster boundaries, and its full cell width measured by Issue 39's shared grapheme/cell helper, never a rune-counting or legacy `visibleWidth` path. The final *truncated* path string cannot be precomputed: the allotted list width changes on terminal resize, gutter growth, wrap-mode indicator changes, and list hide/show, and the PRD requires left truncation against the *current* allocation without splitting graphemes.
 - `View()` renders only the visible file-list range, reading precomputed groups and path metadata rather than rescanning the index. Truncating each visible entry against the current list width inside `View()` is expected and bounded by the visible window.
 - Navigation updates the current-file pointer/index without regrouping; per-file data structures are shared, not re-derived.
 

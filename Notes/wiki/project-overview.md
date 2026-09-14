@@ -13,8 +13,7 @@ current file's contents with matches highlighted.
 
 - Go (`go 1.27.1`), module path `vrg`
 - `github.com/jawher/mow.cli v1.2.0` for command-line parsing
-- Charm v2 stack pinned for the TUI: `charm.land/bubbletea/v2 v2.0.9`,
-  `charm.land/bubbles/v2 v2.2.1`, `charm.land/lipgloss/v2 v2.0.6`
+- Bubble Tea v2 pinned for the TUI: `charm.land/bubbletea/v2 v2.0.9`; Bubbles and Lip Gloss are intentionally not dependencies because the implementation does not import them
 - ripgrep 15.x is the reference search child (spawned in later issues)
 
 ## Layout

@@ -2,8 +2,8 @@
 
 Parent issue: #40
 Parent PRD: PRD-vrg.md
-**Blocked by issues**: none
-**Acceptance criteria**: AC1–AC5 → Tasks 1–2; AC6 → Task 2 (the existing file-list behaviour tests are the unchanged safety net)
+**Blocked by issues**: #39 — this issue consumes #39's shared grapheme/cell helper and cluster-safe path geometry; landing it afterward prevents parallel rewrites of `renderBrowse`
+**Acceptance criteria**: AC1–AC5 → Tasks 1–2; AC6 → Task 2 (the existing file-list behaviour tests and Issue #39's focused rendering regressions are the unchanged safety net)
 **Manual verification**: Task 4 owns the issue's manual checks.
 
 ## Tasks
@@ -16,7 +16,7 @@ Parent PRD: PRD-vrg.md
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md`.
 
-Strengthen the file-list cost guard in `internal/app` (alongside the existing `countingFileList`/`FileListProvider` seam in `layout_test.go`). Require that rendering a completed search performs no call enumerating or copying the full stop list — for example an index/provider test double that panics or fails when the whole-stop accessor is invoked during `View()`, or a counter asserting index access bounded by the visible window. Require only the visible file range to be materialized per frame, and add a resize/gutter-growth case asserting visible paths are re-truncated against the new list width at grapheme boundaries with no whole-list scan. These tests fail on the current code, whose `renderBrowse` calls `m.index.Stops()` and `groupByFile` on every frame. Keep this task test-only.
+Begin only after Issue #39 is complete, and run its focused cluster/path rendering regressions before adding this RED so the shared renderer and grapheme-safe path geometry form the baseline this issue must preserve. Strengthen the file-list cost guard in `internal/app` (alongside the existing `countingFileList`/`FileListProvider` seam in `layout_test.go`). Require that rendering a completed search performs no call enumerating or copying the full stop list — for example an index/provider test double that panics or fails when the whole-stop accessor is invoked during `View()`, or a counter asserting index access bounded by the visible window. Require only the visible file range to be materialized per frame, and add a resize/gutter-growth case asserting visible paths are re-truncated against the new list width at grapheme boundaries with no whole-list scan. These tests fail on the current code, whose `renderBrowse` calls `m.index.Stops()` and `groupByFile` on every frame. Keep this task test-only.
 
 ---
 
@@ -28,7 +28,7 @@ Strengthen the file-list cost guard in `internal/app` (alongside the existing `c
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md`.
 
-Restructure `internal/app/app.go` so immutable per-file groups, current-file indexes, and width-independent display metadata — the `safepresentation.EscapePath` text, its grapheme-cluster boundaries, and its full cell width — are prepared once when the search completes and the index is finalized (the `SearchCompleteMsg` handler, where `longestPathWidth` is already computed), not per frame. `renderBrowse` must render only the visible file-list range from the precomputed groups, left-truncating each visible entry against the *current* list width inside `View()` — expected work bounded by the visible window — without splitting graphemes; the truncated string cannot be precomputed because the allotted width changes on terminal resize, gutter growth, wrap-mode indicator changes, and list hide/show. Navigation updates the current-file pointer/index without regrouping or reallocating the whole grouping, keeping per-file structures shared. Preserve deterministic order, current-file underline and scroll-into-view, left-truncation, the width cap, and the hide/show toggle — the existing file-list tests must pass unchanged. Run the focused tests plus `go build ./...`, `go vet ./...`, and `go test ./...`.
+Restructure `internal/app/app.go` so immutable per-file groups, current-file indexes, and width-independent display metadata — the `safepresentation.EscapePath` text, its grapheme-cluster boundaries, and its full cell width — are prepared once when the search completes and the index is finalized (the `SearchCompleteMsg` handler, where `longestPathWidth` is already computed), not per frame. `renderBrowse` must render only the visible file-list range from the precomputed groups, left-truncating each visible entry against the *current* list width inside `View()` — expected work bounded by the visible window — without splitting graphemes; the truncated string cannot be precomputed because the allotted width changes on terminal resize, gutter growth, wrap-mode indicator changes, and list hide/show. Navigation updates the current-file pointer/index without regrouping or reallocating the whole grouping, keeping per-file structures shared. Preserve deterministic order, current-file underline and scroll-into-view, left-truncation, the width cap, and the hide/show toggle. Consume Issue #39's shared grapheme/cell helper for full path width and visible-row truncation rather than adding competing geometry, and rerun Issue #39's focused renderer/path regressions alongside the unchanged file-list tests. Run the focused tests plus `go build ./...`, `go vet ./...`, and `go test ./...`.
 
 ---
 

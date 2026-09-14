@@ -1,11 +1,11 @@
 ---
 name: styling-tui
-description: Rules for terminal layout and Lip Gloss styling in Sqloid.
+description: Rules for terminal layout and styling in VRG.
 ---
 
 ## Terminal styling
 
-- Use Lip Gloss for terminal presentation and Bubbles components where they fit the required behavior; do not reproduce component behavior solely for visual consistency.
+- Use VRG's existing theme and rendering primitives for terminal presentation. Bubbles and Lip Gloss are intentionally not dependencies; do not add them solely for visual consistency.
 - Derive all widths and heights from the current terminal dimensions and the exact layout arithmetic in the PRD. Account for borders, padding, and the global footer explicitly.
 - Keep layout calculations separate from content rendering so arithmetic can be tested directly with table-driven tests.
 - Centralize repeated styles and semantic states. Do not scatter ANSI escape sequences through model or rendering code.
@@ -16,5 +16,4 @@ description: Rules for terminal layout and Lip Gloss styling in Sqloid.
 
 ## References
 
-- [Lip Gloss](https://github.com/charmbracelet/lipgloss)
-- [Bubbles](https://github.com/charmbracelet/bubbles)
+- [Bubble Tea](https://github.com/charmbracelet/bubbletea)
