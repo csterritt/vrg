@@ -14,6 +14,7 @@ Make the one-load-per-path admission check atomic with reload-state mutation (`i
 - Only set reload flags, reload presentation, and `IntentReloadAnchor` after a new load request has actually been accepted; the admission check and the state mutation happen atomically (single decision point, no intermediate committed state).
 - A dropped `r` leaves revision, intent, and presentation exactly as they were; the in-flight load completes under its original classification.
 - The accepted-reload path is unchanged: `IntentReloadAnchor`, reloading presentation, and revision bump happen precisely when the new request starts.
+- Scope this atomic-admission rule specifically to `handleReload` and the `r` path. Do not gate the navigation re-entry path (`internal/app/app.go:2100-2135`) behind successful load admission: re-entry legitimately changes the current selection, placeholder presentation, and `IntentReveal` even when `startLoad` drops a duplicate load.
 
 See PRD *File loading, cache, reload, and selection consistency* (duplicate `r` dropped; placeholder change is the completion signal) and *Navigation, viewport, and logical anchors*.
 
@@ -29,6 +30,7 @@ See PRD *File loading, cache, reload, and selection consistency* (duplicate `r` 
 - [ ] Given `r` dropped during a navigation load, then the pending destination reveal proceeds per the latest-target rules and is not replaced by `IntentReloadAnchor` behaviour.
 - [ ] Given an `r` accepted after the previous load finished, then reload flags, presentation, intent, and exactly one revision increment are applied.
 - [ ] Given rapid repeated `r` presses, then at most one reload is in flight per path and the completion signal (placeholder → content/unreadable) remains the visible contract.
+- [ ] Given navigation re-entry while a duplicate path load is already in flight, then selection, placeholder presentation, and `IntentReveal` still update; the atomic-admission restriction applies only to `handleReload`.
 
 ### User stories addressed
 

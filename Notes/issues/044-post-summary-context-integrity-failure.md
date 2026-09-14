@@ -9,7 +9,7 @@
 
 ### What to build
 
-Remove the `context` exemption from the post-`summary` rule (`internal/searchindex/searchindex.go:487-526`). The PRD and Issue 9 state that `summary` must be the final record and that *any* record after it is a stream-integrity failure; the implementation currently exempts `context` records, and the lifecycle test at `internal/searchindex/lifecycle_test.go:90-100` explicitly encodes that contradictory expectation.
+Resolve the contradiction between Issue 9's former “`context(P)` in any position” exemption and its summary-is-final row (`internal/searchindex/searchindex.go:487-526`) in favor of the PRD's rule that *any* record after `summary` is a stream-integrity failure. Issue 9's context row is amended to cover only pre-`summary` positions; the implementation currently exempts post-`summary` context records, and the lifecycle test at `internal/searchindex/lifecycle_test.go:90-100` explicitly encodes that superseded expectation.
 
 - Mark every record appearing after `summary` — including `context` — as a stream-integrity failure, uniformly with the other post-summary rows in Issue 9's transition matrix.
 - Keep the pre-`summary` `context` semantics unchanged: context payloads remain ignored for matching/lifecycle purposes *before* `summary` — only their post-`summary` position is a violation.

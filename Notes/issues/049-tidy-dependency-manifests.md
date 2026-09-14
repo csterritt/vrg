@@ -13,7 +13,7 @@ Resolve the dependency-manifest drift reported by `go mod tidy -diff` (`go.mod:5
 
 **Decision (HITL)** — exactly one of two bounded outcomes:
 
-- **Removal**: accept that tidy drops both modules, and update every stated-stack reference to match — at minimum the PRD *Further Notes* stated-stack line (`Notes/PRD-vrg.md` *Further Notes*, "using Bubble Tea, Bubbles, and Lip Gloss") and `Notes/wiki/project-overview.md` (the pinned-stack bullet). This issue then closes once the manifests and documentation agree and tidy is clean.
+- **Removal**: accept that tidy drops both modules, and update every stated-stack reference to match — at minimum the PRD *Further Notes* stated-stack line (`Notes/PRD-vrg.md` *Further Notes*, "using Bubble Tea, Bubbles, and Lip Gloss"), `Notes/wiki/project-overview.md` (the pinned-stack bullet), and the Scope paragraph in `Notes/wiki/AGENTS.md`. This issue then closes once the manifests and documentation agree and tidy is clean.
 - **Adoption**: record — in this issue or a `Notes/decisions/` entry — the concrete component/API each library will own (e.g. which viewport, list, theme, overlay, or width code it replaces or implements). Then create separately scoped implementation issue(s) for that adoption, each declaring dependencies on the audit-fix issues it touches (Issues 38–41 and any others), so adoption work cannot invalidate in-flight render fixes. Token imports whose sole purpose is retaining a manifest entry are not adoption and are rejected. Under this outcome Issue 49 stays open until the adoption issues land and `go mod tidy -diff` is clean on the final state.
 
 Whichever branch is chosen, commit a clean `go mod tidy` result with correct direct/indirect marking and test dependencies declared. Verify that state directly in this issue with `go mod tidy -diff`. Issue 50 exclusively owns creation of `scripts/verify.sh` and will incorporate this direct check into the persistent closing gate after Issue 49 has closed; Issue 49 neither creates nor partially owns that script.
@@ -25,7 +25,7 @@ Whichever branch is chosen, commit a clean `go mod tidy` result with correct dir
 
 ### Acceptance criteria
 
-- [ ] Given the removal decision, then the go.mod/go.sum entries are dropped and the PRD *Further Notes* stated stack and `Notes/wiki/project-overview.md` are updated to match — a finite, reviewable documentation diff.
+- [ ] Given the removal decision, then the go.mod/go.sum entries are dropped and the PRD *Further Notes* stated stack, `Notes/wiki/project-overview.md`, and `Notes/wiki/AGENTS.md` Scope paragraph are updated to match — a finite, reviewable documentation diff.
 - [ ] Given the adoption decision, then the concrete component/API each library will own is recorded, separately scoped implementation issues exist with dependencies on the relevant audit fixes, and this issue closes only after they land with tidy clean.
 - [ ] Given either decision, then no import exists solely to retain a manifest entry.
 - [ ] Given `go mod tidy -diff`, then it reports no drift on the committed manifests.

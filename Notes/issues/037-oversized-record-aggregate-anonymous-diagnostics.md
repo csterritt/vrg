@@ -14,18 +14,18 @@ Fix the record-loss diagnostic composition (`internal/app/app.go:283-304`, `316-
 - An oversized record whose path could not be recovered (limit hit before `type`/`data.path` parsed) produces no oversized diagnostic at all.
 - If path recovery fails on an oversized record and no usable results remain, the fatal outcome renders an empty overlay; if usable results do remain, the skipped record can produce no overlay or replay diagnostic — the loss is silent.
 
-Always emit `N oversized record(s) skipped` as the aggregate diagnostic, then append recoverable per-path details (`oversized record skipped for <sanitized path>`) when known. The aggregate must appear even when no per-path detail is recoverable, so an anonymous oversized record is never invisible.
+Always emit a grammatically pluralized aggregate diagnostic — exactly `1 oversized record skipped` for one and `N oversized records skipped` for every other count — then append recoverable per-path details (`oversized record skipped for <sanitized path>`) when known. The aggregate must appear even when no per-path detail is recoverable, so an anonymous oversized record is never invisible.
 
 See PRD *Result index, records, and stream integrity* (oversized bullets) and *Resources and responsiveness* (64 MiB limit).
 
 ### How to verify
 
 - **Manual**: fake rg emitting one oversized record (payload over 64 MiB) whose path is recoverable, then valid records for another file, then `summary` → browse view with overlay containing both the aggregate count and the named-path line. Repeat with an oversized record that hits the limit before its path field → aggregate count present with no path line, never an empty or absent diagnostic.
-- **Automated**: outcome tests for anonymous oversized records in both directions — (a) anonymous oversized + zero usable results → fatal overlay that still contains `1 oversized record(s) skipped`, exit 2; (b) anonymous oversized + usable results → browse with overlay showing the aggregate, exit 0; plus a mixed case asserting aggregate count and per-path lines coexist.
+- **Automated**: outcome tests for anonymous oversized records in both directions — (a) anonymous oversized + zero usable results → fatal overlay that still contains exactly `1 oversized record skipped`, exit 2; (b) anonymous oversized + usable results → browse with overlay showing the aggregate, exit 0; plus plural coverage asserting `2 oversized records skipped` and a mixed case asserting aggregate count and per-path lines coexist.
 
 ### Acceptance criteria
 
-- [ ] Given any oversized record, then the diagnostics include the aggregate `N oversized record(s) skipped` count regardless of whether a path was recovered.
+- [ ] Given oversized records, then the diagnostics use exactly `1 oversized record skipped` for one and `N oversized records skipped` for every other count, regardless of whether a path was recovered.
 - [ ] Given an oversized record with a recoverable path, then the per-path line naming the sanitized path is appended after the aggregate count.
 - [ ] Given an anonymous oversized record and no usable results, then the fatal overlay contains the aggregate oversized diagnostic and is never empty.
 - [ ] Given an anonymous oversized record and usable results, then the record loss produces a visible overlay and stderr replay diagnostic rather than passing silently.

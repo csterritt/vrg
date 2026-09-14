@@ -19,7 +19,7 @@ See PRD *Resources and responsiveness* (frame rendering must not scan the whole 
 
 ### How to verify
 
-- **Manual**: generate a large result set (tens of thousands of matched lines across many files) and hold `n`/`j` or resize repeatedly → navigation and repainting stay responsive with no per-keystroke stall growing with index size.
+- **Manual**: generate a large result set (tens of thousands of matched lines across many files) and hold `n` or `down`, or resize repeatedly → navigation and repainting stay responsive with no per-keystroke stall growing with index size.
 - **Automated**: strengthen the file-list cost guard so that accessing or copying all stops during a render fails the test — e.g. an index test double that panics or fails when `Stops()` is called, or a counter asserting bounded index access per `View()`; plus a render test asserting only the visible file range is materialized; plus a resize/gutter-growth test asserting visible paths are re-truncated against the new list width without any whole-list scan.
 
 ### Acceptance criteria
