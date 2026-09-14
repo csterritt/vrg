@@ -419,3 +419,13 @@ Agent messages: 21 messages
 Input tokens: 55023 tokens
 Output tokens: 14595 tokens
 Cached input tokens: 2883971 tokens
+
+----
+New task critique
+
+Usage
+Agent messages: 15 messages
+
+Input tokens: 183385 tokens
+Output tokens: 27221 tokens
+Cached input tokens: 781637 tokens
