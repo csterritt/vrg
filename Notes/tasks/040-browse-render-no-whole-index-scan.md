@@ -11,19 +11,19 @@ Parent PRD: PRD-vrg.md
 ### 1. Specify the bounded-render cost guard
 
 **Type**: RED  
-**Output**: Failing tests make any whole-index enumeration during `View()` fail — an index test double or access counter proving `Stops()`/full-stop copying is never invoked per frame, that only the visible file range is materialized, and that resize/gutter-growth re-truncates visible paths without a whole-list scan.  
+**Output**: Failing tests make any whole-index enumeration during a navigation `Update()` plus resulting `View()` fail — an index test double or access counter proving `Stops()`/full-stop copying is never invoked on either half of the model transition, that only the visible file range is materialized, and that resize/gutter-growth re-truncates visible paths without a whole-list scan.  
 **Depends on**: none
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md`.
 
-Begin only after Issue #39 is complete, and run its focused cluster/path rendering regressions before adding this RED so the shared renderer and grapheme-safe path geometry form the baseline this issue must preserve. Strengthen the file-list cost guard in `internal/app` (alongside the existing `countingFileList`/`FileListProvider` seam in `layout_test.go`). Require that rendering a completed search performs no call enumerating or copying the full stop list — for example an index/provider test double that panics or fails when the whole-stop accessor is invoked during `View()`, or a counter asserting index access bounded by the visible window. Require only the visible file range to be materialized per frame, and add a resize/gutter-growth case asserting visible paths are re-truncated against the new list width at grapheme boundaries with no whole-list scan. These tests fail on the current code, whose `renderBrowse` calls `m.index.Stops()` and `groupByFile` on every frame. Keep this task test-only.
+Begin only after Issue #39 is complete, and run its focused cluster/path rendering regressions before adding this RED so the shared renderer and grapheme-safe path geometry form the baseline this issue must preserve. Strengthen the file-list cost guard in `internal/app` (alongside the existing `countingFileList`/`FileListProvider` seam in `layout_test.go`). Install an index/provider double that panics on a whole-stop accessor, or a counter whose permitted access is bounded by the visible window, then send an `n`/`p` file-navigation key through `Update()` and call the resulting model's `View()`. Assert the bound across the combined model-transition path, not separately reset between `Update()` and `View()`, so a whole-index scan, copy, regroup, or whole-group reallocation in either half fails. Also require only the visible file range to be materialized per frame, and add a resize/gutter-growth case asserting visible paths are re-truncated against the new list width at grapheme boundaries with no whole-list scan. These tests fail on the current code, whose `renderBrowse` calls `m.index.Stops()` and `groupByFile` on every frame, and must also fail if that work is merely moved into navigation handling. Keep this task test-only.
 
 ---
 
 ### 2. Precompute file groups and render only the visible range
 
 **Type**: GREEN  
-**Output**: The cost-guard tests pass; `View()` reads precomputed per-file groups and width-independent path metadata, per-frame cost is bounded by the visible window rather than total stops or files, and file-list behaviour is unchanged.  
+**Output**: The cost-guard tests pass; navigation `Update()` and `View()` read shared precomputed per-file groups and width-independent path metadata, combined per-keystroke transition/render cost is bounded by the visible window rather than total stops or files, and file-list behaviour is unchanged.  
 **Depends on**: 1
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md`.
@@ -38,7 +38,7 @@ Restructure `internal/app/app.go` so immutable per-file groups, current-file ind
 **Output**: Wiki documentation records the precomputed groups/path metadata and the O(visible rows) render bound.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #40 implementation into the appropriate pages under `Notes/wiki`. Document what is prepared once at search completion (per-file groups, current-file indexes, escaped path text, cluster boundaries, full cell width), what remains per-frame (visible-range rendering and current-width truncation), the strengthened cost guard, and the roughly 100,000-matched-line responsiveness rationale. Cross-reference Issue #40 and the *Resources and responsiveness* and *File list and layout* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #40 implementation into the appropriate pages under `Notes/wiki`. Document what is prepared once at search completion (per-file groups, current-file indexes, escaped path text, cluster boundaries, full cell width), what remains per-frame (visible-range rendering and current-width truncation), the strengthened cost guard spanning navigation `Update()` plus the resulting `View()` without resetting its access counter, and the roughly 100,000-matched-line responsiveness rationale. Cross-reference Issue #40 and the *Resources and responsiveness* and *File list and layout* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
 
 ---
 
