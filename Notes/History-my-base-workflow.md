@@ -403,7 +403,7 @@ Output tokens: 62917 tokens
 Cached input tokens: 1853817 tokens
 
 ----
-New task critique
+First task critique
 
 Usage
 Agent messages: 12 messages
@@ -421,7 +421,7 @@ Output tokens: 14595 tokens
 Cached input tokens: 2883971 tokens
 
 ----
-New task critique
+Second task critique
 
 Usage
 Agent messages: 15 messages
@@ -438,3 +438,12 @@ Agent messages: 22 messages
 Input tokens: 76051 tokens
 Output tokens: 14546 tokens
 Cached input tokens: 998276 tokens
+
+----
+Third task critique
+
+Usage
+Agent messages: 23 messages
+Input tokens: 93465 tokens
+Output tokens: 32687 tokens
+Cached input tokens: 1368000 tokens
