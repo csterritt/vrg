@@ -16,7 +16,7 @@ const MODEL_LABEL = "GLM-5.2-high";
 const MIN_WALKTHROUGH_BYTES = 1024;
 const RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 300_000, 600_000];
 const PREFIX_RE = /^(\d{3})/;
-const WALKTHROUGH_RE = /Notes\/walkthroughs\/(\d{3})-(\d+)\/code-walkthrough/;
+const WALKTHROUGH_RE = /Notes\/walkthroughs\/(\d{3})-(\d+)\/code-walkthrough/g;
 const DRY_RUN = process.argv.includes("--dry-run");
 
 interface Task {
@@ -74,8 +74,10 @@ async function tasks(): Promise<Task[]> {
     const match = file.match(PREFIX_RE);
     if (!match) continue;
     const taskText = await readFile(join(TASKS_DIR, file), "utf8");
-    const walkthroughMatch = taskText.match(WALKTHROUGH_RE);
-    if (!walkthroughMatch || walkthroughMatch[1] !== match[1]) {
+    const walkthroughMatch = [...taskText.matchAll(WALKTHROUGH_RE)].find(
+      (candidate) => candidate[1] === match[1],
+    );
+    if (!walkthroughMatch) {
       throw new Error(`Task ${file} does not declare its expected walkthrough directory`);
     }
     const stepCount = Number(walkthroughMatch[2]);
