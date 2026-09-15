@@ -1,7 +1,7 @@
 ## Issue 48: Critical PTY tests wait on application handshakes, not fixed sleeps
 
 **Type**: AFK
-**Blocked by**: Issue 45 — the handshakes must ride the same test-only harness mechanism (`vrg_testhooks`-tagged seams) that issue installs; implementing first would either add more production hooks that Issue 45 must then migrate or invent a competing harness
+**Blocked by**: Issue 45 — the handshakes must ride the same test-only harness mechanism (`vrg_testhooks`-tagged seams) that issue installs; implementing first would either add more production hooks that Issue 45 must then migrate or invent a competing harness. Shared-file/harness ordering with Issues 41 and 46: never implement overlapping `cmd/vrg` PTY work concurrently; whichever issue lands second adapts to the already-landed tests and helpers. If Issue 41 or 46 has landed, this issue incorporates those tests and any key-sending helpers into the handshake matrix and removes fixed settling/inter-key delays; if this issue lands first, Issues 41/46 apply their reciprocal adaptation clauses.
 
 ### Parent PRD
 

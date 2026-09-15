@@ -1,7 +1,7 @@
 ## Issue 46: Bubble Tea runtime errors go through the common shutdown/diagnostic-replay path
 
 **Type**: AFK
-**Blocked by**: Issue 45 — the return-shape injection seam the automated verification needs is the dedicated program-runner boundary in that issue's `vrg_testhooks` topology; app options alone cannot substitute `program.Run()` results, and landing this first would either re-add production hooks or invent a competing harness
+**Blocked by**: Issue 45 — the return-shape injection seam the automated verification needs is the dedicated program-runner boundary in that issue's `vrg_testhooks` topology; app options alone cannot substitute `program.Run()` results, and landing this first would either re-add production hooks or invent a competing harness. Shared-file/harness ordering with Issues 41 and 48: never implement overlapping `cmd/vrg` PTY work concurrently; whichever issue lands second adapts its tests to the already-landed `outcome_test.go` changes and handshake helpers. If Issue 48 has landed, this issue must use its acknowledgement harness and add no fixed settling/inter-key delay; any new key-sending helper must be added to Issue 48's matrix and every new acknowledgement hook it requires to Issue 45's hook manifest. If this issue lands first, Issue 48's reciprocal adaptation rule applies.
 
 ### Parent PRD
 

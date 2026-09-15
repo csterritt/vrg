@@ -1,7 +1,7 @@
 ## Issue 41: Error overlays keep every row scrollable — no destructive head/tail compression
 
 **Type**: AFK
-**Blocked by**: None — can start immediately. Shared-file ordering: this issue and Issue 48 both revise `cmd/vrg/outcome_test.go`; do not implement them concurrently. If both are pending, land Issue 48's handshake refactor first, then adapt the overlay regressions to that harness (or land this issue completely before Issue 48 begins).
+**Blocked by**: None — can start immediately. Shared-file/harness ordering with Issues 46 and 48: do not implement overlapping `cmd/vrg` PTY or `outcome_test.go` work concurrently. Whichever issue lands second adapts to the already-landed tests and helpers. If Issue 48 has landed, this issue uses its acknowledgement harness with no fixed settling/inter-key delay and registers any new key-sending helper in Issue 48's matrix and every new acknowledgement hook it requires in Issue 45's hook manifest; if this issue lands first, Issues 46/48 apply their reciprocal adaptation clauses.
 
 ### Parent PRD
 

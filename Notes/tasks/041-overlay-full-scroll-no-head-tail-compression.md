@@ -2,7 +2,7 @@
 
 Parent issue: #41
 Parent PRD: PRD-vrg.md
-**Blocked by issues**: none — shared-file ordering with #48 on `cmd/vrg/outcome_test.go`: never implement the two concurrently; land this issue completely before Issue #48 begins, or land Issue #48's handshake refactor first and adapt these overlay regressions to its harness
+**Blocked by issues**: none — shared-file/harness ordering with #46 and #48 in `cmd/vrg`: never implement overlapping PTY or `outcome_test.go` work concurrently; whichever issue lands second adapts to the already-landed tests and helpers. If #48 has landed, use its acknowledgement harness with no fixed settling/inter-key delay and add any new key-sending helper to #48's matrix and every new acknowledgement hook it requires to #45's hook manifest; if #41 lands first, #46/#48 apply their reciprocal adaptation clauses
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
 **Manual verification**: Task 4 owns the issue's manual checks.
 
