@@ -11,6 +11,7 @@ const REMOTE_DIR = basename(ROOT);
 const REMOTE_PATH_PREFIX = "export PATH=/home/linuxbrew/.linuxbrew/bin:$PATH";
 const JJ_TEMPLATE =
   'change_id.short() ++ "\\t" ++ if(empty, "EMPTY", "nonempty") ++ "\\t" ++ description.trim() ++ "\\n"';
+const DRY_RUN = Bun.argv.includes("--dry-run");
 
 interface CommitEntry {
   changeId: string;
@@ -67,7 +68,32 @@ async function getRemoteCommits(): Promise<CommitEntry[]> {
   return parseJjLog(output);
 }
 
+async function printDryRunPlan(): Promise<void> {
+  log("Dry run: fetching local and remote commit maps...");
+  const localCommits = await getLocalCommits();
+  const remoteCommits = await getRemoteCommits();
+  const localDescriptions = new Set(localCommits.map((c) => c.description));
+  log(`Local: ${localCommits.length} commits, remote: ${remoteCommits.length} commits.`);
+  const missing = remoteCommits.filter((c) => !localDescriptions.has(c.description));
+  if (missing.length === 0) {
+    log("All remote descriptions are present locally. Nothing to do.");
+    return;
+  }
+  log(`Would apply ${missing.length} remote commit(s):`);
+  for (const commit of missing) {
+    log(`${commit.changeId}: ${commit.description}`);
+    log(`  ssh ${REMOTE_HOST} '${REMOTE_PATH_PREFIX} && cd ${REMOTE_DIR} && jj edit ${commit.changeId}'`);
+    log("  bash scripts/pull-up-new.sh");
+    log(`  jj describe -m "${commit.description}"`);
+    log("  jj new");
+  }
+}
+
 async function main(): Promise<void> {
+  if (DRY_RUN) {
+    await printDryRunPlan();
+    return;
+  }
   for (;;) {
     log("Fetching local and remote commit maps...");
     const localCommits = await getLocalCommits();
