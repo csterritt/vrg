@@ -15,7 +15,10 @@ rule that reload reuses,
 reload routes through, and
 [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md)
 for the keyed prepared-layout installation and supersession guard that
-the reload-anchor pending intent commits through.
+the reload-anchor pending intent commits through, and
+[reload-admission](reload-admission.md) for the Issue #42 atomic
+admission check that decides whether `r`'s state mutations apply at
+all.
 
 ## Problem
 
@@ -42,18 +45,25 @@ for navigation or startup loads).
 
 `handleReload()` is the entry point for `r` from the browse state and
 from a read-failure overlay (so the user can retry a failed file
-without dismissing the overlay first). It:
+without dismissing the overlay first). Issue #42 made admission the
+first step: it:
 
-1. Records the current path in `reloadingPaths` so the
-   `FileLoadCompleteMsg` handler knows this completion is a reload
-   and increments the content revision.
-2. Sets `loading = true` and clears `readFailed` so the panel switches
+1. Checks `loadingPaths` for the current path. If a load is already
+   in flight, the request is dropped and the model is returned
+   unchanged — the admission check and the reload-state mutation are
+   a single decision point, so a dropped `r` leaves revision, intent,
+   and presentation exactly as they were. See
+   [reload-admission](reload-admission.md).
+2. When the new load will be admitted, records the current path in
+   `reloadingPaths` so the `FileLoadCompleteMsg` handler knows this
+   completion is a reload and increments the content revision.
+3. Sets `loading = true` and clears `readFailed` so the panel switches
    from `(unreadable)` to `Loading…` on retry.
-3. Does **not** set `needsReveal`: the anchor is preserved without
-   revealing a match (PRD: "Reload by itself does not reveal a match").
-4. Calls `startLoad`, which enforces the one-load-per-path rule
-   (Issue #25): if a load is already in flight for the path, the
-   request is dropped, not queued. No second load starts.
+4. Sets `loadIntent = IntentReloadAnchor`: the anchor is preserved
+   without revealing a match (PRD: "Reload by itself does not reveal
+   a match").
+5. Calls `startLoad`, which enforces the one-load-per-path rule
+   (Issue #25) as the admission boundary for every load request.
 
 `r` does not rerun ripgrep, add or remove cursor stops, or change the
 search index. The cursor and search-index stops are preserved across
@@ -61,13 +71,21 @@ the reload.
 
 ### Dropped duplicates and re-entry
 
-Because `handleReload` routes through `startLoad`, the Issue #25
-one-load-per-path rule applies:
+Because `handleReload` checks `loadingPaths` before mutating any
+reload state (Issue #42), the Issue #25 one-load-per-path rule applies
+atomically:
 
 - A duplicate `r` while the path's load is already in flight is
-  dropped. The loader is not called again; no second load is queued.
+  dropped. The loader is not called again; no second load is queued;
+  and `reloadingPaths`, `loadIntent`, and presentation are left
+  untouched, so the in-flight startup or navigation load completes
+  under its original classification — never misclassified as a reload
+  with an extra revision bump or anchor preservation.
 - Re-entry (n/p navigation away and back) while a reload is in flight
-  is likewise dropped under the one-load-per-path rule.
+  is likewise dropped under the one-load-per-path rule. Re-entry is
+  deliberately ungated: it still updates the selection, placeholder
+  presentation, and `IntentReveal` even when `startLoad` drops the
+  duplicate load.
 - The placeholder transition (`Loading…` to content or
   `(unreadable)`) is the only completion signal. After completion,
   another `r` starts a new load.
@@ -96,7 +114,9 @@ Issue #28 generalized the reload-anchor pending intent into the
 `LoadIntent` enum. `Model.loadIntent LoadIntent` carries the intent
 from load completion to the matching layout installation:
 
-- `handleReload()` sets `loadIntent = IntentReloadAnchor`.
+- `handleReload()` sets `loadIntent = IntentReloadAnchor`, but only
+  when the reload request is admitted — a dropped `r` preserves the
+  in-flight load's original intent (Issue #42).
 - When a reload's `FileLoadCompleteMsg` arrives for the current path
   with a buffer, the handler calls `buildViewport()`. The viewport may
   be nil while the new layout is pending. The intent is not committed
@@ -206,4 +226,8 @@ current-file failure overlay, second-failure append with overlay
 scroll preserved, the one-stop index route, no reload on simulated
 disk change, the filename row retaining the path, content revision
 advancement, and the Issue #17 revision-supersession discard of a
-gated pre-reload layout released after reload completion.
+gated pre-reload layout released after reload completion. The
+`reload_admission_test.go` catalog covers the Issue #42 atomic
+admission contract (dropped-`r` intent/revision/presentation
+preservation, accepted-`r` single revision increment, rapid-press
+single-in-flight, and ungated navigation re-entry).

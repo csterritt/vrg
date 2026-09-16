@@ -534,13 +534,24 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `overlayWrap` (`overlayWrapCache`) memoizes the wrapped rows keyed on
   (text, interior) so the per-keypress clamp does not re-wrap a ~1 MiB
   diagnostic. The modal key contract is unchanged and render-time
-  clipping at tiny sizes remains. See
+  clipping at tiny sizes remains. Issue #42 made the
+  one-load-per-path admission check and the reload-state mutation a
+  single decision point in `handleReload`: it now checks
+  `loadingPaths` for the current path before recording
+  `reloadingPaths`, switching to `Loading…` presentation, or setting
+  `IntentReloadAnchor`, and applies those mutations only when the new
+  load request is actually accepted — a dropped `r` leaves revision,
+  intent, and presentation untouched so the in-flight startup or
+  navigation load completes under its original classification; the
+  navigation re-entry path is unchanged (selection, placeholder, and
+  `IntentReveal` still update on a dropped duplicate). See
   [overlay-full-scroll](overlay-full-scroll.md),
   [stream-integrity-diagnostics](stream-integrity-diagnostics.md),
   [record-robustness](record-robustness.md),
   [viewport-text-width](viewport-text-width.md),
-  [shared-cell-model-render](shared-cell-model-render.md), and
-  [bounded-browse-render](bounded-browse-render.md).
+  [shared-cell-model-render](shared-cell-model-render.md),
+  [bounded-browse-render](bounded-browse-render.md), and
+  [reload-admission](reload-admission.md).
 
 ## internal/safepresentation
 

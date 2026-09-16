@@ -1645,6 +1645,35 @@ recalibrated the right-edge fixtures — visible window ends at
   after the matching prepared layout installs, not at load
   completion.
 
+`reload_admission_test.go` (Issue #42, external package `app_test`):
+
+- `TestDroppedReloadDuringStartupLoadPreservesReveal` — `r` pressed
+  while the startup load is in flight is dropped without changing
+  `LoadIntent` (stays `IntentReveal`), `IsLoading`, or the loader call
+  count; the completion bumps no revision (`LayoutKey().Revision`
+  stays 1) and performs the required first-match reveal (story 50:
+  line 40 of 50 lands at offset 27) rather than anchor preservation.
+- `TestDroppedReloadDuringNavigationLoadPreservesReveal` — `r` pressed
+  while a navigation load is in flight is dropped without changing the
+  pending destination reveal; a subsequent same-file `n` moves the
+  cursor, and the completion reveals the latest selected target
+  (line 40, offset 27) with no revision bump.
+- `TestAcceptedReloadBumpsRevisionExactlyOnce` — an `r` accepted after
+  the previous load finished shows `Loading…`, sets
+  `IntentReloadAnchor`, issues exactly one reread, and increments the
+  content revision exactly once (1 → 2).
+- `TestRapidReloadPressesKeepOneReloadInFlight` — rapid repeated `r`
+  presses admit at most one reload per path (loader call count does
+  not grow), hold the `Loading…` placeholder, and produce exactly one
+  revision increment with the placeholder→content transition as the
+  completion signal.
+- `TestNavigationReentryDuringInFlightLoadStillReveals` — navigation
+  re-entry into a path whose load is already in flight still updates
+  the selection, the `Loading…` placeholder, and `IntentReveal` even
+  though `startLoad` drops the duplicate load; the in-flight load's
+  completion reveals normally (the atomic-admission restriction
+  applies only to `handleReload`).
+
 `stale_validation_test.go` (Issue #29, external package
 `filebuffer_test`):
 

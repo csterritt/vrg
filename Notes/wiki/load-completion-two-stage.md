@@ -93,7 +93,11 @@ The intent is set by the action that selects a load:
   viewport is installed, reveals immediately. If a layout is pending
   (`pendingLayout`), replaces the pending intent with `IntentReveal`
   so the commit targets the latest selection.
-- **Explicit reload** (`handleReload`): sets `IntentReloadAnchor`.
+- **Explicit reload** (`handleReload`): sets `IntentReloadAnchor`,
+  but only when the new load request is admitted — a dropped `r`
+  preserves the in-flight load's original intent, revision, and
+  presentation (Issue #42, see
+  [reload-admission](reload-admission.md)).
 
 A navigation that occurs while a reload is in flight replaces
 `IntentReloadAnchor` with `IntentReveal`, because the latest

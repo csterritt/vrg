@@ -1522,3 +1522,36 @@ exposed). Created
 `Notes/tasks/041-overlay-full-scroll-no-head-tail-compression.md`,
 `Notes/PRD-vrg.md` (Colours, overlays, and key precedence; Outcome
 and exit-status contract).
+## [2026-09-15] ingest | Issue #42 atomic reload admission
+
+Ingested the completed Issue #42 fix. `handleReload`
+(`internal/app/app.go`) previously recorded `reloadingPaths`,
+switched to `Loading…` presentation, and set `IntentReloadAnchor`
+*before* `startLoad` checked whether a load was already in flight for
+the path — so a dropped `r` still committed reload state, and the
+in-flight startup or navigation load's completion was misclassified
+as a reload (extra revision bump, pending destination reveal
+supplanted by anchor preservation, suppressing the required
+first-match reveal). `handleReload` now checks `loadingPaths` first:
+a dropped `r` returns the model unchanged (single decision point, no
+intermediate committed state), while an accepted `r` applies the
+reload flags, `Loading…` presentation, `IntentReloadAnchor`, and
+exactly one revision increment unchanged. Navigation re-entry is
+deliberately ungated: selection, placeholder presentation, and
+`IntentReveal` still update even when `startLoad` drops a duplicate
+load. New `internal/app/reload_admission_test.go` proves the
+dropped-`r` intent/revision/presentation preservation during startup
+and navigation loads (completion reveals the latest target instead of
+anchor-preserving), the accepted-`r` single revision increment, the
+rapid-press single-in-flight rule, and ungated re-entry. Created
+[reload-admission](reload-admission.md); updated
+[explicit-reload](explicit-reload.md),
+[async-load-isolation](async-load-isolation.md),
+[load-completion-two-stage](load-completion-two-stage.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+[index](index.md). Sources: `internal/app/app.go`,
+`internal/app/reload_admission_test.go`,
+`Notes/issues/042-dropped-reload-no-intent-mutation.md`,
+`Notes/tasks/042-dropped-reload-no-intent-mutation.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency; Navigation, viewport, and logical anchors).

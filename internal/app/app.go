@@ -2250,8 +2250,25 @@ func (m Model) handleNavigate(delta int) (tea.Model, tea.Cmd) {
 // reloadingPaths so the FileLoadCompleteMsg handler increments the
 // content revision, producing a new layout key that invalidates stale
 // cached layouts from the prior revision.
+//
+// Issue #42: the one-load-per-path admission check and the
+// reload-state mutation are a single decision point. When a load is
+// already in flight for the current path, the r request is dropped and
+// reloadingPaths, presentation, and loadIntent are left exactly as
+// they were, so the in-flight startup or navigation load completes
+// under its original classification (a dropped r during the startup
+// load must not suppress the first-match reveal, and a dropped r
+// during a navigation load must not replace the pending destination
+// reveal with anchor preservation). The reload mutations are applied
+// only when the new load request is actually accepted.
 func (m Model) handleReload() (tea.Model, tea.Cmd) {
 	if m.currentPath == nil {
+		return m, nil
+	}
+	// Issue #25/#42: at most one load may be in flight per raw path.
+	// If a load is already in flight for the current path, drop the
+	// request without committing any reload state.
+	if _, inFlight := m.loadingPaths[string(m.currentPath)]; inFlight {
 		return m, nil
 	}
 	// Issue #27: record this path as a reload so the completion
@@ -2272,8 +2289,6 @@ func (m Model) handleReload() (tea.Model, tea.Cmd) {
 	// navigation happens during the reload, the intent is replaced
 	// with IntentReveal (see handleNavigate).
 	m.loadIntent = IntentReloadAnchor
-	// Issue #25: at most one load may be in flight per raw path.
-	// If a load is already in flight, startLoad drops the request.
 	var loadCmd tea.Cmd
 	m, loadCmd = m.startLoad(m.currentPath)
 	return m, loadCmd

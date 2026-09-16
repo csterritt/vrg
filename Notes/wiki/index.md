@@ -295,6 +295,13 @@ Catalog of all wiki pages for the vrg project.
   (text, interior); supersedes the Issue #9 simultaneous head/tail
   requirement for the ≥1 MiB stderr fixture while drainage and
   completeness checks remain
+- [reload-admission.md](reload-admission.md) — Issue #42: the
+  one-load-per-path admission check and the reload-state mutation are
+  a single decision point in `handleReload`; reload flags, `Loading…`
+  presentation, and `IntentReloadAnchor` apply only when a new load is
+  actually accepted; a dropped `r` preserves the in-flight load's
+  original intent, revision, and presentation; navigation re-entry is
+  deliberately ungated
 
 ## Catalogs
 

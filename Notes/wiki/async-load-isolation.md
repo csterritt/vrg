@@ -80,6 +80,15 @@ nothing. The panel shows the loading placeholder; the existing load's
 completion will update the cache and, if the path is still current,
 the panel. Re-entering a loading path is a no-op for the loader.
 
+Issue #42 made the same admission check atomic with the reload-state
+mutation inside `handleReload`: a dropped `r` no longer commits
+`reloadingPaths`, `IntentReloadAnchor`, or presentation changes before
+the drop, so the in-flight load completes under its original
+classification. Navigation re-entry is deliberately ungated — it still
+updates the selection, placeholder, and `IntentReveal` even when the
+duplicate load is dropped. See
+[reload-admission](reload-admission.md).
+
 ### Session-long buffer retention
 
 Successful buffers are retained in `fileCache` for the entire session.

@@ -510,3 +510,12 @@ Usage
  Input tokens: 36849 tokens
  Output tokens: 6673 tokens
  Cached input tokens: 1763008 tokens
+
+----
+Task 042-dropped-reload-no-intent-mutation.md
+
+Usage
+ Agent messages: 30 messages
+ Input tokens: 34377 tokens
+ Output tokens: 7861 tokens
+ Cached input tokens: 2031552 tokens
