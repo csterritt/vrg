@@ -108,7 +108,9 @@ table, parser config, and generated help cannot drift.
   agreement, missing `end`, missing `summary`, trailing malformed/
   unterminated records, context records in arbitrary positions, and
   binary exclusion precedence. Each row asserts integrity completeness
-  and stop count.
+  and stop count. Issue #36 corrected the superseded
+  context-after-`summary` row: a post-summary `context` record is an
+  integrity violation, not lifecycle-neutral.
 - Issue #10 malformed disposition tests (`malformed_test.go`,
   `TestMalformedDisposition`) — table-driven coverage of every row of
   the Issue #3 per-record schema matrix (invalid JSON, invalid base64,
@@ -132,6 +134,20 @@ table, parser config, and generated help cannot drift.
   stops), `TestUnknownType` (unknown counted separately, unknown does
   not substitute for summary, unknown after summary is unknown and
   after-summary integrity failure).
+- Issue #36 structured-cause tests (`integrity_test.go`,
+  `TestIntegrityCauses`) — table-driven coverage asserting the exact
+  `Integrity.Causes` list per scenario: duplicate `begin`, orphaned
+  `match`, `match` after binary `end` (distinct kind, same user-facing
+  line), orphaned `end`, missing `end`, missing `summary`, second
+  `summary` (extra-summary precedence, including a malformed second
+  summary keeping the cause plus the malformed count), post-summary
+  `begin`/`match`/`end`/`context`/unknown/oversized records (`record
+  after summary` only, no lifecycle effects, dual counter
+  representation), post-summary unterminated fragments (`record after
+  summary` plus malformed count, no unterminated cause),
+  detection-order multiplicity with no deduplication or cap, and
+  deterministic unsigned raw-path ordering of missing `end` causes
+  across shuffled insertion order.
 - Issue #13 cursor tests (`cursor_test.go`, external package
   `searchindex_test`):
   - `TestCursorStartupSelectsFirstStop` — a new cursor selects the
@@ -461,6 +477,19 @@ table, parser config, and generated help cannot drift.
   (browse or no-results without an overlay).
 - `TestFixedStatusNotRecomputed` — the exit status is chosen once
   after search and later dismissal does not recompute it.
+- Issue #36 composed-diagnostics tests:
+  `TestDecideOutcomeIntegrityCauseLines` asserts the complete
+  `OverlayText` (exact equality, not substring) for each cause kind,
+  including `EscapePath` escaping of hostile path bytes;
+  `TestDecideOutcomeComposedOrder` asserts the universal
+  process → integrity → record-loss → unknown-type ordering across
+  fatal and non-fatal inputs, the generated-process-line restriction
+  to signal/non-0/1 exits, and no process-status line for 0/1;
+  `TestOutcomeIntegrityDiagnosticsFlow` drives the full `Update` flow
+  and asserts the collected stderr replay carries the same composed
+  text as the overlay;
+  `TestOutcomeMissingEndDeterministic` asserts deterministic
+  missing-`end` ordering for real `Builder`-produced causes.
 
 `overlay_test.go` (Issue #9, external package `app_test`):
 

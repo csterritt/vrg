@@ -1,4 +1,4 @@
-# Search collection path (Issue #3, extended by Issues #4, #8, #9, #10, and #11)
+# Search collection path (Issue #3, extended by Issues #4, #8, #9, #10, #11, and #36)
 
 The ripgrep execution and result-collection pipeline delivered by
 [Issue #3](../issues/003-spawn-rg-collect-results-searching-screen.md),
@@ -20,7 +20,9 @@ diagnostics, and record-loss outcome rows. [Issue #11](../issues/011-stderr-repl
 added the session diagnostic collection independent of display, the
 processed-versus-in-flight shutdown boundary, and post-restoration
 stderr replay of every collected diagnostic exactly once in collection
-order. Relevant PRD sections:
+order. [Issue #36](../issues/036-stream-integrity-fatal-diagnostics.md)
+added structured stream-integrity causes and universal overlay/replay
+diagnostic composition. Relevant PRD sections:
 *Implementation Decisions → Invocation and child arguments*,
 *Module Design → CLI / SearchIndex / App*, *Testing Decisions → CLI /
 SearchIndex / App / Subprocess boundary / Responsiveness boundaries*,
@@ -124,8 +126,12 @@ count. This is the single value the app outcome logic consumes.
 `match` records a stop, merging same-line matches: if a new match shares
 the same file and line number as an existing stop, its submatches are
 appended and the line bytes are kept from the first occurrence. `end`
-closes the file context. `summary` and `context` are recognized but do
-not affect the index.
+closes the file context. `context` is recognized but does not affect
+the index. Since Issue #36, the first valid `summary` terminates
+lifecycle processing: a second `summary` records an `extra summary`
+cause, and any other later record records a `record after summary`
+cause without lifecycle dispatch — it cannot open files, add stops, or
+produce later missing-`end` causes.
 
 ### Range normalization
 
@@ -149,8 +155,13 @@ raw path bytes, so non-UTF-8 paths sort after ASCII paths by byte value.
 - `Index.Files()` — number of distinct files with retained matches.
 - `Index.ExcludedFiles()` (Issue #8) — number of distinct files dropped
   by a non-null `binary_offset` in their `end` event.
-- `Index.Integrity()` (Issue #9) — `Integrity{Complete}`, true only when
-  every lifecycle rule passed.
+- `Index.Integrity()` (Issue #9) — `Integrity{Complete, Causes}`;
+  `Complete` is true only when every lifecycle rule passed. Issue #36
+  added `Causes`: one structured `IntegrityCause` (kind plus raw path)
+  per offending physical record, in detection order followed by
+  end-of-stream causes (missing `end` ordered by unsigned raw-path
+  bytes, missing `summary`, trailing-fragment cause). See
+  [stream-integrity-diagnostics](stream-integrity-diagnostics.md).
 - `Index.MalformedCount()` (Issue #10) — number of records skipped and
   counted as malformed (invalid JSON, invalid base64, missing/invalid
   type, or known events violating the per-record schema matrix). Kept

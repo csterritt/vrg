@@ -56,19 +56,29 @@ Catalog of all wiki pages for the vrg project.
   top-of-file starting sequence; saved-state replacement for moving
   and no-scroll reveals; startup-after-load and navigation triggers
 - [outcome-contract.md](outcome-contract.md) — Issue #9 (extended by
-  Issues #10 and #11): stream-integrity accounting, separate
+  Issues #10, #11, and #36): stream-integrity accounting, separate
   process-success and stream-integrity assessment, the fatal/warning
   outcome matrix, the modal error overlay, exit statuses, stderr
   capture and fallback diagnostics, record-loss inputs and outcome
-  rows, and the post-restoration stderr replay with session
-  diagnostic collection
-- [record-robustness.md](record-robustness.md) — Issue #10: robust
-  handling of malformed, oversized, and unknown-type records with
-  separate counters, the 64 MiB record limit with
-  discard-and-resynchronize behavior, sanitized oversized-record
+  rows, the universal composed-diagnostic component order, and the
+  post-restoration stderr replay with session diagnostic collection
+- [record-robustness.md](record-robustness.md) — Issue #10 (extended
+  by Issue #36): robust handling of malformed, oversized, and
+  unknown-type records with separate counters, the 64 MiB record limit
+  with discard-and-resynchronize behavior, sanitized oversized-record
   diagnostics, unknown-type counting rules, missing-`end` retention,
-  and record-loss outcome rows with after-filtering usable-results
-  assessment
+  post-`summary` dual representation, and record-loss outcome rows
+  with after-filtering usable-results assessment
+- [stream-integrity-diagnostics.md](stream-integrity-diagnostics.md) —
+  Issue #36: structured `IntegrityCause` records (one cause per
+  offending physical record with stable diagnostic text), overlap
+  precedence (extra-summary, post-summary lifecycle suppression
+  including the removed `context` exemption, post-summary
+  unterminated fragments), detection-order plus end-of-stream
+  ordering with unsigned raw-path missing-`end` sort, uncapped
+  multiplicity, `EscapePath` escaping, and the universal
+  process → integrity → record-loss → unknown-type component order
+  shared by overlay and stderr replay
 - [wrap-mode-and-grapheme-policy.md](wrap-mode-and-grapheme-policy.md) —
   Issue #16: wrapping on by default, `w` toggle, shared grapheme
   segmentation and cell-width policy, eight-column tab stops, the

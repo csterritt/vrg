@@ -211,7 +211,10 @@ type RecordLoss struct {
 
 // OutcomeInput is the input to the pure outcome decision.
 type OutcomeInput struct {
-	Process       ProcessResult
+	Process ProcessResult
+	// Integrity is the stream-integrity assessment. Its Causes list
+	// carries the structured integrity violations emitted as cause
+	// lines in the composed diagnostic (Issue #36).
 	Integrity     searchindex.Integrity
 	UsableResults int
 	RecordLoss    RecordLoss
@@ -250,34 +253,26 @@ type Outcome struct {
 // malformed or oversized records leave zero usable results, the
 // outcome is a record-loss fatal overlay (exit 2). Unknown-only loss
 // never independently changes exit status; it produces a warning
-// overlay. Record-loss diagnostics are combined with stderr
-// diagnostics for the overlay text.
+// overlay. Every branch composes its overlay text through
+// composeDiagnostics in the universal component order — process
+// diagnostics, integrity-cause lines, record-loss components,
+// unknown-type warnings — so fatal branches state the real integrity
+// cause rather than a bare process-status line, and no process-status
+// line is ever emitted for a 0/1 exit.
 func DecideOutcome(in OutcomeInput) Outcome {
 	fatal := in.Process.SignalDeath || isFatalExit(in.Process.ExitCode) || !in.Integrity.Complete
 	hasResults := in.UsableResults > 0
 
-	// Combine stderr and record-loss diagnostics for overlay text.
-	overlayText := in.Diagnostics
-	if in.RecordLossDiagnostics != "" {
-		if overlayText != "" {
-			overlayText += "\n" + in.RecordLossDiagnostics
-		} else {
-			overlayText = in.RecordLossDiagnostics
-		}
-	}
+	overlayText := composeDiagnostics(in)
 	hasOverlayText := overlayText != ""
 
 	if fatal {
-		text := in.Diagnostics
-		if text == "" {
-			text = generatedDiagnostic(in.Process)
-		}
 		if hasResults {
 			// Browse with error overlay; dismiss → browse; q → 2.
-			return Outcome{State: StateBrowse, Overlay: OverlayError, OverlayText: text, ExitStatus: 2}
+			return Outcome{State: StateBrowse, Overlay: OverlayError, OverlayText: overlayText, ExitStatus: 2}
 		}
 		// Fatal no-results overlay; q/Esc → 2 (no underlying state).
-		return Outcome{State: StateNoResults, Overlay: OverlayError, OverlayFatal: true, OverlayText: text, ExitStatus: 2}
+		return Outcome{State: StateNoResults, Overlay: OverlayError, OverlayFatal: true, OverlayText: overlayText, ExitStatus: 2}
 	}
 
 	// Record-loss fatal: no usable results due to malformed or
@@ -313,9 +308,73 @@ func isFatalExit(code int) bool {
 	return code != 0 && code != 1
 }
 
+// composeDiagnostics builds the complete ordered diagnostic text shared
+// by every outcome branch, fatal and non-fatal alike (Issue #36). The
+// universal component order is: the process component (collected
+// ripgrep stderr in collection order, or — only when the process failed
+// and supplied no stderr — a generated line naming the exit code or
+// signal; never a process-status line for a 0/1 exit), then the
+// stream-integrity cause lines in Index order, then the record-loss
+// components (malformed aggregate, oversized aggregate, per-path
+// oversized details), then unknown-type warnings. Components that do
+// not apply are omitted without disturbing the relative order of those
+// present. The composed text is collected once and reaches both the
+// overlay and the post-restoration stderr replay verbatim.
+func composeDiagnostics(in OutcomeInput) string {
+	var lines []string
+	switch {
+	case in.Diagnostics != "":
+		lines = append(lines, strings.Split(strings.TrimRight(in.Diagnostics, "\n"), "\n")...)
+	case in.Process.SignalDeath || isFatalExit(in.Process.ExitCode):
+		lines = append(lines, generatedDiagnostic(in.Process))
+	}
+	for _, c := range in.Integrity.Causes {
+		lines = append(lines, integrityCauseLine(c))
+	}
+	if in.RecordLossDiagnostics != "" {
+		lines = append(lines, strings.Split(in.RecordLossDiagnostics, "\n")...)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// integrityCauseLine renders one structured integrity cause as its
+// stable user-facing diagnostic line, escaping any embedded path
+// through safepresentation.EscapePath so path newlines cannot forge
+// diagnostic paragraph breaks (Issue #36).
+func integrityCauseLine(c searchindex.IntegrityCause) string {
+	path := safepresentation.EscapePath(c.Path).Text
+	switch c.Kind {
+	case searchindex.IntegrityCauseDuplicateBegin:
+		return "duplicate begin record for " + path
+	case searchindex.IntegrityCauseOrphanedMatch,
+		searchindex.IntegrityCauseMatchAfterBinaryEnd:
+		// A match after a binary-excluding end reports as an orphaned
+		// match; the late match is not retained.
+		return "orphaned match record for " + path
+	case searchindex.IntegrityCauseOrphanedEnd:
+		return "orphaned end record for " + path
+	case searchindex.IntegrityCauseMissingEnd:
+		return "missing end record for " + path
+	case searchindex.IntegrityCauseMissingSummary:
+		return "missing summary record"
+	case searchindex.IntegrityCauseExtraSummary:
+		return "extra summary record"
+	case searchindex.IntegrityCauseRecordAfterSummary:
+		return "record after summary"
+	case searchindex.IntegrityCauseUnterminatedRecord:
+		return "unterminated final record"
+	default:
+		return "unrecognised integrity failure"
+	}
+}
+
 // recordLossDiagnostics builds the formatted diagnostic text for
-// record-loss counts from the index. It includes malformed count,
-// unknown count, and per-record oversized path diagnostics.
+// record-loss counts from the index in the Issue #37 component order:
+// the malformed aggregate, then the oversized component, then the
+// unknown-type warning — so unknown types cannot sit between the
+// malformed and oversized components. The oversized component currently
+// carries the per-record path diagnostics; Issue #37 prepends the
+// aggregate count line ahead of them.
 func recordLossDiagnostics(idx *searchindex.Index) string {
 	var parts []string
 	if m := idx.MalformedCount(); m > 0 {
@@ -325,10 +384,10 @@ func recordLossDiagnostics(idx *searchindex.Index) string {
 		}
 		parts = append(parts, fmt.Sprintf("%d malformed record%s skipped", m, plural))
 	}
+	parts = append(parts, idx.OversizedDiagnostics()...)
 	if u := idx.UnknownCount(); u > 0 {
 		parts = append(parts, fmt.Sprintf("%d unrecognised record types skipped", u))
 	}
-	parts = append(parts, idx.OversizedDiagnostics()...)
 	return strings.Join(parts, "\n")
 }
 

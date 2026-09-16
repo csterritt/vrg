@@ -456,3 +456,12 @@ Agent messages: 42 messages
 Input tokens: 93703 tokens
 Output tokens: 17396 tokens
 Cached input tokens: 2523570 tokens
+
+----
+Task 036-stream-integrity-fatal-diagnostics.md
+
+Usage
+ Agent messages: 46 messages
+ Input tokens: 107938 tokens
+ Output tokens: 23912 tokens
+ Cached input tokens: 3974604 tokens

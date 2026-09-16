@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -327,6 +328,529 @@ func TestDecideOutcomeStderrDiagnostic(t *testing.T) {
 	})
 	if !strings.Contains(got.OverlayText, "boom") {
 		t.Fatalf("OverlayText = %q, want it to contain the stderr 'boom'", got.OverlayText)
+	}
+}
+
+// --- Issue #36: structured integrity causes and universal composition ---
+
+// TestDecideOutcomeIntegrityCauseLines covers every integrity cause in
+// the Issue #36 matrix: each cause produces its stable user-facing line
+// naming the EscapePath-escaped path where applicable. Each row asserts
+// the complete overlay text so a regression that drops, reorders, or
+// rephrases the integrity component fails.
+func TestDecideOutcomeIntegrityCauseLines(t *testing.T) {
+	cases := []struct {
+		name     string
+		causes   []searchindex.IntegrityCause
+		wantText string
+	}{
+		{
+			name:     "duplicate begin names escaped path",
+			causes:   []searchindex.IntegrityCause{{Kind: searchindex.IntegrityCauseDuplicateBegin, Path: []byte("a.go")}},
+			wantText: "duplicate begin record for a.go",
+		},
+		{
+			name:     "orphaned match names escaped path",
+			causes:   []searchindex.IntegrityCause{{Kind: searchindex.IntegrityCauseOrphanedMatch, Path: []byte("a.go")}},
+			wantText: "orphaned match record for a.go",
+		},
+		{
+			name:     "match after binary-excluding end names escaped path",
+			causes:   []searchindex.IntegrityCause{{Kind: searchindex.IntegrityCauseMatchAfterBinaryEnd, Path: []byte("a.go")}},
+			wantText: "orphaned match record for a.go",
+		},
+		{
+			name:     "orphaned end names escaped path",
+			causes:   []searchindex.IntegrityCause{{Kind: searchindex.IntegrityCauseOrphanedEnd, Path: []byte("a.go")}},
+			wantText: "orphaned end record for a.go",
+		},
+		{
+			name:     "missing end names escaped path",
+			causes:   []searchindex.IntegrityCause{{Kind: searchindex.IntegrityCauseMissingEnd, Path: []byte("a.go")}},
+			wantText: "missing end record for a.go",
+		},
+		{
+			name:     "missing summary",
+			causes:   []searchindex.IntegrityCause{{Kind: searchindex.IntegrityCauseMissingSummary}},
+			wantText: "missing summary record",
+		},
+		{
+			name:     "extra summary",
+			causes:   []searchindex.IntegrityCause{{Kind: searchindex.IntegrityCauseExtraSummary}},
+			wantText: "extra summary record",
+		},
+		{
+			name:     "record after summary",
+			causes:   []searchindex.IntegrityCause{{Kind: searchindex.IntegrityCauseRecordAfterSummary}},
+			wantText: "record after summary",
+		},
+		{
+			name:     "unterminated final record",
+			causes:   []searchindex.IntegrityCause{{Kind: searchindex.IntegrityCauseUnterminatedRecord}},
+			wantText: "unterminated final record",
+		},
+		{
+			name:     "path with newline escaped through EscapePath",
+			causes:   []searchindex.IntegrityCause{{Kind: searchindex.IntegrityCauseDuplicateBegin, Path: []byte("a\nb.go")}},
+			wantText: `duplicate begin record for a\nb.go`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := app.DecideOutcome(app.OutcomeInput{
+				Process:       app.ProcessResult{ExitCode: 0},
+				Integrity:     searchindex.Integrity{Complete: false, Causes: tc.causes},
+				UsableResults: 1,
+			})
+			if got.OverlayText != tc.wantText {
+				t.Fatalf("OverlayText = %q, want %q", got.OverlayText, tc.wantText)
+			}
+			if got.ExitStatus != 2 {
+				t.Fatalf("ExitStatus = %d, want 2", got.ExitStatus)
+			}
+		})
+	}
+}
+
+// TestDecideOutcomeComposedOrder covers the Issue #36 universal
+// component order — process diagnostics, then integrity-cause lines,
+// then record-loss components (malformed aggregate, oversized details),
+// then unknown-type warnings — in fatal and non-fatal branches alike.
+// Each row asserts equality of the complete ordered overlay text.
+func TestDecideOutcomeComposedOrder(t *testing.T) {
+	incomplete := func(causes ...searchindex.IntegrityCause) searchindex.Integrity {
+		return searchindex.Integrity{Complete: false, Causes: causes}
+	}
+	orphanA := searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseOrphanedMatch, Path: []byte("a.go")}
+	ras := searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseRecordAfterSummary}
+
+	cases := []struct {
+		name           string
+		process        app.ProcessResult
+		integrity      searchindex.Integrity
+		usableResults  int
+		diagnostics    string
+		recordLoss     app.RecordLoss
+		recordLossDiag string
+		wantText       string
+		wantExitStatus int
+	}{
+		// Fatal: real stderr and integrity causes compose; neither
+		// suppresses the other and no process-status line appears for
+		// a 0/1 exit.
+		{
+			name:          "fatal integrity with stderr composes both in order",
+			process:       app.ProcessResult{ExitCode: 0},
+			integrity:     incomplete(orphanA, searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseMissingSummary}),
+			usableResults: 1,
+			diagnostics:   "warn-one\nwarn-two",
+			wantText: "warn-one\nwarn-two\n" +
+				"orphaned match record for a.go\n" +
+				"missing summary record",
+			wantExitStatus: 2,
+		},
+		// Fatal: failed process with no stderr emits the generated
+		// line, then integrity causes, then record loss.
+		{
+			name:           "fatal exit no stderr generated line then causes then record loss",
+			process:        app.ProcessResult{ExitCode: 3},
+			integrity:      incomplete(searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseMissingEnd, Path: []byte("a.go")}),
+			usableResults:  0,
+			recordLoss:     app.RecordLoss{Malformed: 1},
+			recordLossDiag: "1 malformed record skipped",
+			wantText: "ripgrep exited with code 3\n" +
+				"missing end record for a.go\n" +
+				"1 malformed record skipped",
+			wantExitStatus: 2,
+		},
+		// Fatal: signal death with no stderr names the signal, then
+		// the integrity cause.
+		{
+			name:          "signal death no stderr names signal then causes",
+			process:       app.ProcessResult{SignalDeath: true, ExitCode: 9},
+			integrity:     incomplete(ras),
+			usableResults: 0,
+			wantText: "ripgrep killed by signal 9\n" +
+				"record after summary",
+			wantExitStatus: 2,
+		},
+		// Fatal: a failed process that supplied stderr emits the
+		// stderr, not the generated line, then the causes.
+		{
+			name:           "fatal exit with stderr uses stderr then causes",
+			process:        app.ProcessResult{ExitCode: 3},
+			integrity:      incomplete(orphanA),
+			usableResults:  1,
+			diagnostics:    "boom",
+			wantText:       "boom\norphaned match record for a.go",
+			wantExitStatus: 2,
+		},
+		// Overlap: a second summary has the sole integrity line
+		// "extra summary record" and no "record after summary" line.
+		{
+			name:           "second summary sole line is extra summary record",
+			process:        app.ProcessResult{ExitCode: 0},
+			integrity:      incomplete(searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseExtraSummary}),
+			usableResults:  0,
+			wantText:       "extra summary record",
+			wantExitStatus: 2,
+		},
+		// Overlap: a post-summary begin has the sole integrity line
+		// "record after summary" with no lifecycle line and no
+		// end-of-stream missing end.
+		{
+			name:           "post-summary begin sole line is record after summary",
+			process:        app.ProcessResult{ExitCode: 0},
+			integrity:      incomplete(ras),
+			usableResults:  0,
+			wantText:       "record after summary",
+			wantExitStatus: 2,
+		},
+		// Overlap: a post-summary unterminated fragment has "record
+		// after summary" followed by the malformed aggregate, with no
+		// "unterminated final record" line.
+		{
+			name:           "post-summary unterminated fragment is record after summary plus malformed",
+			process:        app.ProcessResult{ExitCode: 0},
+			integrity:      incomplete(ras),
+			usableResults:  1,
+			recordLoss:     app.RecordLoss{Malformed: 1},
+			recordLossDiag: "1 malformed record skipped",
+			wantText:       "record after summary\n1 malformed record skipped",
+			wantExitStatus: 2,
+		},
+		// Overlap: a post-summary oversized record has "record after
+		// summary" followed by the per-path oversized detail, with no
+		// oversized integrity cause. (Issue #37 will prepend the
+		// aggregate and update this expected slice.)
+		{
+			name:           "post-summary oversized is record after summary plus oversized detail",
+			process:        app.ProcessResult{ExitCode: 0},
+			integrity:      incomplete(ras),
+			usableResults:  1,
+			recordLoss:     app.RecordLoss{Oversized: 1},
+			recordLossDiag: "oversized record skipped for q.go",
+			wantText:       "record after summary\noversized record skipped for q.go",
+			wantExitStatus: 2,
+		},
+		// Overlap: a post-summary unknown-type record has "record
+		// after summary" followed by the unknown-type warning in the
+		// unknown-warning slot, with no second integrity cause.
+		{
+			name:           "post-summary unknown type is record after summary plus unknown warning",
+			process:        app.ProcessResult{ExitCode: 0},
+			integrity:      incomplete(ras),
+			usableResults:  1,
+			recordLoss:     app.RecordLoss{Unknown: 1},
+			recordLossDiag: "1 unrecognised record types skipped",
+			wantText:       "record after summary\n1 unrecognised record types skipped",
+			wantExitStatus: 2,
+		},
+		// Dual representation: a trailing unterminated record outside
+		// the post-summary state produces its integrity line and the
+		// malformed aggregate.
+		{
+			name:    "unterminated record dual representation with malformed aggregate",
+			process: app.ProcessResult{ExitCode: 0},
+			integrity: incomplete(
+				searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseMissingSummary},
+				searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseUnterminatedRecord},
+			),
+			usableResults:  1,
+			recordLoss:     app.RecordLoss{Malformed: 1},
+			recordLossDiag: "1 malformed record skipped",
+			wantText: "missing summary record\n" +
+				"unterminated final record\n" +
+				"1 malformed record skipped",
+			wantExitStatus: 2,
+		},
+		// Uncapped multiplicity: repeated identical violations emit
+		// one line each, in detection order.
+		{
+			name:    "repeated orphaned matches emit one line each uncapped",
+			process: app.ProcessResult{ExitCode: 0},
+			integrity: incomplete(
+				searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseOrphanedMatch, Path: []byte("a.go")},
+				searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseOrphanedMatch, Path: []byte("a.go")},
+				searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseOrphanedMatch, Path: []byte("a.go")},
+			),
+			usableResults: 3,
+			wantText: "orphaned match record for a.go\n" +
+				"orphaned match record for a.go\n" +
+				"orphaned match record for a.go",
+			wantExitStatus: 2,
+		},
+		// Deterministic ordering: missing ends appear in unsigned
+		// raw-path order.
+		{
+			name:    "two missing ends ordered by unsigned raw-path bytes",
+			process: app.ProcessResult{ExitCode: 0},
+			integrity: incomplete(
+				searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseMissingEnd, Path: []byte("a.go")},
+				searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseMissingEnd, Path: []byte("b.go")},
+			),
+			usableResults: 2,
+			wantText: "missing end record for a.go\n" +
+				"missing end record for b.go",
+			wantExitStatus: 2,
+		},
+		// Non-fatal: a complete stream with stderr and record loss
+		// composes process then record-loss components in the same
+		// universal order.
+		{
+			name:           "non-fatal warning composes stderr then record loss then unknown",
+			process:        app.ProcessResult{ExitCode: 0},
+			integrity:      searchindex.Integrity{Complete: true},
+			usableResults:  1,
+			diagnostics:    "warn",
+			recordLoss:     app.RecordLoss{Malformed: 1, Oversized: 1, Unknown: 2},
+			recordLossDiag: "1 malformed record skipped\noversized record skipped for b.go\n2 unrecognised record types skipped",
+			wantText: "warn\n" +
+				"1 malformed record skipped\n" +
+				"oversized record skipped for b.go\n" +
+				"2 unrecognised record types skipped",
+			wantExitStatus: 0,
+		},
+		// A 0/1 exit never emits a process-status line, even when the
+		// stream is incomplete and there is no stderr.
+		{
+			name:           "incomplete stream rg0 no stderr names cause not process status",
+			process:        app.ProcessResult{ExitCode: 0},
+			integrity:      incomplete(searchindex.IntegrityCause{Kind: searchindex.IntegrityCauseMissingSummary}),
+			usableResults:  0,
+			wantText:       "missing summary record",
+			wantExitStatus: 2,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := app.DecideOutcome(app.OutcomeInput{
+				Process:               tc.process,
+				Integrity:             tc.integrity,
+				UsableResults:         tc.usableResults,
+				Diagnostics:           tc.diagnostics,
+				RecordLoss:            tc.recordLoss,
+				RecordLossDiagnostics: tc.recordLossDiag,
+			})
+			if got.OverlayText != tc.wantText {
+				t.Fatalf("OverlayText = %q, want %q", got.OverlayText, tc.wantText)
+			}
+			if got.ExitStatus != tc.wantExitStatus {
+				t.Fatalf("ExitStatus = %d, want %d", got.ExitStatus, tc.wantExitStatus)
+			}
+			if strings.Contains(got.OverlayText, "ripgrep exited with code 0") ||
+				strings.Contains(got.OverlayText, "ripgrep exited with code 1") {
+				t.Fatalf("OverlayText = %q contains a process-status line for a 0/1 exit", got.OverlayText)
+			}
+		})
+	}
+}
+
+// contextRecord builds a context record whose data payload is ignored.
+func contextRecord() string {
+	rec := map[string]any{
+		"type": "context",
+		"data": map[string]any{
+			"path":        map[string]any{"text": "ignored.go"},
+			"lines":       map[string]any{"text": "ignored\n"},
+			"line_number": 99,
+		},
+	}
+	b, _ := json.Marshal(rec)
+	return string(b)
+}
+
+// buildIndexStream builds a searchindex.Index by feeding raw stream
+// data through the bounded ReadFrom record reader, so oversized-record
+// and trailing-fragment paths are exercised exactly as in production.
+func buildIndexStream(t *testing.T, workdir string, data string) *searchindex.Index {
+	t.Helper()
+	b := searchindex.NewBuilder(workdir)
+	if _, err := b.ReadFrom(strings.NewReader(data)); err != nil {
+		t.Fatalf("ReadFrom: %v", err)
+	}
+	return b.Build()
+}
+
+// oversizedMatchRecoverable builds a match record of exactly size bytes
+// with the path field placed early so the path is recoverable from the
+// first MaxRecordSize+1 bytes of partial oversized data.
+func oversizedMatchRecoverable(path string, size int) string {
+	prefix := `{"type":"match","data":{"path":{"text":"` + path + `"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}],"lines":{"text":"`
+	suffix := `"}}}`
+	paddingLen := size - len(prefix) - len(suffix)
+	if paddingLen < 1 {
+		paddingLen = 1
+	}
+	return prefix + strings.Repeat("x", paddingLen) + suffix
+}
+
+// TestOutcomeIntegrityDiagnosticsFlow verifies that the composed
+// diagnostic text reaches both sinks identically through the full
+// Update flow: the overlay text and the collected diagnostic replayed
+// to stderr carry the same complete ordered lines.
+func TestOutcomeIntegrityDiagnosticsFlow(t *testing.T) {
+	cases := []struct {
+		name      string
+		build     func(t *testing.T) *searchindex.Index
+		process   app.ProcessResult
+		stderr    string
+		wantText  string
+		wantFatal bool
+	}{
+		{
+			name: "missing summary names the cause not the exit code",
+			build: func(t *testing.T) *searchindex.Index {
+				return buildIndexRaw(t, "/work",
+					textBegin("a.go"),
+					textMatch("a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+					endRecord("a.go", nil),
+				)
+			},
+			process:  app.ProcessResult{ExitCode: 0},
+			wantText: "missing summary record",
+		},
+		{
+			name: "missing end names the escaped path",
+			build: func(t *testing.T) *searchindex.Index {
+				return buildIndexRaw(t, "/work",
+					textBegin("a.go"),
+					textMatch("a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+					summaryRecord(),
+				)
+			},
+			process:  app.ProcessResult{ExitCode: 0},
+			wantText: "missing end record for a.go",
+		},
+		{
+			name: "context after summary is record after summary",
+			build: func(t *testing.T) *searchindex.Index {
+				return buildIndexRaw(t, "/work", summaryRecord(), contextRecord())
+			},
+			process:   app.ProcessResult{ExitCode: 0},
+			wantText:  "record after summary",
+			wantFatal: true,
+		},
+		{
+			name: "damaged stream with real stderr composes all causes together",
+			build: func(t *testing.T) *searchindex.Index {
+				return buildIndexRaw(t, "/work",
+					textMatch("a.go", "x\n", 1, subSpec{"x", 0, 1}),
+					textBegin("b.go"),
+				)
+			},
+			process: app.ProcessResult{ExitCode: 0},
+			stderr:  "rg warning",
+			wantText: "rg warning\n" +
+				"orphaned match record for a.go\n" +
+				"missing end record for b.go\n" +
+				"missing summary record",
+		},
+		{
+			name: "post-summary unterminated fragment is record after summary plus malformed",
+			build: func(t *testing.T) *searchindex.Index {
+				return buildIndexStream(t, "/work",
+					textBegin("a.go")+"\n"+
+						textMatch("a.go", "x\n", 1, subSpec{"x", 0, 1})+"\n"+
+						endRecord("a.go", nil)+"\n"+
+						summaryRecord()+"\n"+
+						`{"type":"summary"` /* unterminated fragment, no newline */)
+			},
+			process:  app.ProcessResult{ExitCode: 0},
+			wantText: "record after summary\n1 malformed record skipped",
+		},
+		{
+			name: "post-summary unknown type is record after summary plus unknown warning",
+			build: func(t *testing.T) *searchindex.Index {
+				return buildIndexRaw(t, "/work",
+					summaryRecord(), `{"type":"mystery","data":{}}`)
+			},
+			process:   app.ProcessResult{ExitCode: 0},
+			wantText:  "record after summary\n1 unrecognised record types skipped",
+			wantFatal: true,
+		},
+		{
+			name: "post-summary oversized is record after summary plus oversized detail",
+			build: func(t *testing.T) *searchindex.Index {
+				rec := oversizedMatchRecoverable("q.go", 64*1024*1024+100)
+				return buildIndexStream(t, "/work", summaryRecord()+"\n"+rec+"\n")
+			},
+			process:   app.ProcessResult{ExitCode: 0},
+			wantText:  "record after summary\noversized record skipped for q.go",
+			wantFatal: true,
+		},
+		{
+			name: "path with newline cannot forge paragraph breaks",
+			build: func(t *testing.T) *searchindex.Index {
+				return buildIndexRaw(t, "/work",
+					textBegin("a\nb.go"),
+					textBegin("a\nb.go"),
+					endRecord("a\nb.go", nil),
+					summaryRecord(),
+				)
+			},
+			process:   app.ProcessResult{ExitCode: 0},
+			wantText:  `duplicate begin record for a\nb.go`,
+			wantFatal: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			idx := tc.build(t)
+			m := app.New([]string{"--json", "--", "foo", "."}, "/work")
+			m, _ = update(t, m, app.SearchCompleteMsg{
+				Files:   idx.Files(),
+				Lines:   idx.Len(),
+				Index:   idx,
+				Process: tc.process,
+				Stderr:  tc.stderr,
+			})
+			if m.OverlayText() != tc.wantText {
+				t.Fatalf("OverlayText = %q, want %q", m.OverlayText(), tc.wantText)
+			}
+			if m.ExitCode() != 2 {
+				t.Fatalf("ExitCode = %d, want 2", m.ExitCode())
+			}
+			// The same composed diagnostic — same lines, same order —
+			// is collected for post-restoration stderr replay.
+			assertDiagnosticsEq(t, m, []string{tc.wantText})
+			// Dismissal of a fatal no-results overlay exits 2; a
+			// browse overlay dismisses back to browse.
+			m, cmd := update(t, m, keyPress('q'))
+			if tc.wantFatal {
+				assertQuit(t, cmd)
+				if m.ExitCode() != 2 {
+					t.Fatalf("after dismiss, ExitCode = %d, want 2", m.ExitCode())
+				}
+			}
+		})
+	}
+}
+
+// TestOutcomeMissingEndDeterministic verifies that missing-end cause
+// lines for several still-open files appear in unsigned raw-path order
+// and the composed diagnostic is stable across repeated builds.
+func TestOutcomeMissingEndDeterministic(t *testing.T) {
+	want := "missing end record for a.go\n" +
+		"missing end record for b.go\n" +
+		`missing end record for \xff.g` + "\n" +
+		"missing summary record"
+	for i := 0; i < 20; i++ {
+		b := searchindex.NewBuilder("/work")
+		_ = b.Add([]byte(textBegin("b.go")))
+		_ = b.Add([]byte(textBegin("a.go")))
+		_ = b.Add([]byte(bytesBeginRecord([]byte{0xff, '.', 'g'})))
+		idx := b.Build()
+		m := app.New([]string{"--json", "--", "foo", "."}, "/work")
+		m, _ = update(t, m, app.SearchCompleteMsg{
+			Files:   idx.Files(),
+			Lines:   idx.Len(),
+			Index:   idx,
+			Process: app.ProcessResult{ExitCode: 0},
+		})
+		if m.OverlayText() != want {
+			t.Fatalf("build %d: OverlayText = %q, want %q", i, m.OverlayText(), want)
+		}
 	}
 }
 

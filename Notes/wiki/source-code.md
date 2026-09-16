@@ -51,7 +51,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   lifecycle validation: `Builder` tracks per-path open/closed state,
   summary-seen state, after-summary state, trailing-malformed state,
   and an integrity-failed flag. `Index.Integrity()` exposes the
-  `Integrity{Complete}` assessment, kept separate from process success
+  `Integrity` assessment, kept separate from process success
   so the app can assess them independently. `Stop.Incomplete` marks
   retained matches whose lifecycle metadata is incomplete (orphaned
   match, file still open at stream end). `Builder.MarkTrailingMalformed`
@@ -62,7 +62,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   is the bounded 64 MiB record reader that discards oversized records
   through the next newline and resynchronizes on the following record.
   Unknown string event types are counted separately from malformed and
-  never independently alter exit status. Issue #13 added the circular
+  never independently alter exit status. Issue #36 added structured
+  integrity causes: `Integrity.Causes` carries one `IntegrityCause`
+  (a stable `IntegrityCauseKind` plus raw path) per offending physical
+  record, recorded at each violation site with fixed overlap
+  precedence — second `summary` → `extra summary`, other post-summary
+  records → `record after summary` without lifecycle dispatch
+  (including `context`, whose exemption Issue #36 removed), and
+  post-summary unterminated fragments → `record after summary` rather
+  than `unterminated final record`. `Build` appends end-of-stream
+  causes in a fixed order: missing `end` for still-open files sorted
+  by unsigned raw-path bytes, `missing summary`, then the
+  trailing-fragment cause. See
+  [stream-integrity-diagnostics](stream-integrity-diagnostics.md).
+  Issue #13 added the circular
   matched-line cursor: `Cursor` tracks the current stop position over
   `Index.stops` (already ordered by unsigned raw path bytes then
   ascending line number and deduplicated by `(raw path, line number)`,
@@ -454,6 +467,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   PRD's *Resources and responsiveness* section. Both the help overlay
   footer and the README render from this source so neither sink can
   drift. See [documentation-sync](documentation-sync.md).
+  Issue #36 added universal diagnostic composition: `OutcomeInput.
+  Integrity` carries `searchindex.Integrity`, `composeDiagnostics`
+  builds the ordered component list (process stderr or generated
+  process-status line → integrity-cause lines → record-loss
+  diagnostics → unknown-type warning) shared by every fatal and
+  non-fatal `DecideOutcome` branch, and `integrityCauseLine` renders
+  each cause's stable text with `safepresentation.EscapePath`
+  escaping. `recordLossDiagnostics` was reordered so oversized
+  components precede the unknown-type warning. See
+  [stream-integrity-diagnostics](stream-integrity-diagnostics.md).
 
 ## internal/safepresentation
 

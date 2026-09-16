@@ -1,4 +1,4 @@
-# Outcome contract (Issue #9, extended by Issues #10 and #11)
+# Outcome contract (Issue #9, extended by Issues #10, #11, and #36)
 
 The fatal/warning outcome matrix and modal error overlay delivered by
 [Issue #9](../issues/009-error-overlay-and-fatal-outcomes.md), adding
@@ -9,22 +9,27 @@ extended the matrix with record-loss inputs (malformed, oversized,
 unknown) and after-filtering usable-results assessment. [Issue #11](../issues/011-stderr-replay-of-collected-diagnostics.md)
 unified the controlled-failure diagnostic with the post-restoration
 replay writer and added the session diagnostic collection independent
-of display. Relevant PRD sections: *Module Design → SearchIndex / App*,
+of display. [Issue #36](../issues/036-stream-integrity-fatal-diagnostics.md)
+added structured stream-integrity causes and universal diagnostic
+composition shared by the overlay and the stderr replay. Relevant PRD
+sections: *Module Design → SearchIndex / App*,
 *Outcome and exit-status contract*, *Colours, overlays, and key
 precedence* (replay bullet). See also
-[record-robustness](record-robustness.md) and
-[search-collection-path](search-collection-path.md).
+[record-robustness](record-robustness.md),
+[search-collection-path](search-collection-path.md), and
+[stream-integrity-diagnostics](stream-integrity-diagnostics.md).
 
 ## Stream integrity
 
 `internal/searchindex` assesses stream integrity separately from process
-success. `Index.Integrity()` returns `Integrity{Complete}`, where
-`Complete` is true only when every lifecycle rule passed:
+success. `Index.Integrity()` returns `Integrity{Complete, Causes}`,
+where `Complete` is true only when every lifecycle rule passed:
 
 - Exactly one `summary`, as the final record (a summary alone is a
   complete zero-result stream).
-- No record after the summary (context records are ignored for
-  lifecycle purposes).
+- No record after the summary. Issue #36 removed the former
+  `context`-record exemption: a `context` record after `summary` is an
+  integrity violation like any other post-summary record.
 - Every `begin` opens a file that was not already open (duplicate
   `begin` is an integrity failure).
 - Every `match` arrives while its file is open (orphaned match is an
@@ -42,6 +47,13 @@ exclusion takes precedence over orphan retention: a `match` after a
 binary-excluding `end` is dropped, not retained. Path identity uses
 decoded raw path bytes, so `text` and `bytes` representations of the
 same path are identical for lifecycle purposes.
+
+Since Issue #36, `Integrity` also carries `Causes` — one structured
+`IntegrityCause` (kind plus raw path) per offending physical record —
+with fixed overlap precedence, detection-order-then-end-of-stream
+ordering, and uncapped multiplicity. See
+[stream-integrity-diagnostics](stream-integrity-diagnostics.md) for the
+cause table, precedence rules, and ordering contract.
 
 ## Process result
 
@@ -133,12 +145,28 @@ precedence and dismissal semantics.
 
 ## Diagnostics
 
-The overlay text is the captured stderr. When a failed process supplies
-no stderr, `generatedDiagnostic` produces a fallback naming the exit
-code or signal:
+Since Issue #36, `composeDiagnostics` builds one ordered component
+list shared identically by the overlay and the collected stderr
+replay:
 
-- `ripgrep exited with code N` (for a non-signal fatal exit).
-- `ripgrep killed by signal N` (for signal death).
+1. **Process component** — collected ripgrep stderr in collection
+   order; or, only when the process failed (signal death or a code
+   other than 0/1) and supplied no explanatory stderr, the generated
+   fallback naming the exit code (`ripgrep exited with code N`) or
+   signal (`ripgrep killed by signal N`). No process-status line is
+   emitted for a 0/1 exit.
+2. **Integrity-cause lines** in `Integrity.Causes` order — e.g.
+   `missing summary record`, `missing end record for <path>`,
+   `record after summary` — so an incomplete stream never collapses to
+   an unexplained `ripgrep exited with code 0`.
+3. **Record-loss components** in Issue #37's order: malformed
+   aggregate, oversized aggregate, per-path oversized details.
+4. **Unknown-type warnings.**
+
+Component paths escape through `safepresentation.EscapePath`. Omitted
+components do not change the relative order of those present. See
+[stream-integrity-diagnostics](stream-integrity-diagnostics.md) for the
+full cause-line table and dual-representation rules.
 
 The overlay text is sanitized through `safepresentation.EscapeDiagnostic`
 before rendering. Large diagnostics show both the head and tail so the

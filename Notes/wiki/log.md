@@ -1280,3 +1280,36 @@ contract), `cmd/vrg/main.go`, `cmd/vrg/search_test.go`,
 ## [2026-09-14] ingest | Issue #49 dependency removal decision
 
 Recorded the product owner's decision to remove unused Bubbles and Lip Gloss requirements. The active TUI stack now uses Bubble Tea directly with VRG's existing theme and rendering primitives; current PRD, project-overview, wiki-scope, and coding-skill instructions no longer prescribe the removed libraries. Updated the dependency manifests through `go mod tidy`; token imports are explicitly rejected. Sources: `Notes/issues/049-tidy-dependency-manifests.md`, `Notes/tasks/049-tidy-dependency-manifests.md`, `Notes/PRD-vrg.md`, `go.mod`, `go.sum`, `Notes/wiki/project-overview.md`, `Notes/wiki/AGENTS.md`, `Notes/skills/code-writing/styling-tui.md`, `Notes/skills/AGENTS.md`.
+
+## [2026-09-15] ingest | Issue #36 stream-integrity fatal diagnostics
+
+Ingested the completed Issue #36 implementation and tests. SearchIndex
+`Integrity` now carries `Causes`: one structured `IntegrityCause`
+(stable `IntegrityCauseKind` plus raw path) per offending physical
+record, recorded at the violation site (`parseBegin`/`parseMatch`/
+`parseEnd`/`parseSummary`/`Add` post-summary dispatch/`Build`) with
+fixed overlap precedence — second `summary` contributes only
+`extra summary`, other post-`summary` records contribute only
+`record after summary` without lifecycle dispatch (Issue #36 removed
+the `context` exemption and corrected the superseded lifecycle-matrix
+row; Issue #44 builds on that boundary), and post-`summary`
+unterminated fragments contribute `record after summary` rather than
+`unterminated final record`. `Build` appends end-of-stream causes
+deterministically (missing `end` sorted by unsigned raw-path bytes,
+then `missing summary`, then the trailing-fragment cause).
+`DecideOutcome` now composes a universal process → integrity →
+record-loss → unknown-type diagnostic shared by overlay and stderr
+replay, with no process-status line for 0/1 exits and `EscapePath`
+escaping; `recordLossDiagnostics` was reordered so oversized
+components precede unknown-type warnings (Issue #37's aggregate slot).
+Created [stream-integrity-diagnostics](stream-integrity-diagnostics.md);
+updated [outcome-contract](outcome-contract.md),
+[record-robustness](record-robustness.md),
+[search-collection-path](search-collection-path.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+[index](index.md). Sources: `internal/searchindex/searchindex.go`,
+`internal/searchindex/integrity_test.go`,
+`internal/searchindex/lifecycle_test.go`, `internal/app/app.go`,
+`internal/app/outcome_test.go`, `Notes/issues/036-stream-integrity-fatal-diagnostics.md`,
+`Notes/tasks/036-stream-integrity-fatal-diagnostics.md`,
+`Notes/PRD-vrg.md`.

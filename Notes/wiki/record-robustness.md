@@ -2,7 +2,9 @@
 
 Robust handling of malformed, oversized, and unknown-type records in
 ripgrep JSON streams, delivered by
-[Issue #10](../issues/010-record-robustness-malformed-oversized-unknown.md).
+[Issue #10](../issues/010-record-robustness-malformed-oversized-unknown.md)
+and extended by
+[Issue #36](../issues/036-stream-integrity-fatal-diagnostics.md).
 The collection pipeline distinguishes five deterministic categories —
 malformed records, oversized records, unknown event types,
 stream-integrity failures, and process failures — and a sixth
@@ -50,10 +52,20 @@ mark both:
   malformed **and** marks the stream incomplete.
 - A malformed record arriving after a valid `summary` is counted
   malformed **and** flagged as an after-`summary` integrity failure.
+- A trailing unterminated fragment arriving after a valid `summary` is
+  counted malformed and flagged as a `record after summary` integrity
+  cause (Issue #36) — never as an `unterminated final record` cause,
+  which is reserved for trailing fragments outside the post-summary
+  state.
 
 Unknown string event types are never treated as malformed. An unknown
 type after `summary` is counted unknown and its after-`summary`
-position is separately flagged as an integrity failure.
+position is separately flagged as an integrity failure. Since
+Issue #36, each post-`summary` record carries both representations:
+the `record after summary` integrity cause (or `extra summary` for a
+second `summary`) plus its independent malformed, oversized, or
+unknown-type counter. See
+[stream-integrity-diagnostics](stream-integrity-diagnostics.md).
 
 ## Per-record schema matrix
 
@@ -145,11 +157,15 @@ The new outcome-matrix rows (extending the Issue #9 matrix):
 | 0       | complete  | 0              | unknown     | no-results    | warning | no    | 1    |
 | 0       | complete  | 0              | malformed + binary exclusion | no-results | error | yes | 2 |
 
-Record-loss diagnostics are combined with stderr diagnostics for the
-overlay text. The `recordLossDiagnostics` helper formats the malformed
-count ("N malformed record(s) skipped"), the unknown count ("N
-unrecognised record types skipped"), and the per-record oversized path
-diagnostics.
+Record-loss diagnostics are combined with process and
+integrity-cause diagnostics for the overlay text in Issue #36's
+universal component order (process → integrity → record-loss →
+unknown-type). The `recordLossDiagnostics` helper formats the
+malformed count ("N malformed record(s) skipped"), the per-record
+oversized path diagnostics (where Issue #37's aggregate oversized
+count will slot in ahead of them), and the unknown count ("N
+unrecognised record types skipped") — oversized components precede
+unknown-type warnings.
 
 ## Missing `end` retention
 

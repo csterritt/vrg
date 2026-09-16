@@ -1,0 +1,10 @@
+#!/bin/bash
+# Fake rg that emits begin/match for test.txt and a valid summary but
+# NO end record for the only file, then exits 0. vrg should show a
+# fatal error overlay naming "missing end record for test.txt". q
+# dismisses the overlay to browse; q again exits 2. The same
+# diagnostic is replayed to stderr after terminal restoration.
+echo '{"type":"begin","data":{"path":{"text":"demo/test.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"demo/test.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+echo '{"type":"summary","data":{}}'
+exit 0

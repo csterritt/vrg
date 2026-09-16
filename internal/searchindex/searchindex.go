@@ -55,6 +55,57 @@ type Integrity struct {
 	// Complete is true when the stream passed all lifecycle validation
 	// rules.
 	Complete bool
+	// Causes is the ordered list of structured integrity violations,
+	// one per offending physical record. Mid-stream violations appear
+	// in detection order; violations discovered only at end of stream
+	// follow in this order: missing end for each still-open file
+	// ordered by unsigned raw-path bytes, then missing summary, then
+	// the trailing unterminated record (or its post-summary
+	// replacement). Causes is empty exactly when Complete is true.
+	Causes []IntegrityCause
+}
+
+// IntegrityCauseKind is the stable kind identifier for one
+// stream-integrity violation.
+type IntegrityCauseKind string
+
+const (
+	// IntegrityCauseDuplicateBegin is a begin for a path that is
+	// already open.
+	IntegrityCauseDuplicateBegin IntegrityCauseKind = "duplicate begin"
+	// IntegrityCauseOrphanedMatch is a match for a path that is not
+	// open (never opened, or after a non-binary end).
+	IntegrityCauseOrphanedMatch IntegrityCauseKind = "orphaned match"
+	// IntegrityCauseMatchAfterBinaryEnd is a match for a path dropped
+	// by a binary-excluding end. The late match is not retained.
+	IntegrityCauseMatchAfterBinaryEnd IntegrityCauseKind = "match after binary end"
+	// IntegrityCauseOrphanedEnd is an end for a path that is not open.
+	IntegrityCauseOrphanedEnd IntegrityCauseKind = "orphaned end"
+	// IntegrityCauseMissingEnd is a file still open when the stream
+	// ends.
+	IntegrityCauseMissingEnd IntegrityCauseKind = "missing end"
+	// IntegrityCauseMissingSummary is a stream with no valid summary.
+	IntegrityCauseMissingSummary IntegrityCauseKind = "missing summary"
+	// IntegrityCauseExtraSummary is a second summary record.
+	IntegrityCauseExtraSummary IntegrityCauseKind = "extra summary"
+	// IntegrityCauseRecordAfterSummary is any record after a valid
+	// summary other than a second summary, including context, malformed,
+	// oversized, and unknown-type records.
+	IntegrityCauseRecordAfterSummary IntegrityCauseKind = "record after summary"
+	// IntegrityCauseUnterminatedRecord is a trailing unterminated
+	// record outside the post-summary state.
+	IntegrityCauseUnterminatedRecord IntegrityCauseKind = "unterminated final record"
+)
+
+// IntegrityCause is one structured stream-integrity violation: the
+// stable kind plus the affected raw path where the offending record
+// names one. Path is nil for causes that name no path (missing or
+// extra summary, record after summary, unterminated final record).
+type IntegrityCause struct {
+	Kind IntegrityCauseKind
+	// Path is the decoded raw path of the file the violation names, or
+	// nil when the record names no path.
+	Path []byte
 }
 
 // Integrity returns the stream-integrity assessment, kept separate
@@ -230,6 +281,9 @@ type Builder struct {
 	trailingMalformed bool
 	// integrityFailed is true once any lifecycle rule has been violated.
 	integrityFailed bool
+	// causes is the ordered list of structured integrity causes, one
+	// per offending physical record.
+	causes []IntegrityCause
 	// malformedCount is the number of records skipped and counted as
 	// malformed. It is kept separate from integrity failures except in
 	// the two cases the matrices mark both.
@@ -247,7 +301,10 @@ type Builder struct {
 
 // MarkTrailingMalformed signals that the scanner saw a trailing
 // unterminated record. The record is counted as malformed and the
-// stream is marked incomplete.
+// stream is marked incomplete. Its single integrity cause is emitted
+// by Build in the trailing-fragment slot: record after summary when a
+// valid summary put the fragment under post-summary precedence, else
+// unterminated final record.
 func (b *Builder) MarkTrailingMalformed() {
 	b.trailingMalformed = true
 	b.malformedCount++
@@ -283,6 +340,9 @@ func (b *Builder) ReadFrom(r io.Reader) (int64, error) {
 				// not happen with buffer size MaxRecordSize+1,
 				// but handle defensively).
 				b.recordOversized([]byte(record))
+				if b.sawSummary {
+					b.noteAfterSummary()
+				}
 			}
 			continue
 		}
@@ -290,7 +350,9 @@ func (b *Builder) ReadFrom(r io.Reader) (int64, error) {
 			// No more data. Handle trailing bytes.
 			if len(line) > 0 {
 				if len(line) > MaxRecordSize {
-					// Final oversized record without newline.
+					// Final oversized record without newline. Its
+					// single integrity cause is emitted by Build in
+					// the trailing-fragment slot.
 					b.recordOversized([]byte(line))
 					b.malformedCount++
 					b.trailingMalformed = true
@@ -309,10 +371,19 @@ func (b *Builder) ReadFrom(r io.Reader) (int64, error) {
 			rest, discardErr := br.ReadBytes('\n')
 			total += int64(len(rest))
 			if discardErr == nil {
+				// A terminated oversized record after a summary
+				// contributes the after-summary integrity cause in
+				// detection order, in addition to its oversized
+				// count.
+				if b.sawSummary {
+					b.noteAfterSummary()
+				}
 				continue
 			}
 			if discardErr == io.EOF {
-				// No more newlines. Final oversized record.
+				// No more newlines. Final oversized record; its
+				// single integrity cause is emitted by Build in
+				// the trailing-fragment slot.
 				b.malformedCount++
 				b.trailingMalformed = true
 				return total, nil
@@ -482,8 +553,14 @@ func NewBuilder(workdir string) *Builder {
 // records so callers may optionally react, but the count is tracked
 // internally and callers need not count errors themselves. Lifecycle
 // validation is applied per the Issue #9 transition matrix; violations
-// mark the stream integrity as failed but never reject an otherwise
-// well-formed record and never inflate the malformed count.
+// mark the stream integrity as failed and record a structured
+// IntegrityCause, but never reject an otherwise well-formed record and
+// never inflate the malformed count. After a valid summary, post-summary
+// precedence applies (Issue #36): a second summary contributes only the
+// extra-summary cause, and every other record — including context —
+// contributes only the record-after-summary cause and is not
+// lifecycle-processed, so it cannot mutate open-file state or produce
+// a later lifecycle cause.
 func (b *Builder) Add(line []byte) error {
 	var rec struct {
 		Type string          `json:"type"`
@@ -491,22 +568,44 @@ func (b *Builder) Add(line []byte) error {
 	}
 	if err := json.Unmarshal(line, &rec); err != nil {
 		b.malformedCount++
-		// A malformed record arriving after a summary still marks
-		// the stream as after-summary; we cannot confirm it is a
-		// context record, so we treat it as a non-context record.
+		// A malformed record after a summary is a post-summary record:
+		// it contributes the after-summary integrity cause in addition
+		// to its malformed count.
 		if b.sawSummary {
-			b.afterSummary = true
+			b.noteAfterSummary()
 		}
 		return fmt.Errorf("invalid json: %w", err)
 	}
-	// Any record after a summary is an integrity failure. Context
-	// records participate in no lifecycle validation, so they do not
-	// trigger this check on their own; the afterSummary flag is set
-	// only by non-context records arriving after the summary. This
-	// check runs before the missing-type check so that a record with
-	// no type field arriving after a summary still marks the stream.
-	if b.sawSummary && rec.Type != "context" {
+	// Any record after a summary is an integrity failure. Post-summary
+	// precedence is enforced before lifecycle dispatch (Issue #36):
+	// a second summary contributes only the extra-summary cause; every
+	// other record contributes only the record-after-summary cause and
+	// is not lifecycle-processed, so it cannot mutate open-file state
+	// or produce a later lifecycle cause. This check runs before the
+	// missing-type check so that a record with no type field arriving
+	// after a summary still marks the stream.
+	if b.sawSummary {
 		b.afterSummary = true
+		if rec.Type == "summary" {
+			err := b.parseSummary(rec.Data)
+			if err != nil {
+				b.malformedCount++
+			}
+			return err
+		}
+		b.recordCause(IntegrityCauseRecordAfterSummary, nil)
+		if rec.Type == "" {
+			b.malformedCount++
+			return errors.New("missing or empty type field")
+		}
+		if !knownRecordType(rec.Type) {
+			// Unknown string event type: count separately from
+			// malformed. Unknown types never substitute for required
+			// known completion events and never independently alter
+			// exit status.
+			b.unknownCount++
+		}
+		return nil
 	}
 	if rec.Type == "" {
 		b.malformedCount++
@@ -537,6 +636,30 @@ func (b *Builder) Add(line []byte) error {
 	return err
 }
 
+// knownRecordType reports whether t is a recognized ripgrep event type.
+func knownRecordType(t string) bool {
+	switch t {
+	case "begin", "match", "end", "summary", "context":
+		return true
+	}
+	return false
+}
+
+// recordCause appends one structured integrity cause to the builder's
+// ordered cause list.
+func (b *Builder) recordCause(kind IntegrityCauseKind, path []byte) {
+	b.causes = append(b.causes, IntegrityCause{Kind: kind, Path: path})
+}
+
+// noteAfterSummary records the after-summary state and integrity cause
+// for a record arriving after a valid summary. The record contributes
+// only this one integrity cause plus any independent malformed,
+// oversized, or unknown-type representation.
+func (b *Builder) noteAfterSummary() {
+	b.afterSummary = true
+	b.recordCause(IntegrityCauseRecordAfterSummary, nil)
+}
+
 // parseBegin validates a begin record's path field and tracks the
 // per-path open state. A begin while the path is already open is an
 // integrity failure (duplicate begin); the file remains open.
@@ -555,6 +678,7 @@ func (b *Builder) parseBegin(data json.RawMessage) error {
 	if b.open[pathKey] {
 		// Duplicate begin: integrity failure. The file remains open.
 		b.integrityFailed = true
+		b.recordCause(IntegrityCauseDuplicateBegin, rawPath)
 		return nil
 	}
 	b.open[pathKey] = true
@@ -591,6 +715,7 @@ func (b *Builder) parseMatch(data json.RawMessage) error {
 		// The match is an orphan after a binary end; integrity fails
 		// but the match is not retained.
 		b.integrityFailed = true
+		b.recordCause(IntegrityCauseMatchAfterBinaryEnd, rawPath)
 		return nil
 	}
 	line, err := d.Lines.decode()
@@ -619,6 +744,7 @@ func (b *Builder) parseMatch(data json.RawMessage) error {
 	orphaned := !b.open[pathKey]
 	if orphaned {
 		b.integrityFailed = true
+		b.recordCause(IntegrityCauseOrphanedMatch, rawPath)
 	}
 	key := stopKey{path: pathKey, line: d.LineNumber}
 	accum, ok := b.stops[key]
@@ -678,6 +804,7 @@ func (b *Builder) parseEnd(data json.RawMessage) error {
 	// An end while the path is not open is an integrity failure.
 	if !b.open[pathKey] {
 		b.integrityFailed = true
+		b.recordCause(IntegrityCauseOrphanedEnd, rawPath)
 		// Do not add to closed; an orphaned end does not close anything.
 		return nil
 	}
@@ -707,17 +834,23 @@ func (b *Builder) dropStops(pathKey string) {
 
 // parseSummary validates that a summary record has a data object and
 // records that a summary has been seen. A second summary is an
-// integrity failure.
+// integrity failure contributing only the extra-summary cause; its
+// data is still schema-validated so a malformed second summary also
+// counts as malformed.
 func (b *Builder) parseSummary(data json.RawMessage) error {
+	if b.sawSummary {
+		// Second summary: integrity failure. The cause is recorded
+		// before data validation so a malformed second summary still
+		// contributes the extra-summary cause rather than the generic
+		// after-summary cause.
+		b.integrityFailed = true
+		b.recordCause(IntegrityCauseExtraSummary, nil)
+	}
 	if len(data) == 0 {
 		return errors.New("summary: missing data")
 	}
 	if !strings.HasPrefix(strings.TrimSpace(string(data)), "{") {
 		return errors.New("summary: data is not an object")
-	}
-	if b.sawSummary {
-		// Second summary: integrity failure.
-		b.integrityFailed = true
 	}
 	b.sawSummary = true
 	return nil
@@ -733,11 +866,33 @@ func (b *Builder) parseSummary(data json.RawMessage) error {
 // signaled.
 func (b *Builder) Build() *Index {
 	// A file still open when the stream ends is an integrity failure;
-	// its matches are retained with incomplete metadata.
+	// its matches are retained with incomplete metadata. End-of-stream
+	// causes follow all mid-stream causes in the mandated order:
+	// missing end for each still-open file ordered by unsigned raw-path
+	// bytes (never map iteration order), then missing summary, then
+	// the trailing unterminated record — or, when a valid summary put
+	// the trailing fragment under post-summary precedence, the
+	// record-after-summary cause instead.
+	var stillOpen []string
 	for pathKey, isOpen := range b.open {
 		if isOpen {
+			stillOpen = append(stillOpen, pathKey)
 			b.integrityFailed = true
 			b.markPathIncomplete(pathKey)
+		}
+	}
+	sort.Strings(stillOpen)
+	for _, pathKey := range stillOpen {
+		b.recordCause(IntegrityCauseMissingEnd, []byte(pathKey))
+	}
+	if !b.sawSummary {
+		b.recordCause(IntegrityCauseMissingSummary, nil)
+	}
+	if b.trailingMalformed {
+		if b.sawSummary {
+			b.recordCause(IntegrityCauseRecordAfterSummary, nil)
+		} else {
+			b.recordCause(IntegrityCauseUnterminatedRecord, nil)
 		}
 	}
 	complete := b.sawSummary && !b.afterSummary && !b.integrityFailed && !b.trailingMalformed
@@ -773,7 +928,7 @@ func (b *Builder) Build() *Index {
 		oversizedCount: b.oversizedCount,
 		unknownCount:   b.unknownCount,
 		oversizedDiags: b.oversizedDiags,
-		integrity:      Integrity{Complete: complete},
+		integrity:      Integrity{Complete: complete, Causes: append([]IntegrityCause(nil), b.causes...)},
 	}
 }
 

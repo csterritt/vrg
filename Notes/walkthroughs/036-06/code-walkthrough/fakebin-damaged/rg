@@ -1,0 +1,28 @@
+#!/bin/bash
+# Fake rg that emits a damaged stream exercising every structural
+# cause together with real child stderr, then exits 0:
+#   - duplicate begin for test.txt
+#   - orphaned match for ghost.txt (never opened)
+#   - match for bin.dat after a binary-excluding end
+#   - orphaned end for ghost.txt
+#   - a second summary (extra summary)
+#   - a begin for late.txt after the summary (record after summary;
+#     lifecycle-suppressed so late.txt cannot produce a missing end)
+#   - test.txt still open at stream end (missing end)
+# Real child stderr appears ahead of the integrity causes. q dismisses
+# the overlay to browse; q again exits 2. The composed diagnostic is
+# replayed to stderr after terminal restoration.
+echo "rg: parse error near record 4" >&2
+echo '{"type":"begin","data":{"path":{"text":"demo/test.txt"}}}'
+echo '{"type":"begin","data":{"path":{"text":"demo/test.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"demo/test.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"ghost.txt"},"lines":{"text":"hello ghost\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+echo '{"type":"begin","data":{"path":{"text":"bin.dat"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"bin.dat"},"lines":{"text":"hello bin\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+echo '{"type":"end","data":{"path":{"text":"bin.dat"},"binary_offset":3}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"bin.dat"},"lines":{"text":"hello late\n"},"line_number":2,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+echo '{"type":"end","data":{"path":{"text":"ghost.txt"},"binary_offset":null}}'
+echo '{"type":"summary","data":{}}'
+echo '{"type":"summary","data":{}}'
+echo '{"type":"begin","data":{"path":{"text":"late.txt"}}}'
+exit 0
