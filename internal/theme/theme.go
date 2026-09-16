@@ -10,7 +10,8 @@ package theme
 
 import (
 	"strings"
-	"unicode/utf8"
+
+	"vrg/internal/safepresentation"
 )
 
 // Scheme identifies a colour scheme.
@@ -200,25 +201,10 @@ func (t Theme) Overlay(s string) string {
 	return b.String()
 }
 
-// cellWidth returns the number of visible terminal cells in s,
-// excluding ANSI escape sequences. Each rune is one cell (first-pass
-// mapping pending Issue #16's width policy).
+// cellWidth returns the number of visible terminal cells in s through
+// the shared ANSI-aware grapheme/cell policy (Issue #39): ANSI escape
+// sequences contribute zero cells and grapheme clusters are measured
+// under the shared rivo/uniseg policy.
 func cellWidth(s string) int {
-	var w int
-	for i := 0; i < len(s); {
-		if s[i] == '\x1b' {
-			i++
-			for i < len(s) && s[i] != 'm' {
-				i++
-			}
-			if i < len(s) {
-				i++
-			}
-			continue
-		}
-		_, size := utf8.DecodeRuneInString(s[i:])
-		w++
-		i += size
-	}
-	return w
+	return safepresentation.CellWidth(s)
 }

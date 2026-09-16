@@ -1394,3 +1394,50 @@ were recalibrated to the same chain (text width 65 at 80×24 with the
 `Notes/tasks/038-viewport-content-panel-width.md`,
 `Notes/PRD-vrg.md` (File list and layout; Layout and indicators;
 Navigation, viewport, and logical anchors).
+
+## [2026-09-15] ingest | Issue #39 render from the shared grapheme/cell model
+
+Ingested the completed Issue #39 implementation and tests.
+`internal/safepresentation/cellwidth.go` is the new shared ANSI-aware
+grapheme/cell helper: `GraphemeClustersANSI` segments styled text into
+clusters with ANSI CSI sequences carried as zero-width clusters,
+`CellWidth` sums terminal cells ignoring ANSI bytes, and
+`TruncateLeftCells` keeps trailing cells without splitting wide,
+combining, or ZWJ clusters — the sole allow-listed production file for
+`utf8.DecodeRuneInString`. `internal/app/app.go` routed every
+final-render display-geometry consumer through the helper:
+`renderLineWithHighlights` renders each clipped row directly from
+`line.Clusters` cell spans (a cluster whose cells intersect a
+highlight is styled whole, so two-cell CJK no longer swallows the
+following character, combining sequences stay with their base, and
+ZWJ sequences are never split); `visibleWidth` delegates to
+`CellWidth`; the pop-up left-truncation and centreing use
+`TruncateLeftCells`/`CellWidth`; `wrapLine` wraps overlay/help text on
+cluster boundaries; `computeLongestPathWidth`, file-list entry
+padding, the filename-row note slot, and the indicator geometry
+measure through `CellWidth`. `internal/theme/theme.go`'s private
+`cellWidth` delegates to `safepresentation.CellWidth` so overlay
+borders align under wide and combining content. New tests:
+`internal/safepresentation/cellwidth_test.go` (helper units),
+`internal/theme/theme_test.go` (overlay alignment under
+wide/combining/mixed rows), `internal/app/cell_render_test.go`
+(composed `View()` CJK/combining/ZWJ, clip, list padding, filename
+row, pop-up, overlay assertions), and
+`internal/app/decode_guard_test.go` (the recursive non-test source
+scan failing on `utf8.DecodeRuneInString` outside
+`internal/safepresentation/cellwidth.go`). Created
+[shared-cell-model-render](shared-cell-model-render.md); updated
+[safe-presentation](safe-presentation.md),
+[wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
+[theme-module](theme-module.md),
+[file-list-layout](file-list-layout.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+[index](index.md). Sources: `internal/safepresentation/cellwidth.go`,
+`internal/safepresentation/cellwidth_test.go`,
+`internal/app/app.go`, `internal/app/cell_render_test.go`,
+`internal/app/decode_guard_test.go`, `internal/theme/theme.go`,
+`internal/theme/theme_test.go`,
+`Notes/issues/039-render-from-shared-grapheme-cell-model.md`,
+`Notes/tasks/039-render-from-shared-grapheme-cell-model.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; Layout
+and indicators).

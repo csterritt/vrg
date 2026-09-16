@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rivo/uniseg"
+
 	"vrg/internal/theme"
 )
 
@@ -471,6 +473,79 @@ func TestNoStyleProducesNoANSI(t *testing.T) {
 	} {
 		if strings.Contains(got, "\x1b") {
 			t.Fatalf("NoStyle method produced ANSI escape: %q", got)
+		}
+	}
+}
+
+// --- Issue #39: overlay geometry under the shared grapheme/cell model ---
+
+// overlayRowWidths returns the measured terminal cell width of each
+// row of an overlay rendering, with ANSI sequences stripped.
+func overlayRowWidths(t *testing.T, rendered string) []int {
+	t.Helper()
+	var widths []int
+	for _, l := range strings.Split(rendered, "\n") {
+		var stripped strings.Builder
+		for i := 0; i < len(l); {
+			if l[i] == '\x1b' {
+				i++
+				for i < len(l) && l[i] != 'm' {
+					i++
+				}
+				if i < len(l) {
+					i++
+				}
+				continue
+			}
+			stripped.WriteByte(l[i])
+			i++
+		}
+		widths = append(widths, uniseg.StringWidth(stripped.String()))
+	}
+	return widths
+}
+
+// TestOverlayWideTextBorderAlignment verifies that Theme.Overlay sizes
+// and pads its box by measured terminal cells, not rune count: a
+// two-cell CJK character must produce content rows exactly as wide as
+// the border rows (Issue #39).
+func TestOverlayWideTextBorderAlignment(t *testing.T) {
+	tm := theme.New()
+	widths := overlayRowWidths(t, tm.Overlay("中"))
+	if len(widths) != 3 {
+		t.Fatalf("Overlay produced %d rows, want 3", len(widths))
+	}
+	// ┌────┐ / │ 中 │ / └────┘ — all rows must be maxW+4 = 6 cells.
+	for i, w := range widths {
+		if w != 6 {
+			t.Fatalf("overlay row %d width = %d cells, want 6 (wide text must be measured in cells)", i, w)
+		}
+	}
+}
+
+// TestOverlayCombiningTextBorderAlignment verifies that a
+// base-plus-combining sequence counts as one grapheme cluster for
+// overlay sizing and padding (Issue #39).
+func TestOverlayCombiningTextBorderAlignment(t *testing.T) {
+	tm := theme.New()
+	widths := overlayRowWidths(t, tm.Overlay("é"))
+	for i, w := range widths {
+		if w != 5 {
+			t.Fatalf("overlay row %d width = %d cells, want 5 (combining cluster must measure as one cell)", i, w)
+		}
+	}
+}
+
+// TestOverlayMixedWidthRowsAlign verifies that an overlay with rows of
+// differing cell widths pads every row to the widest measured cell
+// width so all border rows align (Issue #39).
+func TestOverlayMixedWidthRowsAlign(t *testing.T) {
+	tm := theme.New()
+	widths := overlayRowWidths(t, tm.Overlay("中\nab"))
+	// Widest row is "中" at 2 cells: every row must be 2+4 = 6 cells.
+	for i, w := range widths {
+		if w != 6 {
+			t.Fatalf("overlay row %d width = %d cells, want 6", i, w)
 		}
 	}
 }

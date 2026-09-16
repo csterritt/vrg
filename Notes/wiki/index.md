@@ -266,6 +266,16 @@ Catalog of all wiki pages for the vrg project.
   every viewport install site (async layout, factory seam, cache hit,
   resize, list hide/show), and the recalibrated horizontal
   expectations for reveal, pan, clip, and indicators
+- [shared-cell-model-render.md](shared-cell-model-render.md) —
+  Issue #39: the shared ANSI-aware grapheme/cell helper
+  (`GraphemeClustersANSI`, `CellWidth`, `TruncateLeftCells` in
+  `internal/safepresentation/cellwidth.go`), final rendering directly
+  from `line.Clusters` cell spans, every final-render geometry
+  consumer routed through the helper (visible width, wrapping,
+  truncation, file-list padding, filename rows, pop-up
+  centering/truncation, overlay sizing, theme `cellWidth`), the
+  no-`DecodeRuneInString` static source guard, and the CJK /
+  combining / emoji-ZWJ test coverage
 
 ## Catalogs
 

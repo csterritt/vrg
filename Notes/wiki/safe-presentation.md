@@ -25,6 +25,13 @@ Exports:
   escaping with byte→cell mappings (Issue #5).
 - `EscapeDiagnostic(raw []byte) string` — multi-line diagnostic
   escaping that preserves line boundaries (Issue #6).
+- `GraphemeClusters(display string) []Cluster` — shared grapheme
+  segmentation and cell widths (Issue #16).
+- `GraphemeClustersANSI(s string) []Cluster`, `CellWidth(s string)
+  int`, `TruncateLeftCells(s string, keep int) string` — the shared
+  ANSI-aware grapheme/cell display-geometry helpers in `cellwidth.go`
+  (Issue #39; see
+  [shared-cell-model-render](shared-cell-model-render.md)).
 
 `internal/sinkfixtures` holds the shared hostile-fixture set and
 sink-safety assertion helpers. Every sink row iterates over the same

@@ -68,7 +68,11 @@ entry in both schemes.
 `Overlay` wraps content with a plain single-line border using
 box-drawing characters (`┌┐└┘─│`) and the active scheme's base colours.
 The no-style theme returns the content without ANSI sequences or a
-border.
+border. Overlay sizing and padding measure terminal cells through the
+shared ANSI-aware grapheme/cell policy (`cellWidth` delegates to
+`safepresentation.CellWidth`, Issue #39), so wide and combining content
+aligns with the border rows. See
+[shared-cell-model-render](shared-cell-model-render.md).
 
 ## No-style theme
 

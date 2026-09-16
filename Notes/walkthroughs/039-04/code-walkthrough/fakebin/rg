@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""Fake rg for the Issue #39 walkthrough. Emits a ripgrep JSON stream
+for three paths:
+
+  demo/src/mixed.txt      - five lines exercising CJK (two-cell
+                            clusters), a combining sequence (e + U+0301),
+                            an emoji ZWJ sequence, and a 69-cell line of
+                            twenty-five consecutive CJK characters for
+                            mid-cluster clipping.
+  demo/src/中é名.txt      - a wide-character path that exists on disk
+                            (e + combining acute in the name) so the
+                            file-change pop-up and file list measure
+                            and centre it by cells.
+  demo/中zzmissing.txt    - a wide-character path that does NOT exist on
+                            disk, so navigating to it produces the
+                            non-fatal read-failure overlay containing
+                            wide characters.
+
+Submatches are honest for the pattern 'needle|中|e|👩': the e and 👩
+submatches cover only part of their grapheme clusters (the combining
+mark and the ZWJ + second emoji lie outside the match bytes), so the
+rendered highlight must expand to whole clusters and cover exactly
+their cells.
+"""
+import json
+import sys
+
+
+def ev(obj):
+    sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+def sub(text, start, end):
+    return {"match": {"text": text}, "start": start, "end": end}
+
+
+def match(path, line, line_number, subs):
+    ev({
+        "type": "match",
+        "data": {
+            "path": {"text": path},
+            "lines": {"text": line},
+            "line_number": line_number,
+            "submatches": subs,
+        },
+    })
+
+
+def end(path):
+    ev({"type": "end", "data": {"path": {"text": path}, "binary_offset": None}})
+
+
+p1 = "demo/src/mixed.txt"
+ev({"type": "begin", "data": {"path": {"text": p1}}})
+match(p1, "a中b needle c\n", 1,
+      [sub("中", 1, 4), sub("needle", 6, 12)])
+match(p1, "déf needle h\n", 2,
+      [sub("e", 1, 2), sub("needle", 6, 12)])
+match(p1, "i👩‍💻j needle k\n", 3,
+      [sub("👩", 1, 5), sub("needle", 14, 20)])
+match(p1, "needle " + "中" * 25 + " tail needle\n", 4,
+      [sub("needle", 0, 6)]
+      + [sub("中", 7 + 3 * i, 10 + 3 * i) for i in range(25)]
+      + [sub("needle", 88, 94)])
+match(p1, "needle tail line\n", 5, [sub("needle", 0, 6)])
+end(p1)
+
+p2 = "demo/src/中é名.txt"
+ev({"type": "begin", "data": {"path": {"text": p2}}})
+match(p2, "needle in wide name\n", 1, [sub("needle", 0, 6)])
+end(p2)
+
+p3 = "demo/中zzmissing.txt"
+ev({"type": "begin", "data": {"path": {"text": p3}}})
+match(p3, "needle is not on disk\n", 1, [sub("needle", 0, 6)])
+end(p3)
+
+ev({"type": "summary", "data": {}})
+sys.exit(0)

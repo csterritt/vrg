@@ -11,7 +11,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -2565,12 +2564,14 @@ func (m Model) renderPopup(base string) string {
 	textWidth := visibleWidth(text)
 	if textWidth > width {
 		// Keep the trailing portion of the path (the filename end is
-		// usually more informative than the directory prefix).
+		// usually more informative than the directory prefix). The
+		// escaped path may contain combining marks, so the cut lands
+		// on grapheme-cluster boundaries (Issue #39).
 		keep := width - 1 // one cell for the leading …
 		if keep < 0 {
 			keep = 0
 		}
-		text = truncateLeftCells(text, keep)
+		text = safepresentation.TruncateLeftCells(text, keep)
 		text = "…" + text
 	}
 	// Center horizontally and vertically over the base content.
@@ -2608,40 +2609,6 @@ func (m Model) renderPopup(base string) string {
 	return b.String()
 }
 
-// truncateLeftCells returns the trailing keep cells of s, dropping
-// leading cells. ANSI escape sequences are preserved and do not count
-// toward the cell budget. Grapheme boundaries are not split: this
-// truncates at rune boundaries, which is sufficient for the single-line
-// safe path output of safepresentation.EscapePath (no combining marks
-// are produced for path text).
-func truncateLeftCells(s string, keep int) string {
-	if keep <= 0 {
-		return ""
-	}
-	// First strip ANSI sequences into a separate buffer while recording
-	// the visible runes, then take the trailing keep runes.
-	var runes []rune
-	for i := 0; i < len(s); {
-		if s[i] == '\x1b' {
-			i++
-			for i < len(s) && s[i] != 'm' {
-				i++
-			}
-			if i < len(s) {
-				i++
-			}
-			continue
-		}
-		r, size := utf8.DecodeRuneInString(s[i:])
-		runes = append(runes, r)
-		i += size
-	}
-	if len(runes) <= keep {
-		return s
-	}
-	return string(runes[len(runes)-keep:])
-}
-
 // wrapText wraps s to the given cell width, breaking long unbroken
 // strings. Existing newlines are preserved as line boundaries.
 func wrapText(s string, width int) string {
@@ -2659,36 +2626,31 @@ func wrapText(s string, width int) string {
 }
 
 // wrapLine wraps a single line (no embedded newlines) to the given cell
-// width, breaking long unbroken strings.
+// width, breaking long unbroken strings. Line breaks land only on
+// grapheme-cluster boundaries under the shared cell policy: a wide or
+// combining cluster that does not fit moves whole to the next line,
+// and ANSI escape sequences pass through without consuming cells
+// (Issue #39).
 func wrapLine(line string, width int) string {
 	if width <= 0 || visibleWidth(line) <= width {
 		return line
 	}
 	var b strings.Builder
 	col := 0
-	for i := 0; i < len(line); {
-		if line[i] == '\x1b' {
-			// Copy ANSI escape sequences without counting cells.
-			b.WriteByte(line[i])
-			i++
-			for i < len(line) && line[i] != 'm' {
-				b.WriteByte(line[i])
-				i++
-			}
-			if i < len(line) {
-				b.WriteByte(line[i])
-				i++
-			}
+	for _, c := range safepresentation.GraphemeClustersANSI(line) {
+		text := line[c.StartByte:c.EndByte]
+		if c.Width == 0 {
+			// ANSI escape sequences and zero-width clusters copy
+			// through without consuming cells.
+			b.WriteString(text)
 			continue
 		}
-		_, size := utf8.DecodeRuneInString(line[i:])
-		if col >= width {
+		if col > 0 && col+c.Width > width {
 			b.WriteString("\n")
 			col = 0
 		}
-		b.WriteString(line[i : i+size])
-		col++
-		i += size
+		b.WriteString(text)
+		col += c.Width
 	}
 	return b.String()
 }
@@ -3180,7 +3142,7 @@ func (m Model) renderFilenameRow(escapedName string) string {
 	}
 	// Reserve space for the note plus a separating space. The note
 	// is placed at the right of the filename row.
-	noteWidth := graphemeCellWidthString(note)
+	noteWidth := safepresentation.CellWidth(note)
 	// The filename row format is "── <path> ── <note>". The
 	// separators and spaces consume 7 cells ("── " is 3 cells plus
 	// " ── " is 4 cells). Truncate the path so the total fits the
@@ -3206,16 +3168,6 @@ func (m Model) renderFilenameRow(escapedName string) string {
 	}
 	truncated := TruncateLeftGrapheme(escapedName, availForPath)
 	return "── " + truncated + " ── " + note
-}
-
-// graphemeCellWidthString returns the terminal cell width of s using
-// the shared grapheme policy (Issue #24).
-func graphemeCellWidthString(s string) int {
-	w := 0
-	for _, c := range safepresentation.GraphemeClusters(s) {
-		w += c.Width
-	}
-	return w
 }
 
 // renderContentPanel renders the right pane: filename rule followed by
@@ -3397,89 +3349,85 @@ func clusterCellWidth(clusters []filebuffer.Cluster) int {
 	return w
 }
 
-// renderLineWithHighlights escapes the display text through the
-// safe-presentation core and applies the true-inverse match style to
-// highlighted cell ranges. On the current matched line (line.Number ==
+// renderLineWithHighlights renders a clipped line directly from its
+// grapheme-cluster table (Issue #39): the cluster spans carry the
+// cell geometry produced upstream by FileBuffer and Viewport, so no
+// display position is re-derived from runes or bytes here. A match
+// cell range styles every cluster whose cells intersect it, so styled
+// spans always cover whole clusters — a two-cell CJK character, a
+// base-plus-combining sequence, and an emoji ZWJ sequence each move
+// as one unit. On the current matched line (line.Number ==
 // currentLine), the current-match style adds underline. With the
 // no-style theme, no ANSI sequences are produced.
 func renderLineWithHighlights(line filebuffer.Line, t theme.Theme, currentLine int) string {
-	escaped := safepresentation.EscapeContent([]byte(line.Display))
-	display := escaped.Text
+	display := line.Display
 	if t.IsNoStyle() || len(line.Highlights) == 0 {
 		return display
 	}
-	isCurrent := line.Number == currentLine
-	cellCount := visibleWidth(display)
-	var b strings.Builder
-	bytePos := 0
-	cellPos := 0
-	for _, hl := range line.Highlights {
-		if hl[0] < cellPos {
-			continue
-		}
-		startCell := hl[0]
-		endCell := hl[1]
-		if startCell >= cellCount {
-			continue
-		}
-		if endCell > cellCount {
-			endCell = cellCount
-		}
-		startByte := cellToBytePos(display, startCell)
-		endByte := cellToBytePos(display, endCell)
-		if startByte > bytePos {
-			b.WriteString(display[bytePos:startByte])
-		}
-		if endByte > startByte {
-			if isCurrent {
-				b.WriteString(t.CurrentMatch(display[startByte:endByte]))
-			} else {
-				b.WriteString(t.Match(display[startByte:endByte]))
-			}
-		}
-		bytePos = endByte
-		cellPos = endCell
+	clusters := line.Clusters
+	// Cluster byte offsets index the source line's display text; a
+	// wrapped row's Display starts at StartByte, so row-local byte
+	// positions are cluster offsets minus base.
+	base := line.StartByte
+	if len(clusters) == 0 {
+		// A line built without a cluster table falls back to the
+		// shared policy so the renderer still works on grapheme
+		// boundaries rather than runes or bytes.
+		clusters = safepresentation.GraphemeClusters(display)
+		base = 0
 	}
+	isCurrent := line.Number == currentLine
+	var b strings.Builder
+	b.Grow(len(display))
+	bytePos := 0 // first display byte not yet written
+	cellPos := 0 // cell offset of the current cluster
+	hi := 0      // index of the next unexpired highlight
+	styledFrom := -1
+	// flush closes the open styled run at endByte, styling the whole
+	// span at once.
+	flush := func(endByte int) {
+		if styledFrom < 0 {
+			return
+		}
+		if isCurrent {
+			b.WriteString(t.CurrentMatch(display[styledFrom:endByte]))
+		} else {
+			b.WriteString(t.Match(display[styledFrom:endByte]))
+		}
+		styledFrom = -1
+		bytePos = endByte
+	}
+	for _, c := range clusters {
+		cs, ce := cellPos, cellPos+c.Width
+		cellPos = ce
+		for hi < len(line.Highlights) && line.Highlights[hi][1] <= cs {
+			hi++
+		}
+		if hi < len(line.Highlights) && line.Highlights[hi][0] < ce && line.Highlights[hi][1] > cs {
+			// The highlight covers this whole cluster's cells.
+			if styledFrom < 0 {
+				if c.StartByte-base > bytePos {
+					b.WriteString(display[bytePos : c.StartByte-base])
+				}
+				styledFrom = c.StartByte - base
+			}
+			continue
+		}
+		flush(c.StartByte - base)
+	}
+	flush(len(display))
 	if bytePos < len(display) {
 		b.WriteString(display[bytePos:])
 	}
 	return b.String()
 }
 
-// cellToBytePos converts a cell position to a byte position in a
-// display string. Each rune is one cell (first-pass mapping pending
-// Issue #16's width policy).
-func cellToBytePos(s string, cell int) int {
-	pos := 0
-	for i := 0; i < cell && pos < len(s); i++ {
-		_, size := utf8.DecodeRuneInString(s[pos:])
-		pos += size
-	}
-	return pos
-}
-
-// visibleWidth returns the number of visible cells in s, excluding
-// ANSI escape sequences. Each rune is one cell (first-pass mapping
-// pending Issue #16's width policy).
+// visibleWidth returns the number of visible cells in s through the
+// shared ANSI-aware grapheme/cell policy (Issue #39): ANSI escape
+// sequences contribute zero cells and grapheme clusters are measured
+// under the shared rivo/uniseg policy.
 func visibleWidth(s string) int {
-	var w int
-	for i := 0; i < len(s); {
-		if s[i] == '\x1b' {
-			// Skip ANSI escape sequence: \x1b[...m.
-			i++
-			for i < len(s) && s[i] != 'm' {
-				i++
-			}
-			if i < len(s) {
-				i++ // skip 'm'
-			}
-			continue
-		}
-		_, size := utf8.DecodeRuneInString(s[i:])
-		w++
-		i += size
-	}
-	return w
+	return safepresentation.CellWidth(s)
 }
 
 // ComputeListWidth computes the file-list width from the given inputs
@@ -3515,43 +3463,24 @@ func ComputeListWidth(termWidth, longestPathWidth, gutterWidth, reservedIndicato
 
 // TruncateLeftGrapheme left-truncates s to fit width cells with a
 // leading … at a grapheme boundary (Issue #24). If s fits within width,
-// it is returned unchanged. Grapheme clusters are never split.
+// it is returned unchanged. Grapheme clusters are never split. The
+// measurement and the cut both go through the shared ANSI-aware
+// grapheme/cell helper (Issue #39).
 func TruncateLeftGrapheme(s string, width int) string {
 	if width <= 0 || s == "" {
 		return ""
 	}
-	clusters := safepresentation.GraphemeClusters(s)
-	totalWidth := 0
-	for _, c := range clusters {
-		totalWidth += c.Width
-	}
-	if totalWidth <= width {
+	if safepresentation.CellWidth(s) <= width {
 		return s
 	}
 	// Reserve one cell for the leading …, so the trailing portion
 	// must fit in width-1 cells.
-	remaining := width - 1
-	if remaining <= 0 {
-		return "…"
-	}
-	// Walk clusters from the end, accumulating width, until adding
-	// the next cluster would exceed the remaining budget. The kept
-	// run is the trailing clusters from startIdx onward.
-	used := 0
-	startIdx := len(clusters)
-	for i := len(clusters) - 1; i >= 0; i-- {
-		cw := clusters[i].Width
-		if used+cw > remaining {
-			break
-		}
-		used += cw
-		startIdx = i
-	}
-	if startIdx >= len(clusters) {
+	kept := safepresentation.TruncateLeftCells(s, width-1)
+	if kept == "" {
 		// No cluster fit in the remaining space; return just ….
 		return "…"
 	}
-	return "…" + s[clusters[startIdx].StartByte:]
+	return "…" + kept
 }
 
 // truncateRightCells truncates s to at most width terminal cells from
@@ -3563,7 +3492,7 @@ func truncateRightCells(s string, width int) string {
 	if width <= 0 || s == "" {
 		return ""
 	}
-	clusters := safepresentation.GraphemeClusters(s)
+	clusters := safepresentation.GraphemeClustersANSI(s)
 	totalWidth := 0
 	for _, c := range clusters {
 		totalWidth += c.Width
@@ -3617,11 +3546,7 @@ func computeLongestPathWidth(idx *searchindex.Index) int {
 	longest := 0
 	for _, stop := range idx.Stops() {
 		escaped := safepresentation.EscapePath(stop.RawPath)
-		w := 0
-		for _, c := range safepresentation.GraphemeClusters(escaped.Text) {
-			w += c.Width
-		}
-		if w > longest {
+		if w := safepresentation.CellWidth(escaped.Text); w > longest {
 			longest = w
 		}
 	}

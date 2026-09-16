@@ -491,10 +491,26 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   path install `m.LayoutKey().TextWidth`, and the cache-hit fast path
   already used `key.TextWidth` — replacing recomputations of
   `viewport.TextWidth(m.width, …)` that skipped the file-list width
-  and separator. See
+  and separator. Issue #39 routed every final-render display-geometry
+  consumer through the shared ANSI-aware grapheme/cell helper in
+  `internal/safepresentation/cellwidth.go`:
+  `renderLineWithHighlights` now renders each clipped row directly
+  from `line.Clusters` cell spans (a cluster whose cells intersect a
+  highlight is styled whole; `cellToBytePos` and the re-escaping of
+  `line.Display` are gone); `visibleWidth` delegates to
+  `safepresentation.CellWidth`; the pop-up's rune-counting
+  `truncateLeftCells` was replaced by `safepresentation.
+  TruncateLeftCells` (escaped paths may contain combining marks);
+  `wrapLine` wraps overlay/help text on cluster boundaries through
+  `GraphemeClustersANSI`; `TruncateLeftGrapheme` and
+  `truncateRightCells` delegate to the helper; `graphemeCellWidthString`
+  was removed (the filename-row note slot measures through
+  `safepresentation.CellWidth`); and `computeLongestPathWidth` measures
+  through `CellWidth`. See
   [stream-integrity-diagnostics](stream-integrity-diagnostics.md),
-  [record-robustness](record-robustness.md), and
-  [viewport-text-width](viewport-text-width.md).
+  [record-robustness](record-robustness.md),
+  [viewport-text-width](viewport-text-width.md), and
+  [shared-cell-model-render](shared-cell-model-render.md).
 
 ## internal/safepresentation
 
@@ -527,6 +543,19 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [safe-presentation](safe-presentation.md), [browse-tracer](browse-tracer.md),
   [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
   and [grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md).
+- `internal/safepresentation/cellwidth.go` — Issue #39: the shared
+  ANSI-aware grapheme/cell display-geometry helper for the final
+  render path. `GraphemeClustersANSI(s)` segments styled strings into
+  display units (CSI escape sequences become zero-width clusters at
+  their byte positions; text between them is segmented by
+  `GraphemeClusters`); `CellWidth(s)` measures total terminal cells;
+  `TruncateLeftCells(s, keep)` keeps the trailing `keep` cells without
+  splitting a cluster, preserving ANSI sequences adjacent to kept
+  text. It is the sole production-file allow-list location for
+  `utf8.DecodeRuneInString`, enforced by a recursive source-scanning
+  guard test in `internal/app` covering every non-test `.go` file
+  under `internal/` and `cmd/`. See
+  [shared-cell-model-render](shared-cell-model-render.md).
 
 ## internal/sinkfixtures
 
@@ -710,8 +739,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `FilenameRule(name)` embeds the name in a base-coloured horizontal
   rule; `Overlay(s)` wraps with base colours and a plain single-line
   border. Match, CurrentMatch, Indicator, and Underline restore the
-  base colours after the styled span. See
-  [theme-module](theme-module.md) and [browse-tracer](browse-tracer.md).
+  base colours after the styled span. Issue #39: the private
+  `cellWidth` used for overlay sizing and padding now delegates to
+  `safepresentation.CellWidth` — the shared ANSI-aware grapheme/cell
+  policy — so borders and padding align under wide or combining
+  content. See
+  [theme-module](theme-module.md), [browse-tracer](browse-tracer.md),
+  and [shared-cell-model-render](shared-cell-model-render.md).
 
 ## internal/docs
 

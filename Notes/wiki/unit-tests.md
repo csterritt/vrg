@@ -1935,6 +1935,69 @@ recalibrated the right-edge fixtures — visible window ends at
 - `TestHelpFooterRenderedInOverlay` — the rendered help overlay
   contains footer tokens (verified at 80×50 so the footer is visible).
 
+### Issue #39 shared grapheme/cell render model
+
+`safepresentation/cellwidth_test.go` (external package
+`safepresentation_test`):
+
+- `TestCellWidth` — table-driven cell widths: ASCII, wide CJK (2),
+  combining cluster (1), emoji ZWJ (2), ellipsis, box drawing, and
+  ANSI-wrapped text contributing zero cells.
+- `TestGraphemeClustersANSI` — a CSI sequence becomes a zero-width
+  cluster at its byte position between grapheme clusters.
+- `TestGraphemeClustersANSIPlain` — strings without ANSI segment
+  identically to `GraphemeClusters`.
+- `TestTruncateLeftCells` — left truncation keeps whole clusters
+  (wide, combining, ZWJ), preserves ANSI in the kept tail, and never
+  emits a bare combining mark.
+
+`theme_test.go` (Issue #39 additions, external package `theme_test`):
+
+- `TestOverlayWideTextBorderAlignment` — `Overlay("中")` produces
+  border and content rows of equal measured cell width.
+- `TestOverlayCombiningTextBorderAlignment` — a base-plus-combining
+  cluster measures as one cell for overlay sizing and padding.
+- `TestOverlayMixedWidthRowsAlign` — rows of differing cell widths
+  pad to the widest measured row so borders align.
+
+`cell_render_test.go` (Issue #39, external package `app_test`) —
+composed `View()` render assertions on the emitted cell layout, not
+private helpers:
+
+- `TestRenderCJKHighlightCoversExactlyClusterCells` — a match
+  overlapping a two-cell CJK character styles exactly that cluster's
+  cells and never swallows the following character.
+- `TestRenderCombiningClusterStyledAsOne` — a base-plus-combining
+  sequence is styled only as one cluster.
+- `TestRenderEmojiZWJHighlightNeverSplit` — an emoji ZWJ sequence
+  occupies its measured cells and is never split by a highlight
+  boundary.
+- `TestRenderEmojiZWJClipBoundaryNeverSplits` — a clip boundary inside
+  a ZWJ cluster blanks its cells rather than emitting a partial
+  sequence.
+- `TestFileListWidePathPaddingCells` — a wide-path list entry pads to
+  the same list column as ASCII entries; the panel starts at the same
+  cell offset on every row.
+- `TestFilenameRowWidePathFitsPanel` — the filename row fits a wide
+  path to the panel width on cluster boundaries.
+- `TestPopupWidePathTruncatedToCells` — pop-up left-truncation of a
+  wide path is measured in cells and never overflows the terminal.
+- `TestPopupWidePathCentredInCells` — pop-up centering uses measured
+  cell width, not rune count.
+- `TestPopupCombiningPathNeverSplitsCluster` — the pop-up no longer
+  assumes `EscapePath` output lacks combining marks; truncation never
+  starts kept text on a bare combining mark.
+- `TestOverlayWideTextWrapsAndPadsToCells` — overlay text with wide
+  characters wraps and pads by cells so every bordered row aligns.
+
+`decode_guard_test.go` (Issue #39, external package `app_test`):
+
+- `TestDecodeRuneInStringOnlyInSharedCellHelper` — recursively scans
+  every non-test `.go` file under `internal/` and `cmd/` and fails
+  when `utf8.DecodeRuneInString` appears outside
+  `internal/safepresentation/cellwidth.go`, the sole allow-listed
+  production file.
+
 ## internal/docs
 
 `docs_test.go` (external package `docs_test`):

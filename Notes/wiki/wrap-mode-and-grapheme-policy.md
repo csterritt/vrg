@@ -26,6 +26,14 @@ The policy handles ASCII (width 1), wide characters (width 2), combining
 marks (width 0, attached to the base cluster), wide characters with
 combining marks (one cluster, width 2), and mixed text.
 
+Issue #39 adds the ANSI-aware variant
+`safepresentation.GraphemeClustersANSI` (CSI escapes become zero-width
+clusters), `CellWidth`, and `TruncateLeftCells` in
+`internal/safepresentation/cellwidth.go`, and makes the final renderer
+consume `Line.Clusters` cell spans directly instead of re-deriving byte
+positions from runes. See
+[shared-cell-model-render](shared-cell-model-render.md).
+
 ## Tab expansion to eight-column stops
 
 `EscapeContent` expands tabs to the next multiple of 8 source-display

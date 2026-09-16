@@ -27,8 +27,8 @@ and [hidden-content-indicators](hidden-content-indicators.md)).
 `longestPathWidth` is computed by `computeLongestPathWidth`, which
 iterates the search index stops, sanitizes each distinct path through
 `safepresentation.EscapePath`, and measures its terminal cell width
-using the shared grapheme-cluster policy
-(`safepresentation.GraphemeClusters` + per-cluster `Width`).
+with `safepresentation.CellWidth` (the shared ANSI-aware grapheme/cell
+helper, Issue #39).
 
 ## Visibility preference vs. computed width
 
@@ -78,12 +78,16 @@ install site (see
 
 `TruncateLeftGrapheme(s string, maxCells int) string` left-truncates
 a display string to fit `maxCells` terminal cells, inserting a
-leading `…` (one cell) when truncation occurs. It segments the string
-through `safepresentation.GraphemeClusters` and accumulates trailing
-clusters until the next cluster would exceed the budget. Wide
-glyphs, combining marks, and multi-cell escaped forms are never
-split — a cluster that does not fit moves entirely out of the
-kept window. When `maxCells <= 0` the result is empty.
+leading `…` (one cell) when truncation occurs. It measures through
+`safepresentation.CellWidth` and cuts through
+`safepresentation.TruncateLeftCells` — the shared ANSI-aware
+grapheme/cell helper (Issue #39). Wide glyphs, combining marks, and
+multi-cell escaped forms are never split — a cluster that does not
+fit moves entirely out of the kept window. When `maxCells <= 0` the
+result is empty. List-entry padding in `renderBrowse` measures the
+styled entry with the same helper, so entries containing wide or
+combining characters pad to the same list column as ASCII entries
+(see [shared-cell-model-render](shared-cell-model-render.md)).
 
 ## Active-entry auto-scroll
 
@@ -146,7 +150,9 @@ location in the new row model.
 - `ComputeListWidth`, `TruncateLeftGrapheme`, `computeLongestPathWidth`
   helpers.
 - `toggleListVisible`, `updateListOffset`, `currentFileIndex`,
-  `renderFilenameRow`, `graphemeCellWidthString` methods.
+  `renderFilenameRow` methods (the `graphemeCellWidthString` helper
+  was removed in Issue #39 — the note slot measures through
+  `safepresentation.CellWidth`).
 - `LayoutKey()` uses `m.ListWidth()` for the panel width; Issue #38
   installs the resulting text width at every viewport install site.
 - `handleNavigate` calls `updateListOffset` on every actual
