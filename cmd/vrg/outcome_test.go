@@ -380,8 +380,13 @@ func TestStderrWarningWithSummaryShowsWarningOverlay(t *testing.T) {
 
 // TestStderrContentFixture verifies that a fake rg writing ≥ 1 MiB to
 // stderr interleaved with a valid stdout stream produces a complete
-// stdout stream, includes the captured stderr in diagnostics, and the
-// overlay contains both the head and tail of the stderr text.
+// stdout stream, includes the captured stderr in diagnostics, and
+// completes. Issue #41 revises this contract: the overlay's
+// scrollable row set is the complete wrapped diagnostic, so head and
+// tail are no longer required to render simultaneously — the head is
+// visible when the overlay opens, and tail reachability is proven by
+// the model-level complete-rows and bounded-traversal tests rather
+// than by sending thousands of PTY keys.
 func TestStderrContentFixture(t *testing.T) {
 	fakeDir := t.TempDir()
 	rgPath := filepath.Join(fakeDir, "rg")
@@ -418,8 +423,13 @@ exit 3
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
 		"VRG_TEST_HANDSHAKE=" + handshakeFile,
 	}
-	// Esc dismisses the overlay, then q exits 2.
-	stdout, _, exitCode := runVrgWithKeys(t, cmd, handshakeFile, "\x1b", "q")
+	// A few downs exercise scrolling over the large diagnostic; the
+	// first q dismisses the overlay and the second exits 2. A bare
+	// Esc is avoided here: after an expensive Update on the 1 MiB
+	// diagnostic the input reader can coalesce "\x1b"+"q" into a
+	// single Alt+q press, which the modal overlay ignores.
+	stdout, _, exitCode := runVrgWithKeys(t, cmd, handshakeFile,
+		"\x1b[B", "\x1b[B", "\x1b[B", "q", "q")
 
 	if exitCode != 2 {
 		t.Fatalf("vrg exited %d, want 2 (fatal with stderr)", exitCode)
@@ -428,12 +438,11 @@ exit 3
 	if !strings.Contains(stdout, "test.txt") {
 		t.Fatalf("vrg stdout does not contain the browse view (stdout stream lost): %q", stdout)
 	}
-	// The overlay must contain the head of the stderr text.
+	// The captured stderr must reach the diagnostic overlay: the head
+	// is visible at scroll position 0. Issue #41: tail reachability
+	// is proven by the model-level complete-rows and traversal tests,
+	// not by simultaneous head/tail rendering.
 	if !strings.Contains(stdout, "HEADMARKER") {
 		t.Fatalf("vrg stdout does not contain the stderr head 'HEADMARKER': %q", stdout)
-	}
-	// The overlay must contain the tail of the stderr text.
-	if !strings.Contains(stdout, "TAILMARKER") {
-		t.Fatalf("vrg stdout does not contain the stderr tail 'TAILMARKER': %q", stdout)
 	}
 }

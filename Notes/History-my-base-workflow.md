@@ -492,3 +492,21 @@ Usage
  Input tokens: 62131 tokens
  Output tokens: 16104 tokens
  Cached input tokens: 2942941 tokens
+
+----
+Task 040-browse-render-no-whole-index-scan.md
+
+Usage
+ Agent messages: 76 messages
+ Input tokens: 126710 tokens
+ Output tokens: 43624 tokens
+ Cached input tokens: 6567863 tokens
+
+----
+Task 041-overlay-full-scroll-no-head-tail-compression.md
+
+Usage
+ Agent messages: 25 messages
+ Input tokens: 36849 tokens
+ Output tokens: 6673 tokens
+ Cached input tokens: 1763008 tokens

@@ -143,6 +143,9 @@ underlying state.
 - [Help overlay (Issue #31)](help-overlay.md)
 - [Outcome contract (Issue #9)](outcome-contract.md)
 - [Read failures and retry (Issue #26)](read-failures-and-retry.md)
+- [Overlay full scroll (Issue #41)](overlay-full-scroll.md) — the
+  complete-row scrollable set and `overlayScroll` clamp that appended
+  diagnostics extend without resetting position
 - [Browse tracer (Issue #15 pop-up)](browse-tracer.md)
 - [Too-small screen (Issue #33)](too-small-screen.md) — the too-small
   `q` rule takes precedence over the Issue #32 dismissal semantics

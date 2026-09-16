@@ -171,8 +171,6 @@ func (l *gatedFailingLoader) load(path []byte, stops []searchindex.Stop) (*fileb
 	l.mu.Lock()
 	l.calls[string(path)]++
 	gate := l.gates[string(path)]
-	buf := l.bufs[string(path)]
-	errMsg, fail := l.fails[string(path)]
 	started := l.started[string(path)]
 	once := l.startOnce[string(path)]
 	l.mu.Unlock()
@@ -184,6 +182,14 @@ func (l *gatedFailingLoader) load(path []byte, stops []searchindex.Stop) (*fileb
 	if gate != nil {
 		<-gate
 	}
+	// The outcome is read after the gate so a test can call
+	// setFailing/setBuffer while the load is held. Reading at entry
+	// would race with the test's configuration and make the result
+	// dependent on goroutine timing.
+	l.mu.Lock()
+	buf := l.bufs[string(path)]
+	errMsg, fail := l.fails[string(path)]
+	l.mu.Unlock()
 	if fail {
 		return nil, errors.New(errMsg)
 	}

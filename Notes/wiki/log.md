@@ -1481,3 +1481,44 @@ handling) with `TestRenderCostGuardNavigateViewBounded`,
 `Notes/tasks/040-browse-render-no-whole-index-scan.md`,
 `Notes/PRD-vrg.md` (Resources and responsiveness; File list and
 layout).
+## [2026-09-15] ingest | Issue #41 overlay full scroll — no head/tail compression
+
+Removed the head-plus-ellipsis-plus-tail compression `renderOverlay`
+applied to non-help diagnostics longer than the visible height: the
+scrollable row set is now the complete wrapped diagnostic, so every
+row of a long captured stderr stream is reachable by scrolling
+(`internal/app/app.go`). `overlayScroll` clamps to
+`[0, max(0, rows−maxVisible)]` in `handleOverlayKey` (stale positions
+snap into range on the next scroll key) and in the render path; new
+shared helpers `overlayInteriorWidth`, `overlayMaxVisible`,
+`overlayRows`, and `overlayMaxScroll` compute the geometry, and the
+new `overlayWrap`/`overlayWrapCache` field memoizes the wrapped rows
+keyed on (text, interior) so the per-keypress clamp does not re-wrap
+a ~1 MiB diagnostic. The modal key contract is unchanged (up/down
+scroll, q/Esc dismiss, `u`/`d`/page up/page down ignored) and
+render-time clipping at tiny sizes remains; model-level elision is
+forbidden. The ≥1 MiB `TestStderrContentFixture` keeps its drainage,
+complete-stdout, captured-stderr, and completion checks but no longer
+requires simultaneous head/tail rendering — superseding the Issue #9
+contract; it scrolls a few rows and dismisses with `q` twice because
+a bare `Esc`+`q` can coalesce into `Alt+q` while an expensive update
+is in flight. New `internal/app/overlay_full_scroll_test.go` proves
+the complete-row set, both-end clamps, bounded traversal, the ≥1 MiB
+content shape, and append-extends-set-with-preserved-position at the
+model level; `TestOverlayKeyOtherIgnored` now covers `u`, `d`, page
+up, and page down; `gatedFailingLoader.load` reads its outcome after
+the per-path gate (fixing a pre-existing race the slower key path
+exposed). Created
+[overlay-full-scroll](overlay-full-scroll.md); updated
+[outcome-contract](outcome-contract.md),
+[help-overlay](help-overlay.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+[index](index.md). Sources: `internal/app/app.go`,
+`internal/app/overlay_full_scroll_test.go`,
+`internal/app/overlay_test.go`,
+`internal/app/overlay_precedence_test.go`,
+`internal/app/read_failure_test.go`, `cmd/vrg/outcome_test.go`,
+`Notes/issues/041-overlay-full-scroll-no-head-tail-compression.md`,
+`Notes/tasks/041-overlay-full-scroll-no-head-tail-compression.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence; Outcome
+and exit-status contract).

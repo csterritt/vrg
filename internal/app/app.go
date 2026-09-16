@@ -695,6 +695,12 @@ type Model struct {
 	// Dismissing the error restores help at its saved scroll position.
 	suspendedHelp       bool
 	suspendedHelpScroll int
+	// overlayWrap caches the wrapped overlay row set keyed on the
+	// exact wrap inputs. Issue #41: the key handler clamps
+	// overlayScroll against the complete wrapped row set on every
+	// key press, so the rows are cached rather than re-wrapping a
+	// large diagnostic (up to 1 MiB of captured stderr) per key.
+	overlayWrap *overlayWrapCache
 
 	// File-change pop-up state (Issue #15). The pop-up starts at
 	// selection time (when navigation crosses a file boundary), not
@@ -2354,12 +2360,22 @@ func (m Model) openHelp() (tea.Model, tea.Cmd) {
 func (m Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case msg.Code == tea.KeyUp:
-		if m.overlayScroll > 0 {
+		// Issue #41: the scrollable set is the complete wrapped
+		// diagnostic, clamped to [0, max(0, rows-maxVisible)]. A
+		// stale position past the new maximum (e.g. after a resize)
+		// snaps back into range on the first scroll key.
+		if max := m.overlayMaxScroll(); m.overlayScroll > max {
+			m.overlayScroll = max
+		} else if m.overlayScroll > 0 {
 			m.overlayScroll--
 		}
 		return m, nil
 	case msg.Code == tea.KeyDown:
-		m.overlayScroll++
+		if max := m.overlayMaxScroll(); m.overlayScroll < max {
+			m.overlayScroll++
+		} else {
+			m.overlayScroll = max
+		}
 		return m, nil
 	case msg.Code == 'r' && msg.Mod == 0:
 		// Issue #27: r retries through a read-failure overlay.
@@ -2470,17 +2486,21 @@ func (m Model) View() tea.View {
 	return v
 }
 
-// renderOverlay renders the modal overlay on top of the base content.
-// The overlay text is wrapped to the interior width (accounting for the
-// single-line border and side margins), scrolled by overlayScroll, and
-// rendered through the theme's Overlay style (base colours + plain
-// single-line border). The base content is rendered first so the
-// overlay sits on top. At tiny sizes the overlay is clipped to the
-// terminal without a special borderless mode (Issue #31).
-func (m Model) renderOverlay(base string) string {
-	// Determine the overlay width: up to 80% of the terminal width,
-	// capped to a reasonable maximum. The interior width accounts for
-	// the border sides and the single space margin on each side.
+// overlayWrapCache memoizes the wrapped overlay row set for one
+// (text, interior-width) pair. Entries are immutable: callers may
+// slice rows but must not mutate them.
+type overlayWrapCache struct {
+	text     string
+	interior int
+	rows     []string
+}
+
+// overlayInteriorWidth returns the width the overlay text is wrapped
+// to at the current terminal size. The overlay box is up to 80% of
+// the terminal width, clamped to [20, 100] columns and clipped to the
+// terminal at tiny sizes (Issue #31); the interior accounts for the
+// border sides and the single space margin on each side.
+func (m Model) overlayInteriorWidth() int {
 	termWidth := m.width
 	if termWidth < 1 {
 		termWidth = 80
@@ -2492,7 +2512,6 @@ func (m Model) renderOverlay(base string) string {
 	if overlayWidth > 100 {
 		overlayWidth = 100
 	}
-	// Clip to the terminal width at tiny sizes (Issue #31).
 	if overlayWidth > termWidth {
 		overlayWidth = termWidth
 	}
@@ -2500,37 +2519,64 @@ func (m Model) renderOverlay(base string) string {
 	if interior < 1 {
 		interior = 1
 	}
-	// Wrap the overlay text to the interior width, including unbroken
-	// strings.
-	wrapped := wrapText(m.overlayText, interior)
-	lines := strings.Split(wrapped, "\n")
-	// Apply vertical scrolling.
+	return interior
+}
+
+// overlayMaxVisible returns the number of overlay rows visible at
+// once at the current terminal height: the terminal height minus the
+// border (2 lines) and a margin.
+func (m Model) overlayMaxVisible() int {
 	termHeight := m.height
 	if termHeight < 1 {
 		termHeight = 24
 	}
-	// Reserve space for the border (2 lines) and a margin.
 	maxVisible := termHeight - 4
 	if maxVisible < 1 {
 		maxVisible = 1
 	}
-	// When the diagnostic is very large, show both the head and tail
-	// so the user sees the beginning and end of the captured stderr.
-	// The help overlay (Issue #31) skips this compression so vertical
-	// scrolling reaches every row.
-	if m.overlay != OverlayHelp && len(lines) > maxVisible {
-		headN := maxVisible / 2
-		if headN < 1 {
-			headN = 1
-		}
-		tailN := maxVisible - headN - 1
-		if tailN < 1 {
-			tailN = 1
-		}
-		head := lines[:headN]
-		tail := lines[len(lines)-tailN:]
-		lines = append(append(head, "…"), tail...)
+	return maxVisible
+}
+
+// overlayRows returns the complete wrapped row set for the overlay
+// text at the current terminal width. Issue #41: every wrapped row
+// stays scrollable for every overlay kind — no head/tail compression
+// or ellipsis substitution happens at the model level. The result is
+// cached on the exact (text, interior) inputs so per-keypress clamping
+// does not re-wrap a large diagnostic.
+func (m *Model) overlayRows() []string {
+	interior := m.overlayInteriorWidth()
+	if c := m.overlayWrap; c != nil && c.text == m.overlayText && c.interior == interior {
+		return c.rows
 	}
+	rows := strings.Split(wrapText(m.overlayText, interior), "\n")
+	m.overlayWrap = &overlayWrapCache{text: m.overlayText, interior: interior, rows: rows}
+	return rows
+}
+
+// overlayMaxScroll returns the largest valid overlayScroll value:
+// max(0, rows-maxVisible) over the complete wrapped row set. Every
+// row is reachable by up/down scrolling (Issue #41).
+func (m *Model) overlayMaxScroll() int {
+	if max := len(m.overlayRows()) - m.overlayMaxVisible(); max > 0 {
+		return max
+	}
+	return 0
+}
+
+// renderOverlay renders the modal overlay on top of the base content.
+// The overlay text is wrapped to the interior width (accounting for the
+// single-line border and side margins), scrolled by overlayScroll, and
+// rendered through the theme's Overlay style (base colours + plain
+// single-line border). Issue #41: the rendered slice is a window into
+// the complete wrapped row set — no rows are elided at the model
+// level, so every row of a long diagnostic is reachable by scrolling.
+// At tiny sizes the overlay is clipped to the terminal without a
+// special borderless mode (Issue #31).
+func (m Model) renderOverlay(base string) string {
+	lines := m.overlayRows()
+	maxVisible := m.overlayMaxVisible()
+	// Clamp the scroll position to the complete row set so a stale
+	// position (e.g. after a resize) still renders a valid window.
 	scroll := m.overlayScroll
 	if scroll < 0 {
 		scroll = 0

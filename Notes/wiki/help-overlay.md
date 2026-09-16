@@ -58,10 +58,11 @@ The help overlay shares the `renderOverlay` component with the [Issue
   margins), including long unbroken strings.
 - Vertical scrolling reaches every row at usable sizes.
 
-The help overlay skips the head/tail compression that the error
-overlay applies to very large diagnostics. This ensures vertical
-scrolling reaches every row of the binding table rather than
-compressing the middle.
+The help overlay scrolls through the complete wrapped binding table.
+Issue #41 removed the head/tail compression the error overlay
+formerly applied to very large diagnostics, so the complete-row rule
+now holds uniformly for every overlay kind
+([overlay-full-scroll](overlay-full-scroll.md)).
 
 ## Tiny-size clipping
 

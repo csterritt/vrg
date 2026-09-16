@@ -287,6 +287,14 @@ Catalog of all wiki pages for the vrg project.
   allocation guard (≤ 512 KiB / ≤ 4096 mallocs over a 45,000-stop
   index) spanning both halves without a reset; per-keystroke cost
   independent of index size at the ~100,000-matched-lines scale
+- [overlay-full-scroll.md](overlay-full-scroll.md) — Issue #41:
+  non-help overlays keep every wrapped row in the scrollable set (no
+  head/ellipsis/tail compression, no model-level elision);
+  `overlayScroll` clamps to `[0, max(0, rows−maxVisible)]` in the key
+  handler and render path; `overlayWrapCache` memoizes rows on
+  (text, interior); supersedes the Issue #9 simultaneous head/tail
+  requirement for the ≥1 MiB stderr fixture while drainage and
+  completeness checks remain
 
 ## Catalogs
 

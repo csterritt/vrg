@@ -516,7 +516,9 @@ table, parser config, and generated help cannot drift.
 - `TestOverlayKeyCtrlCExits130` — ctrl+c from an open overlay exits
   130.
 - `TestOverlayKeyOtherIgnored` — any key other than up/down/q/Esc/
-  ctrl+c is ignored by the overlay.
+  ctrl+c is ignored by the overlay, including the base-state scroll
+  bindings `u`, `d`, page up, and page down (Issue #41: the modal key
+  contract is unchanged and ignored keys never move `overlayScroll`).
 - `TestOverlayFatalNoResultsQExits2` /
   `TestOverlayFatalNoResultsEscExits2` — q/Esc on a fatal no-results
   overlay exits 2.
@@ -1026,8 +1028,15 @@ exit, signal death, and large-stderr fixtures:
   warning overlay then the no-results screen, and q exits 1.
 - `TestStderrContentFixture` — a fake rg writing ≥ 1 MiB to stderr
   interleaved with a valid stdout stream produces a complete stdout
-  stream, includes the captured stderr in diagnostics, and the overlay
-  contains both the head and tail of the stderr text.
+  stream, includes the captured stderr in diagnostics (the head is
+  visible when the overlay opens), and completes. Issue #41 revised
+  the contract: head and tail are no longer required to render
+  simultaneously — tail reachability is proven by the model-level
+  complete-rows and bounded-traversal tests in
+  `overlay_full_scroll_test.go`. The fixture scrolls a few rows and
+  uses `q` twice (dismiss, then exit 2) rather than a bare `Esc`+`q`,
+  which can coalesce into `Alt+q` while an expensive update is in
+  flight.
 
 `cancel_test.go` (Issue #4) extends the fake-rg/PTY harness with a
 controllable blocked fake rg (readiness handshake + indefinite block),
@@ -2013,6 +2022,39 @@ private helpers:
   when `utf8.DecodeRuneInString` appears outside
   `internal/safepresentation/cellwidth.go`, the sole allow-listed
   production file.
+
+`overlay_full_scroll_test.go` (Issue #41, external package
+`app_test`) — the complete-scrollable-row contract for non-help
+overlays:
+
+- `TestOverlayCompleteRowsScrollable` — a 30-row diagnostic at 80×24
+  (maxVisible 20) renders `rows[0:20]` initially with no ellipsis row;
+  ten bounded `down` presses slide the window row by row to
+  `rows[10:30]`; the key handler clamps at `rows−maxVisible` and at 0;
+  a bounded `up` traversal returns to the first row.
+- `TestOverlayHugeDiagnosticCompleteRows` — a ≥1 MiB diagnostic
+  shaped like the large-stderr fixture wraps to 17,615 rows at 80×24;
+  the head marker renders first, the tail only after scrolling the
+  full `rows−maxVisible` distance (17,595 downs — the wrap cache keeps
+  this fast), and no ellipsis row ever appears.
+- `TestOverlayRenderClampsStaleScroll` — after a resize grows the
+  window past the row count, the render path clamps the stale scroll
+  so every row shows, and the next scroll key re-clamps the position
+  into `[0, rows−maxVisible]`.
+- `TestOverlayAppendExtendsScrollableSet` — a diagnostic appended
+  through a read-failure retry extends the complete scrollable set
+  (30→31 rows, max scroll 10→11) while preserving the reader's
+  position; the appended row is the final reachable row and no
+  ellipsis row is injected.
+- Helpers: `overlayTestRows`/`overlayDiagWithHead` build single-row
+  diagnostics with first/last markers; `setupOverlayFullScroll` opens
+  a non-fatal error overlay under the no-style theme so the rendered
+  view is exactly the visible window.
+
+`read_failure_test.go` additionally now reads the gated loader's
+failure/buffer outcome *after* the per-path gate rather than at entry
+(Issue #41): a test can call `setFailing`/`setBuffer` while a load is
+held without racing the loader goroutine's start.
 
 ## internal/docs
 

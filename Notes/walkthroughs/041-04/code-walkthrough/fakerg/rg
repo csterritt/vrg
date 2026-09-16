@@ -1,0 +1,14 @@
+#!/bin/sh
+printf 'FIRST-MARKER\n' >&2
+i=1
+while [ $i -le 58 ]; do
+  printf 'diag-row-%03d\n' "$i" >&2
+  i=$((i + 1))
+done
+printf 'LAST-MARKER\n' >&2
+echo '{"type":"begin","data":{"path":{"text":"test.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+echo '{"type":"end","data":{"path":{"text":"test.txt"},"binary_offset":null}}'
+echo '{"type":"summary","data":{}}'
+touch "$VRG_TEST_HANDSHAKE"
+exit 3

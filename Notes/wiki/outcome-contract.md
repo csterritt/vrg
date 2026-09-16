@@ -182,8 +182,10 @@ components do not change the relative order of those present. See
 full cause-line table and dual-representation rules.
 
 The overlay text is sanitized through `safepresentation.EscapeDiagnostic`
-before rendering. Large diagnostics show both the head and tail so the
-user sees the beginning and end of the captured stderr.
+before rendering. Issue #41: the scrollable row set is the complete
+wrapped diagnostic — every row is reachable by scrolling and no
+head/tail compression or ellipsis substitution is applied at the
+model level ([overlay-full-scroll](overlay-full-scroll.md)).
 
 ## Exit statuses
 

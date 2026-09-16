@@ -167,7 +167,9 @@ func TestAppendErrorPreservesScroll(t *testing.T) {
 	loader := newGatedFailingLoader()
 	loader.set("src/a.go", makeBuf([]filebuffer.Line{ml(1, "content-a")}, 1, 3))
 	loader.set("src/b.go", makeBuf([]filebuffer.Line{ml(1, "content-b")}, 1, 3))
-	loader.setFailing("src/a.go", "first error")
+	// Issue #41: a taller diagnostic keeps scroll position 2 within
+	// the complete-set clamp.
+	loader.setFailing("src/a.go", overlayDiagWithHead("first error", 30))
 	gate := make(chan struct{})
 	close(gate)
 	m := app.New([]string{"--json", "--", "foo", "."}, "/work",
@@ -442,7 +444,10 @@ func setupBrowseErrorOverlay(t *testing.T) app.Model {
 	m, cmd := update(t, m, app.SearchCompleteMsg{
 		Files: idx.Files(), Lines: idx.Len(), Index: idx,
 		Process: app.ProcessResult{ExitCode: 3},
-		Stderr:  "fatal search error",
+		// Issue #41: the diagnostic must be taller than the visible
+		// overlay for scroll positions to be reachable under the
+		// complete-set clamp.
+		Stderr: overlayDiagWithHead("fatal search error", 30),
 	})
 	if cmd != nil {
 		m = deliverLoad(t, m, cmd)
@@ -697,8 +702,10 @@ func TestErrorFirstKeyRouting(t *testing.T) {
 		t.Fatalf("help scroll = %d, want %d", m.OverlayScroll(), helpScrollS)
 	}
 
-	// Trigger a read failure → error overlay suspends help.
-	loader.setFailing("src/a.go", "permission denied")
+	// Trigger a read failure → error overlay suspends help. Issue
+	// #41: a taller diagnostic keeps the error scroll positions
+	// within the complete-set clamp.
+	loader.setFailing("src/a.go", overlayDiagWithHead("permission denied", 30))
 	loader.release("src/a.go")
 	lc := <-loadCh
 	m = deliverCompletion(t, m, lc)

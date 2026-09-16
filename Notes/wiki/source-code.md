@@ -132,8 +132,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   from the wait error. The fixed exit status is decided once at
   completion and never recomputed except by `ctrl+c` (which overrides
   to 130). The overlay is modal: up/down scroll, q/Esc dismiss
-  (non-fatal) or exit 2 (fatal no-results), other keys ignored. Large
-  diagnostics show both head and tail. Issue #10 extended the outcome
+  (non-fatal) or exit 2 (fatal no-results), other keys ignored. Issue
+  #10 extended the outcome
   matrix with record-loss inputs: `RecordLoss{Malformed, Unknown,
   Oversized}` and `RecordLossDiagnostics` on `OutcomeInput`, the
   `recordLossDiagnostics` helper, and new matrix rows for malformed,
@@ -427,8 +427,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   is ignored with the underlying state unchanged. The help overlay
   shares the `renderOverlay` component with the error overlay (base
   colours, plain single-line border, wrapped text including unbroken
-  strings, vertical scrolling reaching every row) but skips the
-  head/tail compression so all rows are reachable by scrolling. At tiny
+  strings, vertical scrolling reaching every row). At tiny
   sizes the overlay is clipped to the terminal without a borderless
   mode and restored on growth; rendering does not panic at 25×8. See
   [help-overlay](help-overlay.md).
@@ -523,7 +522,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   per-frame `index.Files()` distinct-path scan; `loadFileFor` takes
   its per-file stop range from the group map instead of copying and
   scanning `index.Stops()`; `groupByFile` was absorbed into
-  `prepareFileGroups`. See
+  `prepareFileGroups`. Issue #41 removed the
+  head-plus-ellipsis-plus-tail compression `renderOverlay` applied to
+  large non-help diagnostics: the rendered slice is now a clamped
+  window into the complete wrapped row set (`overlayRows`), so every
+  row of a long diagnostic is reachable by scrolling. `overlayScroll`
+  clamps to `[0, max(0, rows−maxVisible)]` in `handleOverlayKey` (a
+  stale position snaps back into range on the next scroll key) and in
+  the render path; `overlayInteriorWidth`, `overlayMaxVisible`, and
+  `overlayMaxScroll` share the geometry between both, and
+  `overlayWrap` (`overlayWrapCache`) memoizes the wrapped rows keyed on
+  (text, interior) so the per-keypress clamp does not re-wrap a ~1 MiB
+  diagnostic. The modal key contract is unchanged and render-time
+  clipping at tiny sizes remains. See
+  [overlay-full-scroll](overlay-full-scroll.md),
   [stream-integrity-diagnostics](stream-integrity-diagnostics.md),
   [record-robustness](record-robustness.md),
   [viewport-text-width](viewport-text-width.md),

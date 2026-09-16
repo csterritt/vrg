@@ -141,13 +141,20 @@ func TestOverlayKeyCtrlCExits130(t *testing.T) {
 }
 
 // TestOverlayKeyOtherIgnored verifies that any key other than
-// up/down/q/Esc/ctrl+c is ignored by the overlay.
+// up/down/q/Esc/ctrl+c is ignored by the overlay — including the
+// base-state scroll bindings u, d, page up, and page down, which have
+// no effect while an error overlay is open (the modal key contract is
+// unchanged, Issue #41).
 func TestOverlayKeyOtherIgnored(t *testing.T) {
 	m := setupOverlayBrowse(t, "boom")
 	for _, k := range []tea.KeyPressMsg{
 		keyPress('x'),
 		keyPress('a'),
 		keyPress('c'), // c toggles theme in browse, but overlay open → ignored
+		keyPress('u'), // base-state half-page scroll — ignored
+		keyPress('d'), // base-state half-page scroll — ignored
+		tea.KeyPressMsg{Code: tea.KeyPgUp},
+		tea.KeyPressMsg{Code: tea.KeyPgDown},
 		tea.KeyPressMsg{Code: tea.KeyLeft},
 		tea.KeyPressMsg{Code: tea.KeyRight},
 	} {
@@ -160,6 +167,9 @@ func TestOverlayKeyOtherIgnored(t *testing.T) {
 		}
 		if mm.State() != app.StateBrowse {
 			t.Fatalf("key %v changed state to %v, want StateBrowse", k, mm.State())
+		}
+		if mm.OverlayScroll() != 0 {
+			t.Fatalf("key %v scrolled the overlay to %d, want no effect", k, mm.OverlayScroll())
 		}
 	}
 }
