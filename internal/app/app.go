@@ -4,8 +4,10 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os/exec"
 	"strings"
 	"sync"
@@ -1445,11 +1447,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// (Issue #11). The diagnostic is collected regardless of
 			// whether the file is current: a non-current failure is
 			// diagnostic-only (no overlay, no indicator), discovered
-			// by visiting that file or at exit.
+			// by visiting that file or at exit. Issue #47: the
+			// diagnostic is composed from the EscapePath-escaped path
+			// plus a sanitized reason that never repeats the raw
+			// path, so one failed read always produces exactly one
+			// diagnostic line.
 			if m.failedPaths == nil {
 				m.failedPaths = make(map[string]string)
 			}
-			diag := msg.Err.Error()
+			diag := readFailureDiagnostic(msg.Path, msg.Err)
 			m.failedPaths[string(msg.Path)] = sanitizeDiagnostic(diag)
 			m.collectDiagnostic(diag)
 		}
@@ -1493,10 +1499,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Issue #26: current-file read failure. Show the error
 			// overlay (Issue #9 component) and the "(unreadable)"
 			// placeholder. The file's cursor stops are retained and
-			// the filename row still identifies the path.
+			// the filename row still identifies the path. Issue #47:
+			// the overlay shows the same single-line diagnostic
+			// collected for replay.
 			m.readFailed = true
 			m.unsupportedEncoding = false
-			m.openReadFailureOverlay(msg.Err.Error())
+			m.openReadFailureOverlay(readFailureDiagnostic(msg.Path, msg.Err))
 		}
 		m.loading = false
 		// Build the viewport from the prepared row data (Issue #16:
@@ -3818,6 +3826,25 @@ func processResultFromSys(state any) ProcessResult {
 		}
 	}
 	return ProcessResult{ExitCode: 1}
+}
+
+// readFailureDiagnostic composes the single-line diagnostic for a
+// failed file load (Issue #47): the safepresentation.EscapePath-escaped
+// raw path plus a sanitized reason that never repeats the raw path. A
+// *fs.PathError (os.ReadFile's error) is unwrapped to its Op and Err so
+// the raw filename bytes embedded in PathError.Error() cannot inject
+// extra diagnostic lines; other loader errors supply the reason
+// verbatim. The same construction feeds the failure record (re-entry
+// retry), the session diagnostic collection (stderr replay), and the
+// current-file overlay, so every file-load diagnostic site produces
+// exactly one line whatever bytes the filename contains.
+func readFailureDiagnostic(path []byte, err error) string {
+	escaped := safepresentation.EscapePath(path).Text
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		return pe.Op + " " + escaped + ": " + pe.Err.Error()
+	}
+	return escaped + ": " + err.Error()
 }
 
 // sanitizeDiagnostic escapes raw diagnostic bytes for safe display while

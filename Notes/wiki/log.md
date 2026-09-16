@@ -1707,3 +1707,45 @@ reciprocal adaptation rule applies. Updated
 `Notes/issues/046-runtime-error-common-diagnostic-replay.md`,
 `Notes/tasks/046-runtime-error-common-diagnostic-replay.md`,
 `Notes/PRD-vrg.md` (Outcome and exit-status contract).
+
+## [2026-09-15] ingest | Issue #47 single-line read-failure diagnostics
+
+Ingested the completed Issue #47 fix, which composes every file-load
+failure diagnostic as the `safepresentation.EscapePath`-escaped path
+plus a sanitized reason that never repeats the raw path, instead of
+passing `err.Error()` to `EscapeDiagnostic`. `os.ReadFile` returns a
+`*fs.PathError` whose message embeds the raw filename, and
+`EscapeDiagnostic` preserves LF as a diagnostic boundary, so a
+filename containing a newline split one failed read into multiple
+diagnostic rows — the escaping sanitized control bytes but did not
+preserve the single-line diagnostic structure. The new
+`readFailureDiagnostic(path, err)` helper unwraps a `*fs.PathError`
+to its `Op` and `Err` (`open <escaped>: no such file or directory`)
+and falls back to `<escaped>: <err>` for non-PathError loader
+errors. The same construction feeds `failedPaths` (re-entry retry
+overlay), the session diagnostic collection (stderr replay), and
+the current-file overlay, so initial load, `r` reload, and
+failed-path re-entry retry all produce exactly one diagnostic line
+whatever bytes the filename contains. `read_failure_test.go` gained
+the Issue #47 suite: a table-driven test over hostile filename kinds
+(newline, tab, invalid UTF-8, ESC) creates real fixture files in a
+disposable `os.MkdirTemp` directory, holds the load at the file
+gate, removes the fixture, and releases the gate so the production
+`filebuffer.Load` fails with a genuine ENOENT `*fs.PathError`;
+assertions pin the single escaped-path-plus-reason line through the
+overlay text, the rendered overlay row set, and the replay
+collection. Reload and re-entry tests drive the same construction
+through `r` and the failed-path retry, where the appended second
+diagnostic is another identical single line.
+`TestOverlayAppendExtendsScrollableSet` now expects the appended
+row's escaped-path prefix (`src/a.go: APPENDED-MARKER`). Updated
+[read-failures-and-retry](read-failures-and-retry.md),
+[safe-presentation](safe-presentation.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+[index](index.md). Sources: `internal/app/app.go`,
+`internal/app/read_failure_test.go`,
+`internal/app/overlay_full_scroll_test.go`,
+`Notes/issues/047-read-failure-single-line-filenames.md`,
+`Notes/tasks/047-read-failure-single-line-filenames.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; File
+loading, cache, reload, and selection consistency).

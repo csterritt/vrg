@@ -1,4 +1,4 @@
-# Read failures and retry rules (Issue #26)
+# Read failures and retry rules (Issue #26, extended by Issue #47)
 
 Issue #26 made unreadable-file behavior explicit and robust so the
 TUI never gets stuck on `Loading…`, the search-derived exit status
@@ -93,6 +93,32 @@ overlay:
 Dismissing a non-fatal overlay with `q` or Escape clears
 `overlayReadFailure` and the overlay state, returning to the browse
 state. Fatal-overlay dismissal behavior is unchanged.
+
+### Single-line diagnostic construction (Issue #47)
+
+Issue #47 fixed the diagnostic construction for every file-load
+failure site. `os.ReadFile` returns a `*fs.PathError` whose
+`Error()` embeds the raw filename; passing `err.Error()` straight to
+`EscapeDiagnostic` preserved an embedded filename newline as a real
+diagnostic boundary, so one failed read could split into
+injected-looking extra diagnostic lines. Relevant PRD sections:
+*Text, graphemes, and safe presentation* (sanitizers) and *File
+loading, cache, reload, and selection consistency* (read-failure
+diagnostics). See
+[safe-presentation](safe-presentation.md) for the shared escaping
+contracts.
+
+`readFailureDiagnostic(path, err)` now composes the diagnostic as
+the `safepresentation.EscapePath`-escaped path plus a sanitized
+reason that never repeats the raw path: a `*fs.PathError` is
+unwrapped to its `Op` and `Err` (`open <escaped>: no such file or
+directory`); other loader errors supply the reason verbatim
+(`<escaped>: <err>`). The same construction feeds the `failedPaths`
+record (re-entry retry overlay), the session diagnostic collection
+(stderr replay), and the current-file overlay, so initial load,
+`r` reload, and failed-path re-entry retry all produce exactly one
+diagnostic line whatever bytes the filename contains — the replay
+introduces no re-splitting.
 
 ### Filename row and placeholder rendering
 

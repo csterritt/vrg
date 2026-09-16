@@ -1597,6 +1597,34 @@ recalibrated the right-edge fixtures — visible window ends at
   path follows Issue #24's slot rules, the `(unreadable)`
   placeholder is shown, nothing overflows, and layout dimensions
   remain nonnegative.
+- `TestReadFailureSingleLineDiagnostics` (Issue #47) — table-driven
+  over hostile filename kinds (newline, tab, invalid UTF-8, ESC): a
+  real fixture file is created in a disposable `os.MkdirTemp`
+  directory and indexed, the load is held at the file gate, the
+  fixture removed, and the gate released so the production
+  `filebuffer.Load` fails with a genuine `*fs.PathError` (ENOENT).
+  Asserts the failure surfaces as exactly one diagnostic line —
+  `open <EscapePath-escaped path>: <unwrapped PathError.Err>` — in
+  the overlay text, the rendered overlay row set, and the collected
+  replay diagnostics, with no raw-path repetition.
+- `TestReadFailureSingleLineReload` — the same genuine failure
+  driven through the `r` reload site after a successful first load;
+  same single-line construction.
+- `TestReadFailureSingleLineReentry` — the failed-path re-entry
+  retry site: the stored single-line diagnostic reopens with the
+  overlay on re-entry and the retry's failure appends exactly one
+  identical line; the replay collection holds two identical
+  single-line entries.
+- Issue #47 helpers: `newHostileDir` (short-named disposable
+  directory with `t.Cleanup` removal), `buildRealPathIndex`
+  (bytes-encoded index records carrying real filesystem paths so
+  invalid UTF-8 filename bytes survive JSON round-tripping),
+  `setupRealLoadBrowse` (browse model using the production
+  `filebuffer.Load` gated by a file-load gate), `requirePathError`
+  (asserts a genuine `*fs.PathError` matching `fs.ErrNotExist`),
+  `wantReadDiagnostic` (expected escaped-path-plus-reason
+  composition), and `assertSingleLineReadDiagnostic` (the shared
+  overlay/row-set/replay single-line assertions).
 
 `reentry_test.go` (Issue #26, external package `app_test`):
 
@@ -2159,8 +2187,9 @@ overlays:
 - `TestOverlayAppendExtendsScrollableSet` — a diagnostic appended
   through a read-failure retry extends the complete scrollable set
   (30→31 rows, max scroll 10→11) while preserving the reader's
-  position; the appended row is the final reachable row and no
-  ellipsis row is injected.
+  position; the appended row — carrying the Issue #47 escaped-path
+  prefix (`src/a.go: APPENDED-MARKER`) — is the final reachable row
+  and no ellipsis row is injected.
 - Helpers: `overlayTestRows`/`overlayDiagWithHead` build single-row
   diagnostics with first/last markers; `setupOverlayFullScroll` opens
   a non-fatal error overlay under the no-style theme so the rendered

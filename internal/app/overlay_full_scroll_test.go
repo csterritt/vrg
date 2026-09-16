@@ -320,7 +320,7 @@ func TestOverlayAppendExtendsScrollableSet(t *testing.T) {
 		t.Fatalf("overlay scroll = %d at bottom, want 11 (rows-maxVisible)", m.OverlayScroll())
 	}
 	view := viewContent(m)
-	if lastNL := strings.LastIndex(view, "\n"); lastNL < 0 || view[lastNL+1:] != "APPENDED-MARKER" {
+	if lastNL := strings.LastIndex(view, "\n"); lastNL < 0 || view[lastNL+1:] != "src/a.go: APPENDED-MARKER" {
 		t.Fatalf("bottom overlay view's last row is not the appended marker: %q", view)
 	}
 	if strings.Contains(view, "…") {

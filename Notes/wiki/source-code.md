@@ -399,6 +399,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   accessors `OverlayFatal()`, `OverlayText()`, `OverlayScroll()`,
   `IsLoading()`, and `ReadFailed()`. See
   [read-failures-and-retry](read-failures-and-retry.md).
+  Issue #47 fixed read-failure diagnostic construction:
+  `readFailureDiagnostic` composes each file-load failure
+  diagnostic as the `EscapePath`-escaped path plus a sanitized
+  reason — a `*fs.PathError` is unwrapped to its `Op` and `Err`
+  rather than `err.Error()`, which embeds the raw path and let a
+  filename newline split one failure into multiple diagnostic
+  lines. The same single-line construction feeds `failedPaths`
+  (re-entry retry), the session diagnostic collection (stderr
+  replay), and the current-file overlay, uniformly across initial
+  load, `r` reload, and retry.
   Issue #27 added explicit reload: `handleReload` rereads the current
   file on `r` (from browse or through a read-failure overlay) without
   rerunning ripgrep or changing cursor stops, recording the path in

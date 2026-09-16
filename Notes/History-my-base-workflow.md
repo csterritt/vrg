@@ -555,3 +555,12 @@ Usage
  Input tokens: 34059 tokens
  Output tokens: 5536 tokens
  Cached input tokens: 1423168 tokens
+
+----
+Task 047-read-failure-single-line-filenames.md
+
+Usage
+ Agent messages: 28 messages
+ Input tokens: 79301 tokens
+ Output tokens: 18650 tokens
+ Cached input tokens: 1542144 tokens

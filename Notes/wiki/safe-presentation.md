@@ -103,6 +103,16 @@ Filename newlines cannot become diagnostic paragraph breaks.
 callers that need to embed a filename in a diagnostic. It delegates to
 `safepresentation.EscapePath`.
 
+Issue #47 applied the rule to read-failure diagnostics:
+`app.readFailureDiagnostic(path, err)` composes each file-load
+failure diagnostic from the `EscapePath`-escaped path plus a
+sanitized reason — a `*fs.PathError` is unwrapped to its `Op` and
+`Err` rather than reusing `err.Error()`, which embeds the raw path.
+One failed read therefore always produces exactly one diagnostic
+line in the overlay and the stderr replay, whatever bytes the
+filename contains. See
+[read-failures-and-retry](read-failures-and-retry.md).
+
 ## Sink wiring
 
 Every current sink routes through the shared utility:

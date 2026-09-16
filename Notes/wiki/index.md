@@ -170,7 +170,8 @@ Catalog of all wiki pages for the vrg project.
   requests, session-long buffer retention with no eviction,
   post-cancellation rejection, and separately gated decode/map phase
   with `ctrl+c`/`n`/`p`/`w`/`c`/resize all actionable
-- [read-failures-and-retry.md](read-failures-and-retry.md) — Issue #26:
+- [read-failures-and-retry.md](read-failures-and-retry.md) — Issue #26
+  (extended by Issue #47):
   read-failure state and `(unreadable)` placeholder, non-fatal
   read-failure overlay with sanitized diagnostics, non-current
   diagnostic-only collection, same-file-step no-retry versus
@@ -178,9 +179,13 @@ Catalog of all wiki pages for the vrg project.
   prior-failure overlay reopen, exactly-one in-flight retry,
   Esc-without-disturbance, settlement presentation, and
   append-preserving-scroll on second failure, composed-view
-  robustness through Issue #24's slot, and load failures never
+  robustness through Issue #24's slot, load failures never
   changing the fixed search-derived exit status (all-fail fixed-0,
-  current-file fixed-2, composed all-fail-with-fixed-2)
+  current-file fixed-2, composed all-fail-with-fixed-2), and the
+  Issue #47 single-line diagnostic construction
+  (`readFailureDiagnostic`: `EscapePath`-escaped path plus a
+  `*fs.PathError`-unwrapped reason, uniform across initial load,
+  `r` reload, and retry)
 - [explicit-reload.md](explicit-reload.md) — Issue #27: `r` rereads
   the current file without rerunning ripgrep or changing cursor stops,
   `Loading…` placeholder while pending, dropped (not queued) duplicate

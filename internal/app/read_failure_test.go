@@ -2,6 +2,9 @@ package app_test
 
 import (
 	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -11,7 +14,9 @@ import (
 
 	"vrg/internal/app"
 	"vrg/internal/filebuffer"
+	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
+	"vrg/internal/theme"
 )
 
 // --- Issue #26 test helpers ---
@@ -861,4 +866,298 @@ func TestReadFailureOutcomeComposedAllFailFixed2(t *testing.T) {
 	if m.ExitCode() != exitBefore {
 		t.Fatalf("ExitCode = %d, want %d after q (all files fail, fixed status 2)", m.ExitCode(), exitBefore)
 	}
+}
+
+// --- Issue #47: single-line read-failure diagnostics ---
+
+// hostileNames is the Issue #47 fixture set: the filename byte
+// patterns that must never break the single-line diagnostic
+// contract. Each name is kept short so the escaped diagnostic fits
+// within one overlay row at the 80-column test terminal.
+var hostileNames = []struct {
+	name string
+	base []byte
+}{
+	{"newline", []byte("nl\nz")},
+	{"tab", []byte("tb\tz")},
+	{"invalid-utf8", []byte{'u', 0xff, 'z'}},
+	{"esc", []byte("es\x1bz")},
+}
+
+// newHostileDir creates a disposable directory for hostile filename
+// fixtures and registers its removal so no hostile filename survives
+// the test on any outcome. os.MkdirTemp with a short pattern keeps
+// the absolute path brief so the escaped diagnostic fits within one
+// overlay row.
+func newHostileDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "v47")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return dir
+}
+
+// writeRealFile creates a fixture file on disk. Invalid-UTF-8
+// filename bytes are legal on Linux; the caller decides how to treat
+// a write error on filesystems that reject them.
+func writeRealFile(t *testing.T, path string, data string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+		t.Fatalf("write fixture %q: %v", path, err)
+	}
+}
+
+// buildRealPathIndex builds an index whose stops carry the given real
+// filesystem paths as raw paths, in the given order. Paths are
+// bytes-encoded so invalid UTF-8 filename bytes survive the JSON
+// round-trip; each file's single match record claims line 1 "x", so a
+// fixture containing "x\n" loads cleanly. Paths must be in unsigned
+// byte order so the first path is the cursor's startup stop.
+func buildRealPathIndex(t *testing.T, workdir string, paths ...[]byte) *searchindex.Index {
+	t.Helper()
+	var records []string
+	for _, p := range paths {
+		records = append(records,
+			bytesBeginRecord(p),
+			bytesMatch(p, []byte("x\n"), 1, subSpec{"x", 0, 1}),
+			bytesEndRecord(p),
+		)
+	}
+	records = append(records, summaryRecord())
+	return buildIndex(t, workdir, records...)
+}
+
+// setupRealLoadBrowse creates a browse model that loads files through
+// the production filebuffer.Load (no injected loader) gated by the
+// given file-load gate, and delivers a SearchCompleteMsg. Returns the
+// model and the async load channel for the startup file.
+func setupRealLoadBrowse(t *testing.T, idx *searchindex.Index, workdir string, gate chan struct{}) (app.Model, <-chan app.FileLoadCompleteMsg) {
+	t.Helper()
+	m := app.New([]string{"--json", "--", "foo", "."}, workdir,
+		app.WithFileLoadGate(gate),
+		app.WithPopupDuration(0),
+		app.WithTheme(theme.NoStyle()),
+	)
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, cmd := update(t, m, app.SearchCompleteMsg{Files: idx.Files(), Lines: idx.Len(), Index: idx})
+	if m.State() != app.StateBrowse {
+		t.Fatalf("State = %v, want StateBrowse", m.State())
+	}
+	loadCh := startLoadAsync(cmd)
+	return m, loadCh
+}
+
+// requirePathError requires lc to carry a genuine filesystem
+// *fs.PathError (a real os.ReadFile failure, not an injected error)
+// and returns it for diagnostic expectations.
+func requirePathError(t *testing.T, lc app.FileLoadCompleteMsg) *fs.PathError {
+	t.Helper()
+	if lc.Err == nil {
+		t.Fatalf("load completed without error, want a real read failure")
+	}
+	var pe *fs.PathError
+	if !errors.As(lc.Err, &pe) {
+		t.Fatalf("load error = %T %v, want *fs.PathError from os.ReadFile", lc.Err, lc.Err)
+	}
+	if !errors.Is(lc.Err, fs.ErrNotExist) {
+		t.Fatalf("load error = %v, want fs.ErrNotExist (fixture removed before read)", lc.Err)
+	}
+	return pe
+}
+
+// wantReadDiagnostic composes the expected single-line read-failure
+// diagnostic: the operation and sanitized reason from the unwrapped
+// *fs.PathError flanking the EscapePath-escaped path. The reason
+// never repeats the raw path (no PathError.Error() passthrough).
+func wantReadDiagnostic(rawPath []byte, pathErr *fs.PathError) string {
+	return pathErr.Op + " " + safepresentation.EscapePath(rawPath).Text + ": " + pathErr.Err.Error()
+}
+
+// assertSingleLineReadDiagnostic requires the model's current
+// read-failure presentation to be exactly one diagnostic line equal
+// to want: the open error overlay text, the rendered overlay row
+// set, and the collected replay diagnostics each carry the
+// single-line form with no raw-path repetition.
+func assertSingleLineReadDiagnostic(t *testing.T, m app.Model, rawPath []byte, want string) {
+	t.Helper()
+	if !m.OverlayOpen() {
+		t.Fatalf("overlay should be open after current-file read failure")
+	}
+	if m.OverlayKind() != app.OverlayError {
+		t.Fatalf("OverlayKind = %v, want OverlayError", m.OverlayKind())
+	}
+	if m.OverlayFatal() {
+		t.Fatalf("read-failure overlay should be non-fatal")
+	}
+	overlay := m.OverlayText()
+	if strings.Contains(overlay, "\n") {
+		t.Fatalf("overlay diagnostic split into multiple lines: %q", overlay)
+	}
+	if overlay != want {
+		t.Fatalf("overlay diagnostic = %q, want %q", overlay, want)
+	}
+	if strings.Contains(overlay, string(rawPath)) {
+		t.Fatalf("overlay diagnostic repeats the raw unescaped path %q: %q", rawPath, overlay)
+	}
+	// The overlay row set carries the same single line: the escaped
+	// diagnostic appears intact in the rendered view and the raw
+	// filename bytes appear nowhere.
+	view := viewContent(m)
+	if !strings.Contains(view, want) {
+		t.Fatalf("rendered overlay lacks the single-line diagnostic %q:\n%s", want, view)
+	}
+	if strings.Contains(view, string(rawPath)) {
+		t.Fatalf("rendered view contains the raw unescaped path %q:\n%s", rawPath, view)
+	}
+	// The collected replay diagnostics are the same single line —
+	// replay introduces no re-splitting.
+	diags := m.Diagnostics()
+	found := false
+	for _, d := range diags {
+		if strings.Contains(d, "\n") {
+			t.Fatalf("collected diagnostic is not a single line: %q", d)
+		}
+		if d == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("collected diagnostics %q do not contain %q", diags, want)
+	}
+}
+
+// TestReadFailureSingleLineDiagnostics drives a genuine os.ReadFile
+// failure for each hostile filename kind (newline, tab, invalid
+// UTF-8, ESC) at the initial-load site. The fixture is indexed, the
+// load is held at the file gate, the fixture is removed, and the
+// gate released so the real read fails with ENOENT. One failed read
+// must produce exactly one diagnostic line: the EscapePath-escaped
+// path plus a sanitized reason that never repeats the raw path
+// (Issue #47, AC1–AC3, AC5).
+func TestReadFailureSingleLineDiagnostics(t *testing.T) {
+	for _, tc := range hostileNames {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := newHostileDir(t)
+			rawPath := []byte(filepath.Join(dir, string(tc.base)))
+			if err := os.WriteFile(string(rawPath), []byte("x\n"), 0o644); err != nil {
+				if tc.name == "invalid-utf8" {
+					t.Skipf("filesystem rejects the invalid-UTF-8 filename: %v", err)
+				}
+				t.Fatalf("write fixture %q: %v", rawPath, err)
+			}
+			idx := buildRealPathIndex(t, dir, rawPath)
+
+			// Hold the file gate so the load cannot reach os.ReadFile
+			// until the fixture is removed, then release the real
+			// read attempt.
+			gate := make(chan struct{})
+			m, loadCh := setupRealLoadBrowse(t, idx, dir, gate)
+			if err := os.Remove(string(rawPath)); err != nil {
+				t.Fatalf("remove fixture %q: %v", rawPath, err)
+			}
+			close(gate)
+
+			lc := <-loadCh
+			pe := requirePathError(t, lc)
+			m = deliverCompletion(t, m, lc)
+			assertSingleLineReadDiagnostic(t, m, rawPath, wantReadDiagnostic(rawPath, pe))
+		})
+	}
+}
+
+// TestReadFailureSingleLineReload drives the same genuine read
+// failure through the r reload site (Issue #47, AC4): the file loads
+// once, is removed, and the reload's real read fails. The failed
+// reload produces the same single-line diagnostic construction.
+func TestReadFailureSingleLineReload(t *testing.T) {
+	dir := newHostileDir(t)
+	rawPath := []byte(filepath.Join(dir, "nl\nz"))
+	writeRealFile(t, string(rawPath), "x\n")
+	idx := buildRealPathIndex(t, dir, rawPath)
+
+	gate := make(chan struct{})
+	close(gate)
+	m, loadCh := setupRealLoadBrowse(t, idx, dir, gate)
+	lc := <-loadCh
+	if lc.Err != nil {
+		t.Fatalf("initial load failed: %v", lc.Err)
+	}
+	m = deliverCompletion(t, m, lc)
+
+	// Remove the fixture so the reload's real read fails, then r.
+	if err := os.Remove(string(rawPath)); err != nil {
+		t.Fatalf("remove fixture %q: %v", rawPath, err)
+	}
+	m, cmd := update(t, m, keyPress('r'))
+	lc = execReloadCmd(t, cmd)
+	pe := requirePathError(t, lc)
+	m = deliverCompletion(t, m, lc)
+	assertSingleLineReadDiagnostic(t, m, rawPath, wantReadDiagnostic(rawPath, pe))
+}
+
+// TestReadFailureSingleLineReentry drives the failed-path re-entry
+// retry site (Issue #47, AC4): a failed file is revisited from a
+// different file, the prior single-line diagnostic reopens with the
+// overlay, and the retry's failure appends exactly one more
+// identical single-line diagnostic.
+func TestReadFailureSingleLineReentry(t *testing.T) {
+	dir := newHostileDir(t)
+	rawA := []byte(filepath.Join(dir, "nl\nz"))
+	rawB := []byte(filepath.Join(dir, "zz"))
+	writeRealFile(t, string(rawA), "x\n")
+	writeRealFile(t, string(rawB), "x\n")
+	idx := buildRealPathIndex(t, dir, rawA, rawB)
+
+	// A's startup load is gated; remove the fixture so its real
+	// read fails, then release.
+	gate := make(chan struct{})
+	m, loadA := setupRealLoadBrowse(t, idx, dir, gate)
+	if err := os.Remove(string(rawA)); err != nil {
+		t.Fatalf("remove fixture %q: %v", rawA, err)
+	}
+	close(gate)
+	lc := <-loadA
+	pe := requirePathError(t, lc)
+	m = deliverCompletion(t, m, lc)
+	want := wantReadDiagnostic(rawA, pe)
+	assertSingleLineReadDiagnostic(t, m, rawA, want)
+
+	// Dismiss, then navigate to B — B's file still exists and loads.
+	m, _ = update(t, m, keyPressOrEscape(tea.KeyEscape))
+	m, cmd := update(t, m, keyPress('n'))
+	assertCurrentPath(t, m, string(rawB))
+	loadB := startLoadAsync(cmd)
+	lc = <-loadB
+	if lc.Err != nil {
+		t.Fatalf("B load failed: %v", lc.Err)
+	}
+	m = deliverCompletion(t, m, lc)
+
+	// Re-enter A: the stored single-line diagnostic reopens with
+	// the overlay before the retry completes.
+	m, cmd = update(t, m, keyPress('p'))
+	assertCurrentPath(t, m, string(rawA))
+	if !m.OverlayOpen() {
+		t.Fatalf("overlay should reopen on failed-path re-entry")
+	}
+	if got := m.OverlayText(); got != want {
+		t.Fatalf("re-entry overlay diagnostic = %q, want the stored single-line %q", got, want)
+	}
+
+	// The retry's real read fails again (the fixture is still
+	// gone): exactly one more identical single-line diagnostic is
+	// appended to the overlay.
+	retryCh := startLoadAsync(cmd)
+	lc = <-retryCh
+	pe = requirePathError(t, lc)
+	m = deliverCompletion(t, m, lc)
+	lines := strings.Split(m.OverlayText(), "\n")
+	if len(lines) != 2 || lines[0] != want || lines[1] != want {
+		t.Fatalf("overlay after failed retry = %q, want two identical single-line diagnostics %q", m.OverlayText(), want)
+	}
+	// The replay collection holds one entry per failed read — two
+	// identical single-line diagnostics, no re-splitting.
+	assertDiagnosticsEq(t, m, []string{want, want})
 }
