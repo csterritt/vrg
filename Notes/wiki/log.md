@@ -1749,3 +1749,62 @@ row's escaped-path prefix (`src/a.go: APPENDED-MARKER`). Updated
 `Notes/tasks/047-read-failure-single-line-filenames.md`,
 `Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; File
 loading, cache, reload, and selection consistency).
+
+## [2026-09-15] ingest | Issue #48 deterministic PTY handshakes
+
+Ingested the completed Issue #48 implementation, which replaces every
+fixed settling and inter-key `time.Sleep` in the `cmd/vrg`
+PTY/subprocess helpers with deterministic, application-side
+acknowledgements riding the Issue #45 `vrg_testhooks` seam — never the
+production binary. `internal/app/app.go` gains the observational
+`UpdateAck` record (message kind, key label, post-update state,
+open-overlay kind, `OverlayDismissed` flag) and the `WithUpdateAck`
+option in the same test-seam family as `WithOnCollect`; `Model.Update`
+is now a wrapper that runs the real `update` transition and then fires
+the callback, so production behaviour and timing are unchanged.
+`seams_testhooks.go` reads the new `VRG_TEST_UPDATE_ACK` manifest name
+and appends one `<seq> msg=… key=… state=… overlay=… dismissed=…`
+record per Update-processed message through the mutex-serialized
+`updateAckLog` sink; the untagged build returns no options and the
+name is absent from the production artifact, proven by the extended
+`TestUntaggedBinaryIgnoresHookManifest` probe (provocative path, no
+`update-ack` side-effect file, no name bytes in the binary).
+`cmd/vrg/handshake_test.go` pins the finite
+helper/action/postcondition/acknowledgement matrix and owns the shared
+`runVrgPTY`/`ptyDriver` scaffold: `waitMsg`/`waitAck` block on the
+`ackLog` per-occurrence cursor (an earlier same-kind record can never
+satisfy a later wait), `sendKey` blocks on that key's own event before
+the next send — which also prevents input-reader coalescing of
+consecutive sends — and `waitForOutput` polls rendered PTY output for
+tests asserting on transient painted content (the Update
+acknowledgement proves the model transition while the renderer can
+still coalesce the frame, the ordering bug the removed sleeps hid).
+`runVrgWithKeys`, `runVrgKillChild`, `runVrgWithQuit`, `runVrgReplay`,
+and `runVrgCancel` are thin wrappers over the scaffold; every
+`runVrgReplay` and `runshape` trigger callback, the Issue #41 overlay
+tests, and the revised `TestStderrContentFixture` now wait on their
+matrix rows, overlay dismissal is acknowledged before a following `q`,
+and `runVrgWithQuit` sends a second `q` only when the first `q`'s
+event reports a dismissal. `TestNormalExitReapsChild` moved off the
+fixture-only handshake, which raced the model transition. Every wait
+is bounded (`ackTimeout`, abort on process exit) and fails naming the
+awaited condition; the only remaining `time.Sleep` calls pace bounded
+condition polls (`waitForFile`, `waitForAckLines`, `waitEvent`,
+`waitForOutput`), enforced by `TestNoFixedSleepsInPtyHelpers`' static
+AST check. Contract tests prove the seam contract, per-occurrence
+correlation with repeated same-kind events, overlay-dismissal-before-
+quit ordering, and bounded-timeout failure. Verified with
+`go test ./cmd/vrg -count=10`, `CGO_ENABLED=1 go test -race
+-count=1 ./cmd/vrg`, and the repository-wide build/vet/test/race
+suite. Created [pty-handshake-tests](pty-handshake-tests.md); updated
+[test-hook-topology](test-hook-topology.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+[index](index.md). Sources: `internal/app/app.go`,
+`cmd/vrg/seams_testhooks.go`, `cmd/vrg/handshake_test.go`,
+`cmd/vrg/outcome_test.go`, `cmd/vrg/search_test.go`,
+`cmd/vrg/replay_test.go`, `cmd/vrg/cancel_test.go`,
+`cmd/vrg/runshape_test.go`, `cmd/vrg/testhooks_test.go`,
+`cmd/vrg/main_test.go`,
+`Notes/issues/048-pty-tests-deterministic-handshakes.md`,
+`Notes/tasks/048-pty-tests-deterministic-handshakes.md`,
+`Notes/PRD-vrg.md` (Testing Decisions — subprocess boundary).

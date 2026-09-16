@@ -7,13 +7,15 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // vrgConsumedHookManifest is the explicit list of vrg-consumed test
 // hook environment variables (Issue #45). The option-related hooks
 // wire app.Option and proc.OnReap seams; the runner controls select
-// the program.Run() return shapes required by Issue #46. Issue #48
-// may extend this list with acknowledgement hooks. Fake-rg fixture
+// the program.Run() return shapes required by Issue #46; the
+// Issue #48 acknowledgement hook wires the per-update
+// acknowledgement log the PTY helpers wait on. Fake-rg fixture
 // variables (VRG_TEST_ARGV, VRG_TEST_CWD, VRG_TEST_HANDSHAKE,
 // VRG_TEST_READY, VRG_TEST_PID) are deliberately absent: they are
 // consumed by the test's fake-rg scripts, not by the vrg binary, and
@@ -26,6 +28,7 @@ var vrgConsumedHookManifest = []string{
 	"VRG_TEST_DIAGNOSTIC_TRIGGER",
 	"VRG_TEST_DIAGNOSTIC_TEXT",
 	"VRG_TEST_COLLECT_ACK",
+	"VRG_TEST_UPDATE_ACK",
 	"VRG_TEST_RUN_FINAL_MODEL",
 	"VRG_TEST_RUN_ERROR",
 }
@@ -62,6 +65,7 @@ func hookProbeEnv(t *testing.T, dir, fakeDir, handshake string) []string {
 		"VRG_TEST_DIAGNOSTIC_TRIGGER=" + filepath.Join(dir, "diagtrigger"),
 		"VRG_TEST_DIAGNOSTIC_TEXT=hook must not fire: diagnostic",
 		"VRG_TEST_COLLECT_ACK=" + filepath.Join(dir, "ack"),
+		"VRG_TEST_UPDATE_ACK=" + filepath.Join(dir, "update-ack"),
 		"VRG_TEST_RUN_FINAL_MODEL=nil",
 		"VRG_TEST_RUN_ERROR=hook must not fire: run error",
 	}
@@ -93,7 +97,20 @@ func TestUntaggedBinaryIgnoresHookManifest(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = hookProbeEnv(t, hookDir, fakeDir, handshakeFile)
 
-	_, stderr, exitCode := runVrgWithKeys(t, cmd, handshakeFile, "q")
+	// The production binary ignores every hook, so the run wires no
+	// acknowledgement log: synchronization rides on externally
+	// observable conditions — the fixture handshake file (rg emitted
+	// its stream), then the rendered browse view containing the
+	// match text (a bounded output poll proving the model left the
+	// "Searching…" state), then q whose processing is proven by the
+	// clean exit the test asserts below (matrix row "untagged
+	// hook-manifest probe").
+	res := runVrgPTY(t, cmd, "", func(d *ptyDriver) {
+		waitForFile(t, handshakeFile, 15*time.Second)
+		d.waitForOutput(t, "hello")
+		d.sendKey(t, "q")
+	})
+	stderr, exitCode := res.stderr, res.exitCode
 
 	if exitCode != 0 {
 		t.Fatalf("production binary exited %d with every hook set, want 0 (stderr %q)", exitCode, stderr)
@@ -101,7 +118,7 @@ func TestUntaggedBinaryIgnoresHookManifest(t *testing.T) {
 	if strings.Contains(stderr, "hook must not fire") {
 		t.Fatalf("hook marker text reached stderr in the production binary: %q", stderr)
 	}
-	for _, name := range []string{"reap", "ack"} {
+	for _, name := range []string{"reap", "ack", "update-ack"} {
 		if _, err := os.Stat(filepath.Join(hookDir, name)); err == nil {
 			t.Fatalf("production binary created hook side-effect file %s", name)
 		}
@@ -134,10 +151,10 @@ func runTaggedWithHooks(t *testing.T, bin, finalModel, runError string) (stderr 
 		t.Fatal(err)
 	}
 
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 	env := []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
 	if finalModel != "" {
 		env = append(env, "VRG_TEST_RUN_FINAL_MODEL="+finalModel)
@@ -149,7 +166,7 @@ func runTaggedWithHooks(t *testing.T, bin, finalModel, runError string) (stderr 
 	cmd := exec.Command(bin, "hello", ".")
 	cmd.Dir = repo
 	cmd.Env = env
-	_, stderr, exitCode = runVrgWithKeys(t, cmd, handshakeFile, "q")
+	_, stderr, exitCode = runVrgWithKeys(t, cmd, ackFile, "q")
 	return stderr, exitCode
 }
 

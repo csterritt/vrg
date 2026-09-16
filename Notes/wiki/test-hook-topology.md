@@ -57,19 +57,21 @@ duplicated in `testhooks_test.go`, never derived by grepping
 | `VRG_TEST_DIAGNOSTIC_TRIGGER` | emits a `DiagnosticMsg` when the named file appears |
 | `VRG_TEST_DIAGNOSTIC_TEXT` | diagnostic text (default `vrg: test diagnostic`) |
 | `VRG_TEST_COLLECT_ACK` | `WithOnCollect` appends each collected diagnostic to the file |
+| `VRG_TEST_UPDATE_ACK` | `WithUpdateAck` appends one acknowledgement record per `Update`-processed message (seq, message kind, key label, post-state, overlay, dismissal flag) |
 | `VRG_TEST_RUN_FINAL_MODEL` | runner control: `valid`/empty keeps the real model, `nil` returns nil, `invalid` returns a non-`app.Model` |
 | `VRG_TEST_RUN_ERROR` | runner control: empty keeps the real error, `nil` forces nil, other values become the injected error text |
 
 Fake-rg fixture variables (`VRG_TEST_ARGV`, `VRG_TEST_CWD`,
 `VRG_TEST_HANDSHAKE`, `VRG_TEST_READY`, `VRG_TEST_PID`) are excluded:
 they are consumed by the test suite's fake-rg shell scripts, not by
-the vrg binary, and Issue #50 renames them `FAKE_RG_*`. Issue #48 may
-add named acknowledgement hooks to this manifest; Issues #46 and #48
-extend these same tagged boundaries rather than adding production
+the vrg binary, and Issue #50 renames them `FAKE_RG_*`. Issues #46 and
+#48 extend these same tagged boundaries rather than adding production
 hooks. Issue #46 landed first and added no new manifest names — its
 return-shape tests reuse the runner controls and the existing
-`VRG_TEST_COLLECT_ACK` acknowledgement — so Issue #48's reciprocal
-adaptation rule applies to its harness changes.
+`VRG_TEST_COLLECT_ACK` acknowledgement. Issue #48 added
+`VRG_TEST_UPDATE_ACK`, the per-update acknowledgement seam its
+deterministic PTY handshakes wait on — see
+[pty-handshake-tests](pty-handshake-tests.md).
 
 ## TestMain and the boundary test
 
@@ -84,10 +86,13 @@ passes unchanged against it.
 - `TestUntaggedBinaryIgnoresHookManifest` builds an **untagged**
   binary into a temp dir, drives an ordinary fake-rg search with every
   manifest name set to a provocative value, and asserts a normal exit
-  0, no hook marker text on stderr, no side-effect files, and — via
-  `bytes.Contains` over the artifact — none of the manifest names in
-  the binary. It proves the released artifact is clean, not merely
-  that the tag defaults off.
+  0, no hook marker text on stderr, no side-effect files (including
+  the `update-ack` acknowledgement log), and — via `bytes.Contains`
+  over the artifact — none of the manifest names in the binary. It
+  proves the released artifact is clean, not merely that the tag
+  defaults off. The untagged run wires no acknowledgement log, so its
+  own synchronization polls the rendered PTY output for the browse
+  view (see [pty-handshake-tests](pty-handshake-tests.md)).
 - `TestTaggedRunnerSeamReturnShapes` builds the tagged binary and
   drives every `VRG_TEST_RUN_FINAL_MODEL` × `VRG_TEST_RUN_ERROR`
   combination Issue #46 needs through a real PTY quit: injected error

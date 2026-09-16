@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/creack/pty"
 	"golang.org/x/sys/unix"
 )
 
@@ -69,67 +66,23 @@ type ptyCancelResult struct {
 	exitCode  int
 }
 
-// runVrgCancel starts vrg under a PTY, waits for readyFile to appear,
-// sends key (a string written to the PTY), and returns the raw PTY
-// output, stderr, and exit code. It also captures termios before and
-// after the run and returns them for comparison.
+// runVrgCancel starts vrg under a PTY through the shared Issue #48
+// driver, waits for readyFile to appear (a fixture-side bounded poll
+// proving the child reached the awaited point), then sends key. The
+// send needs no intra-run acknowledgement — nothing follows it and
+// the asserted exit code proves the key was processed in the awaited
+// state — so the run wires no acknowledgement log. It returns the
+// raw PTY output, stderr, and exit code; termios restoration is
+// asserted inside runVrgPTY.
 func runVrgCancel(t *testing.T, cmd *exec.Cmd, readyFile string, key string) ptyCancelResult {
 	t.Helper()
-	var se bytes.Buffer
-	cmd.Stderr = &se
-
-	ptmx, ptmxErr := pty.Start(cmd)
-	if ptmxErr != nil {
-		t.Fatalf("failed to start vrg with PTY: %v", ptmxErr)
-	}
-	defer func() { _ = ptmx.Close() }()
-
-	if err := pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 80}); err != nil {
-		t.Fatalf("failed to set PTY window size: %v", err)
-	}
-
-	// Capture termios before vrg starts its TUI.
-	beforeTermios := getTermios(t, int(ptmx.Fd()))
-
-	// Read PTY output concurrently to prevent buffer deadlocks.
-	var so bytes.Buffer
-	readDone := make(chan struct{})
-	go func() {
-		defer close(readDone)
-		io.Copy(&so, ptmx)
-	}()
-
-	// Wait for the fake rg to signal ready, then send the key.
-	go func() {
+	res := runVrgPTY(t, cmd, "", func(d *ptyDriver) {
 		if readyFile != "" {
 			waitForFile(t, readyFile, 15*time.Second)
 		}
-		io.WriteString(ptmx, key)
-	}()
-
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-
-	select {
-	case err := <-done:
-		afterTermios := getTermios(t, int(ptmx.Fd()))
-		_ = ptmx.Close()
-		<-readDone
-		if !termiosEqual(beforeTermios, afterTermios) {
-			t.Errorf("termios not restored after exit\nbefore: %+v\nafter:  %+v", beforeTermios, afterTermios)
-		}
-		if err == nil {
-			return ptyCancelResult{rawOutput: so.String(), stderr: se.String(), exitCode: 0}
-		}
-		if ee, ok := err.(*exec.ExitError); ok {
-			return ptyCancelResult{rawOutput: so.String(), stderr: se.String(), exitCode: ee.ExitCode()}
-		}
-		t.Fatalf("vrg failed: %v (stderr %q)", err, se.String())
-	case <-time.After(30 * time.Second):
-		cmd.Process.Kill()
-		t.Fatal("vrg did not complete within 30 seconds")
-	}
-	return ptyCancelResult{}
+		d.sendKey(t, key)
+	})
+	return ptyCancelResult{rawOutput: res.raw, stderr: res.stderr, exitCode: res.exitCode}
 }
 
 // writeBlockedFakeRG writes a fake rg that touches readyFile and pidFile,
@@ -308,14 +261,14 @@ func TestNormalExitReapsChild(t *testing.T) {
 	readyFile := filepath.Join(t.TempDir(), "ready")
 	pidFile := filepath.Join(t.TempDir(), "pid")
 	reapFile := filepath.Join(t.TempDir(), "reap")
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
-	writeCompleteFakeRG(t, fakeDir, readyFile, pidFile, handshakeFile)
+	writeCompleteFakeRG(t, fakeDir, readyFile, pidFile, "")
 
 	repo := t.TempDir()
 	if err := os.WriteFile(filepath.Join(repo, "test.txt"), []byte("hello\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 	cmd := exec.Command(binPath, "hello", ".")
 	cmd.Dir = repo
 	cmd.Env = []string{
@@ -323,13 +276,16 @@ func TestNormalExitReapsChild(t *testing.T) {
 		"VRG_TEST_READY=" + readyFile,
 		"VRG_TEST_PID=" + pidFile,
 		"VRG_TEST_REAP=" + reapFile,
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
-	// Wait for the completion handshake (rg done), then send q from summary.
-	res := runVrgCancel(t, cmd, handshakeFile, "q")
+	// Wait for the search-complete acknowledgement — proving the
+	// model processed SearchCompleteMsg out of searching — then send
+	// q. Waiting on the fixture handshake alone would race the model
+	// transition (q during searching exits 130, not 0).
+	_, _, exitCode := runVrgWithQuit(t, cmd, ackFile)
 
-	if res.exitCode != 0 {
-		t.Fatalf("vrg exited %d, want 0 (normal quit from summary)", res.exitCode)
+	if exitCode != 0 {
+		t.Fatalf("vrg exited %d, want 0 (normal quit from summary)", exitCode)
 	}
 	assertChildGone(t, pidFile)
 	assertReapEvidence(t, reapFile)
@@ -401,83 +357,36 @@ func TestInjectedControlledFailure(t *testing.T) {
 		"VRG_TEST_FAIL_DIAGNOSTIC=controlled failure for test",
 	}
 
-	// Start vrg under a PTY and trigger the failure after the child
-	// signals ready.
-	var se bytes.Buffer
-	cmd.Stderr = &se
-
-	ptmx, ptmxErr := pty.Start(cmd)
-	if ptmxErr != nil {
-		t.Fatalf("failed to start vrg with PTY: %v", ptmxErr)
-	}
-	defer func() { _ = ptmx.Close() }()
-
-	if err := pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 80}); err != nil {
-		t.Fatalf("failed to set PTY window size: %v", err)
-	}
-
-	beforeTermios := getTermios(t, int(ptmx.Fd()))
-
-	var so bytes.Buffer
-	readDone := make(chan struct{})
-	go func() {
-		defer close(readDone)
-		io.Copy(&so, ptmx)
-	}()
-
-	// Wait for the child to signal ready, then trigger the failure.
-	go func() {
+	// Start vrg under a PTY through the shared Issue #48 driver and
+	// trigger the failure after the child signals ready (a
+	// fixture-side bounded poll; no model transition is assumed).
+	res := runVrgPTY(t, cmd, "", func(d *ptyDriver) {
 		waitForFile(t, readyFile, 15*time.Second)
 		if err := os.WriteFile(failTrigger, []byte("trigger"), 0o644); err != nil {
 			t.Errorf("cannot write fail trigger: %v", err)
 		}
-	}()
+	})
 
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
+	if res.exitCode != 2 {
+		t.Fatalf("vrg exited %d, want 2 (controlled failure)", res.exitCode)
+	}
 
-	select {
-	case err := <-done:
-		afterTermios := getTermios(t, int(ptmx.Fd()))
-		_ = ptmx.Close()
-		<-readDone
-		if !termiosEqual(beforeTermios, afterTermios) {
-			t.Errorf("termios not restored after controlled failure\nbefore: %+v\nafter:  %+v", beforeTermios, afterTermios)
-		}
+	assertChildGone(t, pidFile)
+	assertReapEvidence(t, reapFile)
+	assertDisplayRestoration(t, res.raw)
 
-		var exitCode int
-		if err == nil {
-			exitCode = 0
-		} else if ee, ok := err.(*exec.ExitError); ok {
-			exitCode = ee.ExitCode()
-		} else {
-			t.Fatalf("vrg failed: %v", err)
-		}
-
-		if exitCode != 2 {
-			t.Fatalf("vrg exited %d, want 2 (controlled failure)", exitCode)
-		}
-
-		assertChildGone(t, pidFile)
-		assertReapEvidence(t, reapFile)
-		assertDisplayRestoration(t, so.String())
-
-		diag := se.String()
-		if diag == "" {
-			t.Fatal("stderr is empty, want a diagnostic")
-		}
-		if strings.ContainsAny(diag, "\x1b\x9b") {
-			t.Fatalf("stderr contains raw control bytes: %q", diag)
-		}
-		if !strings.Contains(diag, "controlled failure for test") {
-			t.Fatalf("stderr does not contain the expected diagnostic: %q", diag)
-		}
-		// The diagnostic must appear exactly once.
-		if count := strings.Count(diag, "controlled failure for test"); count != 1 {
-			t.Fatalf("diagnostic appears %d times in stderr, want 1: %q", count, diag)
-		}
-	case <-time.After(30 * time.Second):
-		cmd.Process.Kill()
-		t.Fatal("vrg did not complete within 30 seconds")
+	diag := res.stderr
+	if diag == "" {
+		t.Fatal("stderr is empty, want a diagnostic")
+	}
+	if strings.ContainsAny(diag, "\x1b\x9b") {
+		t.Fatalf("stderr contains raw control bytes: %q", diag)
+	}
+	if !strings.Contains(diag, "controlled failure for test") {
+		t.Fatalf("stderr does not contain the expected diagnostic: %q", diag)
+	}
+	// The diagnostic must appear exactly once.
+	if count := strings.Count(diag, "controlled failure for test"); count != 1 {
+		t.Fatalf("diagnostic appears %d times in stderr, want 1: %q", count, diag)
 	}
 }

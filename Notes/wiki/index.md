@@ -331,7 +331,19 @@ Catalog of all wiki pages for the vrg project.
   non-spinning watchers, and the rule that Issues #46 and #48 extend
   the same mechanism rather than adding production hooks — Issue #46
   consumed the runner controls for its `Run()` return-shape matrix
-  without new manifest names
+  without new manifest names, and Issue #48 added the
+  `VRG_TEST_UPDATE_ACK` acknowledgement hook
+- [pty-handshake-tests.md](pty-handshake-tests.md) — Issue #48:
+  deterministic application-side handshakes for the `cmd/vrg`
+  PTY/subprocess tests — the finite helper/action/postcondition/
+  acknowledgement matrix, the `VRG_TEST_UPDATE_ACK` per-update event
+  seam with per-process/per-occurrence correlation, the shared
+  `runVrgPTY`/`ptyDriver` scaffold, overlay-dismissal-before-quit
+  ordering, rendered-output waits for transient painted states, the
+  bounded condition-poll sleep allowance with its static
+  no-fixed-sleep check, and bounded-timeout failure diagnostics —
+  all riding the `vrg_testhooks` seam, absent and inert in the
+  production binary
 
 ## Catalogs
 

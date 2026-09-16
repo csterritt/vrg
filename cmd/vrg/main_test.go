@@ -266,14 +266,14 @@ func TestDashFileRootAtProcessBoundary(t *testing.T) {
 	}
 	fakeDir := t.TempDir()
 	writeFakeRG(t, fakeDir, "")
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 	cmd := exec.Command(binPath, "foo", "./-")
 	cmd.Dir = dir
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
-	_, _, exitCode := runVrgWithQuit(t, cmd, handshakeFile)
+	_, _, exitCode := runVrgWithQuit(t, cmd, ackFile)
 	if exitCode != 0 {
 		t.Fatalf(`vrg foo ./- exited %d, want 0`, exitCode)
 	}

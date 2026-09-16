@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,100 +9,39 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/creack/pty"
 )
 
-// runVrgWithKeys starts vrg under a PTY, waits for handshakeFile to
-// appear, then sends the given keys in sequence (with a small delay
-// between each so the TUI processes them), and returns the stripped
-// stdout, stderr, and exit code.
-func runVrgWithKeys(t *testing.T, cmd *exec.Cmd, handshake string, keys ...string) (stdout, stderr string, exitCode int) {
+// runVrgWithKeys starts vrg under a PTY, waits for the
+// search-complete acknowledgement — proving the model processed
+// SearchCompleteMsg into its post-search state — then sends the
+// given keys in sequence. Each send blocks on the acknowledgement
+// that Update processed that key press before the next is sent
+// (Issue #48 handshake matrix), so no fixed inter-key delay remains.
+// It returns the stripped stdout, stderr, and exit code.
+func runVrgWithKeys(t *testing.T, cmd *exec.Cmd, ackFile string, keys ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
-	var se bytes.Buffer
-	cmd.Stderr = &se
-
-	ptmx, ptmxErr := pty.Start(cmd)
-	if ptmxErr != nil {
-		t.Fatalf("failed to start vrg with PTY: %v", ptmxErr)
-	}
-	defer func() { _ = ptmx.Close() }()
-
-	if err := pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 80}); err != nil {
-		t.Fatalf("failed to set PTY window size: %v", err)
-	}
-
-	var so bytes.Buffer
-	readDone := make(chan struct{})
-	go func() {
-		defer close(readDone)
-		io.Copy(&so, ptmx)
-	}()
-
-	// Wait for the handshake, then send keys in sequence.
-	go func() {
-		if handshake != "" {
-			for i := 0; i < 1000; i++ {
-				if _, err := os.Stat(handshake); err == nil {
-					break
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
-		}
+	res := runVrgPTY(t, cmd, ackFile, func(d *ptyDriver) {
+		d.waitMsg(t, "search-complete")
 		for _, k := range keys {
-			time.Sleep(100 * time.Millisecond)
-			io.WriteString(ptmx, k)
+			d.sendKey(t, k)
 		}
-	}()
-
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-
-	select {
-	case err := <-done:
-		_ = ptmx.Close()
-		<-readDone
-		if err == nil {
-			return stripAnsi(so.String()), se.String(), 0
-		}
-		if ee, ok := err.(*exec.ExitError); ok {
-			return stripAnsi(so.String()), se.String(), ee.ExitCode()
-		}
-		t.Fatalf("vrg failed: %v (stderr %q)", err, se.String())
-	case <-time.After(30 * time.Second):
-		cmd.Process.Kill()
-		t.Fatal("vrg did not complete within 30 seconds")
-	}
-	return "", se.String(), -1
+	})
+	return res.stdout, res.stderr, res.exitCode
 }
 
-// runVrgKillChild starts vrg under a PTY, waits for readyFile, then
-// sends SIGKILL to the fake rg (whose PID is in pidFile), waits for the
-// child to die, then sends the given keys and returns the result.
-func runVrgKillChild(t *testing.T, cmd *exec.Cmd, readyFile, pidFile string, keys ...string) (stdout, stderr string, exitCode int) {
+// runVrgKillChild starts vrg under a PTY, waits for the fake rg's
+// ready file (a fixture-side bounded poll proving the child is
+// running and blocked), sends SIGKILL to the child's process group,
+// waits for the search-complete acknowledgement proving the model
+// processed the child's death into its outcome, waits for expect —
+// when non-empty — to appear in the rendered output (a bounded poll
+// proving the post-search view/overlay painted; the Update
+// acknowledgement alone cannot prove a paint because the renderer
+// coalesces frames), then sends the given keys — each acknowledged
+// as in runVrgWithKeys — and returns the result.
+func runVrgKillChild(t *testing.T, cmd *exec.Cmd, readyFile, pidFile, ackFile, expect string, keys ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
-	var se bytes.Buffer
-	cmd.Stderr = &se
-
-	ptmx, ptmxErr := pty.Start(cmd)
-	if ptmxErr != nil {
-		t.Fatalf("failed to start vrg with PTY: %v", ptmxErr)
-	}
-	defer func() { _ = ptmx.Close() }()
-
-	if err := pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 80}); err != nil {
-		t.Fatalf("failed to set PTY window size: %v", err)
-	}
-
-	var so bytes.Buffer
-	readDone := make(chan struct{})
-	go func() {
-		defer close(readDone)
-		io.Copy(&so, ptmx)
-	}()
-
-	// Wait for ready, then kill the fake rg, then send keys.
-	go func() {
+	res := runVrgPTY(t, cmd, ackFile, func(d *ptyDriver) {
 		waitForFile(t, readyFile, 15*time.Second)
 		// Read the fake rg PID and kill its entire process group
 		// (the shell script's sleep child inherits the stdout pipe
@@ -118,31 +55,15 @@ func runVrgKillChild(t *testing.T, cmd *exec.Cmd, readyFile, pidFile string, key
 		fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &pid)
 		// SIGKILL the entire process group.
 		_ = syscall.Kill(-pid, syscall.SIGKILL)
+		d.waitMsg(t, "search-complete")
+		if expect != "" {
+			d.waitForOutput(t, expect)
+		}
 		for _, k := range keys {
-			time.Sleep(500 * time.Millisecond)
-			io.WriteString(ptmx, k)
+			d.sendKey(t, k)
 		}
-	}()
-
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-
-	select {
-	case err := <-done:
-		_ = ptmx.Close()
-		<-readDone
-		if err == nil {
-			return stripAnsi(so.String()), se.String(), 0
-		}
-		if ee, ok := err.(*exec.ExitError); ok {
-			return stripAnsi(so.String()), se.String(), ee.ExitCode()
-		}
-		t.Fatalf("vrg failed: %v (stderr %q)", err, se.String())
-	case <-time.After(30 * time.Second):
-		cmd.Process.Kill()
-		t.Fatal("vrg did not complete within 30 seconds")
-	}
-	return "", se.String(), -1
+	})
+	return res.stdout, res.stderr, res.exitCode
 }
 
 // writeFatalFakeRG writes a fake rg that emits the given stdout records
@@ -217,15 +138,27 @@ func TestFatalExitWithResultsShowsOverlay(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 	cmd := exec.Command(binPath, "hello", ".")
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
-	// Send Esc to dismiss the overlay, then q to quit.
-	stdout, _, exitCode := runVrgWithKeys(t, cmd, handshakeFile, "\x1b", "q")
+	// Wait for the error overlay to paint (the Update
+	// acknowledgement proves the model state, not the frame — the
+	// renderer coalesces frames, so the overlay text must be
+	// observed in the output before dismissal), then send Esc to
+	// dismiss and q to quit.
+	res := runVrgPTY(t, cmd, ackFile, func(d *ptyDriver) {
+		d.waitMsg(t, "search-complete")
+		d.waitForOutput(t, "boom")
+		if esc := d.sendKey(t, "\x1b"); !esc.dismissed {
+			t.Errorf("esc did not dismiss the error overlay: %+v", esc)
+		}
+		d.sendKey(t, "q")
+	})
+	stdout, _, exitCode := res.stdout, res.stderr, res.exitCode
 
 	if exitCode != 2 {
 		t.Fatalf("vrg exited %d, want 2 (fatal)", exitCode)
@@ -252,14 +185,22 @@ func TestFatalExitNoOutputNamesExitCode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 	cmd := exec.Command(binPath, "hello", ".")
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
-	stdout, _, exitCode := runVrgWithKeys(t, cmd, handshakeFile, "q")
+	// Wait for the generated fatal diagnostic to paint before
+	// sending q — the Update acknowledgement alone cannot prove the
+	// overlay frame was rendered.
+	res := runVrgPTY(t, cmd, ackFile, func(d *ptyDriver) {
+		d.waitMsg(t, "search-complete")
+		d.waitForOutput(t, "code 2")
+		d.sendKey(t, "q")
+	})
+	stdout, _, exitCode := res.stdout, res.stderr, res.exitCode
 
 	if exitCode != 2 {
 		t.Fatalf("vrg exited %d, want 2 (fatal no output)", exitCode)
@@ -281,14 +222,14 @@ func TestFatalExitNoOutputEscExits2(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 	cmd := exec.Command(binPath, "hello", ".")
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
-	_, _, exitCode := runVrgWithKeys(t, cmd, handshakeFile, "\x1b")
+	_, _, exitCode := runVrgWithKeys(t, cmd, ackFile, "\x1b")
 
 	if exitCode != 2 {
 		t.Fatalf("vrg exited %d, want 2 (Esc on fatal no-results overlay)", exitCode)
@@ -321,16 +262,21 @@ sleep 100000
 
 	readyFile := filepath.Join(t.TempDir(), "ready")
 	pidFile := filepath.Join(t.TempDir(), "pid")
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 	cmd := exec.Command(binPath, "hello", ".")
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
 		"VRG_TEST_READY=" + readyFile,
 		"VRG_TEST_PID=" + pidFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
 
 	// Start vrg under a PTY, wait for ready, then SIGKILL the fake rg.
-	stdout, _, exitCode := runVrgKillChild(t, cmd, readyFile, pidFile, "q", "q")
+	// The run waits for the "signal" diagnostic to paint before the
+	// dismissal keys — the Update acknowledgement proves the model
+	// state, not the frame.
+	stdout, _, exitCode := runVrgKillChild(t, cmd, readyFile, pidFile, ackFile, "signal", "q", "q")
 
 	if exitCode != 2 {
 		t.Fatalf("vrg exited %d, want 2 (signal death)", exitCode)
@@ -355,15 +301,28 @@ func TestStderrWarningWithSummaryShowsWarningOverlay(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 	cmd := exec.Command(binPath, "hello", ".")
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
 	// Esc dismisses the warning overlay → no-results; q exits 1.
-	stdout, _, exitCode := runVrgWithKeys(t, cmd, handshakeFile, "\x1b", "q")
+	// Both rendered post-states are waited on in the output: the
+	// Update acknowledgement proves the model transition, not the
+	// paint, and each view is transient (the overlay yields to
+	// no-results, which yields to exit).
+	res := runVrgPTY(t, cmd, ackFile, func(d *ptyDriver) {
+		d.waitMsg(t, "search-complete")
+		d.waitForOutput(t, "warn")
+		if esc := d.sendKey(t, "\x1b"); !esc.dismissed {
+			t.Errorf("esc did not dismiss the warning overlay: %+v", esc)
+		}
+		d.waitForOutput(t, "No results found")
+		d.sendKey(t, "q")
+	})
+	stdout, _, exitCode := res.stdout, res.stderr, res.exitCode
 
 	if exitCode != 1 {
 		t.Fatalf("vrg exited %d, want 1 (warning → no-results)", exitCode)
@@ -390,7 +349,6 @@ func TestStderrWarningWithSummaryShowsWarningOverlay(t *testing.T) {
 func TestStderrContentFixture(t *testing.T) {
 	fakeDir := t.TempDir()
 	rgPath := filepath.Join(fakeDir, "rg")
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
 	// Write a distinctive head and tail to stderr, with ≥ 1 MiB total.
 	// The head is "HEADMARKER" and the tail is "TAILMARKER".
 	script := `#!/bin/sh
@@ -405,7 +363,6 @@ while [ $i -lt 100 ]; do
 done
 printf 'TAILMARKER\n' >&2
 echo '{"type":"summary","data":{}}'
-touch "$VRG_TEST_HANDSHAKE"
 exit 3
 `
 	if err := os.WriteFile(rgPath, []byte(script), 0o755); err != nil {
@@ -417,19 +374,33 @@ exit 3
 		t.Fatal(err)
 	}
 
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 	cmd := exec.Command(binPath, "hello", ".")
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
-	// A few downs exercise scrolling over the large diagnostic; the
-	// first q dismisses the overlay and the second exits 2. A bare
-	// Esc is avoided here: after an expensive Update on the 1 MiB
-	// diagnostic the input reader can coalesce "\x1b"+"q" into a
-	// single Alt+q press, which the modal overlay ignores.
-	stdout, _, exitCode := runVrgWithKeys(t, cmd, handshakeFile,
-		"\x1b[B", "\x1b[B", "\x1b[B", "q", "q")
+	// The head of the diagnostic must paint at scroll position 0
+	// before any scroll key — the Update acknowledgement proves the
+	// model state, not the frame. A few downs then exercise scrolling
+	// over the large diagnostic; the first q dismisses the overlay
+	// and the second exits 2. A bare Esc is avoided here: after an
+	// expensive Update on the 1 MiB diagnostic the input reader can
+	// coalesce "\x1b"+"q" into a single Alt+q press, which the modal
+	// overlay ignores.
+	res := runVrgPTY(t, cmd, ackFile, func(d *ptyDriver) {
+		d.waitMsg(t, "search-complete")
+		d.waitForOutput(t, "HEADMARKER")
+		for range 3 {
+			d.sendKey(t, "\x1b[B")
+		}
+		if q := d.sendKey(t, "q"); !q.dismissed {
+			t.Errorf("first q did not dismiss the error overlay: %+v", q)
+		}
+		d.sendKey(t, "q")
+	})
+	stdout, _, exitCode := res.stdout, res.stderr, res.exitCode
 
 	if exitCode != 2 {
 		t.Fatalf("vrg exited %d, want 2 (fatal with stderr)", exitCode)

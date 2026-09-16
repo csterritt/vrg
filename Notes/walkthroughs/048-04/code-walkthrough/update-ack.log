@@ -1,0 +1,7 @@
+1 msg=other key= state=searching overlay=none dismissed=false
+2 msg=window-size key= state=searching overlay=none dismissed=false
+3 msg=other key= state=searching overlay=none dismissed=false
+4 msg=search-complete key= state=browse overlay=none dismissed=false
+5 msg=file-load-complete key= state=browse overlay=none dismissed=false
+6 msg=layout-ready key= state=browse overlay=none dismissed=false
+7 msg=key key=q state=browse overlay=none dismissed=false

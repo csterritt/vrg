@@ -521,6 +521,14 @@ type Model struct {
 	// acknowledgement side channel (Issue #11), in the same mechanism
 	// family as Process.OnReap.
 	onCollect func(string)
+	// onUpdateAck, if set, is called once per Update-processed message
+	// with the UpdateAck describing the completed transition. It is a
+	// test seam (Issue #48) in the same mechanism family as onCollect:
+	// the process boundary wires it only in the vrg_testhooks build so
+	// PTY helpers can wait on application-side acknowledgements rather
+	// than fixed delays. It observes model behavior; it never changes
+	// it.
+	onUpdateAck func(UpdateAck)
 	// diagSink, if set, is the diagnostic snapshot owned by the process
 	// entry point (Issue #46). Every collected diagnostic is appended
 	// to it as it is processed, so collected session diagnostics reach
@@ -767,6 +775,7 @@ type config struct {
 	fileLoader FileLoader
 	fileGate   chan struct{}
 	onCollect  func(string)
+	updateAck  func(UpdateAck)
 	diagSink   *Diagnostics
 	// rowProviderFactory builds a RowProvider from a loaded buffer.
 	// When nil, viewport.BufferRows is used. This is a test seam for
@@ -889,6 +898,43 @@ func WithOnCollect(f func(string)) Option {
 	return func(c *config) { c.onCollect = f }
 }
 
+// UpdateAck is one application-side acknowledgement record (Issue
+// #48): it describes a message the model has fully processed in
+// Update together with the resulting observable post-state, so a test
+// harness can block on the exact transition its preceding action
+// caused instead of on elapsed time. It carries only what the Update
+// boundary already observes; emitting it never changes model behavior
+// or timing.
+type UpdateAck struct {
+	// Msg is the processed message kind: "key", "search-complete",
+	// "file-load-complete", "layout-ready", "search-failed",
+	// "controlled-failure", "diagnostic", "popup-expiry",
+	// "window-size", or "other".
+	Msg string
+	// Key is the keystroke label for Msg == "key" (for example "q",
+	// "esc", "ctrl+c", "down"); empty otherwise.
+	Key string
+	// State is the model state after the message was processed.
+	State State
+	// Overlay is the kind of the open overlay after processing, or
+	// OverlayNone when no overlay is open.
+	Overlay OverlayKind
+	// OverlayDismissed is true when the processed message closed an
+	// open overlay (an open → closed transition within this update).
+	OverlayDismissed bool
+}
+
+// WithUpdateAck sets a callback invoked once per Update-processed
+// message with the acknowledgement record for the completed
+// transition (Issue #48). It is a test seam in the same mechanism
+// family as WithOnCollect: the process boundary wires it only in the
+// vrg_testhooks build so PTY helpers block on causally correlated
+// application-side acknowledgements — a message processed, a state
+// entered, an overlay dismissed — rather than on fixed sleeps.
+func WithUpdateAck(f func(UpdateAck)) Option {
+	return func(c *config) { c.updateAck = f }
+}
+
 // Diagnostics is the session diagnostic snapshot the process entry
 // point owns (Issue #46). The model appends every collected diagnostic
 // to it as the diagnostic is processed, so the snapshot survives
@@ -1008,6 +1054,7 @@ func New(childArgs []string, workdir string, opts ...Option) Model {
 		fileLoader:         cfg.fileLoader,
 		fileGate:           cfg.fileGate,
 		onCollect:          cfg.onCollect,
+		onUpdateAck:        cfg.updateAck,
 		diagSink:           cfg.diagSink,
 		rowProviderFactory: cfg.rowProviderFactory,
 		layoutGate:         cfg.layoutGate,
@@ -1311,7 +1358,58 @@ func (m Model) Init() tea.Cmd {
 }
 
 // Update handles messages and returns the updated model and command.
+// When an UpdateAck callback is wired (Issue #48), it fires once per
+// processed message with the completed transition's post-state. The
+// callback observes production behavior; it never changes it.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	if m.onUpdateAck != nil {
+		if nm, ok := next.(Model); ok {
+			m.onUpdateAck(describeUpdateAck(msg, m, nm))
+		}
+	}
+	return next, cmd
+}
+
+// describeUpdateAck builds the acknowledgement record for one
+// processed message: the message kind, the key label for a key
+// press, the post-update state and overlay, and whether the message
+// dismissed an open overlay. prev is the pre-update model and next
+// the post-update model.
+func describeUpdateAck(msg tea.Msg, prev, next Model) UpdateAck {
+	ack := UpdateAck{State: next.state}
+	if next.overlayOpen {
+		ack.Overlay = next.overlay
+	}
+	ack.OverlayDismissed = prev.overlayOpen && !next.overlayOpen
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		ack.Msg = "key"
+		ack.Key = msg.String()
+	case SearchCompleteMsg:
+		ack.Msg = "search-complete"
+	case FileLoadCompleteMsg:
+		ack.Msg = "file-load-complete"
+	case LayoutReadyMsg:
+		ack.Msg = "layout-ready"
+	case SearchFailedMsg:
+		ack.Msg = "search-failed"
+	case ControlledFailureMsg:
+		ack.Msg = "controlled-failure"
+	case DiagnosticMsg:
+		ack.Msg = "diagnostic"
+	case FileChangePopupExpiryMsg:
+		ack.Msg = "popup-expiry"
+	case tea.WindowSizeMsg:
+		ack.Msg = "window-size"
+	default:
+		ack.Msg = "other"
+	}
+	return ack
+}
+
+// update implements the message transitions Update acknowledges.
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case SearchCompleteMsg:
 		// Late search completions after cancellation must not revive

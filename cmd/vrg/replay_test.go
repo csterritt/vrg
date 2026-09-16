@@ -1,16 +1,12 @@
 package main
 
 import (
-	"bytes"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/creack/pty"
 
 	"vrg/internal/app"
 )
@@ -42,60 +38,17 @@ type replayResult struct {
 	exitCode  int
 }
 
-// runVrgReplay starts vrg under a PTY, captures termios before and
-// after, reads PTY output concurrently, runs the trigger callback in a
-// goroutine (which can wait for files, create triggers, and send keys),
-// waits for vrg to exit, checks termios restoration, and returns the
-// raw PTY output, stderr, and exit code.
-func runVrgReplay(t *testing.T, cmd *exec.Cmd, trigger func(ptmx *os.File)) replayResult {
+// runVrgReplay starts vrg under a PTY and runs the trigger callback
+// through the shared Issue #48 driver: every wait is a bounded
+// condition poll (fixture files, collect-ack line counts) or an
+// application-side acknowledgement (update-ack events), every key
+// send is acknowledged by the Update-processed event for that key,
+// and termios restoration is checked on exit. It returns the raw PTY
+// output, stderr, and exit code.
+func runVrgReplay(t *testing.T, cmd *exec.Cmd, ackFile string, trigger func(d *ptyDriver)) replayResult {
 	t.Helper()
-	var se bytes.Buffer
-	cmd.Stderr = &se
-
-	ptmx, ptmxErr := pty.Start(cmd)
-	if ptmxErr != nil {
-		t.Fatalf("failed to start vrg with PTY: %v", ptmxErr)
-	}
-	defer func() { _ = ptmx.Close() }()
-
-	if err := pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 80}); err != nil {
-		t.Fatalf("failed to set PTY window size: %v", err)
-	}
-
-	beforeTermios := getTermios(t, int(ptmx.Fd()))
-
-	var so bytes.Buffer
-	readDone := make(chan struct{})
-	go func() {
-		defer close(readDone)
-		io.Copy(&so, ptmx)
-	}()
-
-	go trigger(ptmx)
-
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-
-	select {
-	case err := <-done:
-		afterTermios := getTermios(t, int(ptmx.Fd()))
-		_ = ptmx.Close()
-		<-readDone
-		if !termiosEqual(beforeTermios, afterTermios) {
-			t.Errorf("termios not restored after exit\nbefore: %+v\nafter:  %+v", beforeTermios, afterTermios)
-		}
-		if err == nil {
-			return replayResult{rawOutput: so.String(), stderr: se.String(), exitCode: 0}
-		}
-		if ee, ok := err.(*exec.ExitError); ok {
-			return replayResult{rawOutput: so.String(), stderr: se.String(), exitCode: ee.ExitCode()}
-		}
-		t.Fatalf("vrg failed: %v (stderr %q)", err, se.String())
-	case <-time.After(30 * time.Second):
-		cmd.Process.Kill()
-		t.Fatal("vrg did not complete within 30 seconds")
-	}
-	return replayResult{}
+	res := runVrgPTY(t, cmd, ackFile, trigger)
+	return replayResult{rawOutput: res.raw, stderr: res.stderr, exitCode: res.exitCode}
 }
 
 // assertReplayAfterRestoration requires the raw PTY output to contain
@@ -156,8 +109,8 @@ func writeStderrFakeRG(t *testing.T, dir, stderrText string, exitCode int, block
 // after the display-restoration sequence (Issue #11, AC3).
 func TestReplayCtrlCAfterStderrDiagnostic(t *testing.T) {
 	fakeDir := t.TempDir()
-	ackFile := filepath.Join(t.TempDir(), "ack")
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
+	collectAck := filepath.Join(t.TempDir(), "ack")
+	updateAck := filepath.Join(t.TempDir(), "update-ack")
 	writeStderrFakeRG(t, fakeDir, "ctrl+c test warning", 1, false, "")
 
 	repo := t.TempDir()
@@ -169,18 +122,17 @@ func TestReplayCtrlCAfterStderrDiagnostic(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
-		"VRG_TEST_COLLECT_ACK=" + ackFile,
+		"VRG_TEST_COLLECT_ACK=" + collectAck,
+		"VRG_TEST_UPDATE_ACK=" + updateAck,
 	}
 
-	res := runVrgReplay(t, cmd, func(ptmx *os.File) {
+	res := runVrgReplay(t, cmd, updateAck, func(d *ptyDriver) {
 		// Wait for the diagnostic to be collected (ack fires after
 		// SearchCompleteMsg is processed).
-		waitForAckLines(t, ackFile, 1, 15*time.Second)
-		// Small delay for the model to settle in browse/no-results.
-		time.Sleep(100 * time.Millisecond)
-		// Send ctrl+c.
-		io.WriteString(ptmx, "\x03")
+		waitForAckLines(t, collectAck, 1, 15*time.Second)
+		// Send ctrl+c; the send blocks on the acknowledgement that
+		// Update processed the key.
+		d.sendKey(t, "\x03")
 	})
 
 	if res.exitCode != 130 {
@@ -198,7 +150,8 @@ func TestReplayQWhileSearchingAfterDiagnostic(t *testing.T) {
 	fakeDir := t.TempDir()
 	readyFile := filepath.Join(t.TempDir(), "ready")
 	pidFile := filepath.Join(t.TempDir(), "pid")
-	ackFile := filepath.Join(t.TempDir(), "ack")
+	collectAck := filepath.Join(t.TempDir(), "ack")
+	updateAck := filepath.Join(t.TempDir(), "update-ack")
 	diagTrigger := filepath.Join(t.TempDir(), "diagtrigger")
 	writeStderrFakeRG(t, fakeDir, "", 0, true, "")
 
@@ -213,12 +166,13 @@ func TestReplayQWhileSearchingAfterDiagnostic(t *testing.T) {
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
 		"VRG_TEST_READY=" + readyFile,
 		"VRG_TEST_PID=" + pidFile,
-		"VRG_TEST_COLLECT_ACK=" + ackFile,
+		"VRG_TEST_COLLECT_ACK=" + collectAck,
+		"VRG_TEST_UPDATE_ACK=" + updateAck,
 		"VRG_TEST_DIAGNOSTIC_TRIGGER=" + diagTrigger,
 		"VRG_TEST_DIAGNOSTIC_TEXT=searching diag",
 	}
 
-	res := runVrgReplay(t, cmd, func(ptmx *os.File) {
+	res := runVrgReplay(t, cmd, updateAck, func(d *ptyDriver) {
 		// Wait for the fake rg to signal ready.
 		waitForFile(t, readyFile, 15*time.Second)
 		// Trigger the diagnostic emission.
@@ -226,11 +180,10 @@ func TestReplayQWhileSearchingAfterDiagnostic(t *testing.T) {
 			t.Errorf("cannot write diag trigger: %v", err)
 		}
 		// Wait for the diagnostic to be collected (ack fires).
-		waitForAckLines(t, ackFile, 1, 15*time.Second)
-		// Small delay for the model to settle.
-		time.Sleep(100 * time.Millisecond)
-		// Send q while searching (rg still blocked).
-		io.WriteString(ptmx, "q")
+		waitForAckLines(t, collectAck, 1, 15*time.Second)
+		// Send q while searching (rg still blocked); the send blocks
+		// on the acknowledgement that Update processed the key.
+		d.sendKey(t, "q")
 	})
 
 	if res.exitCode != 130 {
@@ -247,7 +200,8 @@ func TestReplayQWhileSearchingAfterDiagnostic(t *testing.T) {
 func TestReplayQWhileGateHeldAfterDiagnostic(t *testing.T) {
 	fakeDir := t.TempDir()
 	handshakeFile := filepath.Join(t.TempDir(), "handshake")
-	ackFile := filepath.Join(t.TempDir(), "ack")
+	collectAck := filepath.Join(t.TempDir(), "ack")
+	updateAck := filepath.Join(t.TempDir(), "update-ack")
 	diagTrigger := filepath.Join(t.TempDir(), "diagtrigger")
 	gateFile := filepath.Join(t.TempDir(), "gate")
 	writeStderrFakeRG(t, fakeDir, "", 0, false, "")
@@ -262,13 +216,14 @@ func TestReplayQWhileGateHeldAfterDiagnostic(t *testing.T) {
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
 		"VRG_TEST_HANDSHAKE=" + handshakeFile,
-		"VRG_TEST_COLLECT_ACK=" + ackFile,
+		"VRG_TEST_COLLECT_ACK=" + collectAck,
+		"VRG_TEST_UPDATE_ACK=" + updateAck,
 		"VRG_TEST_DIAGNOSTIC_TRIGGER=" + diagTrigger,
 		"VRG_TEST_DIAGNOSTIC_TEXT=gate diag",
 		"VRG_TEST_GATE=" + gateFile,
 	}
 
-	res := runVrgReplay(t, cmd, func(ptmx *os.File) {
+	res := runVrgReplay(t, cmd, updateAck, func(d *ptyDriver) {
 		// Wait for the fake rg to finish (handshake).
 		waitForFile(t, handshakeFile, 15*time.Second)
 		// Trigger the diagnostic emission while the gate is held.
@@ -276,11 +231,10 @@ func TestReplayQWhileGateHeldAfterDiagnostic(t *testing.T) {
 			t.Errorf("cannot write diag trigger: %v", err)
 		}
 		// Wait for the diagnostic to be collected (ack fires).
-		waitForAckLines(t, ackFile, 1, 15*time.Second)
-		// Small delay for the model to settle.
-		time.Sleep(100 * time.Millisecond)
-		// Send q while gate-held (preparation incomplete).
-		io.WriteString(ptmx, "q")
+		waitForAckLines(t, collectAck, 1, 15*time.Second)
+		// Send q while gate-held (preparation incomplete); the send
+		// blocks on the acknowledgement that Update processed the key.
+		d.sendKey(t, "q")
 	})
 
 	if res.exitCode != 130 {
@@ -295,8 +249,8 @@ func TestReplayQWhileGateHeldAfterDiagnostic(t *testing.T) {
 // sequence (Issue #11, AC2).
 func TestReplayNormalQAfterCompletedStreamWithWarning(t *testing.T) {
 	fakeDir := t.TempDir()
-	ackFile := filepath.Join(t.TempDir(), "ack")
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
+	collectAck := filepath.Join(t.TempDir(), "ack")
+	updateAck := filepath.Join(t.TempDir(), "update-ack")
 	writeStderrFakeRG(t, fakeDir, "warn one", 0, false, "")
 
 	repo := t.TempDir()
@@ -308,21 +262,24 @@ func TestReplayNormalQAfterCompletedStreamWithWarning(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
-		"VRG_TEST_COLLECT_ACK=" + ackFile,
+		"VRG_TEST_COLLECT_ACK=" + collectAck,
+		"VRG_TEST_UPDATE_ACK=" + updateAck,
 	}
 
-	res := runVrgReplay(t, cmd, func(ptmx *os.File) {
+	res := runVrgReplay(t, cmd, updateAck, func(d *ptyDriver) {
 		// Wait for the diagnostic to be collected (ack fires after
 		// SearchCompleteMsg is processed — the warning overlay text
 		// is collected).
-		waitForAckLines(t, ackFile, 1, 15*time.Second)
-		// Small delay for the model to settle in browse with overlay.
-		time.Sleep(200 * time.Millisecond)
-		// Dismiss the warning overlay, then quit from browse.
-		io.WriteString(ptmx, "\x1b")
-		time.Sleep(100 * time.Millisecond)
-		io.WriteString(ptmx, "q")
+		waitForAckLines(t, collectAck, 1, 15*time.Second)
+		// Dismiss the warning overlay — the esc event must
+		// acknowledge the dismissal before q is sent (Issue #48
+		// overlay-dismissal-before-quit row) — then quit from
+		// browse.
+		esc := d.sendKey(t, "\x1b")
+		if !esc.dismissed {
+			t.Errorf("esc did not dismiss the warning overlay: %+v", esc)
+		}
+		d.sendKey(t, "q")
 	})
 
 	if res.exitCode != 0 {
@@ -341,7 +298,8 @@ func TestReplayControlledFailureWithEarlierDiagnostic(t *testing.T) {
 	readyFile := filepath.Join(t.TempDir(), "ready")
 	pidFile := filepath.Join(t.TempDir(), "pid")
 	reapFile := filepath.Join(t.TempDir(), "reap")
-	ackFile := filepath.Join(t.TempDir(), "ack")
+	collectAck := filepath.Join(t.TempDir(), "ack")
+	updateAck := filepath.Join(t.TempDir(), "update-ack")
 	diagTrigger := filepath.Join(t.TempDir(), "diagtrigger")
 	failTrigger := filepath.Join(t.TempDir(), "failtrigger")
 	writeStderrFakeRG(t, fakeDir, "", 0, true, "")
@@ -358,14 +316,15 @@ func TestReplayControlledFailureWithEarlierDiagnostic(t *testing.T) {
 		"VRG_TEST_READY=" + readyFile,
 		"VRG_TEST_PID=" + pidFile,
 		"VRG_TEST_REAP=" + reapFile,
-		"VRG_TEST_COLLECT_ACK=" + ackFile,
+		"VRG_TEST_COLLECT_ACK=" + collectAck,
+		"VRG_TEST_UPDATE_ACK=" + updateAck,
 		"VRG_TEST_DIAGNOSTIC_TRIGGER=" + diagTrigger,
 		"VRG_TEST_DIAGNOSTIC_TEXT=earlier diag",
 		"VRG_TEST_FAIL_TRIGGER=" + failTrigger,
 		"VRG_TEST_FAIL_DIAGNOSTIC=controlled failure",
 	}
 
-	res := runVrgReplay(t, cmd, func(ptmx *os.File) {
+	res := runVrgReplay(t, cmd, updateAck, func(d *ptyDriver) {
 		// Wait for the fake rg to signal ready.
 		waitForFile(t, readyFile, 15*time.Second)
 		// Trigger the earlier diagnostic emission.
@@ -373,7 +332,7 @@ func TestReplayControlledFailureWithEarlierDiagnostic(t *testing.T) {
 			t.Errorf("cannot write diag trigger: %v", err)
 		}
 		// Wait for the earlier diagnostic to be collected.
-		waitForAckLines(t, ackFile, 1, 15*time.Second)
+		waitForAckLines(t, collectAck, 1, 15*time.Second)
 		// Trigger the controlled failure.
 		if err := os.WriteFile(failTrigger, []byte("trigger"), 0o644); err != nil {
 			t.Errorf("cannot write fail trigger: %v", err)
@@ -418,7 +377,8 @@ func TestReplayFilenameWithNewlineAndESC(t *testing.T) {
 	fakeDir := t.TempDir()
 	readyFile := filepath.Join(t.TempDir(), "ready")
 	pidFile := filepath.Join(t.TempDir(), "pid")
-	ackFile := filepath.Join(t.TempDir(), "ack")
+	collectAck := filepath.Join(t.TempDir(), "ack")
+	updateAck := filepath.Join(t.TempDir(), "update-ack")
 	diagTrigger := filepath.Join(t.TempDir(), "diagtrigger")
 	writeStderrFakeRG(t, fakeDir, "", 0, true, "")
 
@@ -441,12 +401,13 @@ func TestReplayFilenameWithNewlineAndESC(t *testing.T) {
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
 		"VRG_TEST_READY=" + readyFile,
 		"VRG_TEST_PID=" + pidFile,
-		"VRG_TEST_COLLECT_ACK=" + ackFile,
+		"VRG_TEST_COLLECT_ACK=" + collectAck,
+		"VRG_TEST_UPDATE_ACK=" + updateAck,
 		"VRG_TEST_DIAGNOSTIC_TRIGGER=" + diagTrigger,
 		"VRG_TEST_DIAGNOSTIC_TEXT=" + diagText,
 	}
 
-	res := runVrgReplay(t, cmd, func(ptmx *os.File) {
+	res := runVrgReplay(t, cmd, updateAck, func(d *ptyDriver) {
 		// Wait for the fake rg to signal ready.
 		waitForFile(t, readyFile, 15*time.Second)
 		// Trigger the diagnostic emission.
@@ -454,11 +415,10 @@ func TestReplayFilenameWithNewlineAndESC(t *testing.T) {
 			t.Errorf("cannot write diag trigger: %v", err)
 		}
 		// Wait for the diagnostic to be collected.
-		waitForAckLines(t, ackFile, 1, 15*time.Second)
-		// Small delay for the model to settle.
-		time.Sleep(100 * time.Millisecond)
-		// Send ctrl+c.
-		io.WriteString(ptmx, "\x03")
+		waitForAckLines(t, collectAck, 1, 15*time.Second)
+		// Send ctrl+c; the send blocks on the acknowledgement that
+		// Update processed the key.
+		d.sendKey(t, "\x03")
 	})
 
 	if res.exitCode != 130 {

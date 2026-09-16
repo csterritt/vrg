@@ -5,6 +5,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"vrg/internal/app"
@@ -88,7 +89,87 @@ func testSeamOptions(proc *app.Process) []app.Option {
 		}))
 	}
 
+	// Test seam: if VRG_TEST_UPDATE_ACK is set, append one
+	// acknowledgement record per Update-processed message to that
+	// file (Issue #48). Each record carries a per-process monotonic
+	// sequence number, the message kind, the key label for key
+	// presses, and the post-update state/overlay/dismissal
+	// post-state, so PTY helpers wait on the exact transition their
+	// preceding action caused rather than on elapsed time.
+	if ackPath := os.Getenv("VRG_TEST_UPDATE_ACK"); ackPath != "" {
+		opts = append(opts, app.WithUpdateAck(newUpdateAckLog(ackPath)))
+	}
+
 	return opts
+}
+
+// updateAckLog serializes acknowledgement records to the
+// VRG_TEST_UPDATE_ACK file. The per-process monotonic seq is assigned
+// here at the sink so test-side waits correlate per occurrence: an
+// earlier same-kind record can never satisfy a later wait.
+type updateAckLog struct {
+	mu  sync.Mutex
+	f   *os.File
+	seq int
+}
+
+// newUpdateAckLog opens the acknowledgement sink and returns the
+// callback wired into app.WithUpdateAck. An unwritable path yields an
+// inert callback — the test's bounded wait then reports the missing
+// acknowledgement rather than the seam fabricating records.
+func newUpdateAckLog(path string) func(app.UpdateAck) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return func(app.UpdateAck) {}
+	}
+	l := &updateAckLog{f: f}
+	return l.record
+}
+
+// record appends one acknowledgement line: seq, message kind, key
+// label, and the post-update state/overlay/dismissal post-state.
+func (l *updateAckLog) record(a app.UpdateAck) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.seq++
+	fmt.Fprintf(l.f, "%d msg=%s key=%s state=%s overlay=%s dismissed=%t\n",
+		l.seq, a.Msg, a.Key, ackStateName(a.State), ackOverlayName(a.Overlay), a.OverlayDismissed)
+}
+
+// ackStateName renders the post-update app state for an
+// acknowledgement record.
+func ackStateName(s app.State) string {
+	switch s {
+	case app.StateSearching:
+		return "searching"
+	case app.StateSummary:
+		return "summary"
+	case app.StateBrowse:
+		return "browse"
+	case app.StateNoResults:
+		return "no-results"
+	case app.StateStartFailed:
+		return "start-failed"
+	case app.StateFailed:
+		return "failed"
+	case app.StateCancelled:
+		return "cancelled"
+	}
+	return "unknown"
+}
+
+// ackOverlayName renders the post-update overlay kind for an
+// acknowledgement record.
+func ackOverlayName(k app.OverlayKind) string {
+	switch k {
+	case app.OverlayError:
+		return "error"
+	case app.OverlayWarning:
+		return "warning"
+	case app.OverlayHelp:
+		return "help"
+	}
+	return "none"
 }
 
 // watchForFile polls for path to appear at a paced interval and then

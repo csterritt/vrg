@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -112,7 +111,8 @@ func TestRunReturnShapeUnifiedShutdown(t *testing.T) {
 			pidFile := filepath.Join(t.TempDir(), "pid")
 			handshakeFile := filepath.Join(t.TempDir(), "handshake")
 			reapFile := filepath.Join(t.TempDir(), "reap")
-			ackFile := filepath.Join(t.TempDir(), "ack")
+			collectAck := filepath.Join(t.TempDir(), "ack")
+			updateAck := filepath.Join(t.TempDir(), "update-ack")
 			diagTrigger := filepath.Join(t.TempDir(), "diagtrigger")
 
 			env := []string{
@@ -120,7 +120,8 @@ func TestRunReturnShapeUnifiedShutdown(t *testing.T) {
 				"VRG_TEST_PID=" + pidFile,
 				"VRG_TEST_HANDSHAKE=" + handshakeFile,
 				"VRG_TEST_REAP=" + reapFile,
-				"VRG_TEST_COLLECT_ACK=" + ackFile,
+				"VRG_TEST_COLLECT_ACK=" + collectAck,
+				"VRG_TEST_UPDATE_ACK=" + updateAck,
 				"VRG_TEST_DIAGNOSTIC_TRIGGER=" + diagTrigger,
 				"VRG_TEST_DIAGNOSTIC_TEXT=session diag two",
 				"VRG_TEST_RUN_ERROR=" + tc.runError,
@@ -133,27 +134,29 @@ func TestRunReturnShapeUnifiedShutdown(t *testing.T) {
 			cmd.Dir = repo
 			cmd.Env = env
 
-			res := runVrgReplay(t, cmd, func(ptmx *os.File) {
+			res := runVrgReplay(t, cmd, updateAck, func(d *ptyDriver) {
 				// Wait for the fake rg to finish, then for the
 				// SearchComplete-collected diagnostic (the fake
 				// rg's stderr warning) to be acknowledged. The
 				// triggered diagnostic is collected second, so
 				// the session collection order is deterministic.
 				waitForFile(t, handshakeFile, 15*time.Second)
-				waitForAckLines(t, ackFile, 1, 15*time.Second)
+				waitForAckLines(t, collectAck, 1, 15*time.Second)
 				if err := os.WriteFile(diagTrigger, []byte("trigger"), 0o644); err != nil {
 					t.Errorf("cannot write diag trigger: %v", err)
 				}
-				waitForAckLines(t, ackFile, 2, 15*time.Second)
-				// Small delay for the model to settle, then Esc
-				// dismisses the warning overlay and q quits
-				// browse, so the real Run() result is a clean
-				// (app.Model, nil) tuple for the seam to
-				// override.
-				time.Sleep(100 * time.Millisecond)
-				io.WriteString(ptmx, "\x1b")
-				time.Sleep(100 * time.Millisecond)
-				io.WriteString(ptmx, "q")
+				waitForAckLines(t, collectAck, 2, 15*time.Second)
+				// Esc dismisses the warning overlay — the esc
+				// event must acknowledge the dismissal before q
+				// is sent (Issue #48 overlay-dismissal-before-quit
+				// row) — then q quits browse, so the real Run()
+				// result is a clean (app.Model, nil) tuple for
+				// the seam to override.
+				esc := d.sendKey(t, "\x1b")
+				if !esc.dismissed {
+					t.Errorf("esc did not dismiss the warning overlay: %+v", esc)
+				}
+				d.sendKey(t, "q")
 			})
 
 			// Every failing Run() return shape is a controlled

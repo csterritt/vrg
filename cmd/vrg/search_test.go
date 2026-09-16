@@ -2,15 +2,11 @@ package main
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/creack/pty"
 )
 
 // writeFakeRG writes a fake rg script to dir that outputs valid ripgrep
@@ -50,73 +46,20 @@ exit 0
 // runVrgWithQuit runs vrg with a PTY for stdin/stdout (necessary because
 // Bubble Tea's cancelable reader uses epoll, which requires a terminal
 // file descriptor, and the renderer needs a terminal for raw mode). It
-// reads PTY output concurrently to prevent buffer deadlocks. It sends
-// "q" after the handshake file appears (or immediately if handshake is
-// empty).
-func runVrgWithQuit(t *testing.T, cmd *exec.Cmd, handshake string) (stdout, stderr string, exitCode int) {
+// waits for the search-complete acknowledgement — proving the model
+// processed SearchCompleteMsg into browse, no-results, or an overlay
+// state — then sends q. When the first q dismisses an open overlay
+// (acknowledged by the event's dismissal flag), a second q quits the
+// underlying state (Issue #48 handshake matrix).
+func runVrgWithQuit(t *testing.T, cmd *exec.Cmd, ackFile string) (stdout, stderr string, exitCode int) {
 	t.Helper()
-	var se bytes.Buffer
-	cmd.Stderr = &se
-
-	ptmx, ptmxErr := pty.Start(cmd)
-	if ptmxErr != nil {
-		t.Fatalf("failed to start vrg with PTY: %v", ptmxErr)
-	}
-	defer func() { _ = ptmx.Close() }()
-
-	// Set a window size so Bubble Tea's renderer has a non-zero frame.
-	if err := pty.Setsize(ptmx, &pty.Winsize{Rows: 24, Cols: 80}); err != nil {
-		t.Fatalf("failed to set PTY window size: %v", err)
-	}
-
-	// Read PTY output concurrently to prevent the PTY buffer from
-	// filling up and deadlocking Bubble Tea's renderer.
-	var so bytes.Buffer
-	readDone := make(chan struct{})
-	go func() {
-		defer close(readDone)
-		io.Copy(&so, ptmx)
-	}()
-
-	// Send q to the PTY after the handshake file appears (or immediately).
-	// A delay after the handshake gives vrg time to process the
-	// completion and transition to browse/overlay before the first q.
-	// Two q presses handle both the no-overlay case (first q quits) and
-	// the warning-overlay case (first q dismisses, second q quits).
-	go func() {
-		if handshake != "" {
-			for i := 0; i < 1000; i++ {
-				if _, err := os.Stat(handshake); err == nil {
-					break
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
+	res := runVrgPTY(t, cmd, ackFile, func(d *ptyDriver) {
+		d.waitMsg(t, "search-complete")
+		if d.sendKey(t, "q").dismissed {
+			d.sendKey(t, "q")
 		}
-		time.Sleep(200 * time.Millisecond)
-		io.WriteString(ptmx, "q")
-		time.Sleep(100 * time.Millisecond)
-		io.WriteString(ptmx, "q")
-	}()
-
-	done := make(chan error, 1)
-	go func() { done <- cmd.Wait() }()
-
-	select {
-	case err := <-done:
-		_ = ptmx.Close()
-		<-readDone
-		if err == nil {
-			return stripAnsi(so.String()), se.String(), 0
-		}
-		if ee, ok := err.(*exec.ExitError); ok {
-			return stripAnsi(so.String()), se.String(), ee.ExitCode()
-		}
-		t.Fatalf("vrg failed: %v (stderr %q)", err, se.String())
-	case <-time.After(30 * time.Second):
-		cmd.Process.Kill()
-		t.Fatal("vrg did not complete within 30 seconds")
-	}
-	return "", se.String(), -1
+	})
+	return res.stdout, res.stderr, res.exitCode
 }
 
 // stripAnsi removes ANSI escape sequences from s so the visible text
@@ -164,7 +107,7 @@ func TestChildArgvAndWorkdir(t *testing.T) {
 
 	argvFile := filepath.Join(t.TempDir(), "argv.txt")
 	cwdFile := filepath.Join(t.TempDir(), "cwd.txt")
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 
 	cmd := exec.Command(binPath, "hello", ".")
 	cmd.Dir = repo
@@ -172,9 +115,9 @@ func TestChildArgvAndWorkdir(t *testing.T) {
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
 		"VRG_TEST_ARGV=" + argvFile,
 		"VRG_TEST_CWD=" + cwdFile,
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
-	_, _, exitCode := runVrgWithQuit(t, cmd, handshakeFile)
+	_, _, exitCode := runVrgWithQuit(t, cmd, ackFile)
 
 	// vrg should exit 0 (happy path: q from summary).
 	if exitCode != 0 {
@@ -215,15 +158,15 @@ func TestChildArgvWithFlags(t *testing.T) {
 	}
 
 	argvFile := filepath.Join(t.TempDir(), "argv.txt")
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 	cmd := exec.Command(binPath, "-i", "-S", "hello", ".")
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
 		"VRG_TEST_ARGV=" + argvFile,
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
-	runVrgWithQuit(t, cmd, handshakeFile)
+	runVrgWithQuit(t, cmd, ackFile)
 
 	argvBytes, _ := os.ReadFile(argvFile)
 	argv := strings.TrimSpace(string(argvBytes))
@@ -344,13 +287,15 @@ exit 0
 		t.Fatal(err)
 	}
 
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 	cmd := exec.Command(binPath, "hello", ".")
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
 		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
-	stdout, _, exitCode := runVrgWithQuit(t, cmd, handshakeFile)
+	stdout, _, exitCode := runVrgWithQuit(t, cmd, ackFile)
 
 	// vrg should exit 0 (q from summary after collection completed).
 	if exitCode != 0 {
@@ -376,7 +321,6 @@ exit 0
 func TestStderrCapturedWithoutBlocking(t *testing.T) {
 	fakeDir := t.TempDir()
 	rgPath := filepath.Join(fakeDir, "rg")
-	handshakeFile := filepath.Join(t.TempDir(), "handshake")
 	script := `#!/bin/sh
 # Write some diagnostic text to stderr
 echo "warning: some diagnostic" >&2
@@ -386,7 +330,6 @@ echo '{"type":"begin","data":{"path":{"text":"test.txt"}}}'
 printf '%s\n' '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
 echo '{"type":"end","data":{"path":{"text":"test.txt"},"binary_offset":null}}'
 echo '{"type":"summary","data":{}}'
-touch "$VRG_TEST_HANDSHAKE"
 exit 0
 `
 	if err := os.WriteFile(rgPath, []byte(script), 0o755); err != nil {
@@ -398,13 +341,14 @@ exit 0
 		t.Fatal(err)
 	}
 
+	ackFile := filepath.Join(t.TempDir(), "update-ack")
 	cmd := exec.Command(binPath, "hello", ".")
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
-	stdout, _, exitCode := runVrgWithQuit(t, cmd, handshakeFile)
+	stdout, _, exitCode := runVrgWithQuit(t, cmd, ackFile)
 
 	if exitCode != 0 {
 		t.Fatalf("vrg exited %d, want 0", exitCode)

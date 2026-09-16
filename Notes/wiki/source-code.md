@@ -33,9 +33,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   option-related `VRG_TEST_*` manifest names (`VRG_TEST_REAP`,
   `VRG_TEST_GATE`, `VRG_TEST_FAIL_TRIGGER`/`VRG_TEST_FAIL_DIAGNOSTIC`,
   `VRG_TEST_DIAGNOSTIC_TRIGGER`/`VRG_TEST_DIAGNOSTIC_TEXT`,
-  `VRG_TEST_COLLECT_ACK`) and returns the corresponding `app.Option`s
-  and `proc.OnReap` wiring, with the file watchers paced by
-  `watchForFile`'s sleep-polled loop.
+  `VRG_TEST_COLLECT_ACK`, and Issue #48's `VRG_TEST_UPDATE_ACK`) and
+  returns the corresponding `app.Option`s and `proc.OnReap` wiring,
+  with the file watchers paced by `watchForFile`'s sleep-polled loop.
+  `VRG_TEST_UPDATE_ACK` wires `app.WithUpdateAck` to the
+  mutex-serialized `updateAckLog` sink, which appends one
+  `<seq> msg=… key=… state=… overlay=… dismissed=…` record per
+  Update-processed message — the acknowledgement log the PTY
+  handshake helpers wait on (see
+  [pty-handshake-tests](pty-handshake-tests.md)).
 - `cmd/vrg/runner.go` / `cmd/vrg/runner_testhooks.go` — the Issue #45
   program-runner boundary around `tea.NewProgram(...).Run()`. The
   untagged `runner.go` delegates directly; the tagged
@@ -588,7 +594,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   wiring rather than a test seam, the `diagSink` model/config field,
   and a `collectDiagnostic` append to the sink alongside the session
   collection — so collected diagnostics reach stderr even when the
-  `Run()` final model is absent or wrong-typed. See
+  `Run()` final model is absent or wrong-typed. Issue #48 added the
+  per-update acknowledgement seam: the `UpdateAck` record (message
+  kind, key label, post-update state, open-overlay kind, and an
+  `OverlayDismissed` flag), the `WithUpdateAck` option in the same
+  test-seam family as `WithOnCollect`, and a `Model.Update` wrapper
+  that runs the real `update` transition then fires the callback with
+  `describeUpdateAck(msg, prev, next)` — observational only, so
+  production behaviour and timing are unchanged. See
   [overlay-full-scroll](overlay-full-scroll.md),
   [stream-integrity-diagnostics](stream-integrity-diagnostics.md),
   [record-robustness](record-robustness.md),

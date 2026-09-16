@@ -1036,8 +1036,19 @@ stdout/stderr/status separately:
   control bytes on stderr; the help path asserts no dangerous control
   bytes on stdout.
 
+Since Issue #48 every PTY helper in this package routes through the
+shared `runVrgPTY`/`ptyDriver` scaffold in `handshake_test.go` and
+synchronizes on deterministic acknowledgements — the
+`VRG_TEST_UPDATE_ACK` per-update event log, the `VRG_TEST_COLLECT_ACK`
+collection file, fixture-side files, or rendered-output markers —
+never on fixed settling or inter-key sleeps (see
+[pty-handshake-tests](pty-handshake-tests.md)).
+
 `search_test.go` (Issue #3) uses a fake `rg` shell script and a PTY
-(`github.com/creack/pty`) to drive the Bubble Tea program:
+(`github.com/creack/pty`) to drive the Bubble Tea program. Its
+`runVrgWithQuit` helper waits for the `search-complete`
+acknowledgement, sends `q`, and sends a second `q` only when the
+first `q`'s event reports an overlay dismissal:
 
 - `TestChildArgvAndWorkdir` — vrg starts rg with the exact protected
   child argv from the invocation working directory.
@@ -1053,7 +1064,15 @@ stdout/stderr/status separately:
   while exiting 0 with a valid stdout stream does not block the child.
 
 `outcome_test.go` (Issue #9) extends the fake-rg/PTY harness with fatal
-exit, signal death, and large-stderr fixtures:
+exit, signal death, and large-stderr fixtures. `runVrgWithKeys` waits
+for `search-complete` then blocks each key send on that key's own
+acknowledgement; `runVrgKillChild` adds the fixture-ready wait and
+process-group SIGKILL plus an optional rendered-output marker wait
+before the keys. Tests asserting on transient painted content (the
+error/warning overlays, the no-results view) wait for the asserted
+text in the PTY output before the dismissal key, because the Update
+acknowledgement proves the model transition while the renderer can
+still coalesce the frame:
 
 - `TestFatalExitWithResultsShowsOverlay` — a fake rg that emits two
   valid matches then exits non-zero with stderr shows the browse view
@@ -1085,7 +1104,11 @@ controllable blocked fake rg (readiness handshake + indefinite block),
 reap-evidence side channel (`VRG_TEST_REAP`), termios snapshot/restore
 assertions, display-restoration sequence checks, gate injection
 (`VRG_TEST_GATE`), and controlled-failure injection
-(`VRG_TEST_FAIL_TRIGGER` / `VRG_TEST_FAIL_DIAGNOSTIC`):
+(`VRG_TEST_FAIL_TRIGGER` / `VRG_TEST_FAIL_DIAGNOSTIC`). `runVrgCancel`
+keeps its send-after-ready pattern through the shared Issue #48
+driver — the cancel key needs no intra-run acknowledgement because
+nothing follows it and the asserted exit 130 proves processing while
+still searching:
 
 - `TestQAgainstBlockedFakeRGExits130` — `q` while the fake rg is
   blocked exits 130, terminates and reaps the child, restores the
@@ -1093,8 +1116,11 @@ assertions, display-restoration sequence checks, gate injection
 - `TestCtrlCAgainstBlockedFakeRGExits130` — `ctrl+c` while the fake rg
   is blocked exits 130, terminates and reaps the child, restores the
   display, restores PTY termios.
-- `TestNormalExitReapsChild` — normal exit while rg is still running
-  leaves no orphaned or unreaped child; reap evidence present.
+- `TestNormalExitReapsChild` — normal exit after rg completes leaves
+  no orphaned or unreaped child; reap evidence present. Issue #48
+  routes it through `runVrgWithQuit`'s search-complete
+  acknowledgement — the fixture handshake alone raced the model
+  transition (a `q` arriving while still searching exits 130, not 0).
 - `TestQDuringGateHeldPreparationExits130` — `q` after rg has exited
   but while index preparation is gate-held exits 130 (cancellation),
   not a browse quit.
@@ -1107,7 +1133,12 @@ assertions, display-restoration sequence checks, gate injection
 application-side collection acknowledgement side channel
 (`VRG_TEST_COLLECT_ACK`), the diagnostic emission trigger
 (`VRG_TEST_DIAGNOSTIC_TRIGGER` / `VRG_TEST_DIAGNOSTIC_TEXT`), and
-replay-ordering assertions:
+replay-ordering assertions. Since Issue #48 `runVrgReplay` routes
+every trigger callback through the shared driver: `waitForAckLines`
+still polls the collection file, and every key send (`q`, `ctrl+c`,
+Esc) blocks on that key's per-update acknowledgement — the
+overlay-dismissal event must report `dismissed` before a following
+`q` is sent:
 
 - `TestReplayCtrlCAfterStderrDiagnostic` — `ctrl+c` sent after a
   stderr diagnostic has been collected (acknowledged) exits 130 with
@@ -1140,11 +1171,12 @@ replay-ordering assertions:
 
 - `TestUntaggedBinaryIgnoresHookManifest` — builds the production
   binary without tags, runs an ordinary fake-rg search with every name
-  in the explicit vrg-consumed hook manifest set (the option hooks
-  plus the `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` runner
-  controls), and asserts a normal exit 0, no hook marker text on
-  stderr, no side-effect files, and none of the manifest names present
-  in the artifact bytes. The probed list comes only from the explicit
+  in the explicit vrg-consumed hook manifest set (the option hooks,
+  the `VRG_TEST_UPDATE_ACK` acknowledgement hook, and the
+  `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` runner controls),
+  and asserts a normal exit 0, no hook marker text on stderr, no
+  side-effect files, and none of the manifest names present in the
+  artifact bytes. The probed list comes only from the explicit
   manifest — never from grepping `VRG_TEST_*` — because fake-rg
   fixture variables are not vrg behaviour and are renamed `FAKE_RG_*`
   by Issue #50.
@@ -1177,6 +1209,36 @@ acknowledged first via `VRG_TEST_COLLECT_ACK`, then a triggered
   valid-model case also asserts the invalid-final-model diagnostic is
   absent. `writeRunShapeFakeRG` supplies a fake rg that records its
   PID, writes a stderr warning, completes a valid stream, and exits 0.
+  Issue #48 routes the Esc-dismissal/`q` sequence through the
+  per-update acknowledgements (the Esc event must report `dismissed`
+  before `q` is sent).
+
+`handshake_test.go` (Issue #48) owns the deterministic-handshake
+contract for the whole package — see
+[pty-handshake-tests](pty-handshake-tests.md). It defines the
+helper/action/postcondition/acknowledgement matrix in a comment, the
+`ackEvent`/`ackLog` per-occurrence cursor over the
+`VRG_TEST_UPDATE_ACK` log, the `ptyDriver` (`waitMsg`, `waitAck`,
+`sendKey`, `waitForOutput`), the shared `runVrgPTY` scaffold every PTY
+helper routes through, and the contract tests:
+
+- `TestUpdateAckSeamContract` — a `search-complete` event then a
+  causally later `key=q` event with strictly increasing per-process
+  sequence.
+- `TestUpdateAckPerOccurrenceCorrelation` — cursor semantics on a
+  fixture log plus two repeated `down` sends through a real open error
+  overlay, requiring two distinct increasing events; an earlier
+  same-kind record can never satisfy a later wait.
+- `TestUpdateAckOverlayDismissalBeforeQuit` — Esc on a warning
+  overlay yields `key=esc dismissed=true overlay=none` strictly before
+  the `q` event.
+- `TestAckWaitBoundedTimeout` — a never-arriving handshake fails on
+  the bounded timeout naming the awaited condition.
+- `TestNoFixedSleepsInPtyHelpers` — parses every `*_test.go` in the
+  package and requires each `time.Sleep` to live inside a named
+  bounded condition poll (`waitForFile`, `waitForAckLines`,
+  `waitEvent`, `waitForOutput`); any other sleep is a fixed settling
+  or inter-key delay and fails.
 
 `grapheme_highlight_test.go` (Issue #21, external package
 `viewport_test`):

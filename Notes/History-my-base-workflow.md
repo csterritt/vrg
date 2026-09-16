@@ -564,3 +564,12 @@ Usage
  Input tokens: 79301 tokens
  Output tokens: 18650 tokens
  Cached input tokens: 1542144 tokens
+
+----
+Task 048-pty-tests-deterministic-handshakes.md
+
+Usage
+ Agent messages: 118 messages
+ Input tokens: 146220 tokens
+ Output tokens: 64125 tokens
+ Cached input tokens: 14679808 tokens
