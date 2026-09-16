@@ -871,6 +871,105 @@ func TestOutcomeMissingEndDeterministic(t *testing.T) {
 	}
 }
 
+// --- Issue #44: post-summary context is an integrity failure ---
+
+// TestContextAfterSummaryOutcome is Issue #44's dedicated outcome
+// assertion for the summary-is-final contract: a stream of valid
+// records, a valid summary, then a context record is a stream-integrity
+// failure — never silently accepted. The complete composed diagnostic
+// names exactly the record-after-summary cause and is retained for
+// post-restoration stderr replay; the outcome takes the fatal path of
+// the outcome matrix (exit 2) in both the no-results and the
+// retained-results dispositions.
+func TestContextAfterSummaryOutcome(t *testing.T) {
+	t.Run("zero results fatal overlay exits 2", func(t *testing.T) {
+		idx := buildIndexRaw(t, "/work", summaryRecord(), contextRecord())
+		m := app.New([]string{"--json", "--", "foo", "."}, "/work")
+		m, _ = update(t, m, app.SearchCompleteMsg{
+			Files:   idx.Files(),
+			Lines:   idx.Len(),
+			Index:   idx,
+			Process: app.ProcessResult{ExitCode: 0},
+		})
+		if m.State() != app.StateNoResults {
+			t.Fatalf("State = %v, want StateNoResults", m.State())
+		}
+		if m.OverlayKind() != app.OverlayError {
+			t.Fatalf("OverlayKind = %v, want OverlayError", m.OverlayKind())
+		}
+		if !m.OverlayFatal() {
+			t.Fatalf("OverlayFatal = false, want true (zero usable results)")
+		}
+		if m.OverlayText() != "record after summary" {
+			t.Fatalf("OverlayText = %q, want %q", m.OverlayText(), "record after summary")
+		}
+		if m.ExitCode() != 2 {
+			t.Fatalf("ExitCode = %d, want 2", m.ExitCode())
+		}
+		// The same composed diagnostic — same lines, same order —
+		// is collected for post-restoration stderr replay.
+		assertDiagnosticsEq(t, m, []string{"record after summary"})
+		// A fatal no-results overlay dismisses to exit 2.
+		m, cmd := update(t, m, keyPress('q'))
+		assertQuit(t, cmd)
+		if m.ExitCode() != 2 {
+			t.Fatalf("after dismiss, ExitCode = %d, want 2", m.ExitCode())
+		}
+	})
+
+	t.Run("retained results browse overlay dismiss q exits 2", func(t *testing.T) {
+		idx := buildIndexRaw(t, "/work",
+			textBegin("a.go"),
+			textMatch("a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
+			endRecord("a.go", nil),
+			summaryRecord(),
+			contextRecord(),
+		)
+		m := app.New([]string{"--json", "--", "foo", "."}, "/work")
+		m, _ = update(t, m, app.SearchCompleteMsg{
+			Files:   idx.Files(),
+			Lines:   idx.Len(),
+			Index:   idx,
+			Process: app.ProcessResult{ExitCode: 0},
+		})
+		if m.State() != app.StateBrowse {
+			t.Fatalf("State = %v, want StateBrowse", m.State())
+		}
+		if m.OverlayKind() != app.OverlayError {
+			t.Fatalf("OverlayKind = %v, want OverlayError", m.OverlayKind())
+		}
+		if m.OverlayFatal() {
+			t.Fatalf("OverlayFatal = true, want false (usable results remain browsable)")
+		}
+		if m.OverlayText() != "record after summary" {
+			t.Fatalf("OverlayText = %q, want %q", m.OverlayText(), "record after summary")
+		}
+		if m.ExitCode() != 2 {
+			t.Fatalf("ExitCode = %d, want 2", m.ExitCode())
+		}
+		// The same composed diagnostic — same lines, same order —
+		// is collected for post-restoration stderr replay.
+		assertDiagnosticsEq(t, m, []string{"record after summary"})
+		// A non-fatal browse overlay dismisses back to browse.
+		m, cmd := update(t, m, keyPress('q'))
+		if cmd != nil {
+			t.Fatalf("non-fatal dismiss produced a command: %v", cmd)
+		}
+		if m.OverlayOpen() {
+			t.Fatalf("after dismiss, overlay still open")
+		}
+		if m.State() != app.StateBrowse {
+			t.Fatalf("after dismiss, State = %v, want StateBrowse", m.State())
+		}
+		// Quitting from browse exits with the decided status 2.
+		m, cmd = update(t, m, keyPress('q'))
+		assertQuit(t, cmd)
+		if m.ExitCode() != 2 {
+			t.Fatalf("after quit, ExitCode = %d, want 2", m.ExitCode())
+		}
+	})
+}
+
 // --- Issue #37: oversized aggregate and anonymous records ---
 
 // TestOutcomeOversizedAggregateDiagnostics covers the Issue #37

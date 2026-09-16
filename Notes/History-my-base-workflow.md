@@ -528,3 +528,12 @@ Usage
  Input tokens: 66440 tokens
  Output tokens: 39315 tokens
  Cached input tokens: 4207744 tokens
+
+----
+Task 044-post-summary-context-integrity-failure.md
+
+Usage
+ Agent messages: 64 messages
+ Input tokens: 150969 tokens
+ Output tokens: 45369 tokens
+ Cached input tokens: 7573376 tokens

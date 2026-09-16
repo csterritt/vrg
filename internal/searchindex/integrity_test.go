@@ -231,6 +231,27 @@ func TestIntegrityCauseMatrix(t *testing.T) {
 			wantStops:         1,
 		},
 
+		// --- Pre-summary context positions (Issue #44) ---
+
+		{
+			name:         "context before begin records no causes and is ignored",
+			records:      []string{contextRecord(), textBegin("a.go"), validMatch, endRecord("a.go", nil), summaryRecord()},
+			wantComplete: true,
+			wantStops:    1,
+		},
+		{
+			name:         "context while open records no causes and is ignored",
+			records:      []string{textBegin("a.go"), contextRecord(), validMatch, contextRecord(), endRecord("a.go", nil), summaryRecord()},
+			wantComplete: true,
+			wantStops:    1,
+		},
+		{
+			name:         "context after end before summary records no causes and is ignored",
+			records:      []string{textBegin("a.go"), validMatch, endRecord("a.go", nil), contextRecord(), summaryRecord()},
+			wantComplete: true,
+			wantStops:    1,
+		},
+
 		// --- Ordering ---
 
 		{

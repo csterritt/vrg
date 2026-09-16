@@ -1,4 +1,4 @@
-# Outcome contract (Issue #9, extended by Issues #10, #11, #36, and #37)
+# Outcome contract (Issue #9, extended by Issues #10, #11, #36, #37, and #44)
 
 The fatal/warning outcome matrix and modal error overlay delivered by
 [Issue #9](../issues/009-error-overlay-and-fatal-outcomes.md), adding
@@ -14,7 +14,10 @@ added structured stream-integrity causes and universal diagnostic
 composition shared by the overlay and the stderr replay.
 [Issue #37](../issues/037-oversized-record-aggregate-anonymous-diagnostics.md)
 added the always-emitted oversized aggregate and the
-anonymous-oversized-record guarantees. Relevant PRD
+anonymous-oversized-record guarantees.
+[Issue #44](../issues/044-post-summary-context-integrity-failure.md)
+added dedicated `context`-after-`summary` outcome coverage pinning the
+fatal path and the `record after summary` diagnostic. Relevant PRD
 sections: *Module Design → SearchIndex / App*,
 *Outcome and exit-status contract*, *Colours, overlays, and key
 precedence* (replay bullet). See also
@@ -32,7 +35,11 @@ where `Complete` is true only when every lifecycle rule passed:
   complete zero-result stream).
 - No record after the summary. Issue #36 removed the former
   `context`-record exemption: a `context` record after `summary` is an
-  integrity violation like any other post-summary record.
+  integrity violation like any other post-summary record. Pre-`summary`
+  `context` records remain ignored for match/lifecycle purposes —
+  Issue #9's former "`context` in any position" row is amended to
+  pre-`summary` positions only, and Issue #44 added dedicated coverage
+  for both halves of the contract.
 - Every `begin` opens a file that was not already open (duplicate
   `begin` is an integrity failure).
 - Every `match` arrives while its file is open (orphaned match is an

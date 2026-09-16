@@ -6,7 +6,10 @@ composition, delivered by
 (tasks: `Notes/tasks/036-stream-integrity-fatal-diagnostics.md`) and
 extended by
 [Issue #37](../issues/037-oversized-record-aggregate-anonymous-diagnostics.md),
-which landed the oversized aggregate in the record-loss component. It
+which landed the oversized aggregate in the record-loss component, and
+[Issue #44](../issues/044-post-summary-context-integrity-failure.md),
+which added dedicated `context`-after-`summary` regression coverage
+pinning the summary-is-final contract. It
 closes the gap where a fatal stream-integrity outcome was explained as
 `ripgrep exited with code 0` (when ripgrep produced no stderr) or as
 stderr-only (when it did) — the actual reason the stream was incomplete
@@ -67,6 +70,45 @@ The most-specific applicable row wins:
   record` plus the malformed count — which means the unterminated cause
   always co-occurs with `missing summary`, since a stream whose last
   bytes are an unterminated fragment never carried a valid summary.
+
+## Summary-is-final and the `context` record (Issue #44)
+
+The summary-is-final contract is unqualified: *any* record after a
+valid `summary` — including `context` — is a stream-integrity failure
+contributing exactly the `record after summary` cause. Issue #9's
+former "`context` in any position" lifecycle-matrix row is amended to
+cover only pre-`summary` positions: `context` payloads stay ignored
+for match and lifecycle purposes *before* `summary` — before `begin`,
+while a file is open (ripgrep's real position for context records),
+and between `end` and `summary` — producing no causes, no stops, and
+a complete stream. Only the post-`summary` position is a violation.
+
+Ownership is split across two issues. Issue #36 owned the parser
+change — removing the `context` exemption in `Builder.Add` and
+correcting the contradictory `"context after summary has no lifecycle
+effect"` row in `lifecycle_test.go` — as part of its post-summary
+precedence GREEN. Issue #44 began from that green boundary and added
+dedicated coverage only, with no second parser change:
+
+- `lifecycle_test.go` gained a neighbouring `context while open` row;
+- `TestIntegrityCauseMatrix` gained neighbouring pre-`summary`
+  `context` rows (before `begin`, while open, after `end` before
+  `summary`) asserting an empty cause list beside the dedicated
+  `summary` → `context` row asserting exactly the single
+  `record after summary` cause;
+- `internal/app/outcome_test.go` gained
+  `TestContextAfterSummaryOutcome`, asserting the `summary` →
+  `context` stream takes the outcome matrix's fatal path (exit 2) in
+  both the zero-results fatal-overlay and retained-results
+  browse-overlay dispositions, with the complete composed diagnostic
+  `record after summary` retained for post-restoration stderr replay.
+
+Cross-references:
+[Issue #36](../issues/036-stream-integrity-fatal-diagnostics.md),
+[Issue #44](../issues/044-post-summary-context-integrity-failure.md),
+and `Notes/PRD-vrg.md` *Result index, records, and stream integrity*
+(the complete-stream bullets) and *Outcome and exit-status contract*
+(the fatal rows).
 
 ## Ordering
 

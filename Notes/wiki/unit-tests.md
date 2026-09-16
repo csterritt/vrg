@@ -106,11 +106,14 @@ table, parser config, and generated help cannot drift.
   match after `end`, records after summary, second summary, interleaved
   open files with valid pairing, `text`/`bytes` path identity
   agreement, missing `end`, missing `summary`, trailing malformed/
-  unterminated records, context records in arbitrary positions, and
-  binary exclusion precedence. Each row asserts integrity completeness
+  unterminated records, context records in pre-`summary` positions
+  (before `begin`, while open, after `end`), and binary exclusion
+  precedence. Each row asserts integrity completeness
   and stop count. Issue #36 corrected the superseded
   context-after-`summary` row: a post-summary `context` record is an
-  integrity violation, not lifecycle-neutral.
+  integrity violation, not lifecycle-neutral. Issue #44 added the
+  neighbouring `context while open` row, completing the amended
+  pre-`summary`-only context coverage.
 - Issue #10 malformed disposition tests (`malformed_test.go`,
   `TestMalformedDisposition`) — table-driven coverage of every row of
   the Issue #3 per-record schema matrix (invalid JSON, invalid base64,
@@ -135,7 +138,7 @@ table, parser config, and generated help cannot drift.
   not substitute for summary, unknown after summary is unknown and
   after-summary integrity failure).
 - Issue #36 structured-cause tests (`integrity_test.go`,
-  `TestIntegrityCauses`) — table-driven coverage asserting the exact
+  `TestIntegrityCauseMatrix`) — table-driven coverage asserting the exact
   `Integrity.Causes` list per scenario: duplicate `begin`, orphaned
   `match`, `match` after binary `end` (distinct kind, same user-facing
   line), orphaned `end`, missing `end`, missing `summary`, second
@@ -147,7 +150,11 @@ table, parser config, and generated help cannot drift.
   summary` plus malformed count, no unterminated cause),
   detection-order multiplicity with no deduplication or cap, and
   deterministic unsigned raw-path ordering of missing `end` causes
-  across shuffled insertion order.
+  across shuffled insertion order. Issue #44 added neighbouring
+  pre-`summary` `context` rows (before `begin`, while open, after
+  `end` before `summary`) asserting an empty cause list and a
+  complete stream, beside the dedicated `summary` → `context` row
+  asserting exactly the single `record after summary` cause.
 - Issue #13 cursor tests (`cursor_test.go`, external package
   `searchindex_test`):
   - `TestCursorStartupSelectsFirstStop` — a new cursor selects the
@@ -506,6 +513,15 @@ table, parser config, and generated help cannot drift.
   `TestOutcomeIntegrityDiagnosticsFlow` were updated to expect the
   aggregate between the `record after summary` cause and the per-path
   detail.
+- Issue #44 post-`summary` `context` outcome test:
+  `TestContextAfterSummaryOutcome` drives the dedicated `summary` →
+  `context` stream through the full `Update` flow, asserting the
+  fatal path of the outcome matrix (exit 2) in both dispositions —
+  zero results (fatal error overlay, `q` exits 2) and retained
+  results (browse with non-fatal error overlay, dismiss → browse,
+  `q` → 2) — with the complete composed diagnostic exactly
+  `record after summary` in the overlay and identically retained in
+  the collected stderr replay.
 
 `overlay_test.go` (Issue #9, external package `app_test`):
 

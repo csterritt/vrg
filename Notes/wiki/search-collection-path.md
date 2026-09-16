@@ -1,4 +1,4 @@
-# Search collection path (Issue #3, extended by Issues #4, #8, #9, #10, #11, #36, and #37)
+# Search collection path (Issue #3, extended by Issues #4, #8, #9, #10, #11, #36, #37, and #44)
 
 The ripgrep execution and result-collection pipeline delivered by
 [Issue #3](../issues/003-spawn-rg-collect-results-searching-screen.md),
@@ -25,7 +25,10 @@ added structured stream-integrity causes and universal overlay/replay
 diagnostic composition.
 [Issue #37](../issues/037-oversized-record-aggregate-anonymous-diagnostics.md)
 added the always-emitted oversized aggregate count and the
-anonymous-oversized-record guarantees. Relevant PRD sections:
+anonymous-oversized-record guarantees.
+[Issue #44](../issues/044-post-summary-context-integrity-failure.md)
+added dedicated `context`-after-`summary` regression coverage for the
+summary-is-final contract. Relevant PRD sections:
 *Implementation Decisions → Invocation and child arguments*,
 *Module Design → CLI / SearchIndex / App*, *Testing Decisions → CLI /
 SearchIndex / App / Subprocess boundary / Responsiveness boundaries*,
@@ -86,8 +89,12 @@ Recognized event types:
   integer means ripgrep detected binary content, and Issue #8 drops the
   file and all its previously collected matches.
 - `summary` — final stream record (currently carries no data we index).
-- `context` — recognized but ignored (Issue #3 does not display context
-  lines).
+- `context` — recognized but ignored before `summary` (Issue #3 does
+  not display context lines). After a valid `summary`, a `context`
+  record is a stream-integrity failure like any other post-`summary`
+  record (Issue #36 removed the exemption; Issue #44 added dedicated
+  coverage — see
+  [stream-integrity-diagnostics](stream-integrity-diagnostics.md)).
 
 Both `text` and `bytes` encodings are supported for paths and line
 content. Text and bytes representations of the same logical value produce

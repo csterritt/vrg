@@ -1595,3 +1595,38 @@ wrap and pan/clip count the fallback cell. Created
 `Notes/tasks/043-combining-cluster-fallback-cell.md`,
 `Notes/decisions/043-combining-cluster-fallback-cell.md`,
 `Notes/PRD-vrg.md` (Text, graphemes, and safe presentation).
+## [2026-09-15] ingest | Issue #44 post-`summary` `context` integrity failure
+
+Ingested the completed Issue #44 coverage and documentation. Issue #36
+had already removed the `context` exemption in `Builder.Add` and
+corrected the superseded `"context after summary has no lifecycle
+effect"` lifecycle-matrix row as part of its post-summary-precedence
+GREEN; Issue #44 began from that green boundary and added dedicated
+regression coverage only — no second parser change.
+`internal/searchindex/lifecycle_test.go` gained a neighbouring
+`context while open` row; `TestIntegrityCauseMatrix`
+(`internal/searchindex/integrity_test.go`) gained neighbouring
+pre-`summary` `context` rows (before `begin`, while open, after `end`
+before `summary`) asserting an empty cause list beside the dedicated
+`summary` → `context` row asserting exactly the single
+`record after summary` cause; `internal/app/outcome_test.go` gained
+`TestContextAfterSummaryOutcome`, asserting the `summary` → `context`
+stream takes the outcome matrix's fatal path (exit 2) in both the
+zero-results fatal-overlay and retained-results browse-overlay
+dispositions, with the complete composed `record after summary`
+diagnostic identical in the overlay and the collected stderr replay.
+The wiki now records the amended contract: Issue #9's former
+"`context` in any position" row covers only pre-`summary` positions,
+and *any* record after `summary` — including `context` — is a
+stream-integrity failure per the summary-is-final contract. Updated
+[stream-integrity-diagnostics](stream-integrity-diagnostics.md),
+[outcome-contract](outcome-contract.md),
+[search-collection-path](search-collection-path.md),
+[unit-tests](unit-tests.md), and [index](index.md). Sources:
+`internal/searchindex/lifecycle_test.go`,
+`internal/searchindex/integrity_test.go`,
+`internal/app/outcome_test.go`,
+`Notes/issues/044-post-summary-context-integrity-failure.md`,
+`Notes/tasks/044-post-summary-context-integrity-failure.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity;
+Outcome and exit-status contract).

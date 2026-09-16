@@ -93,6 +93,12 @@ func TestLifecycleMatrix(t *testing.T) {
 			wantStops:    1,
 		},
 		{
+			name:         "context while open has no lifecycle effect",
+			records:      []string{textBegin("a.go"), contextRecord(), textMatch("a.go", "x\n", 1, subSpec{"x", 0, 1}), contextRecord(), endRecord("a.go", nil), summaryRecord()},
+			wantComplete: true,
+			wantStops:    1,
+		},
+		{
 			// Issue #36 owns this corrected row: any record after a
 			// summary is an integrity failure, including context.
 			name:         "context after summary is integrity failure",

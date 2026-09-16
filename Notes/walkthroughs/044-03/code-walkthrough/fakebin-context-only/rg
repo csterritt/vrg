@@ -1,0 +1,10 @@
+#!/bin/bash
+# Fake rg that emits a valid summary and then a context record, with
+# no matches, then exits 0. The post-summary context record is a
+# stream-integrity failure with zero usable results, so the outcome
+# matrix's fatal path applies: a fatal error overlay naming
+# "record after summary" whose dismissal (q) exits 2. The same
+# diagnostic is replayed to stderr after terminal restoration.
+echo '{"type":"summary","data":{}}'
+printf '%s\n' '{"type":"context","data":{"path":{"text":"demo/test.txt"},"lines":{"text":"hello world\n"},"line_number":1}}'
+exit 0
