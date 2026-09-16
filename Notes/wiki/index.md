@@ -302,6 +302,15 @@ Catalog of all wiki pages for the vrg project.
   actually accepted; a dropped `r` preserves the in-flight load's
   original intent, revision, and presentation; navigation re-entry is
   deliberately ungated
+- [cluster-fallback-cell.md](cluster-fallback-cell.md) — Issue #43:
+  the recorded `U+25CC ◌`-before-marks fallback representation for
+  standalone zero-width combining clusters, materialized by
+  `filebuffer.standaloneClusterFallback` as a real width-1 cluster in
+  the display text and cluster table; one-cell normalization by
+  construction; `ByteOffsets` shifted past inserted bytes so
+  byte-to-cell mapping still resolves to original source bytes;
+  propagation through ByteCells, wrapping, clipping, panning, highlight
+  expansion, and the Issue #39 renderer
 
 ## Catalogs
 

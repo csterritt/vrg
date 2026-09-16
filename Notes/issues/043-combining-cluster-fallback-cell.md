@@ -19,6 +19,8 @@ Materialize a real fallback cell for zero-width standalone combining clusters (`
 
 The decision must state: (a) the exact display byte sequence; (b) its expected grapheme segmentation and cell width under the shared `rivo/uniseg` policy — it must segment as a single cluster occupying exactly one terminal cell, and the decision must define how an unexpected width result (0 or >1 from the width library, or an inconsistent terminal) is normalized to the required one cell; (c) that byte-to-cell mapping still resolves the fallback cell to the cluster's original source bytes.
 
+**Recorded decision (2026-09-15)**: Candidate A — display `U+25CC ◌` followed by the cluster's original combining-mark bytes. Full record in `Notes/decisions/043-combining-cluster-fallback-cell.md`: display bytes `E2 97 8C` + original mark bytes; expected segmentation one cluster of width 1, normalized by constructing the fallback unit as exactly one cell in the cluster table regardless of an unexpected width-library report; byte-to-cell mapping still resolves the fallback cell to the original source bytes.
+
 Once the representation is chosen:
 
 - Give a standalone combining cluster the chosen one-cell display representation rather than only a widened cell annotation.

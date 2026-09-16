@@ -901,6 +901,30 @@ table, parser config, and generated help cannot drift.
   mark bytes map to the cluster's cell range (not 1-cell-per-rune), so
   the Issue #19 reveal targets the cluster start.
 
+`cluster_fallback_test.go` (Issue #43, external package
+`filebuffer_test`) — the recorded `◌`-based one-cell fallback for
+standalone zero-width clusters:
+
+- `TestStandaloneClusterFallbackDisplayBytes` — a line starting with a
+  standalone combining mark displays the recorded fallback bytes `◌́x`;
+  the fallback unit is one width-1 cluster and re-segmentation under
+  the shared policy agrees.
+- `TestStandaloneClusterFallbackByteCells` — mark bytes resolve to the
+  fallback cell `[0, 1)` while `x` advances to `[1, 2)` (no shared
+  cell).
+- `TestStandaloneClusterFallbackContentWidth` — `ContentWidth` counts
+  the fallback cell.
+- `TestStandaloneClusterFallbackHighlight` /
+  `TestStandaloneClusterFallbackHighlightSpan` — a match on the mark
+  highlights exactly the fallback cell; a span covering mark plus `x`
+  covers both cells.
+- `TestMultipleStandaloneClustersFallback` — consecutive zero-width
+  clusters (ZWSP then combining mark) each receive their own one-cell
+  fallback with non-overlapping byte cells.
+- `TestStandaloneClusterFallbackIsNormalizedToOneCell` — no zero-width
+  cluster survives in the line's cluster table; the fallback unit is
+  constructed as exactly one cell.
+
 `structural_line_test.go` (Issue #22, external package
 `filebuffer_test`):
 
@@ -2084,6 +2108,22 @@ overlays:
 failure/buffer outcome *after* the per-path gate rather than at entry
 (Issue #41): a test can call `setFailing`/`setBuffer` while a load is
 held without racing the loader goroutine's start.
+
+`fallback_cell_test.go` (Issue #43, external package `app_test`) —
+composed `View()` assertions for the standalone-combining-cluster
+fallback cell through the production `filebuffer.Load` path (helper
+`loadBufWithStops`):
+
+- `TestRenderStandaloneClusterPaintsFallbackBytes` — a match covering
+  a line-start standalone mark styles exactly the recorded `◌́`
+  fallback bytes in one cell; the following `x` is emitted unstyled in
+  the next cell.
+- `TestStandaloneFallbackCountsForWrap` — wrapping counts the fallback
+  like any other cell: the first row holds `◌́` plus 65 x's at the
+  wrap-mode text width 66.
+- `TestStandaloneFallbackCountsForPanAndClip` — panning right one cell
+  hides the fallback cluster entirely, `x` clips into the first text
+  cell, and the match reports entirely hidden left (`1* `).
 
 ## internal/docs
 

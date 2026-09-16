@@ -113,10 +113,11 @@ that `EscapePath` output contains no combining marks.
   [bounded-browse-render](bounded-browse-render.md): the `fileGroup`
   metadata stores the escaped text and its cluster table, and
   `TruncateLeftCellsFrom` truncates against the current list width
-  without re-segmenting — and Issue #43 (a visible one-cell fallback
-  for standalone combining clusters, which propagates through
-  rendering, clipping, wrapping, highlights, and byte mapping via
-  this model).
+  without re-segmenting — and Issue #43 — now implemented in
+  [cluster-fallback-cell](cluster-fallback-cell.md): standalone
+  combining clusters carry real `◌`+marks display bytes in a width-1
+  cluster, which this renderer paints as one cell styled exactly by a
+  covering match.
 
 ## Tests
 

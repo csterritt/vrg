@@ -652,7 +652,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   (`expandedHighlights` uses the end byte's original cell end when it
   has no cluster); a standalone CR is escaped as `^M`; an empty file
   produces zero lines with a three-cell gutter; non-leading U+FEFF is
-  ordinary content. Issue #23 added zero-width match markers:
+  ordinary content. Issue #43 added the standalone-cluster fallback
+  cell: `standaloneClusterFallback(text, byteOffsets, clusters)` runs
+  between `GraphemeClusters` and the Issue #21 expansion and gives
+  every zero-width cluster the recorded `U+25CC ◌`-before-marks
+  display representation — rewriting the display text, shifting
+  `ByteOffsets` past the three inserted bytes, and recording the
+  `◌`+marks unit as a real width-1 cluster so `cellPos` advances by it
+  and no following cluster can overlap (byte-to-cell mapping still
+  resolves the fallback cell to the original source bytes).
+  Issue #23 added zero-width match markers:
   `markerCellsForStops(stops, byteCells, clusters)` returns the display
   cell positions of zero-width submatches (`Start == End`), mapping each
   through the expanded `ByteCells` (cluster-start mapping) and
@@ -690,8 +699,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md),
   [structural-line-handling](structural-line-handling.md),
   [zero-width-match-markers](zero-width-match-markers.md),
-  [stale-match-validation](stale-match-validation.md), and
-  [unsupported-encodings](unsupported-encodings.md).
+  [stale-match-validation](stale-match-validation.md),
+  [unsupported-encodings](unsupported-encodings.md), and
+  [cluster-fallback-cell](cluster-fallback-cell.md).
 
 ## internal/viewport
 

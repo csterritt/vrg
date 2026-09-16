@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
@@ -206,19 +207,27 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		d := safepresentation.EscapeContent(rawLine)
 		clusters := safepresentation.GraphemeClusters(d.Text)
 
+		// Issue #43: a standalone zero-width cluster gains the
+		// recorded one-cell fallback representation — U+25CC ◌
+		// inserted before the cluster's original bytes — so it
+		// occupies a real display cell the renderer can paint and
+		// cellPos advances by it. ByteOffsets shift past the inserted
+		// bytes so byte-to-cell mapping still resolves the fallback
+		// cell to the cluster's original source bytes.
+		display, byteOffsets, clusters := standaloneClusterFallback(d.Text, d.ByteOffsets, clusters)
+
 		// Issue #21: expand each submatch's byte range to the enclosing
 		// grapheme-cluster boundaries so highlights never split a
 		// cluster. ByteCells are remapped so every byte in a cluster
 		// (including combining marks) maps to the cluster's full cell
 		// range; this makes the Issue #19 reveal target the cluster
 		// start and keeps indicators consistent with the expanded span.
-		// A standalone cluster with width 0 (no base, no visible cell)
-		// receives a visible fallback cell so the highlight is never
-		// zero cells.
-		byteCells := expandedByteCells(d.ByteCells, d.ByteOffsets, clusters)
+		// A standalone cluster's Issue #43 fallback cell is a real
+		// width-1 cluster here, so the highlight is never zero cells.
+		byteCells := expandedByteCells(d.ByteCells, byteOffsets, clusters)
 		// Issue #29: compute highlights from validated stops only so
 		// dropped submatches produce no highlight.
-		highlights := expandedHighlights(d.ByteOffsets, d.ByteCells, clusters, validStopsByLine[lineNum])
+		highlights := expandedHighlights(byteOffsets, d.ByteCells, clusters, validStopsByLine[lineNum])
 
 		// Issue #23: zero-width submatches (Start == End) render as
 		// one inverse-video cell at their mapped display location.
@@ -235,18 +244,17 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		// and reveal like any other highlight. The terminator-only $
 		// marker is an ordinary marker with no special cases.
 		// Issue #29: markers come from validated stops only.
-		display := d.Text
 		markerCells := markerCellsForStops(validStopsByLine[lineNum], byteCells, clusters)
 		eolCell := clusterContentWidth(clusters)
 		eolMarkerAdded := false
 		for _, mc := range markerCells {
 			if mc == eolCell && !eolMarkerAdded {
-				display = display + " "
 				clusters = append(clusters, safepresentation.Cluster{
-					StartByte: len(d.Text),
-					EndByte:   len(d.Text) + 1,
+					StartByte: len(display),
+					EndByte:   len(display) + 1,
 					Width:     1,
 				})
+				display = display + " "
 				eolMarkerAdded = true
 			}
 			highlights = append(highlights, [2]int{mc, mc + 1})
@@ -365,14 +373,78 @@ func detectUnsupportedBOM(data []byte) string {
 	return ""
 }
 
+// standaloneClusterFallback gives every zero-width grapheme cluster a
+// real one-cell display representation (Issue #43, recorded decision
+// in Notes/decisions/043-combining-cluster-fallback-cell.md): U+25CC ◌
+// is inserted immediately before the cluster's original bytes so the
+// marks compose onto the conventional "no base" carrier. The fallback
+// unit (◌ + the cluster's original bytes) is recorded as one cluster
+// of width 1 — the recorded normalization pins the cell count
+// regardless of an unexpected width-library report — so cell positions
+// never overlap a following cluster and the renderer has a real cell
+// to paint. Only the display gains the ◌ bytes: byteOffsets shift past
+// them so byte-to-cell mapping still resolves the fallback cell to the
+// cluster's original source bytes.
+func standaloneClusterFallback(text string, byteOffsets []int, clusters []safepresentation.Cluster) (string, []int, []safepresentation.Cluster) {
+	const dottedCircle = "◌"
+	var insertPoints []int
+	for _, c := range clusters {
+		if c.Width == 0 {
+			insertPoints = append(insertPoints, c.StartByte)
+		}
+	}
+	if len(insertPoints) == 0 {
+		return text, byteOffsets, clusters
+	}
+	var b strings.Builder
+	b.Grow(len(text) + len(dottedCircle)*len(insertPoints))
+	remapped := make([]safepresentation.Cluster, 0, len(clusters))
+	inserted := 0
+	for _, c := range clusters {
+		shift := inserted * len(dottedCircle)
+		if c.Width == 0 {
+			b.WriteString(dottedCircle)
+			start := b.Len() - len(dottedCircle)
+			b.WriteString(text[c.StartByte:c.EndByte])
+			remapped = append(remapped, safepresentation.Cluster{
+				StartByte: start,
+				EndByte:   b.Len(),
+				Width:     1,
+			})
+			inserted++
+			continue
+		}
+		remapped = append(remapped, safepresentation.Cluster{
+			StartByte: c.StartByte + shift,
+			EndByte:   c.EndByte + shift,
+			Width:     c.Width,
+		})
+		b.WriteString(text[c.StartByte:c.EndByte])
+	}
+	// Shift each source byte's display offset past every inserted ◌:
+	// an offset at or after an insertion point moves right by the
+	// three-byte dotted circle. Insertion points are in cluster order
+	// and byteOffsets are non-decreasing, so a single forward pass
+	// suffices.
+	shifted := make([]int, len(byteOffsets))
+	ins := 0
+	for i, off := range byteOffsets {
+		for ins < len(insertPoints) && insertPoints[ins] <= off {
+			ins++
+		}
+		shifted[i] = off + ins*len(dottedCircle)
+	}
+	return b.String(), shifted, remapped
+}
+
 // expandedByteCells remaps the per-byte display cell ranges from
 // EscapeContent so every byte in a grapheme cluster (including combining
 // marks and ZWJ joiners) maps to the cluster's full cell range (Issue
 // #21). This makes the Issue #19 reveal target the cluster start for a
 // combining-only match and keeps ByteCells consistent with the expanded
-// highlight spans. A standalone cluster with width 0 (no base, no
-// visible cell) receives a visible fallback cell of width 1 so the
-// highlight is never zero cells.
+// highlight spans. A standalone cluster's Issue #43 fallback cell is a
+// real width-1 cluster by this point; a width-0 cluster seen here is
+// still annotated one cell so the highlight is never zero cells.
 //
 // byteOffsets[i] is the display byte offset where raw byte i starts;
 // it is matched to the grapheme cluster whose [StartByte, EndByte)
@@ -389,13 +461,14 @@ func expandedByteCells(rawCells [][2]int, byteOffsets []int, clusters []safepres
 	for ci, c := range clusters {
 		start := cellPos
 		width := c.Width
-		// Issue #21: a standalone cluster with width 0 receives a
-		// visible fallback cell so the highlight is never zero cells.
+		// A cluster with width 0 is annotated one cell so the
+		// highlight is never zero cells; Issue #43 materializes the
+		// fallback as a real width-1 cluster before this point.
 		if width == 0 {
 			width = 1
 		}
 		clusterCells[ci] = [2]int{start, start + width}
-		cellPos += c.Width
+		cellPos += width
 	}
 	// displayByteEnd[i] is the display byte offset where raw byte i's
 	// display text ends. For a multi-byte rune, all its bytes share the
@@ -485,8 +558,9 @@ func clusterContainingByte(byteOffsets []int, clusters []safepresentation.Cluste
 // boundaries (Issue #21). The span starts at the cell start of the
 // cluster containing the submatch's start byte, and ends at the cell
 // end of the cluster containing the submatch's last byte. A standalone
-// cluster with width 0 receives a visible fallback cell. The expanded
-// span is the sole source of highlight spans for Viewport and App.
+// cluster's Issue #43 fallback cell is a real width-1 cluster here.
+// The expanded span is the sole source of highlight spans for Viewport
+// and App.
 //
 // The original cell range from EscapeContent's ByteCells is the
 // starting point; expansion only grows the range outward to cluster
@@ -497,7 +571,10 @@ func expandedHighlights(byteOffsets []int, rawCells [][2]int, clusters []safepre
 	if len(stops) == 0 || len(clusters) == 0 {
 		return nil
 	}
-	// Compute each cluster's cell range.
+	// Compute each cluster's cell range. A width-0 cluster is
+	// annotated one cell so the highlight is never zero cells;
+	// Issue #43 materializes the fallback as a real width-1 cluster
+	// before this point.
 	clusterCells := make([][2]int, len(clusters))
 	cellPos := 0
 	for ci, c := range clusters {
@@ -507,7 +584,7 @@ func expandedHighlights(byteOffsets []int, rawCells [][2]int, clusters []safepre
 			width = 1
 		}
 		clusterCells[ci] = [2]int{start, start + width}
-		cellPos += c.Width
+		cellPos += width
 	}
 	displayByteEnd := computeDisplayByteEnd(byteOffsets)
 	clusterForByte := func(byteIdx int) int {

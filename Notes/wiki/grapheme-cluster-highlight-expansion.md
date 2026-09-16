@@ -3,11 +3,13 @@
 Issue #21: match highlights expand to grapheme-cluster boundaries so
 they never split a cluster, combining-only matches highlight the whole
 base cluster, standalone zero-width clusters receive a visible fallback
-cell, wide glyphs are never split, and wrap/clip blank filler cells are
+cell (materialized as a real `◌`-based display cell by Issue #43),
+wide glyphs are never split, and wrap/clip blank filler cells are
 never painted as match cells. The expanded spans are the single source
 for highlights, reveal, and indicator visibility.
 
-Cross-references: [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md)
+Cross-references: [cluster-fallback-cell](cluster-fallback-cell.md)
+(Issue #43 fallback representation), [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md)
 (Issue #16 shared grapheme policy), [browse-tracer](browse-tracer.md)
 (FileBuffer Load and rendering), [horizontal-reveal](horizontal-reveal.md)
 (Issue #19 reveal consumes ByteCells), [hidden-content-indicators](hidden-content-indicators.md)
@@ -85,11 +87,18 @@ the Issue #20 indicators see the whole cluster as the highlight.
 ## Standalone-cluster fallback cell
 
 A standalone cluster with width 0 (a combining mark with no base, no
-independent visible cell) receives a visible fallback cell of width 1
-so the highlight is never zero cells. `expandedByteCells` and
-`expandedHighlights` both compute cluster cell ranges with
-`width = max(c.Width, 1)`, so a zero-width cluster's cell range is
-`[cellStart, cellStart+1)` instead of `[cellStart, cellStart)`.
+independent visible cell) receives a visible fallback cell so the
+highlight is never zero cells. Since Issue #43 the fallback is a real
+display cell materialized upstream by `standaloneClusterFallback`:
+`U+25CC ◌` is inserted before the cluster's original bytes (the
+recorded representation — see
+[cluster-fallback-cell](cluster-fallback-cell.md)), the cluster table
+records the `◌`+marks unit as one width-1 cluster, and `cellPos`
+advances by it, so no following cluster can overlap the cell. As a
+defensive residue, `expandedByteCells` and `expandedHighlights` still
+compute cluster cell ranges with `width = max(c.Width, 1)` for a
+hypothetical zero-width cluster and now advance `cellPos` by that
+effective width.
 
 ## Wide glyphs never split
 

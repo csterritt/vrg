@@ -1555,3 +1555,43 @@ rapid-press single-in-flight rule, and ungated re-entry. Created
 `Notes/tasks/042-dropped-reload-no-intent-mutation.md`,
 `Notes/PRD-vrg.md` (File loading, cache, reload, and selection
 consistency; Navigation, viewport, and logical anchors).
+## [2026-09-15] ingest | Issue #43 standalone combining cluster fallback cell
+
+Ingested the completed Issue #43 implementation. The recorded decision
+(HITL gate, `Notes/decisions/043-combining-cluster-fallback-cell.md`)
+selects Candidate A: a standalone zero-width cluster displays `U+25CC ◌`
+followed by the cluster's original combining-mark bytes, expected to
+segment as one width-1 cluster under `rivo/uniseg`. Previously
+`expandedByteCells`/`expandedHighlights` only annotated a synthetic
+`[start, start+1)` range while `cellPos` still advanced by zero, so a
+following cluster overlapped the fallback and the Issue #39 renderer
+had no real cell to paint (the mark rendered unstyled, the next
+character took the highlight). `filebuffer.Load` now runs
+`standaloneClusterFallback` between `GraphemeClusters` and the Issue
+#21 expansion: it inserts ◌ before every zero-width cluster's bytes,
+records the `◌`+marks unit as one width-1 cluster (one-cell
+normalization by construction, immune to an unexpected width-library
+report), and shifts `ByteOffsets` past the inserted bytes so
+byte-to-cell mapping still resolves the fallback cell to the original
+source bytes. The fallback propagates through `expandedByteCells`,
+`expandedHighlights`, `ContentWidth`, wrapping, clipping, panning,
+indicators, and `renderLineWithHighlights` like any other cell;
+`cellPos` in both expansion functions now advances by the effective
+width as a defensive residue. New
+`internal/filebuffer/cluster_fallback_test.go` asserts the recorded
+display bytes, ByteCells, content width, exact highlight spans,
+multiple-fallback non-overlap, and one-cell normalization; new
+`internal/app/fallback_cell_test.go` asserts the composed view paints
+exactly `◌́` styled for one cell with `x` unstyled after it, and that
+wrap and pan/clip count the fallback cell. Created
+[cluster-fallback-cell](cluster-fallback-cell.md); updated
+[grapheme-cluster-highlight-expansion](grapheme-cluster-highlight-expansion.md),
+[shared-cell-model-render](shared-cell-model-render.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+[index](index.md). Sources: `internal/filebuffer/filebuffer.go`,
+`internal/filebuffer/cluster_fallback_test.go`,
+`internal/app/fallback_cell_test.go`,
+`Notes/issues/043-combining-cluster-fallback-cell.md`,
+`Notes/tasks/043-combining-cluster-fallback-cell.md`,
+`Notes/decisions/043-combining-cluster-fallback-cell.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation).
