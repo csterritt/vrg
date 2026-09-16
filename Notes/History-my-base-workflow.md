@@ -537,3 +537,12 @@ Usage
  Input tokens: 150969 tokens
  Output tokens: 45369 tokens
  Cached input tokens: 7573376 tokens
+
+----
+Task 045-remove-test-hooks-from-production-binary.md
+
+Usage
+ Agent messages: 62 messages
+ Input tokens: 136449 tokens
+ Output tokens: 41319 tokens
+ Cached input tokens: 6447232 tokens
