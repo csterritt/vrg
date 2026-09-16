@@ -722,6 +722,17 @@ type Model struct {
 	listOffset       int
 	longestPathWidth int
 	statusNote       func() string
+	// fileGroups is the immutable per-file grouping of the index's
+	// stops with each file's width-independent display metadata
+	// attached (Issue #40). It is prepared once in the
+	// SearchCompleteMsg handler and shared by navigation and
+	// rendering: the render path reads only the visible window and
+	// navigation indexes into it without regrouping or reallocating.
+	fileGroups []fileGroup
+	// fileIndexByPath maps each file's raw path to its index in
+	// fileGroups so the current-file lookup is a map access, not a
+	// group scan (Issue #40).
+	fileIndexByPath map[string]int
 
 	// tooSmall is true when the terminal is below the 20x3 minimum
 	// (Issue #33). Set by the WindowSizeMsg handler from the current
@@ -1270,11 +1281,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lines = msg.Lines
 			m.index = msg.Index
 			m.excludedFiles = msg.Index.ExcludedFiles()
-			// Issue #24: compute the longest sanitized path width
-			// once when the search completes. This is term 1 of the
-			// file-list width formula and does not change until a new
+			// Issue #40: prepare the immutable per-file groups,
+			// the raw-path → group index map, and each file's
+			// width-independent display metadata once, when the
+			// index is finalized. longestPathWidth (term 1 of the
+			// file-list width formula, Issue #24) falls out of the
+			// same one-time pass and does not change until a new
 			// search.
-			m.longestPathWidth = computeLongestPathWidth(msg.Index)
+			m.fileGroups, m.fileIndexByPath, m.longestPathWidth = prepareFileGroups(msg.Index)
 			m.overlay = oc.Overlay
 			m.overlayOpen = oc.Overlay != OverlayNone
 			m.overlayText = sanitizeDiagnostic(oc.OverlayText)
@@ -1856,16 +1870,11 @@ func (m *Model) updateListOffset(currentFileIdx, visibleRows int) {
 
 // currentFileIndex returns the 0-based file-group index for the given
 // raw path (Issue #24). Used to compute the active entry for list
-// auto-scroll.
+// auto-scroll. Issue #40: the lookup indexes into the precomputed
+// fileIndexByPath map — it never regroups or rescans the index.
 func (m Model) currentFileIndex(path []byte) int {
-	if m.index == nil {
-		return 0
-	}
-	groups := groupByFile(m.index.Stops())
-	for i, g := range groups {
-		if bytes.Equal(g.path, path) {
-			return i
-		}
+	if i, ok := m.fileIndexByPath[string(path)]; ok {
+		return i
 	}
 	return 0
 }
@@ -2936,12 +2945,13 @@ func (m Model) loadFileFor(path []byte, requestID uint64) tea.Cmd {
 		if m.index == nil {
 			return FileLoadCompleteMsg{RequestID: requestID}
 		}
-		stops := m.index.Stops()
+		// Issue #40: the file's stops come from the precomputed
+		// group — a raw-path map lookup plus a slice read — rather
+		// than copying and scanning the whole index. The group's
+		// stop slice is immutable, so it is shared without copying.
 		var fileStops []searchindex.Stop
-		for _, s := range stops {
-			if bytes.Equal(s.RawPath, path) {
-				fileStops = append(fileStops, s)
-			}
+		if gi, ok := m.fileIndexByPath[string(path)]; ok {
+			fileStops = m.fileGroups[gi].stops
 		}
 
 		if m.fileGate != nil {
@@ -2964,16 +2974,38 @@ func (m Model) loadFileFor(path []byte, requestID uint64) tea.Cmd {
 	}
 }
 
-// fileGroup is a set of stops for one file, identified by raw path.
+// fileGroup is a set of stops for one file, identified by raw path,
+// with the file's width-independent display metadata attached (Issue
+// #40): escaped is the safepresentation.EscapePath text, clusters are
+// its grapheme-cluster boundaries under the shared grapheme/cell
+// policy (Issue #39), and width is its full cell width. Groups are
+// built once when the search completes and are immutable afterwards;
+// navigation and rendering share them without regrouping or
+// reallocating.
 type fileGroup struct {
-	path  []byte
-	stops []searchindex.Stop
+	path     []byte
+	stops    []searchindex.Stop
+	escaped  string
+	clusters []safepresentation.Cluster
+	width    int
 }
 
-// groupByFile groups stops by raw path. The index returns stops
-// ordered by unsigned raw path bytes then line number, so stops for
-// the same file are contiguous.
-func groupByFile(stops []searchindex.Stop) []fileGroup {
+// prepareFileGroups groups the index's stops by raw path and attaches
+// the width-independent display metadata (Issue #40). The index
+// returns stops ordered by unsigned raw path bytes then line number,
+// so stops for the same file are contiguous. It also returns the raw
+// path → group index map (for O(1) current-file lookup) and the
+// longest escaped path's cell width (term 1 of the file-list width
+// formula, Issue #24). The truncated per-entry strings are not
+// precomputed: the allotted list width changes on resize, gutter
+// growth, wrap-mode indicator changes, and list hide/show, so
+// truncation runs per visible row inside View() against the current
+// width using the stored cluster table.
+func prepareFileGroups(idx *searchindex.Index) ([]fileGroup, map[string]int, int) {
+	if idx == nil {
+		return nil, nil, 0
+	}
+	stops := idx.Stops()
 	var groups []fileGroup
 	for _, s := range stops {
 		if len(groups) == 0 || !bytes.Equal(groups[len(groups)-1].path, s.RawPath) {
@@ -2982,7 +3014,45 @@ func groupByFile(stops []searchindex.Stop) []fileGroup {
 			groups[len(groups)-1].stops = append(groups[len(groups)-1].stops, s)
 		}
 	}
-	return groups
+	byPath := make(map[string]int, len(groups))
+	longest := 0
+	for i := range groups {
+		g := &groups[i]
+		// Escaped path text contains no ANSI sequences, so the plain
+		// grapheme segmentation applies; its widths are the same
+		// shared policy as safepresentation.CellWidth.
+		g.escaped = safepresentation.EscapePath(g.path).Text
+		g.clusters = safepresentation.GraphemeClusters(g.escaped)
+		for _, c := range g.clusters {
+			g.width += c.Width
+		}
+		byPath[string(g.path)] = i
+		if g.width > longest {
+			longest = g.width
+		}
+	}
+	return groups, byPath, longest
+}
+
+// truncateFileEntry left-truncates the group's precomputed escaped
+// path to fit width cells with a leading … at a grapheme boundary,
+// using the stored cluster table and full width (Issue #40). It is the
+// precomputed-metadata form of TruncateLeftGrapheme: same result, but
+// no per-frame escaping or re-segmentation.
+func truncateFileEntry(g fileGroup, width int) string {
+	if width <= 0 || g.escaped == "" {
+		return ""
+	}
+	if g.width <= width {
+		return g.escaped
+	}
+	// Reserve one cell for the leading …, so the trailing portion
+	// must fit in width-1 cells.
+	kept := safepresentation.TruncateLeftCellsFrom(g.escaped, g.clusters, width-1)
+	if kept == "" {
+		return "…"
+	}
+	return "…" + kept
 }
 
 // renderBrowse renders the two-pane browse view: file list on the left,
@@ -2992,24 +3062,26 @@ func groupByFile(stops []searchindex.Stop) []fileGroup {
 // file and current matched line derive from the cursor; the file list
 // underline follows the cursor's current file.
 func (m Model) renderBrowse() string {
-	if m.index == nil || m.index.Files() == 0 {
+	// Issue #40: the file count comes from the precomputed groups;
+	// index.Files() would rebuild a distinct-path set over every
+	// stop on each frame.
+	if m.index == nil || len(m.fileGroups) == 0 {
 		return m.theme.Base("No results")
 	}
 
-	groups := groupByFile(m.index.Stops())
+	// Issue #40: groups were prepared once when the search
+	// completed; the render path reads only the visible window
+	// below and never regroups or rescans the index.
+	groups := m.fileGroups
 
 	// Issue #13: the current file derives from the cursor. Find the
-	// file group index for the cursor's current stop's raw path.
+	// file group index for the cursor's current stop's raw path via
+	// the precomputed path map (Issue #40).
 	currentFileIdx := 0
 	currentLine := 0
 	if m.cursor != nil {
 		if stop, ok := m.cursor.Stop(); ok {
-			for i, g := range groups {
-				if bytes.Equal(g.path, stop.RawPath) {
-					currentFileIdx = i
-					break
-				}
-			}
+			currentFileIdx = m.currentFileIndex(stop.RawPath)
 			currentLine = stop.LineNumber
 		}
 	}
@@ -3052,9 +3124,12 @@ func (m Model) renderBrowse() string {
 				end = len(groups)
 			}
 			for i := listOffset; i < end; i++ {
+				// Issue #40: escaped path text, cluster
+				// boundaries, and full width were stored at
+				// search completion; only the current-width
+				// truncation runs per visible row here.
 				g := groups[i]
-				escaped := safepresentation.EscapePath(g.path)
-				entry := TruncateLeftGrapheme(escaped.Text, listWidth)
+				entry := truncateFileEntry(g, listWidth)
 				if i == currentFileIdx {
 					entry = m.theme.Underline(entry)
 				}
@@ -3063,10 +3138,10 @@ func (m Model) renderBrowse() string {
 		}
 	}
 
-	// Content panel (right pane).
+	// Content panel (right pane). Issue #40: the escaped path text
+	// is precomputed on the group.
 	current := groups[currentFileIdx]
-	escapedName := safepresentation.EscapePath(current.path)
-	panel := m.renderContentPanel(escapedName.Text, currentLine)
+	panel := m.renderContentPanel(current.escaped, currentLine)
 
 	// Join horizontally: pad each file-list line to listWidth, then
 	// append the corresponding content-panel line. Each composed line
@@ -3532,25 +3607,6 @@ func GraphemeClustersForTest(s string) []filebuffer.Cluster {
 // the shared safe-presentation policy (Issue #24).
 func filebufferClusterSegments(s string) []filebuffer.Cluster {
 	return safepresentation.GraphemeClusters(s)
-}
-
-// computeLongestPathWidth returns the display cell width of the
-// longest sanitized path in the index (Issue #24). This is term 1 of
-// the file-list width formula. Paths are escaped through
-// safepresentation.EscapePath and measured with the shared grapheme
-// cell-width policy.
-func computeLongestPathWidth(idx *searchindex.Index) int {
-	if idx == nil {
-		return 0
-	}
-	longest := 0
-	for _, stop := range idx.Stops() {
-		escaped := safepresentation.EscapePath(stop.RawPath)
-		if w := safepresentation.CellWidth(escaped.Text); w > longest {
-			longest = w
-		}
-	}
-	return longest
 }
 
 // collectResults drains both pipes concurrently, parses stdout JSON

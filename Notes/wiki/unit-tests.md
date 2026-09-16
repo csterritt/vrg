@@ -852,6 +852,22 @@ table, parser config, and generated help cannot drift.
   preparation request.
 - `TestRenderCostGuardFileList` — the file-list render path queries
   only the visible range (counting fake provider).
+- Issue #40 combined `Update()`+`View()` cost guards over a synthetic
+  3,000-file / 45,000-stop index: `measureUpdateViewAllocs` snapshots
+  `runtime.MemStats` across one transition plus the resulting `View()`
+  without resetting between them (≤ 512 KiB / ≤ 4096 mallocs), so
+  whole-index work fails whether it lives in `View()` or in
+  navigation handling; the `countingFileList` provider asserts only
+  the visible `[listOffset, listOffset+height)` window is queried.
+  `TestRenderCostGuardNavigateViewBounded` — `n` navigation stays
+  within the bound. `TestRenderCostGuardNavigatePrevBounded` — `p`
+  navigation stays within the bound.
+  `TestRenderCostGuardResizeRetruncates` — a resize re-truncates the
+  visible wide-grapheme path against the new width (grapheme-safe, no
+  split `中`) within the bound.
+  `TestRenderCostGuardGutterGrowthRetruncates` — navigation into a
+  file with a wider line-number gutter shrinks the list width and
+  re-truncates the visible paths within the bound.
 
 `grapheme_test.go` (Issue #16, external package `filebuffer_test`):
 

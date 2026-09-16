@@ -1441,3 +1441,43 @@ scan failing on `utf8.DecodeRuneInString` outside
 `Notes/tasks/039-render-from-shared-grapheme-cell-model.md`,
 `Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; Layout
 and indicators).
+
+## [2026-09-15] ingest | Issue #40 bounded browse rendering from prepared file groups
+
+Ingested the completed Issue #40 implementation and tests.
+`internal/app/app.go` moved all whole-index work off the frame path:
+`prepareFileGroups(idx)` runs once in the `SearchCompleteMsg` handler
+and produces `m.fileGroups` (immutable per-file stop groupings, each
+carrying the `safepresentation.EscapePath` text, its
+`GraphemeClusters` table, and its full cell width),
+`m.fileIndexByPath` (raw path → group index), and `longestPathWidth`
+(absorbing `computeLongestPathWidth`). `renderBrowse` now reads
+`m.fileGroups`, iterates only the visible `[listOffset,
+listOffset+visibleRows)` window, truncates each visible entry via the
+new `truncateFileEntry` → `safepresentation.TruncateLeftCellsFrom`
+(the cluster-table variant added to
+`internal/safepresentation/cellwidth.go`), finds the current file via
+the `currentFileIndex` map lookup, and tests emptiness with
+`len(m.fileGroups)` instead of the per-frame `index.Files()`
+distinct-path scan; `loadFileFor` takes its per-file stop range from
+the group map instead of copying and scanning `index.Stops()`.
+Per-keystroke `Update()`+`View()` allocation fell from ~42 MB to
+under 512 KiB over a 45,000-stop index. `internal/app/layout_test.go`
+gained the combined Update+View cost guard
+(`measureUpdateViewAllocs`, spanning both halves without a counter
+reset, so whole-index work fails even when moved into navigation
+handling) with `TestRenderCostGuardNavigateViewBounded`,
+`TestRenderCostGuardNavigatePrevBounded`,
+`TestRenderCostGuardResizeRetruncates`, and
+`TestRenderCostGuardGutterGrowthRetruncates`. Created
+[bounded-browse-render](bounded-browse-render.md); updated
+[shared-cell-model-render](shared-cell-model-render.md),
+[file-list-layout](file-list-layout.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+[index](index.md). Sources: `internal/app/app.go`,
+`internal/app/layout_test.go`,
+`internal/safepresentation/cellwidth.go`,
+`Notes/issues/040-browse-render-no-whole-index-scan.md`,
+`Notes/tasks/040-browse-render-no-whole-index-scan.md`,
+`Notes/PRD-vrg.md` (Resources and responsiveness; File list and
+layout).

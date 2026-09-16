@@ -86,10 +86,19 @@ func CellWidth(s string) int {
 // units directly adjacent to kept text are preserved so styling
 // applied to the kept portion survives (Issue #39).
 func TruncateLeftCells(s string, keep int) string {
+	return TruncateLeftCellsFrom(s, GraphemeClustersANSI(s), keep)
+}
+
+// TruncateLeftCellsFrom is like TruncateLeftCells but consumes a
+// cluster table already computed for s (from GraphemeClusters or
+// GraphemeClustersANSI), so callers that hold the width-independent
+// geometry do not re-segment on every truncation (Issue #40). The
+// cluster table must describe s exactly; the cell policy is the same
+// shared policy as TruncateLeftCells.
+func TruncateLeftCellsFrom(s string, clusters []Cluster, keep int) string {
 	if keep <= 0 {
 		return ""
 	}
-	clusters := GraphemeClustersANSI(s)
 	total := 0
 	for _, c := range clusters {
 		total += c.Width

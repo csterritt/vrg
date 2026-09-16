@@ -44,6 +44,11 @@ policy for the final render path:
   out whole); zero-width units — ANSI sequences and zero-width
   clusters — do not consume the budget and are preserved when adjacent
   to kept text.
+- `TruncateLeftCellsFrom(s, clusters, keep) string` — Issue #40: the
+  same cell policy consuming a precomputed cluster table, so callers
+  holding width-independent geometry (the prepared `fileGroup`
+  metadata) truncate without re-segmenting; `TruncateLeftCells` is
+  now a thin wrapper over it.
 
 The file is the sole production-file allow-list location for
 `utf8.DecodeRuneInString`: a static guard test
@@ -104,10 +109,14 @@ that `EscapePath` output contains no combining marks.
 - Issue #38's panel/text-width behavior is preserved: the widths are
   the same, only the measurement is now cell-accurate.
 - The helper and the width-independent escaped-path/cluster geometry
-  are the handoff for Issue #40 (moving grouping work out of `View()`)
-  and Issue #43 (a visible one-cell fallback for standalone combining
-  clusters, which propagates through rendering, clipping, wrapping,
-  highlights, and byte mapping via this model).
+  are the handoff for Issue #40 — now implemented in
+  [bounded-browse-render](bounded-browse-render.md): the `fileGroup`
+  metadata stores the escaped text and its cluster table, and
+  `TruncateLeftCellsFrom` truncates against the current list width
+  without re-segmenting — and Issue #43 (a visible one-cell fallback
+  for standalone combining clusters, which propagates through
+  rendering, clipping, wrapping, highlights, and byte mapping via
+  this model).
 
 ## Tests
 

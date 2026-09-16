@@ -1,6 +1,8 @@
 package app_test
 
 import (
+	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -527,6 +529,308 @@ func TestRenderCostGuardFileList(t *testing.T) {
 	// queried, not all 50.
 	if len(counter.queries) > 24 {
 		t.Fatalf("file-list queries = %d, want <= 24 (visible range only)", len(counter.queries))
+	}
+}
+
+// --- Issue #40: bounded render cost across Update + View ---
+
+// renderCostBounds cap the heap work allowed for one combined
+// navigation Update() plus the resulting View() (Issue #40). The
+// bound is independent of index size: at the documented ~100,000
+// matched-line scale a whole-index stop copy, a regroup, or a
+// whole-group reallocation allocates megabytes and tens of thousands
+// of objects, while the bounded render path allocates in proportion
+// to the visible window only.
+const (
+	renderCostBoundBytes   = 512 * 1024
+	renderCostBoundMallocs = 4096
+)
+
+// costGuardFiles and costGuardStopsPerFile size the large guard index:
+// 3,000 files × 15 stops = 45,000 stops, so a single Stops() copy or
+// regroup allocates several megabytes — far beyond the bound above.
+const (
+	costGuardFiles        = 3000
+	costGuardStopsPerFile = 15
+)
+
+// measureUpdateViewAllocs runs f once and returns the heap allocation
+// count and byte total observed across it. The Issue #40 guard wraps
+// a navigation Update() and the resulting View() in a single measured
+// region — the counter is never reset between the halves — so moving
+// whole-index work from View() into Update() also fails.
+func measureUpdateViewAllocs(f func()) (mallocs uint64, bytes uint64) {
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	f()
+	runtime.ReadMemStats(&after)
+	return after.Mallocs - before.Mallocs, after.TotalAlloc - before.TotalAlloc
+}
+
+// largeBrowseIndex builds an index with costGuardFiles files ×
+// costGuardStopsPerFile matched lines and returns it with the file
+// paths in index order (the same order a FileListProvider serves).
+// Default paths are "src/fileNNNNN.go"; overrides replaces the name at
+// the given file index and must preserve unsigned-byte sort order.
+func largeBrowseIndex(t *testing.T, overrides map[int]string) (*searchindex.Index, [][]byte) {
+	t.Helper()
+	records := make([]string, 0, costGuardFiles*costGuardStopsPerFile)
+	paths := make([][]byte, costGuardFiles)
+	for i := 0; i < costGuardFiles; i++ {
+		path := overrides[i]
+		if path == "" {
+			path = fmt.Sprintf("src/file%05d.go", i)
+		}
+		paths[i] = []byte(path)
+		for j := 1; j <= costGuardStopsPerFile; j++ {
+			records = append(records, textMatch(path, "hello\n", j, subSpec{"hello", 0, 5}))
+		}
+	}
+	return buildIndex(t, "/work", records...), paths
+}
+
+// setupBrowseCostGuard builds a browse model over the large index with
+// the counting file-list provider installed and the startup file's
+// load and layout delivered, so tests can measure one navigation
+// Update() plus the resulting View().
+func setupBrowseCostGuard(t *testing.T, idx *searchindex.Index, paths [][]byte, loader app.FileLoader, width, height int) (app.Model, *countingFileList) {
+	t.Helper()
+	counter := &countingFileList{paths: paths}
+	gate := make(chan struct{})
+	close(gate)
+	m := app.New([]string{"--json", "--", "foo", "."}, "/work",
+		app.WithFileLoadGate(gate),
+		app.WithFileLoader(loader),
+		app.WithFileListProvider(counter),
+		// Instant pop-up timer: cross-file navigation commands return
+		// their expiry message immediately instead of blocking for the
+		// one-second pop-up duration.
+		app.WithPopupDuration(0),
+	)
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: width, Height: height})
+	m, cmd := update(t, m, app.SearchCompleteMsg{Files: idx.Files(), Lines: idx.Len(), Index: idx})
+	if m.State() != app.StateBrowse {
+		t.Fatalf("State = %v, want StateBrowse", m.State())
+	}
+	return deliverLoad(t, m, cmd), counter
+}
+
+// assertBoundedTransitionCost requires the measured transition to stay
+// within the visible-window cost bounds (Issue #40).
+func assertBoundedTransitionCost(t *testing.T, mallocs, bytes uint64) {
+	t.Helper()
+	if bytes > renderCostBoundBytes {
+		t.Fatalf("Update+View allocated %d bytes, want <= %d (bounded by the visible window, not index size)", bytes, renderCostBoundBytes)
+	}
+	if mallocs > renderCostBoundMallocs {
+		t.Fatalf("Update+View performed %d heap allocations, want <= %d (bounded by the visible window, not index size)", mallocs, renderCostBoundMallocs)
+	}
+}
+
+// assertVisibleWindowQueries requires every file-list provider query to
+// land inside the visible window [offset, offset+rows) and the query
+// count to stay within the window size (Issue #40: only the visible
+// file range is materialized).
+func assertVisibleWindowQueries(t *testing.T, c *countingFileList, offset, rows int) {
+	t.Helper()
+	if len(c.queries) > rows {
+		t.Fatalf("file-list queries = %d, want <= %d (visible window only)", len(c.queries), rows)
+	}
+	for _, q := range c.queries {
+		if q < offset || q >= offset+rows {
+			t.Fatalf("file-list query %d outside visible window [%d, %d)", q, offset, offset+rows)
+		}
+	}
+}
+
+// TestRenderCostGuardNavigateViewBounded verifies that a file
+// navigation Update() plus the resulting View() performs no
+// whole-index work (Issue #40): no Stops() enumeration or copy, no
+// regrouping, and no whole-group reallocation on either half of the
+// transition. Only the visible file range may be materialized.
+func TestRenderCostGuardNavigateViewBounded(t *testing.T) {
+	idx, paths := largeBrowseIndex(t, nil)
+	buf := makeBuf([]filebuffer.Line{ml(1, "hello")}, 1, 3)
+	loader := func(path []byte, stops []searchindex.Stop) (*filebuffer.Buffer, error) {
+		return buf, nil
+	}
+	m, counter := setupBrowseCostGuard(t, idx, paths, loader, 80, 24)
+
+	// Cache the next file so the measured navigation exercises the
+	// full render path (cached destination installs a viewport).
+	// file00001 starts at stop 15 (15 stops per file).
+	for i := 0; i < costGuardStopsPerFile; i++ {
+		var cmd tea.Cmd
+		m, cmd = update(t, m, keyPress('n'))
+		m = deliverLoad(t, m, cmd)
+	}
+	if got := m.CursorPosition(); got != costGuardStopsPerFile {
+		t.Fatalf("CursorPosition = %d, want %d (first stop of file00001)", got, costGuardStopsPerFile)
+	}
+	// Return to the previous file so the measured 'n' is a cached
+	// cross-file navigation.
+	m, cmd := update(t, m, keyPress('p'))
+	m = deliverLoad(t, m, cmd)
+
+	// The bound spans the combined model transition — the navigation
+	// Update() and the resulting View() — with no reset between the
+	// halves.
+	counter.queries = nil
+	var rendered app.Model
+	mallocs, b := measureUpdateViewAllocs(func() {
+		rendered, _ = update(t, m, keyPress('n'))
+		_ = viewContent(rendered)
+	})
+	assertBoundedTransitionCost(t, mallocs, b)
+	assertVisibleWindowQueries(t, counter, rendered.ListOffset(), 24)
+}
+
+// TestRenderCostGuardNavigatePrevBounded verifies the same combined
+// Update()+View() bound for the 'p' navigation direction (Issue #40).
+func TestRenderCostGuardNavigatePrevBounded(t *testing.T) {
+	idx, paths := largeBrowseIndex(t, nil)
+	buf := makeBuf([]filebuffer.Line{ml(1, "hello")}, 1, 3)
+	loader := func(path []byte, stops []searchindex.Stop) (*filebuffer.Buffer, error) {
+		return buf, nil
+	}
+	m, counter := setupBrowseCostGuard(t, idx, paths, loader, 80, 24)
+
+	// Move to a mid-index file and cache it so 'p' is a cached
+	// cross-file navigation.
+	for i := 0; i < 2*costGuardStopsPerFile; i++ {
+		var cmd tea.Cmd
+		m, cmd = update(t, m, keyPress('n'))
+		m = deliverLoad(t, m, cmd)
+	}
+
+	counter.queries = nil
+	var rendered app.Model
+	mallocs, b := measureUpdateViewAllocs(func() {
+		rendered, _ = update(t, m, keyPress('p'))
+		_ = viewContent(rendered)
+	})
+	assertBoundedTransitionCost(t, mallocs, b)
+	assertVisibleWindowQueries(t, counter, rendered.ListOffset(), 24)
+}
+
+// TestRenderCostGuardResizeRetruncates verifies that a terminal resize
+// that changes the allotted list width re-truncates the visible paths
+// against the new width at grapheme boundaries, inside the same
+// visible-window cost bound and with no whole-list scan (Issue #40).
+func TestRenderCostGuardResizeRetruncates(t *testing.T) {
+	// The wide path at file index 1 is engineered so the post-resize
+	// truncation cut lands inside the two-cell 中 cluster: at 80
+	// columns the keep budget (31 cells) starts before it; at 60
+	// columns the keep budget (23 cells) starts inside it, so the
+	// cluster must be dropped whole, never split.
+	widePath := "src/file00001-" + strings.Repeat("d", 30) + "中" + strings.Repeat("t", 22)
+	idx, paths := largeBrowseIndex(t, map[int]string{1: widePath})
+	buf := makeBuf([]filebuffer.Line{ml(1, "hello")}, 1, 3)
+	loader := func(path []byte, stops []searchindex.Stop) (*filebuffer.Buffer, error) {
+		return buf, nil
+	}
+	m, counter := setupBrowseCostGuard(t, idx, paths, loader, 80, 24)
+
+	// Precondition: at 80 columns the list width is 32 (40% cap) and
+	// the entry keeps the whole 中 cluster.
+	if got := m.ListWidth(); got != 32 {
+		t.Fatalf("ListWidth at 80 columns = %d, want 32 (40%% cap)", got)
+	}
+	wantWide := app.TruncateLeftGrapheme(widePath, m.ListWidth())
+	if !strings.Contains(wantWide, "中") {
+		t.Fatalf("precondition: 80-column entry %q lost the 中 cluster", wantWide)
+	}
+	if view := viewContent(m); !strings.Contains(view, wantWide) {
+		t.Fatalf("80-column View does not contain entry %q:\n%s", wantWide, view)
+	}
+
+	// Resize to 60 columns: the 40% cap shrinks the list to 24 cells.
+	// The measured region covers the resize Update() and the
+	// resulting View() together.
+	counter.queries = nil
+	var rendered app.Model
+	mallocs, b := measureUpdateViewAllocs(func() {
+		rendered, _ = update(t, m, tea.WindowSizeMsg{Width: 60, Height: 24})
+		_ = viewContent(rendered)
+	})
+	assertBoundedTransitionCost(t, mallocs, b)
+	assertVisibleWindowQueries(t, counter, rendered.ListOffset(), 24)
+
+	if got := rendered.ListWidth(); got != 24 {
+		t.Fatalf("ListWidth at 60 columns = %d, want 24 (40%% cap)", got)
+	}
+	view := viewContent(rendered)
+	want := "…" + strings.Repeat("t", 22)
+	if !strings.Contains(view, want) {
+		t.Fatalf("60-column View does not contain re-truncated entry %q:\n%s", want, view)
+	}
+	// The two-cell cluster straddling the cut is dropped whole: no
+	// 中 survives in the 60-column render.
+	if strings.Contains(view, "中") {
+		t.Fatalf("60-column View contains 中 (cluster split by the cut):\n%s", view)
+	}
+}
+
+// TestRenderCostGuardGutterGrowthRetruncates verifies that navigating
+// to a file whose buffer has a wider gutter shrinks the list width
+// and re-truncates the visible paths against it, still inside the
+// visible-window cost bound (Issue #40).
+func TestRenderCostGuardGutterGrowthRetruncates(t *testing.T) {
+	// The wide path sits at file index 2 (never the current file in
+	// this test, so its entry is not underlined). File index 1 loads
+	// a large-gutter buffer.
+	widePath := "src/file00002-" + strings.Repeat("d", 30) + "中" + strings.Repeat("t", 22)
+	idx, paths := largeBrowseIndex(t, map[int]string{2: widePath})
+	bufA := makeBuf([]filebuffer.Line{ml(1, "hello")}, 1, 3)
+	bufB := makeBuf([]filebuffer.Line{ml(1, "hello")}, 1, 30)
+	loader := func(path []byte, stops []searchindex.Stop) (*filebuffer.Buffer, error) {
+		if string(path) == string(paths[1]) {
+			return bufB, nil
+		}
+		return bufA, nil
+	}
+	m, _ := setupBrowseCostGuard(t, idx, paths, loader, 60, 24)
+
+	// At 60 columns with gutter 3 the list width is 24.
+	if got := m.ListWidth(); got != 24 {
+		t.Fatalf("ListWidth with gutter 3 = %d, want 24", got)
+	}
+	wantBefore := app.TruncateLeftGrapheme(widePath, m.ListWidth())
+	if view := viewContent(m); !strings.Contains(view, wantBefore) {
+		t.Fatalf("View before gutter growth does not contain entry %q:\n%s", wantBefore, view)
+	}
+
+	// Navigate to file00001 (large gutter) and back so it is cached.
+	for i := 0; i < costGuardStopsPerFile; i++ {
+		var cmd tea.Cmd
+		m, cmd = update(t, m, keyPress('n'))
+		m = deliverLoad(t, m, cmd)
+	}
+	m, cmd := update(t, m, keyPress('p'))
+	m = deliverLoad(t, m, cmd)
+
+	// Measured: cross-file navigation to the cached large-gutter
+	// file plus the resulting View(). The gutter growth shrinks the
+	// list width from 24 to 20 (60 - (30 + 10 + 0)).
+	var rendered app.Model
+	mallocs, b := measureUpdateViewAllocs(func() {
+		rendered, _ = update(t, m, keyPress('n'))
+		_ = viewContent(rendered)
+	})
+	assertBoundedTransitionCost(t, mallocs, b)
+
+	if got := rendered.ListWidth(); got != 20 {
+		t.Fatalf("ListWidth after gutter growth = %d, want 20", got)
+	}
+	view := viewContent(rendered)
+	want := app.TruncateLeftGrapheme(widePath, rendered.ListWidth())
+	if !strings.Contains(view, want) {
+		t.Fatalf("View after gutter growth does not contain re-truncated entry %q:\n%s", want, view)
+	}
+	// The re-truncated entry never splits the wide cluster.
+	if !strings.HasPrefix(want, "…") {
+		t.Fatalf("re-truncated entry %q does not start with …", want)
 	}
 }
 

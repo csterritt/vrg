@@ -276,6 +276,17 @@ Catalog of all wiki pages for the vrg project.
   centering/truncation, overlay sizing, theme `cellWidth`), the
   no-`DecodeRuneInString` static source guard, and the CJK /
   combining / emoji-ZWJ test coverage
+- [bounded-browse-render.md](bounded-browse-render.md) — Issue #40:
+  immutable per-file groups, the raw-path → group index map, and
+  width-independent path metadata (escaped text, cluster table, full
+  cell width) prepared once in the `SearchCompleteMsg` handler;
+  `renderBrowse` bounded to the visible window with current-width
+  grapheme-safe truncation from the stored cluster table
+  (`safepresentation.TruncateLeftCellsFrom`); `currentFileIndex` and
+  `loadFileFor` as map lookups; the combined `Update()`+`View()`
+  allocation guard (≤ 512 KiB / ≤ 4096 mallocs over a 45,000-stop
+  index) spanning both halves without a reset; per-keystroke cost
+  independent of index size at the ~100,000-matched-lines scale
 
 ## Catalogs
 

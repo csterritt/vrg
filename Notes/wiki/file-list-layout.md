@@ -24,11 +24,14 @@ result is 0. The reserved indicator width is
 mode — see [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md)
 and [hidden-content-indicators](hidden-content-indicators.md)).
 
-`longestPathWidth` is computed by `computeLongestPathWidth`, which
-iterates the search index stops, sanitizes each distinct path through
-`safepresentation.EscapePath`, and measures its terminal cell width
-with `safepresentation.CellWidth` (the shared ANSI-aware grapheme/cell
-helper, Issue #39).
+`longestPathWidth` is produced by `prepareFileGroups`, which iterates
+the search index stops once at search completion, sanitizes each
+distinct path through `safepresentation.EscapePath`, and measures its
+terminal cell width from the stored `GraphemeClusters` table (the
+shared ANSI-aware grapheme/cell helper, Issue #39). The same pass
+builds the immutable per-file groups and the raw-path → group index
+map (Issue #40 — see
+[bounded-browse-render](bounded-browse-render.md)).
 
 ## Visibility preference vs. computed width
 
@@ -99,14 +102,19 @@ down (placing the current file at the bottom) when it is below. It
 is called from `handleNavigate` (on every actual navigation) and
 from `renderBrowse` (so the initial render and any state change
 converge). `currentFileIndex(path)` derives the 0-based file-group
-index from the cursor's current stop.
+index from the cursor's current stop via the precomputed
+`fileIndexByPath` map (Issue #40) — a lookup, not a group scan.
 
 ## Visible-window-only rendering
 
 `renderBrowse` queries the file-list provider only for the
 `[listOffset, listOffset+visibleRows)` window (Issue #17 render-cost
-guard, re-verified with the Issue #24 layout in place). When the
-computed list width is zero, no list cells are drawn.
+guard, re-verified with the Issue #24 layout in place). With the
+precomputed groups (Issue #40) the same window bound applies: only
+visible rows are truncated and styled, the escaped path text and
+cluster table come from the group, and no whole-index regrouping,
+`Stops()` copy, or `Files()` scan runs per frame. When the computed
+list width is zero, no list cells are drawn.
 
 ## Filename-row status-note slot
 
@@ -147,19 +155,24 @@ location in the new row model.
   `longestPathWidth int`, `statusNote func() string` fields.
 - `ListVisible()`, `ListWidth()`, `ListOffset()`, `ViewportAnchor()`
   accessors.
-- `ComputeListWidth`, `TruncateLeftGrapheme`, `computeLongestPathWidth`
-  helpers.
+- `ComputeListWidth`, `TruncateLeftGrapheme`, `prepareFileGroups`,
+  `truncateFileEntry` helpers (`prepareFileGroups` computes
+  `longestPathWidth` — the `computeLongestPathWidth` helper was
+  absorbed into it in Issue #40).
 - `toggleListVisible`, `updateListOffset`, `currentFileIndex`,
   `renderFilenameRow` methods (the `graphemeCellWidthString` helper
   was removed in Issue #39 — the note slot measures through
-  `safepresentation.CellWidth`).
+  `safepresentation.CellWidth`; `currentFileIndex` is a map lookup
+  since Issue #40).
 - `LayoutKey()` uses `m.ListWidth()` for the panel width; Issue #38
   installs the resulting text width at every viewport install site.
 - `handleNavigate` calls `updateListOffset` on every actual
   navigation.
 - `renderBrowse` uses `m.ListWidth()`, auto-scrolls via
-  `updateListOffset`, queries only visible provider entries, applies
-  `TruncateLeftGrapheme`, and skips list rendering for zero width.
+  `updateListOffset`, queries only visible provider entries (or reads
+  only the visible precomputed groups), applies
+  `TruncateLeftGrapheme` (provider path) or `truncateFileEntry`
+  (group path, Issue #40), and skips list rendering for zero width.
 - `renderContentPanel` delegates its first line to
   `renderFilenameRow`.
 - The old Issue #5 placeholder `fileListWidth` function was removed.
@@ -167,5 +180,6 @@ location in the new row model.
 See [browse-tracer](browse-tracer.md),
 [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
 [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md),
-[horizontal-panning](horizontal-panning.md), and
-[viewport-text-width](viewport-text-width.md).
+[horizontal-panning](horizontal-panning.md),
+[viewport-text-width](viewport-text-width.md), and
+[bounded-browse-render](bounded-browse-render.md).

@@ -506,11 +506,29 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `truncateRightCells` delegate to the helper; `graphemeCellWidthString`
   was removed (the filename-row note slot measures through
   `safepresentation.CellWidth`); and `computeLongestPathWidth` measures
-  through `CellWidth`. See
+  through `CellWidth`. Issue #40 moved all whole-index work off the
+  frame path: `fileGroups []fileGroup` and `fileIndexByPath
+  map[string]int` fields hold the immutable per-file grouping and the
+  raw-path → group index map, prepared once by `prepareFileGroups` in
+  the `SearchCompleteMsg` handler (which also yields
+  `longestPathWidth`, replacing `computeLongestPathWidth`); each
+  `fileGroup` carries `escaped` (the `EscapePath` text), `clusters`
+  (the `GraphemeClusters` table), and `width` (full cell width);
+  `truncateFileEntry` left-truncates a group's stored text through
+  `safepresentation.TruncateLeftCellsFrom` against the current list
+  width; `renderBrowse` reads `m.fileGroups`, iterates only the
+  visible `[listOffset, listOffset+visibleRows)` window, finds the
+  current file via `currentFileIndex` (a map lookup, not a group
+  scan), and tests emptiness with `len(m.fileGroups)` instead of the
+  per-frame `index.Files()` distinct-path scan; `loadFileFor` takes
+  its per-file stop range from the group map instead of copying and
+  scanning `index.Stops()`; `groupByFile` was absorbed into
+  `prepareFileGroups`. See
   [stream-integrity-diagnostics](stream-integrity-diagnostics.md),
   [record-robustness](record-robustness.md),
-  [viewport-text-width](viewport-text-width.md), and
-  [shared-cell-model-render](shared-cell-model-render.md).
+  [viewport-text-width](viewport-text-width.md),
+  [shared-cell-model-render](shared-cell-model-render.md), and
+  [bounded-browse-render](bounded-browse-render.md).
 
 ## internal/safepresentation
 
@@ -551,7 +569,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `GraphemeClusters`); `CellWidth(s)` measures total terminal cells;
   `TruncateLeftCells(s, keep)` keeps the trailing `keep` cells without
   splitting a cluster, preserving ANSI sequences adjacent to kept
-  text. It is the sole production-file allow-list location for
+  text. Issue #40 added `TruncateLeftCellsFrom(s, clusters, keep)` —
+  the same cell policy consuming a precomputed cluster table, so
+  callers holding width-independent geometry do not re-segment on
+  every truncation. It is the sole production-file allow-list
+  location for
   `utf8.DecodeRuneInString`, enforced by a recursive source-scanning
   guard test in `internal/app` covering every non-test `.go` file
   under `internal/` and `cmd/`. See
