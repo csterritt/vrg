@@ -59,4 +59,4 @@ Periodically health-check the wiki:
 
 ## Scope
 
-This wiki covers the vrg project: a Go terminal UI for browsing ripgrep results, using the Charm v2 stack (Bubble Tea/Bubbles/Lip Gloss under `charm.land/`) for the TUI and `github.com/jawher/mow.cli` for command-line parsing.
+This wiki covers the vrg project: a Go terminal UI for browsing ripgrep results, using `charm.land/bubbletea/v2` for the TUI and `github.com/jawher/mow.cli` for command-line parsing. Bubbles and Lip Gloss are intentionally not dependencies because the implementation does not import them.
