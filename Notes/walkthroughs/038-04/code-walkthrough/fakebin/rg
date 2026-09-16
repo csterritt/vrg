@@ -1,0 +1,14 @@
+#!/bin/bash
+# Fake rg for the Issue #38 walkthrough. Emits one match for
+# demo/src/alpha.txt whose 300-cell first line carries a needle
+# submatch at bytes [250, 256) — far beyond the ~36-cell text width
+# of a 60-column terminal — plus a short-line match for
+# demo/src/beta.txt, then a summary, and exits 0.
+echo '{"type":"begin","data":{"path":{"text":"demo/src/alpha.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"demo/src/alpha.txt"},"lines":{"text":"'"$(python3 -c "print('x'*250 + 'needle' + 'x'*44)")"'\n"},"line_number":1,"submatches":[{"match":{"text":"needle"},"start":250,"end":256}]}}'
+echo '{"type":"end","data":{"path":{"text":"demo/src/alpha.txt"},"binary_offset":null}}'
+echo '{"type":"begin","data":{"path":{"text":"demo/src/beta.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"demo/src/beta.txt"},"lines":{"text":"beta needle here\n"},"line_number":1,"submatches":[{"match":{"text":"needle"},"start":5,"end":11}]}}'
+echo '{"type":"end","data":{"path":{"text":"demo/src/beta.txt"},"binary_offset":null}}'
+echo '{"type":"summary","data":{}}'
+exit 0

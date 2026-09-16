@@ -1497,9 +1497,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			oldAnchor = m.viewport.Anchor()
 			oldHOffset = m.viewport.HOffset()
 		}
-		tw := viewport.TextWidth(m.width, m.buffer.GutterWidth, m.wrapMode)
+		// Issue #38: install the layout key's text width — the
+		// panel width minus gutter minus reserved indicator — so
+		// horizontal behaviour is measured against the content
+		// panel, not the raw terminal width.
 		m.viewport = viewport.New(msg.RowModel, m.height)
-		m.viewport.SetLayout(tw, m.wrapMode)
+		m.viewport.SetLayout(msg.Key.TextWidth, m.wrapMode)
 		if sameFile {
 			m.viewport.SetAnchor(oldAnchor)
 			// Issue #18: carry over the horizontal offset. In wrap
@@ -1739,9 +1742,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.SetPanelHeight(msg.Height)
 			// Issue #18: update the text width on resize so the
 			// horizontal clamp reflects the new dimensions.
+			// Issue #38: the text width comes from the layout key —
+			// the panel width chain, not the raw terminal width.
 			if m.buffer != nil {
-				tw := viewport.TextWidth(m.width, m.buffer.GutterWidth, m.wrapMode)
-				m.viewport.SetLayout(tw, m.wrapMode)
+				m.viewport.SetLayout(m.LayoutKey().TextWidth, m.wrapMode)
 			}
 		}
 		return m, nil
@@ -1983,9 +1987,10 @@ func (m *Model) buildViewport() tea.Cmd {
 			oldAnchor = m.viewport.Anchor()
 			oldHOffset = m.viewport.HOffset()
 		}
-		tw := viewport.TextWidth(m.width, m.buffer.GutterWidth, m.wrapMode)
+		// Issue #38: the text width is the layout key's — the
+		// panel width chain, not the raw terminal width.
 		m.viewport = viewport.New(rows, m.height)
-		m.viewport.SetLayout(tw, m.wrapMode)
+		m.viewport.SetLayout(m.LayoutKey().TextWidth, m.wrapMode)
 		if sameFile {
 			m.viewport.SetAnchor(oldAnchor)
 			m.viewport.SetHOffset(oldHOffset)

@@ -259,6 +259,13 @@ Catalog of all wiki pages for the vrg project.
   with child reaped and terminal restored, help-only 0 with ripgrep
   unavailable and a sentinel fake rg never invoked); no regressions
   found
+- [viewport-text-width.md](viewport-text-width.md) — Issue #38: the
+  terminal/panel/text width chain (terminal minus list minus
+  separator = panel; panel minus gutter minus reserved indicator =
+  text), the layout key's `TextWidth` as the single installed width at
+  every viewport install site (async layout, factory seam, cache hit,
+  resize, list hide/show), and the recalibrated horizontal
+  expectations for reveal, pan, clip, and indicators
 
 ## Catalogs
 

@@ -20,6 +20,10 @@ This page cross-references:
   indicator visibility computation reuses.
 - [theme-module](theme-module.md) — the `Theme.Indicator` inverse
   style used for both indicators.
+- [viewport-text-width](viewport-text-width.md) — Issue #38: the text
+  width the indicators are measured against is the layout key's
+  panel-derived width, so the reserved column sits at the panel's
+  right edge and no composed row exceeds the terminal width.
 - `Notes/PRD-vrg.md` — Layout and indicators section.
 
 ## Left gutter indicator

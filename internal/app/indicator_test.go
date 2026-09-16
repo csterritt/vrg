@@ -15,9 +15,12 @@ import (
 
 // setupBrowseIndicatorMode creates a browse model with the no-style theme
 // (so indicator characters appear without ANSI sequences) in the given wrap
-// mode. The terminal is 80x24; in run-off-edge mode the text width is
-// 80 - gutterWidth - 1 (reserved indicator). The file load completes
-// immediately.
+// mode. The terminal is 80x24; in run-off-edge mode the text width is the
+// panel width minus the gutter minus the reserved indicator cell, where
+// the panel width is the terminal width minus the list width minus the
+// one-cell separator (Issue #38). With the src/a.go list (width 10) and
+// gutter 3, the text width is 80 - 10 - 1 - 3 - 1 = 65. The file load
+// completes immediately.
 func setupBrowseIndicatorMode(t *testing.T, idx *searchindex.Index, buf *filebuffer.Buffer, mode viewport.WrapMode) app.Model {
 	t.Helper()
 	gate := make(chan struct{})
@@ -59,7 +62,7 @@ func panRight(t *testing.T, m app.Model, columns int) app.Model {
 
 // firstContentRow returns the first content row from the view, skipping the
 // filename rule. With the no-style theme, the row includes the list-entry
-// prefix (20 chars + 1 space) followed by the panel line.
+// prefix (list width + 1-cell separator) followed by the panel line.
 func firstContentRow(view string) string {
 	lines := strings.Split(view, "\n")
 	if len(lines) < 2 {
@@ -247,8 +250,11 @@ func TestIndicatorPartialVisibilityRightNoStar(t *testing.T) {
 	idx := buildIndex(t, "/work",
 		textMatch("src/a.go", "hello\n", 1, subSpec{"h", 0, 1}),
 	)
+	// The match at [113, 117) straddles the right clip edge of the
+	// [50, 115) window (text width 65, Issue #38): cells 113-114 are
+	// visible, cells 115-116 are hidden.
 	lines := []filebuffer.Line{
-		ml(1, lineText, [2]int{125, 127}),
+		ml(1, lineText, [2]int{113, 117}),
 	}
 	buf := makeBuf(lines, 1, 3)
 	m := setupBrowseIndicatorMode(t, idx, buf, viewport.WrapOff)
@@ -270,10 +276,10 @@ func TestIndicatorLastCellMatchFarRightStar(t *testing.T) {
 	idx := buildIndex(t, "/work",
 		textMatch("src/a.go", "hello\n", 1, subSpec{"h", 0, 1}),
 	)
-	// Match 1 at cell 125 (last visible cell in [50, 126)). Match 2 at
-	// cell 200 (entirely hidden right).
+	// Match 1 at cell 114 (last visible cell in [50, 115), text width
+	// 65 — Issue #38). Match 2 at cell 200 (entirely hidden right).
 	lines := []filebuffer.Line{
-		ml(1, lineText, [2]int{125, 126}, [2]int{200, 201}),
+		ml(1, lineText, [2]int{114, 115}, [2]int{200, 201}),
 	}
 	buf := makeBuf(lines, 1, 3)
 	m := setupBrowseIndicatorMode(t, idx, buf, viewport.WrapOff)

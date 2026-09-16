@@ -65,7 +65,8 @@ func TestIndicatorMidClusterMatchHiddenLeft(t *testing.T) {
 // cluster is visible, so no hidden-match indicator.
 func TestIndicatorMidClusterMatchVisibleNoStar(t *testing.T) {
 	// é cluster at cell 50. Pan right by 49: the cluster [50, 51) is
-	// within the window [49, 49+76). No hidden-match indicator.
+	// within the window [49, 49+65) (text width 65, Issue #38). No
+	// hidden-match indicator.
 	prefix := strings.Repeat("a", 50)
 	suffix := strings.Repeat("a", 200)
 	raw := prefix + "e\u0301" + suffix + "\n"
@@ -117,8 +118,9 @@ func TestIndicatorWideClusterMatchHiddenLeft(t *testing.T) {
 // visible.
 func TestIndicatorWideClusterMatchPartiallyVisibleNoStar(t *testing.T) {
 	// 50 ASCII chars + "中" (2 cells) + 200 ASCII. The 中 cluster is at
-	// cells [50, 52). Pan right by 50: window [50, 50+76). The cluster
-	// [50, 52) is fully visible. No hidden-match indicator.
+	// cells [50, 52). Pan right by 50: window [50, 50+65) (text width
+	// 65, Issue #38). The cluster [50, 52) is fully visible. No
+	// hidden-match indicator.
 	prefix := strings.Repeat("a", 50)
 	suffix := strings.Repeat("a", 200)
 	raw := prefix + "中" + suffix + "\n"

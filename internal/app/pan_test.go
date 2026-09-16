@@ -42,7 +42,11 @@ func makeCJKLine(num int) filebuffer.Line {
 
 // setupBrowsePan creates a browse model in run-off-edge mode with long
 // lines, ready for pan testing. The terminal is 80x24; the text width
-// in run-off-edge mode is 80 - gutter - 1 (reserved indicator).
+// in run-off-edge mode is the panel width minus gutter minus the
+// reserved indicator cell, where the panel width is the terminal width
+// minus the list width minus the one-cell separator (Issue #38). With
+// the src/a.go list (width 10) and gutter 3, the text width is
+// 80 - 10 - 1 - 3 - 1 = 65.
 func setupBrowsePan(t *testing.T, lines []filebuffer.Line, lineCount, gutterWidth int) app.Model {
 	t.Helper()
 	idx := buildIndex(t, "/work",
@@ -110,9 +114,10 @@ func TestPanRightHalfWidth(t *testing.T) {
 	lines := []filebuffer.Line{makeLongLine(1, 300)}
 	m := setupBrowsePan(t, lines, 1, 3)
 	m, _ = update(t, m, keyPress(']'))
-	// textWidth = 80 - 3 - 1 = 76, half = 38.
-	if m.ViewportHOffset() != 38 {
-		t.Fatalf("ViewportHOffset = %d, want 38 after ']' (half of 76)", m.ViewportHOffset())
+	// textWidth = 80 - 10 (list) - 1 (separator) - 3 (gutter) - 1
+	// (reserved indicator) = 65, half = 32.
+	if m.ViewportHOffset() != 32 {
+		t.Fatalf("ViewportHOffset = %d, want 32 after ']' (half of 65)", m.ViewportHOffset())
 	}
 }
 
@@ -125,8 +130,9 @@ func TestPanLeftHalfWidth(t *testing.T) {
 		m, _ = update(t, m, keyPress(']'))
 	}
 	m, _ = update(t, m, keyPress('['))
-	if m.ViewportHOffset() != 76 {
-		t.Fatalf("ViewportHOffset = %d, want 76 after '[' from 114", m.ViewportHOffset())
+	// 3 × half(65) = 96, then '[' pans back 32 → 64.
+	if m.ViewportHOffset() != 64 {
+		t.Fatalf("ViewportHOffset = %d, want 64 after '[' from 96", m.ViewportHOffset())
 	}
 }
 

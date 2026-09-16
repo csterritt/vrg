@@ -10,8 +10,10 @@ visible file-list entries alongside the existing visible-row guard.
 Cross-references: [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
 [manual-vertical-scrolling](manual-vertical-scrolling.md),
 [destination-reveal](destination-reveal.md),
-[browse-tracer](browse-tracer.md). PRD sections: Navigation, viewport,
-and logical anchors; Resources and responsiveness.
+[browse-tracer](browse-tracer.md),
+[viewport-text-width](viewport-text-width.md). PRD sections:
+Navigation, viewport, and logical anchors; Resources and
+responsiveness.
 
 ## Logical anchor model
 
@@ -68,7 +70,14 @@ runtime executes it; the UI never blocks on preparation.
 
 `LayoutKey()` returns the current `RowModelKey{Path, Revision,
 TextWidth, WrapMode}`. The revision field is in place for Issue #27's
-reload-supersession; it is currently always 1.
+reload-supersession; it is currently always 1. `TextWidth` is the
+panel-derived text width — terminal width minus `ListWidth()` minus
+the one-cell separator, minus the buffer gutter and the reserved
+right-indicator width — and Issue #38 makes it the installed viewport
+width at every install site: the `LayoutReadyMsg` handler, the
+synchronous factory seam, the cache-hit fast path, and the
+`WindowSizeMsg` resize path (see
+[viewport-text-width](viewport-text-width.md)).
 
 ### Layout gate (test seam)
 
@@ -168,5 +177,6 @@ per-file anchor) rather than a same-file rebuild (preserving the
 current anchor).
 
 See [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
-[manual-vertical-scrolling](manual-vertical-scrolling.md), and
-[destination-reveal](destination-reveal.md).
+[manual-vertical-scrolling](manual-vertical-scrolling.md),
+[destination-reveal](destination-reveal.md), and
+[viewport-text-width](viewport-text-width.md).

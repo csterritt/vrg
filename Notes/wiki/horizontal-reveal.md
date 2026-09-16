@@ -22,6 +22,8 @@ This page cross-references:
 - [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md)
   — the prepared-layout architecture and pending-reveal intent that
   Issue #19 commits through.
+- [viewport-text-width](viewport-text-width.md) — the Issue #38
+  terminal/panel/text width chain the reveal is measured against.
 - `Notes/PRD-vrg.md` — Navigation, viewport, and logical anchors
   section (run-off-edge horizontal reveal).
 
@@ -175,3 +177,8 @@ without toggling. The production default remains `WrapOn`.
   option, `wrapMode` config field.
 - `internal/app/reveal_horizontal_test.go` — app trigger tests (startup,
   same-file navigation, every-navigation, file-change reset ordering).
+  Issue #38 recalibrated every expectation to the text width — terminal
+  width minus the actual `ListWidth()` minus separator minus gutter
+  minus `ReservedWidth(mode)` — via the `textWidthFor` helper, and added
+  list-hidden, wrap-mode, resize, factory-seam, and composed-view
+  coverage.

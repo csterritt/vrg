@@ -1351,3 +1351,46 @@ all through real `Builder.ReadFrom` oversized streams. Updated
 `Notes/tasks/037-oversized-record-aggregate-anonymous-diagnostics.md`,
 `Notes/PRD-vrg.md` (Result index, records, and stream integrity —
 oversized bullets; Resources and responsiveness — 64 MiB limit).
+
+## [2026-09-15] ingest | Issue #38 viewport installed with the layout key's text width
+
+Ingested the completed Issue #38 implementation and tests.
+`internal/app/app.go` no longer recomputes
+`viewport.TextWidth(m.width, …)` from the raw terminal width at
+viewport install sites: the `LayoutReadyMsg` handler installs
+`msg.Key.TextWidth`, the synchronous row-provider factory seam in
+`buildViewport` installs `m.LayoutKey().TextWidth`, the
+`WindowSizeMsg` resize path (factory-seam viewport retained) installs
+`m.LayoutKey().TextWidth`, and the cache-hit fast path already used
+`key.TextWidth`. The single `LayoutKey` computation — terminal width
+minus `ListWidth()` minus the one-cell separator = panel width; panel
+width minus gutter minus `ReservedWidth(mode)` = text width — now
+governs row construction and viewport behaviour alike, so reveal,
+pan, clip, padding, and the hidden-content indicators are measured
+against the content panel with the file list present, and no composed
+row exceeds the terminal width.
+`internal/app/reveal_horizontal_test.go` replaced the terminal-width
+`textWidthAt80` helper with `textWidthFor` (terminal minus actual
+`ListWidth()` minus separator minus gutter minus `ReservedWidth`) and
+added list-hidden, wrap-mode zero-reservation, resize, factory-seam,
+and composed-view boundary coverage; `pan_test.go`,
+`indicator_test.go`, `grapheme_indicator_test.go`, and `wrap_test.go`
+were recalibrated to the same chain (text width 65 at 80×24 with the
+`src/a.go` fixture list). Created
+[viewport-text-width](viewport-text-width.md); updated
+[file-list-layout](file-list-layout.md),
+[wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
+[logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md),
+[horizontal-panning](horizontal-panning.md),
+[horizontal-reveal](horizontal-reveal.md),
+[hidden-content-indicators](hidden-content-indicators.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+[index](index.md). Sources: `internal/app/app.go`,
+`internal/app/reveal_horizontal_test.go`,
+`internal/app/pan_test.go`, `internal/app/indicator_test.go`,
+`internal/app/grapheme_indicator_test.go`,
+`internal/app/wrap_test.go`,
+`Notes/issues/038-viewport-content-panel-width.md`,
+`Notes/tasks/038-viewport-content-panel-width.md`,
+`Notes/PRD-vrg.md` (File list and layout; Layout and indicators;
+Navigation, viewport, and logical anchors).

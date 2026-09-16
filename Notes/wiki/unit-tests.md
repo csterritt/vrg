@@ -1159,7 +1159,9 @@ replay-ordering assertions:
   correct width for ASCII and CJK clusters, with a 1-cell fallback
   for out-of-range cells.
 
-`pan_test.go` (Issue #18, external package `app_test`):
+`pan_test.go` (Issue #18, external package `app_test`; Issue #38
+recalibrated the half-pan expectations to the panel-derived text
+width — 65 at 80×24 with the `src/a.go` fixture list):
 
 - `TestPanRightOneColumn` / `TestPanLeftOneColumn` — `.`/`,` pan one
   column via the app key routing.
@@ -1178,11 +1180,19 @@ replay-ordering assertions:
   blank rather than a broken glyph.
 - `TestPanAtMaxNoOp` — panning past the maximum does nothing.
 
-`reveal_horizontal_test.go` (Issue #19, external package `app_test`):
+`reveal_horizontal_test.go` (Issue #19, extended by Issue #38,
+external package `app_test`):
+
+Issue #38 replaced the `textWidthAt80` helper — which encoded the
+terminal-width defect — with `textWidthFor`, computing the expected
+text width as terminal width minus the model's actual `ListWidth()`
+minus the one-cell separator minus the gutter minus
+`viewport.ReservedWidth(mode)`. Every expected-position calculation
+subtracts list width, separator, gutter, and the reserved indicator.
 
 - `TestStartupHorizontalRevealRunOffEdge` — the startup reveal
   includes horizontal reveal in run-off-edge mode (right-edge
-  arithmetic).
+  arithmetic against the text width).
 - `TestStartupHorizontalRevealWrapModeNoOp` — the startup horizontal
   reveal is a no-op in wrap mode (offset stays zero).
 - `TestSameFileNavigationHorizontalReveal` — `n` within the same
@@ -1200,8 +1210,23 @@ replay-ordering assertions:
 - `TestFileChangeResetOrdering` — the reset runs before the reveal,
   so a far match in the first file does not carry over to the second
   file's near match.
+- `TestListHiddenHorizontalReveal` — with the file list hidden, the
+  reveal is measured against the wider panel's text width (Issue #38).
+- `TestWrapModeZeroReservedIndicator` — wrap mode reserves no
+  indicator column in the layout key; toggling to run-off-edge
+  re-measures reveal against the narrower text width (Issue #38).
+- `TestResizeRemeasuresTextWidth` — a terminal resize re-measures the
+  reveal against the new panel-width chain (Issue #38).
+- `TestFactorySeamInstallsLayoutTextWidth` — the synchronous
+  row-provider-factory install also installs the layout key's text
+  width (Issue #38).
+- `TestComposedViewRowsFitTerminal` — no composed row exceeds the
+  terminal width, and the reserved right-indicator column sits at the
+  panel's right edge outside the text area (Issue #38).
 
-`indicator_test.go` (Issue #20, external package `app_test`):
+`indicator_test.go` (Issue #20, external package `app_test`; Issue #38
+recalibrated the right-edge fixtures — visible window ends at
+`hOffset + 65` at 80×24 with the `src/a.go` fixture list):
 
 - `TestIndicatorLeftUnderscoreHiddenText` — left `_` when text is
   hidden left without a hidden match.

@@ -149,7 +149,11 @@ during panning or re-clamping.
   paths) carries over the horizontal offset on same-file rebuilds and
   calls `ResetHorizontal` on file change.
 - `SetLayout` is called on every viewport (re)installation so the
-  text width and wrap mode are current.
+  text width and wrap mode are current. Issue #38: the installed text
+  width is always the layout key's `TextWidth` — the panel width
+  chain, not the raw terminal width (see
+  [viewport-text-width](viewport-text-width.md)).
 - `WindowSizeMsg` updates the text width via `SetLayout` when the
-  factory test seam is in use.
+  factory test seam is in use, likewise from `LayoutKey().TextWidth`
+  (Issue #38).
 - `ViewportHOffset()` exposes the offset for tests and inspection.

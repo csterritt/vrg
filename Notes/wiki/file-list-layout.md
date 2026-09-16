@@ -68,7 +68,11 @@ loaded) whenever:
 
 `LayoutKey()` uses `m.ListWidth()` for the panel width, so every
 text-width change caused by this issue flows through Issue #17's
-prepared-layout path.
+prepared-layout path. Issue #38 then makes the layout key's text
+width — terminal width minus list width minus separator minus gutter
+minus reserved indicator — the installed viewport width at every
+install site (see
+[viewport-text-width](viewport-text-width.md)).
 
 ## Grapheme-safe left truncation
 
@@ -143,7 +147,8 @@ location in the new row model.
   helpers.
 - `toggleListVisible`, `updateListOffset`, `currentFileIndex`,
   `renderFilenameRow`, `graphemeCellWidthString` methods.
-- `LayoutKey()` uses `m.ListWidth()` for the panel width.
+- `LayoutKey()` uses `m.ListWidth()` for the panel width; Issue #38
+  installs the resulting text width at every viewport install site.
 - `handleNavigate` calls `updateListOffset` on every actual
   navigation.
 - `renderBrowse` uses `m.ListWidth()`, auto-scrolls via
@@ -156,4 +161,5 @@ location in the new row model.
 See [browse-tracer](browse-tracer.md),
 [wrap-mode-and-grapheme-policy](wrap-mode-and-grapheme-policy.md),
 [logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md),
-and [horizontal-panning](horizontal-panning.md).
+[horizontal-panning](horizontal-panning.md), and
+[viewport-text-width](viewport-text-width.md).

@@ -21,8 +21,9 @@ func TestWrapModeOnByDefault(t *testing.T) {
 	idx := buildIndex(t, "/work",
 		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
 	)
-	// 100-char line at panel width 80, gutter 4 → text width 76.
-	// 100 chars at width 76 = 2 rows in wrap mode.
+	// 100-char line at terminal 80, list 10, gutter 4: panel width
+	// 80 - 10 - 1 = 69, wrap text width 69 - 4 = 65 (Issue #38).
+	// 100 chars at width 65 = 2 rows in wrap mode.
 	line := ml(1, strings.Repeat("x", 100))
 	buf := makeBuf([]filebuffer.Line{line}, 1, 4)
 	m := setupBrowseWithSize(t, idx, buf, 80, 24)
@@ -50,8 +51,9 @@ func TestWrapToggleChangesRowModel(t *testing.T) {
 	idx := buildIndex(t, "/work",
 		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
 	)
-	// 100-char line at panel width 80, gutter 4 → text width 76.
-	// Wrap: 2 rows. Run-off-edge: 1 row.
+	// 100-char line at terminal 80, list 10, gutter 4: wrap text width
+	// 80 - 10 - 1 - 4 = 65 (Issue #38). Wrap: 2 rows. Run-off-edge: 1
+	// row.
 	line := ml(1, strings.Repeat("x", 100))
 	buf := makeBuf([]filebuffer.Line{line}, 1, 4)
 	m := setupBrowseWithSize(t, idx, buf, 80, 24)
@@ -60,7 +62,7 @@ func TestWrapToggleChangesRowModel(t *testing.T) {
 	view := viewContent(m)
 	wrapLines := countContentXLines(view)
 	if wrapLines != 2 {
-		t.Fatalf("wrap mode content lines = %d, want 2 (100 chars at width 76)", wrapLines)
+		t.Fatalf("wrap mode content lines = %d, want 2 (100 chars at width 65)", wrapLines)
 	}
 
 	// Toggle to run-off-edge mode.
@@ -88,8 +90,8 @@ func TestWrapTogglePreservesOffset(t *testing.T) {
 	idx := buildIndex(t, "/work",
 		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
 	)
-	// 100-char line at panel width 80, gutter 4 → text width 76.
-	// Wrap: 2 rows. Run-off-edge: 1 row.
+	// 100-char line at terminal 80, list 10, gutter 4: wrap text width
+	// 65 (Issue #38). Wrap: 2 rows. Run-off-edge: 1 row.
 	line := ml(1, strings.Repeat("x", 100))
 	buf := makeBuf([]filebuffer.Line{line}, 1, 4)
 	m := setupBrowseWithSize(t, idx, buf, 80, 24)
@@ -144,9 +146,10 @@ func TestContinuationGutterBlank(t *testing.T) {
 	idx := buildIndex(t, "/work",
 		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
 	)
-	// 100-char line at panel width 30, gutter 4 → text width 26.
-	// 100 chars at width 26 = 4 rows. Only the first row has a line
-	// number; continuation rows have a blank gutter.
+	// 100-char line at terminal 30, list 10, gutter 4: panel width 19,
+	// wrap text width 15 (Issue #38). 100 chars at width 15 = 7 rows.
+	// Only the first row has a line number; continuation rows have a
+	// blank gutter.
 	line := ml(1, strings.Repeat("x", 100))
 	buf := makeBuf([]filebuffer.Line{line}, 1, 4)
 	m := setupBrowseWithSize(t, idx, buf, 30, 24)
@@ -219,8 +222,8 @@ func TestRenderCostGuardWithWrappingApp(t *testing.T) {
 	idx := buildIndex(t, "/work",
 		textMatch("src/a.go", "hello\n", 1, subSpec{"hello", 0, 5}),
 	)
-	// 500-char line at panel width 30, gutter 4 → text width 26.
-	// 500 chars at width 26 = 20 rows.
+	// 500-char line at terminal 30, list 10, gutter 4: panel width 19,
+	// wrap text width 15 (Issue #38). 500 chars at width 15 = 34 rows.
 	line := ml(1, strings.Repeat("x", 500))
 	buf := makeBuf([]filebuffer.Line{line}, 1, 4)
 

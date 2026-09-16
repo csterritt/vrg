@@ -483,9 +483,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   distinct raw path from `Index.OversizedDiagnostics()` deduplicated in
   first-occurrence order — so an anonymous oversized record produces a
   non-empty fatal overlay (exit 2) with zero usable results and a
-  visible overlay plus stderr replay with usable results. See
-  [stream-integrity-diagnostics](stream-integrity-diagnostics.md) and
-  [record-robustness](record-robustness.md).
+  visible overlay plus stderr replay with usable results. Issue #38
+  made the layout key's `TextWidth` the installed viewport width at
+  every install site: the `LayoutReadyMsg` handler now calls
+  `m.viewport.SetLayout(msg.Key.TextWidth, m.wrapMode)`, the
+  synchronous row-provider factory seam and the `WindowSizeMsg` resize
+  path install `m.LayoutKey().TextWidth`, and the cache-hit fast path
+  already used `key.TextWidth` — replacing recomputations of
+  `viewport.TextWidth(m.width, …)` that skipped the file-list width
+  and separator. See
+  [stream-integrity-diagnostics](stream-integrity-diagnostics.md),
+  [record-robustness](record-robustness.md), and
+  [viewport-text-width](viewport-text-width.md).
 
 ## internal/safepresentation
 

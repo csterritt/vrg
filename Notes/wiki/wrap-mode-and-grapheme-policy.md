@@ -49,7 +49,12 @@ The reserved column is unpopulated for now; Issue #20 will populate it.
 
 `TextWidth(panelWidth, gutterWidth, mode)` returns the number of display
 cells available for text: panel width minus gutter width minus the
-reserved indicator width, clamped to at least 1 cell.
+reserved indicator width, clamped to at least 1 cell. The panel width
+is the terminal width minus the file-list width minus the one-cell
+separator (Issue #24); Issue #38 makes the layout key's `TextWidth` —
+computed through this full chain — the installed viewport width at
+every install site (see
+[viewport-text-width](viewport-text-width.md)).
 
 ## Row model
 
@@ -113,5 +118,6 @@ wrapping reflects the new panel width, preserving the logical anchor.
 
 See [browse-tracer](browse-tracer.md),
 [manual-vertical-scrolling](manual-vertical-scrolling.md),
-[destination-reveal](destination-reveal.md), and
-[logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md).
+[destination-reveal](destination-reveal.md),
+[logical-anchor-and-layout-preparation](logical-anchor-and-layout-preparation.md),
+and [viewport-text-width](viewport-text-width.md).
