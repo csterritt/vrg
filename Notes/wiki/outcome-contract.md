@@ -1,4 +1,4 @@
-# Outcome contract (Issue #9, extended by Issues #10, #11, #36, #37, and #44)
+# Outcome contract (Issue #9, extended by Issues #10, #11, #36, #37, #44, and #46)
 
 The fatal/warning outcome matrix and modal error overlay delivered by
 [Issue #9](../issues/009-error-overlay-and-fatal-outcomes.md), adding
@@ -17,7 +17,12 @@ added the always-emitted oversized aggregate and the
 anonymous-oversized-record guarantees.
 [Issue #44](../issues/044-post-summary-context-integrity-failure.md)
 added dedicated `context`-after-`summary` outcome coverage pinning the
-fatal path and the `record after summary` diagnostic. Relevant PRD
+fatal path and the `record after summary` diagnostic.
+[Issue #46](../issues/046-runtime-error-common-diagnostic-replay.md)
+routed every `program.Run()` return shape through the single ordered
+shutdown/replay sequence — including the runtime-error and
+invalid-final-model shapes, which previously bypassed the replay or
+exited silently. Relevant PRD
 sections: *Module Design → SearchIndex / App*,
 *Outcome and exit-status contract*, *Colours, overlays, and key
 precedence* (replay bullet). See also
@@ -199,13 +204,15 @@ model level ([overlay-full-scroll](overlay-full-scroll.md)).
 - `0` — clean browse quit (rg 0/1 with results, complete stream).
 - `1` — no-results quit (rg 0/1 with no usable results, complete stream).
 - `2` — fatal outcome (fatal exit code, signal death, or incomplete
-  stream).
+  stream); also every failing `program.Run()` return shape since
+  Issue #46 — a `Run()` runtime error or an absent/wrong-type final
+  model — matching the startup-failure convention.
 - `130` — cancellation (ctrl+c in any state, or q while searching).
 
 Once a search-derived status is fixed, later `ctrl+c` still overrides
 it to 130.
 
-## Post-restoration replay (Issue #11)
+## Post-restoration replay (Issue #11, unified by Issue #46)
 
 The model maintains a session diagnostic collection independent of what
 was displayed. Every diagnostic the model processes is collected via
@@ -220,11 +227,31 @@ writer serves every controlled exit. Exactly-once holds across both
 the former direct-write path and the replay mechanism: there is no
 duplicate between the two.
 
+Since Issue #46, the replay source is the `app.Diagnostics` snapshot
+the process boundary owns and wires through `app.WithDiagnostics`:
+`collectDiagnostic` appends to it alongside the model's own collection,
+so retained session diagnostics reach stderr even when the final model
+`Run()` returns is absent or has the wrong type. The final-model type
+assertion is no longer the only channel to the replay.
+
 After `program.Run()` returns and cleanup is complete, the process
-boundary replays every collected diagnostic to stderr, exactly once
-each, in collection order. Replay occurs strictly after the
-display-restoration sequence because `program.Run()` returns only
-after Bubble Tea restores the terminal.
+boundary runs the single ordered shutdown sequence for every `Run()`
+return shape — `Run()` has returned (so Bubble Tea has already
+restored the terminal) and the child has been terminated and reaped
+exactly as on normal exits:
+
+1. Session diagnostics retained in the snapshot, in collection order.
+2. `vrg: program returned no usable final model` when the final model
+   is absent or has the wrong type — never a silent exit.
+3. The `program.Run()` runtime error itself, appended exactly once —
+   no duplicate emission from a direct write plus the replay.
+
+Every failing return shape is a controlled application failure exiting
+2, matching the startup-failure convention. Replay occurs strictly
+after the display-restoration sequence because `program.Run()` returns
+only after Bubble Tea restores the terminal, and still waits until
+`Run()` has returned even when cleanup also completed inside the model
+earlier.
 
 The shutdown boundary is defined at message-processing time: a
 diagnostic is "collected" once the model has processed the message

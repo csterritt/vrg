@@ -1156,6 +1156,28 @@ replay-ordering assertions:
   with a forced-nil error reach the invalid-final-model branch; unset
   controls delegate to the real run (exit 0).
 
+`runshape_test.go` (Issue #46) drives the full `program.Run()`
+return-shape matrix through the Issue #45 tagged runner seam
+(`VRG_TEST_RUN_FINAL_MODEL` × `VRG_TEST_RUN_ERROR`) at the real
+`Run()` boundary, inside a PTY lifecycle in which two diagnostics are
+collected in deterministic order (the fake rg's stderr warning
+acknowledged first via `VRG_TEST_COLLECT_ACK`, then a triggered
+`DiagnosticMsg` second) before a clean browse quit:
+
+- `TestRunReturnShapeUnifiedShutdown` — table-driven over the five
+  shapes (valid/nil/invalid final model × injected/nil `Run()` error).
+  Each subtest asserts exit 2 (the real model's clean browse quit
+  would have exited 0, proving the injected tuple reached the actual
+  post-`Run()` branches), reap evidence and a gone child, termios
+  restoration and display-restoration sequences, and the ordered
+  replay via `assertStderrOrderedOnce`: session diagnostics in
+  collection order, then the invalid-final-model diagnostic
+  (`final model`) when applicable, then the injected runtime error —
+  each exactly once with no direct-write/replay duplicate. The
+  valid-model case also asserts the invalid-final-model diagnostic is
+  absent. `writeRunShapeFakeRG` supplies a fake rg that records its
+  PID, writes a stderr warning, completes a valid stream, and exits 0.
+
 `grapheme_highlight_test.go` (Issue #21, external package
 `viewport_test`):
 

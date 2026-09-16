@@ -1667,3 +1667,43 @@ same tagged boundaries rather than adding production hooks. Added
 `Notes/tasks/045-remove-test-hooks-from-production-binary.md`,
 `Notes/PRD-vrg.md` (Outcome and exit-status contract; Testing
 Decisions).
+
+## [2026-09-15] ingest | Issue #46 unified runtime-error shutdown/replay
+
+Ingested the completed Issue #46 implementation, which routes every
+`program.Run()` return shape through the single ordered
+shutdown/diagnostic-replay sequence instead of writing a `Run()` error
+directly and returning before the replay — or exiting silently on a
+failed final-model type assertion. `runSearch` now owns an
+`app.Diagnostics` snapshot (a mutex-guarded string list with
+`add`/`Lines()`) wired into the model through the new
+`app.WithDiagnostics` option — production wiring in the same option
+family as the `WithOnCollect` test seam — and `collectDiagnostic`
+appends each collected diagnostic to it alongside the session
+collection, so session diagnostics reach stderr even when the final
+model `Run()` returns is absent or has the wrong type. After `Run()`
+returns (terminal already restored by Bubble Tea) and centralized
+cleanup terminates and reaps the child, the unified sequence replays:
+the snapshot's session diagnostics in collection order, then
+`vrg: program returned no usable final model` when the final model is
+absent or wrong-typed (never a silent exit), then the `Run()` runtime
+error appended exactly once with no direct-write/replay duplicate.
+Every failing shape exits 2, matching the startup-failure convention.
+`cmd/vrg/runshape_test.go` adds `TestRunReturnShapeUnifiedShutdown`,
+driving the five-shape matrix (valid/nil/invalid final model ×
+injected/nil `Run()` error) through the Issue #45 tagged
+`runProgram` seam in a real PTY lifecycle with two diagnostics
+collected in deterministic order before a clean browse quit; each
+subtest asserts exit 2, termios and display restoration, child
+termination/reap, and the ordered exactly-once replay. The issue added
+no new hook-manifest names or key-sending helpers, so Issue #48's
+reciprocal adaptation rule applies. Updated
+[outcome-contract](outcome-contract.md),
+[search-collection-path](search-collection-path.md),
+[test-hook-topology](test-hook-topology.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+[index](index.md). Sources: `cmd/vrg/main.go`, `internal/app/app.go`,
+`cmd/vrg/runshape_test.go`, `cmd/vrg/runner_testhooks.go`,
+`Notes/issues/046-runtime-error-common-diagnostic-replay.md`,
+`Notes/tasks/046-runtime-error-common-diagnostic-replay.md`,
+`Notes/PRD-vrg.md` (Outcome and exit-status contract).

@@ -519,6 +519,12 @@ type Model struct {
 	// acknowledgement side channel (Issue #11), in the same mechanism
 	// family as Process.OnReap.
 	onCollect func(string)
+	// diagSink, if set, is the diagnostic snapshot owned by the process
+	// entry point (Issue #46). Every collected diagnostic is appended
+	// to it as it is processed, so collected session diagnostics reach
+	// stderr even when the final model Run() returns is absent or has
+	// the wrong type.
+	diagSink *Diagnostics
 
 	childArgs []string
 	workdir   string
@@ -759,6 +765,7 @@ type config struct {
 	fileLoader FileLoader
 	fileGate   chan struct{}
 	onCollect  func(string)
+	diagSink   *Diagnostics
 	// rowProviderFactory builds a RowProvider from a loaded buffer.
 	// When nil, viewport.BufferRows is used. This is a test seam for
 	// the render-cost guard.
@@ -880,6 +887,47 @@ func WithOnCollect(f func(string)) Option {
 	return func(c *config) { c.onCollect = f }
 }
 
+// Diagnostics is the session diagnostic snapshot the process entry
+// point owns (Issue #46). The model appends every collected diagnostic
+// to it as the diagnostic is processed, so the snapshot survives
+// independently of the final model Run() returns: collected session
+// diagnostics reach stderr even when the final model is absent or has
+// the wrong type. The entry point reads it only after the program has
+// exited and cleanup is complete; the mutex keeps the snapshot safe
+// even if a diagnostic append races the shutdown read.
+type Diagnostics struct {
+	mu    sync.Mutex
+	lines []string
+}
+
+// add appends one already-sanitized diagnostic to the snapshot. The
+// model calls it from collectDiagnostic; the entry point never calls
+// it.
+func (d *Diagnostics) add(s string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.lines = append(d.lines, s)
+}
+
+// Lines returns a copy of the retained diagnostics in collection
+// order.
+func (d *Diagnostics) Lines() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make([]string, len(d.lines))
+	copy(out, d.lines)
+	return out
+}
+
+// WithDiagnostics sets the diagnostic snapshot the model appends every
+// collected diagnostic to (Issue #46). It is in the same option family
+// as WithOnCollect but is production wiring, not a test seam: the
+// entry point owns the snapshot so the post-Run() replay does not
+// depend on the final-model type assertion.
+func WithDiagnostics(d *Diagnostics) Option {
+	return func(c *config) { c.diagSink = d }
+}
+
 // WithRowProviderFactory sets a factory that builds a RowProvider from
 // a loaded buffer. When nil, viewport.BufferRows is used. This is a
 // test seam for the render-cost guard (Issue #12): a counting fake
@@ -958,6 +1006,7 @@ func New(childArgs []string, workdir string, opts ...Option) Model {
 		fileLoader:         cfg.fileLoader,
 		fileGate:           cfg.fileGate,
 		onCollect:          cfg.onCollect,
+		diagSink:           cfg.diagSink,
 		rowProviderFactory: cfg.rowProviderFactory,
 		layoutGate:         cfg.layoutGate,
 		rowModelFactory:    cfg.rowModelFactory,
@@ -3785,8 +3834,9 @@ func sanitizeDiagnostic(s string) string {
 }
 
 // collectDiagnostic sanitizes s through sanitizeDiagnostic, appends it to
-// the session diagnostic collection, and fires the onCollect callback if
-// set (Issue #11). The callback is the application-side acknowledgement
+// the session diagnostic collection and to the entry point's diagnostic
+// snapshot if one is wired (Issue #46), and fires the onCollect callback
+// if set (Issue #11). The callback is the application-side acknowledgement
 // side channel: it fires once a diagnostic has been processed into the
 // collection, in the same mechanism family as Process.OnReap. The
 // shutdown boundary is defined here: a diagnostic is "collected" once the
@@ -3796,6 +3846,9 @@ func sanitizeDiagnostic(s string) string {
 func (m *Model) collectDiagnostic(s string) {
 	sanitized := sanitizeDiagnostic(s)
 	m.diagnostics = append(m.diagnostics, sanitized)
+	if m.diagSink != nil {
+		m.diagSink.add(sanitized)
+	}
 	if m.onCollect != nil {
 		m.onCollect(sanitized)
 	}

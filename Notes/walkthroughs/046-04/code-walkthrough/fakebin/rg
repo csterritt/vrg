@@ -1,0 +1,11 @@
+#!/bin/sh
+# Fake ripgrep: write a stderr diagnostic (collected as a session
+# diagnostic at SearchComplete), emit a valid JSON stream for
+# demo/test.txt, then exit 0 — leaving a clean browse state for the
+# tagged runner seam to override the Run() return tuple.
+printf '%s\n' 'manual session warning 046' >&2
+echo '{"type":"begin","data":{"path":{"text":"demo/test.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"demo/test.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+echo '{"type":"end","data":{"path":{"text":"demo/test.txt"},"binary_offset":null}}'
+echo '{"type":"summary","data":{}}'
+exit 0

@@ -38,7 +38,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 // diagnostic to stderr and returns 2 without entering the TUI. Every
 // ordinary exit routes through the same centralized cleanup: the child
 // is terminated and reaped, and the terminal is restored by Bubble Tea
-// before any diagnostic is written.
+// before any diagnostic is written. Every Run() return shape routes
+// through the single ordered shutdown sequence (Issue #46): retained
+// session diagnostics replayed in collection order, then a diagnostic
+// for an absent or wrong-type final model when applicable, then the
+// Run() runtime error appended exactly once; every failing shape exits
+// 2, matching the startup-failure convention.
 func runSearch(res cli.Result, stdout, stderr io.Writer) int {
 	workdir, err := os.Getwd()
 	if err != nil {
@@ -71,7 +76,14 @@ func runSearch(res cli.Result, stdout, stderr io.Writer) int {
 
 	proc := app.NewProcess(rgCmd, rgStdout, rgStderr)
 
-	opts := []app.Option{app.WithProcess(proc)}
+	// The diagnostic snapshot (Issue #46) is owned here at the process
+	// boundary: the model appends every collected diagnostic to it as
+	// it is processed, so session diagnostics reach stderr even when
+	// the final model Run() returns is absent or has the wrong type.
+	// The final-model type assertion is not the only channel through
+	// which collected diagnostics reach the replay.
+	snapshot := &app.Diagnostics{}
+	opts := []app.Option{app.WithProcess(proc), app.WithDiagnostics(snapshot)}
 
 	// Test-hook boundary (Issue #45): the untagged production build
 	// contributes no options; the vrg_testhooks build wires the
@@ -95,29 +107,42 @@ func runSearch(res cli.Result, stdout, stderr io.Writer) int {
 	}
 	proc.Cleanup()
 
-	if err != nil {
-		// Terminal is already restored by Bubble Tea. Write the
-		// diagnostic exactly once, after restoration.
-		fmt.Fprintf(stderr, "vrg: %s\n", cli.Escape(err.Error()))
-		return 2
+	// Post-restoration stderr replay (Issue #11), unified across every
+	// Run() return shape (Issue #46): Run() has returned, so Bubble Tea
+	// has already restored the terminal, and cleanup above has
+	// terminated and reaped the child — even when cleanup also
+	// completed inside the model before Run() returned, replay still
+	// waits until now. The snapshot replays each collected diagnostic
+	// exactly once, in collection order, to sanitized stderr. The
+	// collection is independent of what was displayed; diagnostics
+	// never shown in an overlay are also replayed. The
+	// controlled-failure diagnostic is routed through the collection
+	// (no separate direct write), so the Issue #4 writer serves every
+	// controlled exit. Replay does not wait on unrelated in-flight
+	// work: only diagnostics already processed by the model before the
+	// exit are collected.
+	for _, d := range snapshot.Lines() {
+		fmt.Fprintln(stderr, d)
 	}
 
 	m, ok := finalModel.(app.Model)
 	if !ok {
+		// An absent or wrong-type final model is a controlled
+		// failure, never a silent exit: the diagnostic names the
+		// invalid-final-model condition after the session
+		// diagnostics and before any runtime error.
+		fmt.Fprintln(stderr, "vrg: program returned no usable final model")
+	}
+
+	if err != nil {
+		// The Run() runtime error is appended exactly once, as the
+		// last line of the ordered replay.
+		fmt.Fprintf(stderr, "vrg: %s\n", cli.Escape(err.Error()))
 		return 2
 	}
 
-	// Post-restoration stderr replay (Issue #11): replay each collected
-	// diagnostic exactly once, in collection order, to sanitized stderr
-	// after the terminal has been restored by Bubble Tea. The collection
-	// is independent of what was displayed; diagnostics never shown in an
-	// overlay are also replayed. The controlled-failure diagnostic is
-	// routed through the collection (no separate direct write), so the
-	// Issue #4 writer serves every controlled exit. Replay does not wait
-	// on unrelated in-flight work: only diagnostics already processed by
-	// the model before the exit are collected.
-	for _, d := range m.Diagnostics() {
-		fmt.Fprintln(stderr, d)
+	if !ok {
+		return 2
 	}
 
 	return m.ExitCode()

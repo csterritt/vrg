@@ -11,8 +11,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   program, propagates exit codes; Issue #4: centralized cleanup kills the
   child process group and reaps via `proc.Cleanup`, single
   post-restoration stderr writer for diagnostics; Issue #11:
-  replays every collected diagnostic from `m.Diagnostics()` to stderr
-  exactly once each in collection order after terminal restoration),
+  replays every collected diagnostic to stderr exactly once each in
+  collection order after terminal restoration; Issue #46: owns the
+  `app.Diagnostics` snapshot wired via `app.WithDiagnostics` and routes
+  every `Run()` return shape through the single ordered shutdown
+  sequence — snapshot diagnostics in collection order, then the
+  invalid-final-model diagnostic `vrg: program returned no usable final
+  model` when applicable, then the `Run()` runtime error appended
+  exactly once — exiting 2 on every failing shape),
   usage error → sanitized diagnostic on stderr,
   exit 2. Issue #45 moved every `VRG_TEST_*` test seam out of this file
   behind two unconditional call sites — `testSeamOptions(proc)` for
@@ -565,7 +571,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   intent, and presentation untouched so the in-flight startup or
   navigation load completes under its original classification; the
   navigation re-entry path is unchanged (selection, placeholder, and
-  `IntentReveal` still update on a dropped duplicate). See
+  `IntentReveal` still update on a dropped duplicate). Issue #46 added
+  the boundary-owned diagnostic snapshot: the `Diagnostics` type (a
+  mutex-guarded list with `add`/`Lines()`), the `WithDiagnostics`
+  option in the same family as `WithOnCollect` but as production
+  wiring rather than a test seam, the `diagSink` model/config field,
+  and a `collectDiagnostic` append to the sink alongside the session
+  collection — so collected diagnostics reach stderr even when the
+  `Run()` final model is absent or wrong-typed. See
   [overlay-full-scroll](overlay-full-scroll.md),
   [stream-integrity-diagnostics](stream-integrity-diagnostics.md),
   [record-robustness](record-robustness.md),

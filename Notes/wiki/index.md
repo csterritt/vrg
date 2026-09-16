@@ -15,13 +15,15 @@ Catalog of all wiki pages for the vrg project.
   flag allow-list, ordered exact-spelling scan records, combined shorts,
   cumulative `-u`, assignment rejection, exact child argv
 - [search-collection-path.md](search-collection-path.md) — Issue #3
-  (extended by Issues #4, #8, #9, #10, #11, #36, #37, and #44): ripgrep subprocess
+  (extended by Issues #4, #8, #9, #10, #11, #36, #37, #44, and #46): ripgrep subprocess
   execution, dual-pipe drainage, SearchIndex parsing with binary-file
   exclusion and stream-integrity accounting, the searching/summary/no-results TUI
   lifecycle, cancellation, child termination/reaping, terminal
   restoration, controlled-failure cleanup, the fatal/warning
-  outcome matrix with modal error overlay, and the session diagnostic
-  collection with post-restoration stderr replay
+  outcome matrix with modal error overlay, the session diagnostic
+  collection with post-restoration stderr replay, and the
+  boundary-owned diagnostic snapshot feeding the unified
+  shutdown/replay sequence for every `Run()` return shape
 - [browse-tracer.md](browse-tracer.md) — Issue #5 (extended by Issue #7,
   Issue #12, Issue #13, and Issue #15): two-pane browse view with file list,
   filename rule, gutter, true-inverse match highlights, current-match
@@ -56,12 +58,14 @@ Catalog of all wiki pages for the vrg project.
   top-of-file starting sequence; saved-state replacement for moving
   and no-scroll reveals; startup-after-load and navigation triggers
 - [outcome-contract.md](outcome-contract.md) — Issue #9 (extended by
-  Issues #10, #11, #36, #37, and #44): stream-integrity accounting, separate
+  Issues #10, #11, #36, #37, #44, and #46): stream-integrity accounting, separate
   process-success and stream-integrity assessment, the fatal/warning
   outcome matrix, the modal error overlay, exit statuses, stderr
   capture and fallback diagnostics, record-loss inputs and outcome
-  rows, the universal composed-diagnostic component order, and the
-  post-restoration stderr replay with session diagnostic collection
+  rows, the universal composed-diagnostic component order, the
+  post-restoration stderr replay with session diagnostic collection,
+  and the unified shutdown sequence for every `Run()` return shape
+  (runtime error and invalid final model included, exit 2)
 - [record-robustness.md](record-robustness.md) — Issue #10 (extended
   by Issues #36 and #37): robust handling of malformed, oversized, and
   unknown-type records with separate counters, the 64 MiB record limit
@@ -320,7 +324,9 @@ Catalog of all wiki pages for the vrg project.
   manifest and its exclusion of fake-rg fixture variables, the
   `TestMain` tagged build, the untagged-artifact boundary test, paced
   non-spinning watchers, and the rule that Issues #46 and #48 extend
-  the same mechanism rather than adding production hooks
+  the same mechanism rather than adding production hooks — Issue #46
+  consumed the runner controls for its `Run()` return-shape matrix
+  without new manifest names
 
 ## Catalogs
 

@@ -1,4 +1,4 @@
-# Search collection path (Issue #3, extended by Issues #4, #8, #9, #10, #11, #36, #37, and #44)
+# Search collection path (Issue #3, extended by Issues #4, #8, #9, #10, #11, #36, #37, #44, and #46)
 
 The ripgrep execution and result-collection pipeline delivered by
 [Issue #3](../issues/003-spawn-rg-collect-results-searching-screen.md),
@@ -28,7 +28,12 @@ added the always-emitted oversized aggregate count and the
 anonymous-oversized-record guarantees.
 [Issue #44](../issues/044-post-summary-context-integrity-failure.md)
 added dedicated `context`-after-`summary` regression coverage for the
-summary-is-final contract. Relevant PRD sections:
+summary-is-final contract.
+[Issue #46](../issues/046-runtime-error-common-diagnostic-replay.md)
+added the boundary-owned diagnostic snapshot and routed every
+`program.Run()` return shape through the single ordered
+shutdown/replay sequence, exiting 2 on every failing shape. Relevant
+PRD sections:
 *Implementation Decisions → Invocation and child arguments*,
 *Module Design → CLI / SearchIndex / App*, *Testing Decisions → CLI /
 SearchIndex / App / Subprocess boundary / Responsiveness boundaries*,
@@ -54,23 +59,28 @@ precedence* (replay bullet), and *Resources and responsiveness
    2 without entering the TUI.
 5. Constructs an `app.Process` via `app.NewProcess` (Issue #4) with the
    running process and its pipes, then constructs an `app.Model` with
-   `app.WithProcess` and optional test seams.
-6. Runs the Bubble Tea program with `tea.NewProgram(model,
-   tea.WithOutput(stdout))`.
+   `app.WithProcess`, the boundary-owned `app.Diagnostics` snapshot via
+   `app.WithDiagnostics` (Issue #46), and optional test seams.
+6. Runs the Bubble Tea program through the `runProgram` boundary
+   (Issue #45), which delegates to `tea.NewProgram(model,
+   tea.WithOutput(stdout)).Run()` in the untagged build.
 7. After the program exits, performs centralized cleanup (Issue #4):
    kills the child process group with `syscall.Kill(-pid, SIGKILL)`,
    then calls `proc.Cleanup()` which kills the direct child if still
    running and waits for the collection goroutine to finish (ensuring
    the child is reaped).
-8. Inspects the final model state: if a diagnostic is present, prints
-   it to stderr exactly once, after the terminal has been restored by
-   Bubble Tea. Since Issue #11, replays every collected diagnostic from
-   `m.Diagnostics()` to stderr, exactly once each, in collection order,
-   after terminal restoration. The controlled-failure diagnostic is
-   routed through the collection (no separate direct write), so the
-   Issue #4 post-restoration writer serves every controlled exit.
+8. Runs the single ordered shutdown/replay sequence for every `Run()`
+   return shape (Issue #46), after terminal restoration and cleanup:
+   the snapshot's session diagnostics in collection order, then
+   `vrg: program returned no usable final model` when the final model
+   is absent or has the wrong type, then the `Run()` runtime error
+   appended exactly once. The controlled-failure diagnostic is routed
+   through the collection (no separate direct write), so the Issue #4
+   post-restoration writer serves every controlled exit.
 9. Returns the model's exit code (0 for normal quit, 130 for
-   Ctrl-C/quit during search, 2 for failure).
+   Ctrl-C/quit during search, 2 for failure); every failing `Run()`
+   return shape — a runtime error or an unusable final model — exits
+   2, matching the startup-failure convention.
 
 The library packages never call `os.Exit` or write directly to
 stdout/stderr. All exit-status and stream-destination decisions live in
@@ -238,13 +248,18 @@ trailing malformed record so the outcome is fatal.
   diagnostic has been processed into the session collection. The
   application-side acknowledgement side channel, in the same mechanism
   family as `Process.OnReap`.
+- `Diagnostics` / `WithDiagnostics(d)` (Issue #46) — the diagnostic
+  snapshot the process entry point owns; `collectDiagnostic` appends
+  every collected diagnostic to it, so session diagnostics survive a
+  final model that is absent or wrong-typed. Production wiring in the
+  same option family as `WithOnCollect`, not a test seam.
 - `State()` / `ExitCode()` / `Diagnostic()` — accessors for the entry
   point.
 - `Diagnostics()` (Issue #11) — returns a copy of the session
   diagnostic collection in collection order. Each entry is sanitized
-  through `sanitizeDiagnostic`. The entry point replays these to
-  stderr after terminal restoration, exactly once each, on every
-  controlled exit. The collection is independent of what was displayed.
+  through `sanitizeDiagnostic`. Since Issue #46 the entry point replays
+  the `Diagnostics` snapshot rather than this accessor; the collection
+  is independent of what was displayed.
 
 ### States
 
@@ -380,13 +395,20 @@ a separate direct write, so the Issue #4 post-restoration writer serves
 every controlled exit. Exactly-once holds across both the former
 direct-write path and the replay mechanism.
 
-### Session diagnostic collection and replay (Issue #11)
+### Session diagnostic collection and replay (Issue #11, snapshot by Issue #46)
 
 The model maintains a session diagnostic collection (`diagnostics
 []string`) independent of what was displayed. Every diagnostic the
 model processes is collected via `collectDiagnostic`, which sanitizes
 the text through `sanitizeDiagnostic`, appends it to the collection,
-and fires the `onCollect` callback if set.
+appends it to the entry point's `app.Diagnostics` snapshot when one is
+wired through `app.WithDiagnostics` (Issue #46), and fires the
+`onCollect` callback if set. The snapshot is a mutex-guarded string
+list owned by `runSearch`; `Lines()` returns a copy in collection
+order. Because the boundary — not the returned model — owns it,
+session diagnostics survive a final model that is absent or has the
+wrong type: the final-model type assertion is not the only channel
+through which collected diagnostics reach stderr.
 
 Collection sources:
 
@@ -409,13 +431,17 @@ keys: `ctrl+c` in any state and `q` while searching or gate-held
 preparation is incomplete.
 
 After `program.Run()` returns and cleanup is complete, the process
-boundary replays every collected diagnostic to stderr, exactly once
-each, in collection order. Replay occurs strictly after the
+boundary replays the snapshot's collected diagnostics to stderr,
+exactly once each, in collection order — followed, in the Issue #46
+unified sequence, by the invalid-final-model diagnostic when the
+`Run()` final model is absent or wrong-typed, then the `Run()` runtime
+error appended exactly once. Replay occurs strictly after the
 display-restoration sequence (alt-screen exit, cursor show) and after
 input modes are restored, because `program.Run()` returns only after
-Bubble Tea restores the terminal. Replay does not wait on unrelated
-in-flight work: only diagnostics already processed by the model before
-the exit are collected.
+Bubble Tea restores the terminal; it still waits until `Run()` has
+returned even when cleanup also completed inside the model earlier.
+Replay does not wait on unrelated in-flight work: only diagnostics
+already processed by the model before the exit are collected.
 
 The `onCollect` callback is the application-side acknowledgement side
 channel, in the same mechanism family as `Process.OnReap`. The process
@@ -489,4 +515,9 @@ assertions, display-restoration sequence checks, gate injection
 extended the harness with the application-side collection
 acknowledgement side channel (`VRG_TEST_COLLECT_ACK`), the diagnostic
 emission trigger (`VRG_TEST_DIAGNOSTIC_TRIGGER` /
-`VRG_TEST_DIAGNOSTIC_TEXT`), and replay-ordering assertions.
+`VRG_TEST_DIAGNOSTIC_TEXT`), and replay-ordering assertions. Issue #45
+moved every seam behind the `vrg_testhooks` build variant and added
+the `runProgram` program-runner boundary; Issue #46 drives the
+`VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` runner controls
+through it to cover the full `Run()` return-shape matrix (see
+[test-hook-topology](test-hook-topology.md)).

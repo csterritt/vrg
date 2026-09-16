@@ -35,7 +35,9 @@ tagged file, joined by an unconditional common call site in
   `runner_testhooks.go` (tagged) runs the real program and then
   substitutes the returned final-model/error tuple selected by the
   runner controls, so Issue #46's return-shape matrix lands at the
-  executable's actual post-`Run()` branches.
+  executable's actual post-`Run()` branches. Issue #46 consumes it in
+  `runshape_test.go`, driving every matrix shape through a real PTY
+  lifecycle with diagnostics collected before the injected return.
 
 The inert complementary implementations are permitted by the issue:
 the untagged halves may only delegate directly or return no options.
@@ -64,7 +66,10 @@ they are consumed by the test suite's fake-rg shell scripts, not by
 the vrg binary, and Issue #50 renames them `FAKE_RG_*`. Issue #48 may
 add named acknowledgement hooks to this manifest; Issues #46 and #48
 extend these same tagged boundaries rather than adding production
-hooks.
+hooks. Issue #46 landed first and added no new manifest names — its
+return-shape tests reuse the runner controls and the existing
+`VRG_TEST_COLLECT_ACK` acknowledgement — so Issue #48's reciprocal
+adaptation rule applies to its harness changes.
 
 ## TestMain and the boundary test
 
@@ -90,5 +95,14 @@ passes unchanged against it.
   and invalid model shapes; nil/invalid models with nil error reach
   the invalid-final-model branch (exit 2, not the `app.Model` path);
   unset controls delegate and exit 0.
+
+Issue #46's `runshape_test.go` then owns the shutdown/replay contract
+behind each branch: `TestRunReturnShapeUnifiedShutdown` covers the
+full matrix — valid model plus `Run()` error, nil/invalid model plus
+`Run()` error, and nil/invalid model plus nil error — asserting exit
+2, terminal restoration, child reap, and the ordered replay (session
+diagnostics in collection order, then the invalid-final-model
+diagnostic when applicable, then the runtime error exactly once). See
+[outcome-contract](outcome-contract.md).
 
 See [unit-tests](unit-tests.md) and [source-code](source-code.md).
