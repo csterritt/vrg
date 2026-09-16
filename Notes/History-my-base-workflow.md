@@ -546,3 +546,12 @@ Usage
  Input tokens: 136449 tokens
  Output tokens: 41319 tokens
  Cached input tokens: 6447232 tokens
+
+----
+Task 046-runtime-error-common-diagnostic-replay.md
+
+Usage
+ Agent messages: 13 messages
+ Input tokens: 34059 tokens
+ Output tokens: 5536 tokens
+ Cached input tokens: 1423168 tokens
