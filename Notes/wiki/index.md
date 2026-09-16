@@ -313,6 +313,14 @@ Catalog of all wiki pages for the vrg project.
   byte-to-cell mapping still resolves to original source bytes;
   propagation through ByteCells, wrapping, clipping, panning, highlight
   expansion, and the Issue #39 renderer
+- [test-hook-topology.md](test-hook-topology.md) — Issue #45: the
+  `vrg_testhooks` build variant and its two build-constrained
+  boundaries (the `testSeamOptions` option/process wiring and the
+  `runProgram` program-runner wrapper), the explicit vrg-consumed hook
+  manifest and its exclusion of fake-rg fixture variables, the
+  `TestMain` tagged build, the untagged-artifact boundary test, paced
+  non-spinning watchers, and the rule that Issues #46 and #48 extend
+  the same mechanism rather than adding production hooks
 
 ## Catalogs
 

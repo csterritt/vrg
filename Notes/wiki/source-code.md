@@ -10,14 +10,35 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   starts ripgrep with the protected child argv, runs the Bubble Tea
   program, propagates exit codes; Issue #4: centralized cleanup kills the
   child process group and reaps via `proc.Cleanup`, single
-  post-restoration stderr writer for diagnostics, test seams for reap
-  evidence/gate/failure injection via `VRG_TEST_*` env vars; Issue #11:
+  post-restoration stderr writer for diagnostics; Issue #11:
   replays every collected diagnostic from `m.Diagnostics()` to stderr
-  exactly once each in collection order after terminal restoration, and
-  wires the `VRG_TEST_COLLECT_ACK` acknowledgement side channel and the
-  `VRG_TEST_DIAGNOSTIC_TRIGGER`/`VRG_TEST_DIAGNOSTIC_TEXT` diagnostic
-  emission trigger), usage error → sanitized diagnostic on stderr,
-  exit 2. See [search-collection-path](search-collection-path.md).
+  exactly once each in collection order after terminal restoration),
+  usage error → sanitized diagnostic on stderr,
+  exit 2. Issue #45 moved every `VRG_TEST_*` test seam out of this file
+  behind two unconditional call sites — `testSeamOptions(proc)` for
+  option/process wiring and `runProgram(model, stdout)` for the
+  Bubble Tea program boundary — whose test-hook halves compile only
+  under `-tags vrg_testhooks`. See [search-collection-path](search-collection-path.md)
+  and [test-hook-topology](test-hook-topology.md).
+- `cmd/vrg/seams.go` / `cmd/vrg/seams_testhooks.go` — the Issue #45
+  option/process-wiring boundary. The untagged `seams.go`
+  (`//go:build !vrg_testhooks`) returns no options; the tagged
+  `seams_testhooks.go` (`//go:build vrg_testhooks`) reads the
+  option-related `VRG_TEST_*` manifest names (`VRG_TEST_REAP`,
+  `VRG_TEST_GATE`, `VRG_TEST_FAIL_TRIGGER`/`VRG_TEST_FAIL_DIAGNOSTIC`,
+  `VRG_TEST_DIAGNOSTIC_TRIGGER`/`VRG_TEST_DIAGNOSTIC_TEXT`,
+  `VRG_TEST_COLLECT_ACK`) and returns the corresponding `app.Option`s
+  and `proc.OnReap` wiring, with the file watchers paced by
+  `watchForFile`'s sleep-polled loop.
+- `cmd/vrg/runner.go` / `cmd/vrg/runner_testhooks.go` — the Issue #45
+  program-runner boundary around `tea.NewProgram(...).Run()`. The
+  untagged `runner.go` delegates directly; the tagged
+  `runner_testhooks.go` runs the real program and then substitutes the
+  returned final-model/error tuple selected by `VRG_TEST_RUN_FINAL_MODEL`
+  (`valid`/`nil`/`invalid`, the last via the non-`app.Model` stub
+  `invalidRunModel`) and `VRG_TEST_RUN_ERROR` (real/`nil`/injected
+  text), giving Issue #46 its return-shape matrix at the actual
+  executable `Run()` boundary.
 
 ## internal/cli
 

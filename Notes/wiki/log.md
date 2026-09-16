@@ -1630,3 +1630,40 @@ stream-integrity failure per the summary-is-final contract. Updated
 `Notes/tasks/044-post-summary-context-integrity-failure.md`,
 `Notes/PRD-vrg.md` (Result index, records, and stream integrity;
 Outcome and exit-status contract).
+
+## [2026-09-15] ingest | Issue #45 test-hook build topology
+
+Ingested the completed Issue #45 implementation, which moves every
+test-only seam out of the released `vrg` binary behind a
+`vrg_testhooks` build variant. `cmd/vrg` now carries two
+build-constrained boundaries joined by unconditional common call sites
+in `runSearch`: the option/process wiring `testSeamOptions(proc)`
+(`seams.go` returns nil untagged; `seams_testhooks.go` reads the
+option-related `VRG_TEST_*` manifest and returns the `app.Option`s and
+`proc.OnReap` wiring, with file watchers paced by a sleep-polled
+`watchForFile` instead of the former tight `os.Stat` spin) and the
+program-runner wrapper `runProgram(model, stdout)`
+(`runner.go` delegates to `tea.NewProgram(...).Run()` untagged;
+`runner_testhooks.go` runs the real program and substitutes the
+returned final-model/error tuple selected by `VRG_TEST_RUN_FINAL_MODEL`
+and `VRG_TEST_RUN_ERROR` for Issue #46's return-shape matrix).
+`TestMain` builds the binary under test with
+`go build -tags vrg_testhooks`, so the whole subprocess suite
+exercises the hooked variant automatically; `testhooks_test.go` adds
+the two-sided boundary proof — the untagged artifact ignores the
+entire explicit hook manifest and contains none of its names, while
+the tagged runner delivers every required tuple at the real
+`program.Run()` return site. The explicit manifest excludes fake-rg
+fixture variables (`VRG_TEST_ARGV`/`CWD`/`HANDSHAKE`/`READY`/`PID`),
+which Issue #50 renames `FAKE_RG_*`; Issues #46 and #48 extend these
+same tagged boundaries rather than adding production hooks. Added
+[test-hook-topology](test-hook-topology.md); updated
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+[index](index.md). Sources: `cmd/vrg/main.go`, `cmd/vrg/seams.go`,
+`cmd/vrg/seams_testhooks.go`, `cmd/vrg/runner.go`,
+`cmd/vrg/runner_testhooks.go`, `cmd/vrg/main_test.go`,
+`cmd/vrg/testhooks_test.go`,
+`Notes/issues/045-remove-test-hooks-from-production-binary.md`,
+`Notes/tasks/045-remove-test-hooks-from-production-binary.md`,
+`Notes/PRD-vrg.md` (Outcome and exit-status contract; Testing
+Decisions).

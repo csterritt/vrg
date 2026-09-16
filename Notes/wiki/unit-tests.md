@@ -1004,7 +1004,9 @@ standalone zero-width clusters:
 
 ## cmd/vrg (subprocess boundary)
 
-`main_test.go` builds the real binary once in `TestMain` and asserts
+`main_test.go` builds the real binary once in `TestMain` — with
+`go build -tags vrg_testhooks` since Issue #45, so every subprocess
+test exercises the hooked variant automatically — and asserts
 stdout/stderr/status separately:
 
 - **`TestGeneratedHelpStdout`** (named group, rerun by Issue #6) — all
@@ -1131,6 +1133,28 @@ replay-ordering assertions:
 - `TestReplayFilenameWithNewlineAndESC` — a diagnostic embedding a
   filename with `\n` and ESC is escaped and single-lined in the
   replayed stderr text through the Issue #6 utility.
+
+`testhooks_test.go` (Issue #45) proves both halves of the
+`vrg_testhooks` build topology — see
+[test-hook-topology](test-hook-topology.md):
+
+- `TestUntaggedBinaryIgnoresHookManifest` — builds the production
+  binary without tags, runs an ordinary fake-rg search with every name
+  in the explicit vrg-consumed hook manifest set (the option hooks
+  plus the `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` runner
+  controls), and asserts a normal exit 0, no hook marker text on
+  stderr, no side-effect files, and none of the manifest names present
+  in the artifact bytes. The probed list comes only from the explicit
+  manifest — never from grepping `VRG_TEST_*` — because fake-rg
+  fixture variables are not vrg behaviour and are renamed `FAKE_RG_*`
+  by Issue #50.
+- `TestTaggedRunnerSeamReturnShapes` — builds the tagged binary and
+  proves the runner seam delivers every final-model/error tuple Issue
+  #46 needs at the executable's real `program.Run()` return site:
+  injected error text reaches the `Run()` error branch verbatim for
+  `valid`, `nil`, and `invalid` model shapes; `nil`/`invalid` models
+  with a forced-nil error reach the invalid-final-model branch; unset
+  controls delegate to the real run (exit 0).
 
 `grapheme_highlight_test.go` (Issue #21, external package
 `viewport_test`):

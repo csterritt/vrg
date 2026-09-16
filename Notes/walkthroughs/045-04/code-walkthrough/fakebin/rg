@@ -1,0 +1,7 @@
+#!/bin/sh
+# Fake ripgrep: emit a valid JSON stream for demo/test.txt, then exit 0.
+echo '{"type":"begin","data":{"path":{"text":"demo/test.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"demo/test.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+echo '{"type":"end","data":{"path":{"text":"demo/test.txt"},"binary_offset":null}}'
+echo '{"type":"summary","data":{}}'
+exit 0
