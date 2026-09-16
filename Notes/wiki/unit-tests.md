@@ -1178,8 +1178,10 @@ overlay-dismissal event must report `dismissed` before a following
   side-effect files, and none of the manifest names present in the
   artifact bytes. The probed list comes only from the explicit
   manifest — never from grepping `VRG_TEST_*` — because fake-rg
-  fixture variables are not vrg behaviour and are renamed `FAKE_RG_*`
-  by Issue #50.
+  fixture variables are not vrg behaviour; Issue #50 renamed them to
+  `FAKE_RG_ARGV_FILE`, `FAKE_RG_CWD_FILE`, `FAKE_RG_HANDSHAKE_FILE`,
+  `FAKE_RG_READY_FILE`, and `FAKE_RG_PID_FILE` (see
+  [post-audit-reverification](post-audit-reverification.md)).
 - `TestTaggedRunnerSeamReturnShapes` — builds the tagged binary and
   proves the runner seam delivers every final-model/error tuple Issue
   #46 needs at the executable's real `program.Run()` return site:

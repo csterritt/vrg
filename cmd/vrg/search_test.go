@@ -11,19 +11,19 @@ import (
 
 // writeFakeRG writes a fake rg script to dir that outputs valid ripgrep
 // JSON to stdout. The script writes its argv to the file named by the
-// VRG_TEST_ARGV environment variable and its cwd to VRG_TEST_CWD. After
-// writing all output, it touches the file named by VRG_TEST_HANDSHAKE to
+// FAKE_RG_ARGV_FILE environment variable and its cwd to FAKE_RG_CWD_FILE. After
+// writing all output, it touches the file named by FAKE_RG_HANDSHAKE_FILE to
 // signal completion.
 func writeFakeRG(t *testing.T, dir string, extraScript string) string {
 	t.Helper()
 	rgPath := filepath.Join(dir, "rg")
 	script := `#!/bin/sh
 # Write argv and cwd for test verification
-if [ -n "$VRG_TEST_ARGV" ]; then
-	printf '%s\n' "$*" > "$VRG_TEST_ARGV"
+if [ -n "$FAKE_RG_ARGV_FILE" ]; then
+	printf '%s\n' "$*" > "$FAKE_RG_ARGV_FILE"
 fi
-if [ -n "$VRG_TEST_CWD" ]; then
-	pwd > "$VRG_TEST_CWD"
+if [ -n "$FAKE_RG_CWD_FILE" ]; then
+	pwd > "$FAKE_RG_CWD_FILE"
 fi
 ` + extraScript + `
 # Output a valid ripgrep JSON stream
@@ -32,8 +32,8 @@ printf '%s\n' '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text
 echo '{"type":"end","data":{"path":{"text":"test.txt"},"binary_offset":null}}'
 echo '{"type":"summary","data":{}}'
 # Signal completion so the test can send q after the stream is done.
-if [ -n "$VRG_TEST_HANDSHAKE" ]; then
-	touch "$VRG_TEST_HANDSHAKE"
+if [ -n "$FAKE_RG_HANDSHAKE_FILE" ]; then
+	touch "$FAKE_RG_HANDSHAKE_FILE"
 fi
 exit 0
 `
@@ -113,8 +113,8 @@ func TestChildArgvAndWorkdir(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_ARGV=" + argvFile,
-		"VRG_TEST_CWD=" + cwdFile,
+		"FAKE_RG_ARGV_FILE=" + argvFile,
+		"FAKE_RG_CWD_FILE=" + cwdFile,
 		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
 	_, _, exitCode := runVrgWithQuit(t, cmd, ackFile)
@@ -163,7 +163,7 @@ func TestChildArgvWithFlags(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_ARGV=" + argvFile,
+		"FAKE_RG_ARGV_FILE=" + argvFile,
 		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
 	runVrgWithQuit(t, cmd, ackFile)
@@ -275,7 +275,7 @@ while [ $i -lt 100 ]; do
 done
 echo '{"type":"summary","data":{}}'
 # Handshake: signal both pipes are done
-touch "$VRG_TEST_HANDSHAKE"
+touch "$FAKE_RG_HANDSHAKE_FILE"
 exit 0
 `
 	if err := os.WriteFile(rgPath, []byte(script), 0o755); err != nil {
@@ -292,7 +292,7 @@ exit 0
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"FAKE_RG_HANDSHAKE_FILE=" + handshakeFile,
 		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
 	stdout, _, exitCode := runVrgWithQuit(t, cmd, ackFile)

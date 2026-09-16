@@ -92,17 +92,17 @@ func writeBlockedFakeRG(t *testing.T, dir, readyFile, pidFile string) string {
 	rgPath := filepath.Join(dir, "rg")
 	script := `#!/bin/sh
 # Write argv and cwd for test verification
-if [ -n "$VRG_TEST_ARGV" ]; then
-	printf '%s\n' "$*" > "$VRG_TEST_ARGV"
+if [ -n "$FAKE_RG_ARGV_FILE" ]; then
+	printf '%s\n' "$*" > "$FAKE_RG_ARGV_FILE"
 fi
-if [ -n "$VRG_TEST_CWD" ]; then
-	pwd > "$VRG_TEST_CWD"
+if [ -n "$FAKE_RG_CWD_FILE" ]; then
+	pwd > "$FAKE_RG_CWD_FILE"
 fi
-if [ -n "$VRG_TEST_PID" ]; then
-	echo $$ > "$VRG_TEST_PID"
+if [ -n "$FAKE_RG_PID_FILE" ]; then
+	echo $$ > "$FAKE_RG_PID_FILE"
 fi
-if [ -n "$VRG_TEST_READY" ]; then
-	touch "$VRG_TEST_READY"
+if [ -n "$FAKE_RG_READY_FILE" ]; then
+	touch "$FAKE_RG_READY_FILE"
 fi
 # Block indefinitely until killed.
 sleep 100000
@@ -120,18 +120,18 @@ func writeCompleteFakeRG(t *testing.T, dir, readyFile, pidFile, completionFile s
 	t.Helper()
 	rgPath := filepath.Join(dir, "rg")
 	script := `#!/bin/sh
-if [ -n "$VRG_TEST_PID" ]; then
-	echo $$ > "$VRG_TEST_PID"
+if [ -n "$FAKE_RG_PID_FILE" ]; then
+	echo $$ > "$FAKE_RG_PID_FILE"
 fi
-if [ -n "$VRG_TEST_READY" ]; then
-	touch "$VRG_TEST_READY"
+if [ -n "$FAKE_RG_READY_FILE" ]; then
+	touch "$FAKE_RG_READY_FILE"
 fi
 echo '{"type":"begin","data":{"path":{"text":"test.txt"}}}'
 printf '%s\n' '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
 echo '{"type":"end","data":{"path":{"text":"test.txt"},"binary_offset":null}}'
 echo '{"type":"summary","data":{}}'
-if [ -n "$VRG_TEST_HANDSHAKE" ]; then
-	touch "$VRG_TEST_HANDSHAKE"
+if [ -n "$FAKE_RG_HANDSHAKE_FILE" ]; then
+	touch "$FAKE_RG_HANDSHAKE_FILE"
 fi
 exit 0
 `
@@ -204,8 +204,8 @@ func TestQAgainstBlockedFakeRGExits130(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_READY=" + readyFile,
-		"VRG_TEST_PID=" + pidFile,
+		"FAKE_RG_READY_FILE=" + readyFile,
+		"FAKE_RG_PID_FILE=" + pidFile,
 		"VRG_TEST_REAP=" + reapFile,
 	}
 	res := runVrgCancel(t, cmd, readyFile, "q")
@@ -237,8 +237,8 @@ func TestCtrlCAgainstBlockedFakeRGExits130(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_READY=" + readyFile,
-		"VRG_TEST_PID=" + pidFile,
+		"FAKE_RG_READY_FILE=" + readyFile,
+		"FAKE_RG_PID_FILE=" + pidFile,
 		"VRG_TEST_REAP=" + reapFile,
 	}
 	// ctrl+c is byte 0x03.
@@ -273,8 +273,8 @@ func TestNormalExitReapsChild(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_READY=" + readyFile,
-		"VRG_TEST_PID=" + pidFile,
+		"FAKE_RG_READY_FILE=" + readyFile,
+		"FAKE_RG_PID_FILE=" + pidFile,
 		"VRG_TEST_REAP=" + reapFile,
 		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
@@ -313,10 +313,10 @@ func TestQDuringGateHeldPreparationExits130(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_READY=" + readyFile,
-		"VRG_TEST_PID=" + pidFile,
+		"FAKE_RG_READY_FILE=" + readyFile,
+		"FAKE_RG_PID_FILE=" + pidFile,
 		"VRG_TEST_REAP=" + reapFile,
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"FAKE_RG_HANDSHAKE_FILE=" + handshakeFile,
 		"VRG_TEST_GATE=" + gateFile,
 	}
 	// Wait for the completion handshake (rg done, gate held), then send q.
@@ -350,8 +350,8 @@ func TestInjectedControlledFailure(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_READY=" + readyFile,
-		"VRG_TEST_PID=" + pidFile,
+		"FAKE_RG_READY_FILE=" + readyFile,
+		"FAKE_RG_PID_FILE=" + pidFile,
 		"VRG_TEST_REAP=" + reapFile,
 		"VRG_TEST_FAIL_TRIGGER=" + failTrigger,
 		"VRG_TEST_FAIL_DIAGNOSTIC=controlled failure for test",

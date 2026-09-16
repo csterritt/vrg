@@ -160,3 +160,15 @@ reports a dismissal, making the warning-overlay path deterministic.
 - `TestAckWaitBoundedTimeout` — a never-arriving handshake fails on
   the bounded timeout with a message naming the awaited condition.
 - `TestNoFixedSleepsInPtyHelpers` — the static check above.
+
+## Issue #50 re-verification
+
+Issue #50 re-ran this entire suite explicitly and uncached — `go test
+-count=1 ./cmd/vrg` and `CGO_ENABLED=1 go test -race -count=1 ./cmd/vrg`
+over the named outcome, replay, and cancellation/boundary tests, plus a
+repeated `-count=3` package run inside `scripts/verify.sh` — all green
+on these handshakes. The same condition-driven contract now also owns
+the canonical production smoke harness `scripts/smoke.py` (bounded
+output-marker waits, EOF-driven draining, a static no-`time.sleep`
+assertion). See
+[post-audit-reverification](post-audit-reverification.md).

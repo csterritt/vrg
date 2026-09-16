@@ -1828,3 +1828,57 @@ audit/issue/critique references are preserved as decision context.
 Sources: `go.mod`, `go.sum`,
 `Notes/issues/049-tidy-dependency-manifests.md`,
 `Notes/tasks/049-tidy-dependency-manifests.md`, `Notes/PRD-vrg.md`.
+
+## [2026-09-15] ingest | Issue #50 post-audit re-verification
+
+Ingested the completed Issue #50 closing verification pass — the
+audit cycle's counterpart to Issue #35, run after the composed
+Issues #36–#49 implementation and required by the audit's overall
+assessment (`Notes/critiques/final-audit-vrg.md`: rerun the complete
+acceptance and PTY verification suite with deterministic
+handshakes). `scripts/verify.sh` is the new permanent gate runner:
+ten ordered gates (untagged `go build`/`go vet`, the `vrg_testhooks`
+build/vet variants, `go test ./... -count=1`, `CGO_ENABLED=1 go test
+-race ./... -count=1`, `go test ./cmd/vrg -count=3`, `go mod verify`,
+pinned `go run golang.org/x/vuln/cmd/govulncheck@v1.5.0 ./...`, and
+`go mod tidy -diff` — the permanent tidy gate Issue #49 refers to),
+failing on the first non-zero step; the govulncheck prerequisite is
+documented as network access or warm module/tool and
+vulnerability-database caches, with an offline clean machine reported
+as an environment failure (exit 75), not a repository regression.
+Every gate is green on the final state, including zero reachable
+vulnerabilities and zero manifest drift. The fake-rg fixture variables
+moved off the `VRG_TEST_` prefix throughout the active `cmd/vrg` PTY
+fixtures and their `cmd.Env` lists — `FAKE_RG_ARGV_FILE`,
+`FAKE_RG_CWD_FILE`, `FAKE_RG_HANDSHAKE_FILE`, `FAKE_RG_READY_FILE`,
+`FAKE_RG_PID_FILE` — leaving `VRG_TEST_*` to name only the explicit
+vrg-consumed hook manifest; the suite is green before and after the
+rename. `scripts/smoke.py` is the canonical condition-driven PTY smoke
+harness (every key gated on an observed UI-state/output marker,
+completion/EOF-driven draining, bounded condition polls only, an AST
+self-check that no `time.sleep` exists, and a `VRG_TEST_*`-free
+environment assertion); the Issue #35 copy under
+`Notes/walkthroughs/035-03/` stays a frozen historical artifact. The
+named outcome, replay, and cancellation/boundary tests were re-run
+uncached and under race on the Issue #48 handshakes — all green — and
+the five smoke scenarios ran against the untagged production binary:
+browse 0, no-results 1, fatal 2 under both `q` and `Esc` with the
+composed integrity/record-loss diagnostics, cancellation 130 with
+externally observed child/process-group termination, PTY EOF, and
+terminal restoration, and help-only 0 with exactly one `Usage:` copy
+and the sentinel fake rg never invoked. No repository regression was
+found; one defect inside the new harness itself (a missing index
+increment in `strip_ansi`) was fixed during bring-up. Created
+[post-audit-reverification](post-audit-reverification.md); updated
+[test-hook-topology](test-hook-topology.md),
+[pty-handshake-tests](pty-handshake-tests.md),
+[final-verification](final-verification.md),
+[unit-tests](unit-tests.md), and [index](index.md). Sources:
+`scripts/verify.sh`, `scripts/smoke.py`, `cmd/vrg/search_test.go`,
+`cmd/vrg/cancel_test.go`, `cmd/vrg/outcome_test.go`,
+`cmd/vrg/replay_test.go`, `cmd/vrg/runshape_test.go`,
+`cmd/vrg/testhooks_test.go`,
+`Notes/issues/050-post-audit-reverification.md`,
+`Notes/tasks/050-post-audit-reverification.md`,
+`Notes/critiques/final-audit-vrg.md`, `Notes/PRD-vrg.md` (Testing
+Decisions).

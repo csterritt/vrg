@@ -137,4 +137,10 @@ weakened, or deleted.
 
 See [unit-tests](unit-tests.md) for the full test catalog and
 [outcome-contract](outcome-contract.md) for the outcome matrix these
-smoke outcomes exercise.
+smoke outcomes exercise. Issue #50's
+[post-audit-reverification](post-audit-reverification.md) is this
+pass's counterpart for the audit cycle: it owns the permanent
+`scripts/verify.sh` gate runner and the canonical condition-driven
+`scripts/smoke.py` harness, while the `smoke.py` recorded in
+`Notes/walkthroughs/035-03/code-walkthrough/` remains this issue's
+frozen historical artifact.

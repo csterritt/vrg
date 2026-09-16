@@ -16,10 +16,11 @@ import (
 // the program.Run() return shapes required by Issue #46; the
 // Issue #48 acknowledgement hook wires the per-update
 // acknowledgement log the PTY helpers wait on. Fake-rg fixture
-// variables (VRG_TEST_ARGV, VRG_TEST_CWD, VRG_TEST_HANDSHAKE,
-// VRG_TEST_READY, VRG_TEST_PID) are deliberately absent: they are
-// consumed by the test's fake-rg scripts, not by the vrg binary, and
-// are renamed FAKE_RG_* by Issue #50.
+// variables (FAKE_RG_ARGV_FILE, FAKE_RG_CWD_FILE,
+// FAKE_RG_HANDSHAKE_FILE, FAKE_RG_READY_FILE, FAKE_RG_PID_FILE) are
+// deliberately absent: they are consumed by the test's fake-rg
+// scripts, not by the vrg binary. Issue #50 renamed them off the
+// VRG_TEST_ prefix.
 var vrgConsumedHookManifest = []string{
 	"VRG_TEST_REAP",
 	"VRG_TEST_GATE",
@@ -57,7 +58,7 @@ func hookProbeEnv(t *testing.T, dir, fakeDir, handshake string) []string {
 	t.Helper()
 	return []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshake,
+		"FAKE_RG_HANDSHAKE_FILE=" + handshake,
 		"VRG_TEST_REAP=" + filepath.Join(dir, "reap"),
 		"VRG_TEST_GATE=" + filepath.Join(dir, "gate"),
 		"VRG_TEST_FAIL_TRIGGER=" + filepath.Join(dir, "failtrigger"),

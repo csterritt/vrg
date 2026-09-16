@@ -85,8 +85,8 @@ func writeStderrFakeRG(t *testing.T, dir, stderrText string, exitCode int, block
 	}
 	if block {
 		// Write ready/pid if requested, then block.
-		script += "if [ -n \"$VRG_TEST_READY\" ]; then touch \"$VRG_TEST_READY\"; fi\n"
-		script += "if [ -n \"$VRG_TEST_PID\" ]; then echo $$ > \"$VRG_TEST_PID\"; fi\n"
+		script += "if [ -n \"$FAKE_RG_READY_FILE\" ]; then touch \"$FAKE_RG_READY_FILE\"; fi\n"
+		script += "if [ -n \"$FAKE_RG_PID_FILE\" ]; then echo $$ > \"$FAKE_RG_PID_FILE\"; fi\n"
 		script += "sleep 100000\n"
 	} else {
 		// Output a valid stream.
@@ -94,7 +94,7 @@ func writeStderrFakeRG(t *testing.T, dir, stderrText string, exitCode int, block
 		script += "printf '%s\\n' '{\"type\":\"match\",\"data\":{\"path\":{\"text\":\"test.txt\"},\"lines\":{\"text\":\"hello world\\n\"},\"line_number\":1,\"submatches\":[{\"match\":{\"text\":\"hello\"},\"start\":0,\"end\":5}]}}'\n"
 		script += "echo '{\"type\":\"end\",\"data\":{\"path\":{\"text\":\"test.txt\"},\"binary_offset\":null}}'\n"
 		script += "echo '{\"type\":\"summary\",\"data\":{}}'\n"
-		script += "if [ -n \"$VRG_TEST_HANDSHAKE\" ]; then touch \"$VRG_TEST_HANDSHAKE\"; fi\n"
+		script += "if [ -n \"$FAKE_RG_HANDSHAKE_FILE\" ]; then touch \"$FAKE_RG_HANDSHAKE_FILE\"; fi\n"
 		script += "exit " + itoa(exitCode) + "\n"
 	}
 	if err := os.WriteFile(rgPath, []byte(script), 0o755); err != nil {
@@ -164,8 +164,8 @@ func TestReplayQWhileSearchingAfterDiagnostic(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_READY=" + readyFile,
-		"VRG_TEST_PID=" + pidFile,
+		"FAKE_RG_READY_FILE=" + readyFile,
+		"FAKE_RG_PID_FILE=" + pidFile,
 		"VRG_TEST_COLLECT_ACK=" + collectAck,
 		"VRG_TEST_UPDATE_ACK=" + updateAck,
 		"VRG_TEST_DIAGNOSTIC_TRIGGER=" + diagTrigger,
@@ -215,7 +215,7 @@ func TestReplayQWhileGateHeldAfterDiagnostic(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_HANDSHAKE=" + handshakeFile,
+		"FAKE_RG_HANDSHAKE_FILE=" + handshakeFile,
 		"VRG_TEST_COLLECT_ACK=" + collectAck,
 		"VRG_TEST_UPDATE_ACK=" + updateAck,
 		"VRG_TEST_DIAGNOSTIC_TRIGGER=" + diagTrigger,
@@ -313,8 +313,8 @@ func TestReplayControlledFailureWithEarlierDiagnostic(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_READY=" + readyFile,
-		"VRG_TEST_PID=" + pidFile,
+		"FAKE_RG_READY_FILE=" + readyFile,
+		"FAKE_RG_PID_FILE=" + pidFile,
 		"VRG_TEST_REAP=" + reapFile,
 		"VRG_TEST_COLLECT_ACK=" + collectAck,
 		"VRG_TEST_UPDATE_ACK=" + updateAck,
@@ -399,8 +399,8 @@ func TestReplayFilenameWithNewlineAndESC(t *testing.T) {
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_READY=" + readyFile,
-		"VRG_TEST_PID=" + pidFile,
+		"FAKE_RG_READY_FILE=" + readyFile,
+		"FAKE_RG_PID_FILE=" + pidFile,
 		"VRG_TEST_COLLECT_ACK=" + collectAck,
 		"VRG_TEST_UPDATE_ACK=" + updateAck,
 		"VRG_TEST_DIAGNOSTIC_TRIGGER=" + diagTrigger,

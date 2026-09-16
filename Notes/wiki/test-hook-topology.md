@@ -61,10 +61,12 @@ duplicated in `testhooks_test.go`, never derived by grepping
 | `VRG_TEST_RUN_FINAL_MODEL` | runner control: `valid`/empty keeps the real model, `nil` returns nil, `invalid` returns a non-`app.Model` |
 | `VRG_TEST_RUN_ERROR` | runner control: empty keeps the real error, `nil` forces nil, other values become the injected error text |
 
-Fake-rg fixture variables (`VRG_TEST_ARGV`, `VRG_TEST_CWD`,
-`VRG_TEST_HANDSHAKE`, `VRG_TEST_READY`, `VRG_TEST_PID`) are excluded:
-they are consumed by the test suite's fake-rg shell scripts, not by
-the vrg binary, and Issue #50 renames them `FAKE_RG_*`. Issues #46 and
+Fake-rg fixture variables (`FAKE_RG_ARGV_FILE`, `FAKE_RG_CWD_FILE`,
+`FAKE_RG_HANDSHAKE_FILE`, `FAKE_RG_READY_FILE`, `FAKE_RG_PID_FILE`)
+are excluded: they are consumed by the test suite's fake-rg shell
+scripts, not by the vrg binary. Issue #50 renamed them off the
+`VRG_TEST_*` prefix — see
+[post-audit-reverification](post-audit-reverification.md). Issues #46 and
 #48 extend these same tagged boundaries rather than adding production
 hooks. Issue #46 landed first and added no new manifest names — its
 return-shape tests reuse the runner controls and the existing

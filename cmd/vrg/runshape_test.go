@@ -19,7 +19,7 @@ func writeRunShapeFakeRG(t *testing.T, dir, stderrText string) string {
 	t.Helper()
 	rgPath := filepath.Join(dir, "rg")
 	script := "#!/bin/sh\n"
-	script += "if [ -n \"$VRG_TEST_PID\" ]; then echo $$ > \"$VRG_TEST_PID\"; fi\n"
+	script += "if [ -n \"$FAKE_RG_PID_FILE\" ]; then echo $$ > \"$FAKE_RG_PID_FILE\"; fi\n"
 	if stderrText != "" {
 		script += "printf '%s\\n' " + shellQuote(stderrText) + " >&2\n"
 	}
@@ -27,7 +27,7 @@ func writeRunShapeFakeRG(t *testing.T, dir, stderrText string) string {
 	script += "printf '%s\\n' '{\"type\":\"match\",\"data\":{\"path\":{\"text\":\"test.txt\"},\"lines\":{\"text\":\"hello world\\n\"},\"line_number\":1,\"submatches\":[{\"match\":{\"text\":\"hello\"},\"start\":0,\"end\":5}]}}'\n"
 	script += "echo '{\"type\":\"end\",\"data\":{\"path\":{\"text\":\"test.txt\"},\"binary_offset\":null}}'\n"
 	script += "echo '{\"type\":\"summary\",\"data\":{}}'\n"
-	script += "if [ -n \"$VRG_TEST_HANDSHAKE\" ]; then touch \"$VRG_TEST_HANDSHAKE\"; fi\n"
+	script += "if [ -n \"$FAKE_RG_HANDSHAKE_FILE\" ]; then touch \"$FAKE_RG_HANDSHAKE_FILE\"; fi\n"
 	script += "exit 0\n"
 	if err := os.WriteFile(rgPath, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -117,8 +117,8 @@ func TestRunReturnShapeUnifiedShutdown(t *testing.T) {
 
 			env := []string{
 				"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-				"VRG_TEST_PID=" + pidFile,
-				"VRG_TEST_HANDSHAKE=" + handshakeFile,
+				"FAKE_RG_PID_FILE=" + pidFile,
+				"FAKE_RG_HANDSHAKE_FILE=" + handshakeFile,
 				"VRG_TEST_REAP=" + reapFile,
 				"VRG_TEST_COLLECT_ACK=" + collectAck,
 				"VRG_TEST_UPDATE_ACK=" + updateAck,

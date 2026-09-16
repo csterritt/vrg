@@ -573,3 +573,21 @@ Usage
  Input tokens: 146220 tokens
  Output tokens: 64125 tokens
  Cached input tokens: 14679808 tokens
+
+----
+Task 049-tidy-dependency-manifests.md
+
+Usage
+ Agent messages: 28 messages
+ Input tokens: 69043 tokens
+ Output tokens: 8195 tokens
+ Cached input tokens: 720576 tokens
+
+----
+Task 050-post-audit-reverification.md
+
+Usage
+ Agent messages: 86 messages
+ Input tokens: 135594 tokens
+ Output tokens: 52409 tokens
+ Cached input tokens: 10232704 tokens

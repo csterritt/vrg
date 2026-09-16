@@ -83,7 +83,7 @@ func writeFatalFakeRG(t *testing.T, dir string, stdoutRecords []string, stderrTe
 	if stdoutPart != "" {
 		script += "printf '%s\\n' " + shellQuote(stdoutPart) + "\n"
 	}
-	script += "if [ -n \"$VRG_TEST_HANDSHAKE\" ]; then touch \"$VRG_TEST_HANDSHAKE\"; fi\n"
+	script += "if [ -n \"$FAKE_RG_HANDSHAKE_FILE\" ]; then touch \"$FAKE_RG_HANDSHAKE_FILE\"; fi\n"
 	script += "exit " + itoa(exitCode) + "\n"
 	if err := os.WriteFile(rgPath, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
@@ -244,10 +244,10 @@ func TestSignalDeathNamesSignal(t *testing.T) {
 	// The fake rg writes a partial stream (no summary) then blocks,
 	// waiting to be killed. vrg should detect the signal death.
 	script := `#!/bin/sh
-if [ -n "$VRG_TEST_PID" ]; then echo $$ > "$VRG_TEST_PID"; fi
+if [ -n "$FAKE_RG_PID_FILE" ]; then echo $$ > "$FAKE_RG_PID_FILE"; fi
 echo '{"type":"begin","data":{"path":{"text":"test.txt"}}}'
 printf '%s\n' '{"type":"match","data":{"path":{"text":"test.txt"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
-if [ -n "$VRG_TEST_READY" ]; then touch "$VRG_TEST_READY"; fi
+if [ -n "$FAKE_RG_READY_FILE" ]; then touch "$FAKE_RG_READY_FILE"; fi
 # Block until killed.
 sleep 100000
 `
@@ -267,8 +267,8 @@ sleep 100000
 	cmd.Dir = repo
 	cmd.Env = []string{
 		"PATH=" + fakeDir + ":" + os.Getenv("PATH"),
-		"VRG_TEST_READY=" + readyFile,
-		"VRG_TEST_PID=" + pidFile,
+		"FAKE_RG_READY_FILE=" + readyFile,
+		"FAKE_RG_PID_FILE=" + pidFile,
 		"VRG_TEST_UPDATE_ACK=" + ackFile,
 	}
 

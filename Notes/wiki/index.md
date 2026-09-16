@@ -344,6 +344,19 @@ Catalog of all wiki pages for the vrg project.
   no-fixed-sleep check, and bounded-timeout failure diagnostics —
   all riding the `vrg_testhooks` seam, absent and inert in the
   production binary
+- [post-audit-reverification.md](post-audit-reverification.md) —
+  Issue #50: the closing audit-cycle verification pass — the permanent
+  `scripts/verify.sh` runner and its ten ordered gates (untagged and
+  `vrg_testhooks` build/vet variants, uncached and race suite runs,
+  the repeated `cmd/vrg` run, `go mod verify`, pinned
+  `govulncheck@v1.5.0` with its network/cache prerequisite reported as
+  an environment failure, and the `go mod tidy -diff` no-drift gate),
+  the `FAKE_RG_*` fixture-variable rename, the canonical
+  condition-driven `scripts/smoke.py` harness versus the frozen
+  035-03 artifact, the explicit uncached and race PTY reruns on the
+  Issue #48 handshakes, and the five smoke outcomes against the
+  untagged production binary including the composed fatal
+  integrity/record-loss diagnostics — no regressions found
 
 ## Catalogs
 
