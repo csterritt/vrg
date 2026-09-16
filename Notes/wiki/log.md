@@ -1313,3 +1313,41 @@ updated [outcome-contract](outcome-contract.md),
 `internal/app/outcome_test.go`, `Notes/issues/036-stream-integrity-fatal-diagnostics.md`,
 `Notes/tasks/036-stream-integrity-fatal-diagnostics.md`,
 `Notes/PRD-vrg.md`.
+
+## [2026-09-15] ingest | Issue #37 oversized-record aggregate and anonymous diagnostics
+
+Ingested the completed Issue #37 implementation and tests.
+`recordLossDiagnostics` in `internal/app/app.go` now leads the
+oversized component with the pluralized aggregate built from
+`Index.OversizedCount()` — exactly `1 oversized record skipped` for one
+record and `N oversized records skipped` for every other count —
+emitted whenever the count is positive, followed by one
+`oversized record skipped for <sanitized path>` detail per distinct raw
+path deduplicated in deterministic first-occurrence order; the
+per-record aggregate count itself is never deduplicated. An anonymous
+oversized record (path not recovered) now always surfaces: with zero
+usable results the record-loss fatal overlay contains exactly the
+aggregate line and exits 2 — never an empty overlay — and with usable
+results the loss produces a warning overlay and the aggregate reaches
+the post-restoration stderr replay instead of passing silently. The
+component keeps Issue #36's universal order: after the malformed
+aggregate and before unknown-type warnings. The Issue #36
+post-`summary` oversized fixtures in `TestDecideOutcomeComposedOrder`
+and `TestOutcomeIntegrityDiagnosticsFlow` were updated to
+`[record after summary, 1 oversized record skipped, oversized record
+skipped for <escaped Q>]`, and `TestOutcomeOversizedAggregateDiagnostics`
+was added covering singular/plural aggregates, per-path deduplication,
+both anonymous cases, mixed recoverability, and component ordering —
+all through real `Builder.ReadFrom` oversized streams. Updated
+[record-robustness](record-robustness.md),
+[outcome-contract](outcome-contract.md),
+[stream-integrity-diagnostics](stream-integrity-diagnostics.md),
+[search-collection-path](search-collection-path.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+[index](index.md). Sources: `internal/app/app.go`,
+`internal/app/outcome_test.go`,
+`internal/searchindex/searchindex.go`,
+`Notes/issues/037-oversized-record-aggregate-anonymous-diagnostics.md`,
+`Notes/tasks/037-oversized-record-aggregate-anonymous-diagnostics.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity —
+oversized bullets; Resources and responsiveness — 64 MiB limit).

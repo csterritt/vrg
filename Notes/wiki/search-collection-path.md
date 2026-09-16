@@ -1,4 +1,4 @@
-# Search collection path (Issue #3, extended by Issues #4, #8, #9, #10, #11, and #36)
+# Search collection path (Issue #3, extended by Issues #4, #8, #9, #10, #11, #36, and #37)
 
 The ripgrep execution and result-collection pipeline delivered by
 [Issue #3](../issues/003-spawn-rg-collect-results-searching-screen.md),
@@ -22,7 +22,10 @@ processed-versus-in-flight shutdown boundary, and post-restoration
 stderr replay of every collected diagnostic exactly once in collection
 order. [Issue #36](../issues/036-stream-integrity-fatal-diagnostics.md)
 added structured stream-integrity causes and universal overlay/replay
-diagnostic composition. Relevant PRD sections:
+diagnostic composition.
+[Issue #37](../issues/037-oversized-record-aggregate-anonymous-diagnostics.md)
+added the always-emitted oversized aggregate count and the
+anonymous-oversized-record guarantees. Relevant PRD sections:
 *Implementation Decisions → Invocation and child arguments*,
 *Module Design → CLI / SearchIndex / App*, *Testing Decisions → CLI /
 SearchIndex / App / Subprocess boundary / Responsiveness boundaries*,
@@ -173,7 +176,10 @@ raw path bytes, so non-UTF-8 paths sort after ASCII paths by byte value.
 - `Index.OversizedDiagnostics()` (Issue #10) — per-record oversized
   diagnostics with sanitized paths, for records where path recovery
   succeeded. Each entry is of the form "oversized record skipped for
-  <sanitized path>".
+  <sanitized path>". Entries are per record, so repeated oversized
+  records for one path repeat the line; `recordLossDiagnostics`
+  (Issue #37) deduplicates them by path in first-occurrence order when
+  composing the diagnostic text.
 
 ### Bounded record parsing (Issue #10)
 

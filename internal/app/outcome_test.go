@@ -258,7 +258,7 @@ func TestDecideOutcomeMatrix(t *testing.T) {
 			integrity:      complete,
 			usableResults:  0,
 			recordLoss:     app.RecordLoss{Oversized: 1},
-			recordLossDiag: "oversized record skipped for a.go",
+			recordLossDiag: "1 oversized record skipped\noversized record skipped for a.go",
 			wantState:      app.StateNoResults,
 			wantOverlay:    app.OverlayError,
 			wantFatal:      true,
@@ -520,17 +520,19 @@ func TestDecideOutcomeComposedOrder(t *testing.T) {
 			wantExitStatus: 2,
 		},
 		// Overlap: a post-summary oversized record has "record after
-		// summary" followed by the per-path oversized detail, with no
-		// oversized integrity cause. (Issue #37 will prepend the
-		// aggregate and update this expected slice.)
+		// summary" followed by the oversized component — the Issue #37
+		// aggregate, then the per-path oversized detail — with no
+		// oversized integrity cause.
 		{
 			name:           "post-summary oversized is record after summary plus oversized detail",
 			process:        app.ProcessResult{ExitCode: 0},
 			integrity:      incomplete(ras),
 			usableResults:  1,
 			recordLoss:     app.RecordLoss{Oversized: 1},
-			recordLossDiag: "oversized record skipped for q.go",
-			wantText:       "record after summary\noversized record skipped for q.go",
+			recordLossDiag: "1 oversized record skipped\noversized record skipped for q.go",
+			wantText: "record after summary\n" +
+				"1 oversized record skipped\n" +
+				"oversized record skipped for q.go",
 			wantExitStatus: 2,
 		},
 		// Overlap: a post-summary unknown-type record has "record
@@ -604,9 +606,10 @@ func TestDecideOutcomeComposedOrder(t *testing.T) {
 			usableResults:  1,
 			diagnostics:    "warn",
 			recordLoss:     app.RecordLoss{Malformed: 1, Oversized: 1, Unknown: 2},
-			recordLossDiag: "1 malformed record skipped\noversized record skipped for b.go\n2 unrecognised record types skipped",
+			recordLossDiag: "1 malformed record skipped\n1 oversized record skipped\noversized record skipped for b.go\n2 unrecognised record types skipped",
 			wantText: "warn\n" +
 				"1 malformed record skipped\n" +
+				"1 oversized record skipped\n" +
 				"oversized record skipped for b.go\n" +
 				"2 unrecognised record types skipped",
 			wantExitStatus: 0,
@@ -678,6 +681,20 @@ func buildIndexStream(t *testing.T, workdir string, data string) *searchindex.In
 func oversizedMatchRecoverable(path string, size int) string {
 	prefix := `{"type":"match","data":{"path":{"text":"` + path + `"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}],"lines":{"text":"`
 	suffix := `"}}}`
+	paddingLen := size - len(prefix) - len(suffix)
+	if paddingLen < 1 {
+		paddingLen = 1
+	}
+	return prefix + strings.Repeat("x", paddingLen) + suffix
+}
+
+// oversizedMatchAnonymous builds an oversized match record of exactly
+// size bytes whose data carries no path field, so path recovery finds
+// nothing and the record produces no per-path detail — Issue #37's
+// anonymous oversized case.
+func oversizedMatchAnonymous(size int) string {
+	prefix := `{"type":"match","data":{"lines":{"text":"`
+	suffix := `"},"line_number":1,"submatches":[]}}`
 	paddingLen := size - len(prefix) - len(suffix)
 	if paddingLen < 1 {
 		paddingLen = 1
@@ -776,7 +793,7 @@ func TestOutcomeIntegrityDiagnosticsFlow(t *testing.T) {
 				return buildIndexStream(t, "/work", summaryRecord()+"\n"+rec+"\n")
 			},
 			process:   app.ProcessResult{ExitCode: 0},
-			wantText:  "record after summary\noversized record skipped for q.go",
+			wantText:  "record after summary\n1 oversized record skipped\noversized record skipped for q.go",
 			wantFatal: true,
 		},
 		{
@@ -851,6 +868,134 @@ func TestOutcomeMissingEndDeterministic(t *testing.T) {
 		if m.OverlayText() != want {
 			t.Fatalf("build %d: OverlayText = %q, want %q", i, m.OverlayText(), want)
 		}
+	}
+}
+
+// --- Issue #37: oversized aggregate and anonymous records ---
+
+// TestOutcomeOversizedAggregateDiagnostics covers the Issue #37
+// oversized component through the full Update flow: the oversized
+// component always leads with the pluralized aggregate built from
+// Index.OversizedCount — exactly "1 oversized record skipped" for one
+// and "N oversized records skipped" for every other count — followed by
+// one "oversized record skipped for <sanitized path>" detail per
+// distinct recoverable raw path in first-occurrence order. The
+// aggregate is emitted whenever the count is positive even when no path
+// detail exists, so an anonymous oversized record (the limit hit before
+// data.path was parsed) is never invisible: with zero usable results
+// the fatal overlay contains exactly the aggregate line, and with
+// usable results the record loss produces a warning overlay and the
+// aggregate reaches the stderr replay.
+func TestOutcomeOversizedAggregateDiagnostics(t *testing.T) {
+	const mib = 64 * 1024 * 1024
+	validStream := textBegin("b.go") + "\n" +
+		textMatch("b.go", "y\n", 1, subSpec{"y", 0, 1}) + "\n" +
+		endRecord("b.go", nil) + "\n" +
+		summaryRecord() + "\n"
+
+	cases := []struct {
+		name        string
+		stream      string
+		wantText    string
+		wantOverlay app.OverlayKind
+		wantFatal   bool
+		wantExit    int
+	}{
+		{
+			name:   "one oversized record emits singular aggregate then detail",
+			stream: oversizedMatchRecoverable("a.go", mib+100) + "\n" + validStream,
+			wantText: "1 oversized record skipped\n" +
+				"oversized record skipped for a.go",
+			wantOverlay: app.OverlayWarning,
+			wantExit:    0,
+		},
+		{
+			name: "two oversized records for same path emit plural aggregate and one detail",
+			stream: oversizedMatchRecoverable("a.go", mib+100) + "\n" +
+				oversizedMatchRecoverable("a.go", mib+200) + "\n" +
+				validStream,
+			wantText: "2 oversized records skipped\n" +
+				"oversized record skipped for a.go",
+			wantOverlay: app.OverlayWarning,
+			wantExit:    0,
+		},
+		{
+			name:        "anonymous oversized zero usable results fatal aggregate only",
+			stream:      oversizedMatchAnonymous(mib+100) + "\n" + summaryRecord() + "\n",
+			wantText:    "1 oversized record skipped",
+			wantOverlay: app.OverlayError,
+			wantFatal:   true,
+			wantExit:    2,
+		},
+		{
+			name:        "anonymous oversized with usable results surfaces aggregate in overlay and replay",
+			stream:      oversizedMatchAnonymous(mib+100) + "\n" + validStream,
+			wantText:    "1 oversized record skipped",
+			wantOverlay: app.OverlayWarning,
+			wantExit:    0,
+		},
+		{
+			name: "mixed recoverability aggregate totals every record and names distinct paths once",
+			stream: oversizedMatchAnonymous(mib+100) + "\n" +
+				oversizedMatchRecoverable("a.go", mib+100) + "\n" +
+				oversizedMatchRecoverable("a.go", mib+200) + "\n" +
+				oversizedMatchRecoverable("c.go", mib+300) + "\n" +
+				validStream,
+			wantText: "4 oversized records skipped\n" +
+				"oversized record skipped for a.go\n" +
+				"oversized record skipped for c.go",
+			wantOverlay: app.OverlayWarning,
+			wantExit:    0,
+		},
+		{
+			name: "aggregate sits after malformed aggregate and before per-path details",
+			stream: "{bad json\n" +
+				oversizedMatchRecoverable("a.go", mib+100) + "\n" +
+				validStream,
+			wantText: "1 malformed record skipped\n" +
+				"1 oversized record skipped\n" +
+				"oversized record skipped for a.go",
+			wantOverlay: app.OverlayWarning,
+			wantExit:    0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			idx := buildIndexStream(t, "/work", tc.stream)
+			m := app.New([]string{"--json", "--", "foo", "."}, "/work")
+			m, _ = update(t, m, app.SearchCompleteMsg{
+				Files:   idx.Files(),
+				Lines:   idx.Len(),
+				Index:   idx,
+				Process: app.ProcessResult{ExitCode: 0},
+			})
+			if !m.OverlayOpen() {
+				t.Fatalf("overlay not open; oversized record loss must never pass silently")
+			}
+			if m.OverlayKind() != tc.wantOverlay {
+				t.Fatalf("OverlayKind = %v, want %v", m.OverlayKind(), tc.wantOverlay)
+			}
+			if m.OverlayFatal() != tc.wantFatal {
+				t.Fatalf("OverlayFatal = %v, want %v", m.OverlayFatal(), tc.wantFatal)
+			}
+			if m.OverlayText() != tc.wantText {
+				t.Fatalf("OverlayText = %q, want %q", m.OverlayText(), tc.wantText)
+			}
+			if m.ExitCode() != tc.wantExit {
+				t.Fatalf("ExitCode = %d, want %d", m.ExitCode(), tc.wantExit)
+			}
+			// The same composed diagnostic — same lines, same order —
+			// is collected for post-restoration stderr replay.
+			assertDiagnosticsEq(t, m, []string{tc.wantText})
+			// A fatal no-results overlay dismisses to exit 2.
+			if tc.wantFatal {
+				m, cmd := update(t, m, keyPress('q'))
+				assertQuit(t, cmd)
+				if m.ExitCode() != 2 {
+					t.Fatalf("after dismiss, ExitCode = %d, want 2", m.ExitCode())
+				}
+			}
+		})
 	}
 }
 

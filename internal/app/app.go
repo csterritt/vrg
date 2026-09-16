@@ -372,9 +372,15 @@ func integrityCauseLine(c searchindex.IntegrityCause) string {
 // record-loss counts from the index in the Issue #37 component order:
 // the malformed aggregate, then the oversized component, then the
 // unknown-type warning — so unknown types cannot sit between the
-// malformed and oversized components. The oversized component currently
-// carries the per-record path diagnostics; Issue #37 prepends the
-// aggregate count line ahead of them.
+// malformed and oversized components. The oversized component always
+// leads with the pluralized aggregate built from Index.OversizedCount
+// ("1 oversized record skipped" for one, "N oversized records skipped"
+// otherwise) whenever the count is positive, followed by one
+// recoverable per-path detail per distinct raw path from
+// Index.OversizedDiagnostics in first-occurrence order. The aggregate
+// is emitted even when no path detail exists, so an oversized record
+// whose path could not be recovered is never invisible in the overlay
+// or the replay.
 func recordLossDiagnostics(idx *searchindex.Index) string {
 	var parts []string
 	if m := idx.MalformedCount(); m > 0 {
@@ -384,7 +390,25 @@ func recordLossDiagnostics(idx *searchindex.Index) string {
 		}
 		parts = append(parts, fmt.Sprintf("%d malformed record%s skipped", m, plural))
 	}
-	parts = append(parts, idx.OversizedDiagnostics()...)
+	if n := idx.OversizedCount(); n > 0 {
+		plural := ""
+		if n != 1 {
+			plural = "s"
+		}
+		parts = append(parts, fmt.Sprintf("%d oversized record%s skipped", n, plural))
+	}
+	// Per-path details are deduplicated by path (each line embeds its
+	// injectively escaped path), never by record: two oversized records
+	// naming the same path produce one detail line, while the aggregate
+	// still counts both.
+	seen := make(map[string]bool)
+	for _, d := range idx.OversizedDiagnostics() {
+		if seen[d] {
+			continue
+		}
+		seen[d] = true
+		parts = append(parts, d)
+	}
 	if u := idx.UnknownCount(); u > 0 {
 		parts = append(parts, fmt.Sprintf("%d unrecognised record types skipped", u))
 	}

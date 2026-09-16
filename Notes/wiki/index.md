@@ -15,7 +15,7 @@ Catalog of all wiki pages for the vrg project.
   flag allow-list, ordered exact-spelling scan records, combined shorts,
   cumulative `-u`, assignment rejection, exact child argv
 - [search-collection-path.md](search-collection-path.md) — Issue #3
-  (extended by Issues #4, #8, #9, #10, and #11): ripgrep subprocess
+  (extended by Issues #4, #8, #9, #10, #11, #36, and #37): ripgrep subprocess
   execution, dual-pipe drainage, SearchIndex parsing with binary-file
   exclusion and stream-integrity accounting, the searching/summary/no-results TUI
   lifecycle, cancellation, child termination/reaping, terminal
@@ -56,21 +56,23 @@ Catalog of all wiki pages for the vrg project.
   top-of-file starting sequence; saved-state replacement for moving
   and no-scroll reveals; startup-after-load and navigation triggers
 - [outcome-contract.md](outcome-contract.md) — Issue #9 (extended by
-  Issues #10, #11, and #36): stream-integrity accounting, separate
+  Issues #10, #11, #36, and #37): stream-integrity accounting, separate
   process-success and stream-integrity assessment, the fatal/warning
   outcome matrix, the modal error overlay, exit statuses, stderr
   capture and fallback diagnostics, record-loss inputs and outcome
   rows, the universal composed-diagnostic component order, and the
   post-restoration stderr replay with session diagnostic collection
 - [record-robustness.md](record-robustness.md) — Issue #10 (extended
-  by Issue #36): robust handling of malformed, oversized, and
+  by Issues #36 and #37): robust handling of malformed, oversized, and
   unknown-type records with separate counters, the 64 MiB record limit
   with discard-and-resynchronize behavior, sanitized oversized-record
-  diagnostics, unknown-type counting rules, missing-`end` retention,
-  post-`summary` dual representation, and record-loss outcome rows
-  with after-filtering usable-results assessment
+  diagnostics with the always-emitted pluralized aggregate and
+  per-distinct-path details, unknown-type counting rules, missing-`end`
+  retention, post-`summary` dual representation, and record-loss
+  outcome rows with after-filtering usable-results assessment
 - [stream-integrity-diagnostics.md](stream-integrity-diagnostics.md) —
-  Issue #36: structured `IntegrityCause` records (one cause per
+  Issue #36 (extended by Issue #37): structured `IntegrityCause`
+  records (one cause per
   offending physical record with stable diagnostic text), overlap
   precedence (extra-summary, post-summary lifecycle suppression
   including the removed `context` exemption, post-summary

@@ -3,7 +3,10 @@
 Structured integrity-cause reporting and universal diagnostic
 composition, delivered by
 [Issue #36](../issues/036-stream-integrity-fatal-diagnostics.md)
-(tasks: `Notes/tasks/036-stream-integrity-fatal-diagnostics.md`). It
+(tasks: `Notes/tasks/036-stream-integrity-fatal-diagnostics.md`) and
+extended by
+[Issue #37](../issues/037-oversized-record-aggregate-anonymous-diagnostics.md),
+which landed the oversized aggregate in the record-loss component. It
 closes the gap where a fatal stream-integrity outcome was explained as
 `ripgrep exited with code 0` (when ripgrep produced no stderr) or as
 stderr-only (when it did) — the actual reason the stream was incomplete
@@ -92,8 +95,9 @@ retained in their respective components:
 - a malformed record after `summary` produces `record after summary`
   and contributes to the malformed count;
 - a post-`summary` oversized record produces `record after summary` and
-  retains its oversized count (plus the recoverable-path detail
-  `oversized record skipped for <escaped path>` when available);
+  retains its oversized count — the Issue #37 aggregate
+  `N oversized record(s) skipped` — plus the recoverable-path detail
+  `oversized record skipped for <escaped path>` when available;
 - a post-`summary` unknown-type record produces `record after summary`
   and retains its unknown-type count/warning.
 
@@ -111,10 +115,16 @@ and non-fatal:
    emitted for a 0/1 exit.
 2. **Integrity-cause lines** in `Integrity.Causes` order.
 3. **Record-loss components** in Issue #37's order: malformed
-   aggregate, oversized aggregate, then per-path oversized details.
-   (Issue #36 reordered `recordLossDiagnostics` so the oversized
-   component sits ahead of the unknown-type warning and Issue #37's
-   aggregate can slot in before the per-path details.)
+   aggregate, then the oversized component — the always-emitted
+   pluralized aggregate (`1 oversized record skipped` /
+   `N oversized records skipped`) built from `Index.OversizedCount()`,
+   followed by the per-path oversized details deduplicated by raw path
+   in first-occurrence order. The aggregate is emitted whenever the
+   count is positive even when no detail exists, so an anonymous
+   oversized record never yields an empty fatal overlay or a silent
+   non-fatal loss. (Issue #36 reordered `recordLossDiagnostics` so the
+   oversized component sits ahead of the unknown-type warning;
+   Issue #37 prepended the aggregate and deduplicated the details.)
 4. **Unknown-type warnings.**
 
 Omitted components do not change the relative order of those present.

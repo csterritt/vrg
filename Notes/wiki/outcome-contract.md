@@ -1,4 +1,4 @@
-# Outcome contract (Issue #9, extended by Issues #10, #11, and #36)
+# Outcome contract (Issue #9, extended by Issues #10, #11, #36, and #37)
 
 The fatal/warning outcome matrix and modal error overlay delivered by
 [Issue #9](../issues/009-error-overlay-and-fatal-outcomes.md), adding
@@ -11,7 +11,10 @@ unified the controlled-failure diagnostic with the post-restoration
 replay writer and added the session diagnostic collection independent
 of display. [Issue #36](../issues/036-stream-integrity-fatal-diagnostics.md)
 added structured stream-integrity causes and universal diagnostic
-composition shared by the overlay and the stderr replay. Relevant PRD
+composition shared by the overlay and the stderr replay.
+[Issue #37](../issues/037-oversized-record-aggregate-anonymous-diagnostics.md)
+added the always-emitted oversized aggregate and the
+anonymous-oversized-record guarantees. Relevant PRD
 sections: *Module Design → SearchIndex / App*,
 *Outcome and exit-status contract*, *Colours, overlays, and key
 precedence* (replay bullet). See also
@@ -108,8 +111,15 @@ except by `ctrl+c` (which overrides to 130).
 formatted diagnostic text for record-loss counts, combined with stderr
 diagnostics for the overlay text. The `recordLossDiagnostics` helper
 formats the malformed count ("N malformed record(s) skipped"), the
-unknown count ("N unrecognised record types skipped"), and the
-per-record oversized path diagnostics.
+Issue #37 oversized component — the pluralized aggregate
+("1 oversized record skipped" / "N oversized records skipped") built
+from `Index.OversizedCount()`, followed by one per-path detail per
+distinct raw path in first-occurrence order — and the unknown count
+("N unrecognised record types skipped"). The oversized aggregate is
+emitted whenever the count is positive, even when no path was
+recovered, so an anonymous oversized record produces a non-empty
+fatal overlay with zero usable results and a visible overlay plus
+stderr replay with usable results.
 
 Usable-results assessment happens after all filtering (binary exclusion
 and record loss), so a stream whose sole retained file was
@@ -160,7 +170,10 @@ replay:
    `record after summary` — so an incomplete stream never collapses to
    an unexplained `ripgrep exited with code 0`.
 3. **Record-loss components** in Issue #37's order: malformed
-   aggregate, oversized aggregate, per-path oversized details.
+   aggregate, then the oversized component — the always-emitted
+   pluralized aggregate (`N oversized record(s) skipped`) followed by
+   the per-path oversized details, one per distinct recoverable raw
+   path in first-occurrence order.
 4. **Unknown-type warnings.**
 
 Component paths escape through `safepresentation.EscapePath`. Omitted

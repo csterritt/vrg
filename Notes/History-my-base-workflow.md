@@ -465,3 +465,12 @@ Usage
  Input tokens: 107938 tokens
  Output tokens: 23912 tokens
  Cached input tokens: 3974604 tokens
+
+----
+Task 037-oversized-record-aggregate-anonymous-diagnostics.md
+
+Usage
+ Agent messages: 76 messages
+ Input tokens: 173126 tokens
+ Output tokens: 47989 tokens
+ Cached input tokens: 8913944 tokens

@@ -475,8 +475,17 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   non-fatal `DecideOutcome` branch, and `integrityCauseLine` renders
   each cause's stable text with `safepresentation.EscapePath`
   escaping. `recordLossDiagnostics` was reordered so oversized
-  components precede the unknown-type warning. See
-  [stream-integrity-diagnostics](stream-integrity-diagnostics.md).
+  components precede the unknown-type warning. Issue #37 completed the
+  oversized component in `recordLossDiagnostics`: it now always leads
+  with the pluralized aggregate built from `Index.OversizedCount()`
+  (`1 oversized record skipped` / `N oversized records skipped`)
+  whenever the count is positive, followed by one per-path detail per
+  distinct raw path from `Index.OversizedDiagnostics()` deduplicated in
+  first-occurrence order — so an anonymous oversized record produces a
+  non-empty fatal overlay (exit 2) with zero usable results and a
+  visible overlay plus stderr replay with usable results. See
+  [stream-integrity-diagnostics](stream-integrity-diagnostics.md) and
+  [record-robustness](record-robustness.md).
 
 ## internal/safepresentation
 

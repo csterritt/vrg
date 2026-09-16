@@ -490,6 +490,22 @@ table, parser config, and generated help cannot drift.
   text as the overlay;
   `TestOutcomeMissingEndDeterministic` asserts deterministic
   missing-`end` ordering for real `Builder`-produced causes.
+- Issue #37 oversized-aggregate tests:
+  `TestOutcomeOversizedAggregateDiagnostics` drives real oversized
+  streams through `Builder.ReadFrom` and the full `Update` flow,
+  asserting the always-emitted pluralized aggregate
+  (`1 oversized record skipped` / `N oversized records skipped`),
+  per-path details deduplicated to one line per distinct path in
+  first-occurrence order, the anonymous-oversized fatal case (overlay
+  containing exactly the aggregate, exit 2 — never empty), the
+  anonymous-oversized non-fatal case (visible warning overlay plus
+  stderr replay), the mixed-recoverability multi-record case, and the
+  aggregate's position after the malformed aggregate and before the
+  per-path details. The Issue #36 post-`summary` oversized fixtures in
+  `TestDecideOutcomeComposedOrder` and
+  `TestOutcomeIntegrityDiagnosticsFlow` were updated to expect the
+  aggregate between the `record after summary` cause and the per-path
+  detail.
 
 `overlay_test.go` (Issue #9, external package `app_test`):
 

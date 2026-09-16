@@ -1,0 +1,15 @@
+#!/bin/bash
+# Fake rg that emits one oversized match record (over the 64 MiB
+# payload limit) carrying no recoverable path — the data object has no
+# path field, so per-path recovery produces nothing — followed by a
+# valid summary, then exits 0. The anonymous record still counts: vrg
+# shows a fatal overlay containing exactly "1 oversized record
+# skipped" — never an empty overlay — and q exits 2. The same line is
+# replayed to stderr after terminal restoration.
+{
+  printf '%s' '{"type":"match","data":{"lines":{"text":"'
+  head -c 70000000 /dev/zero | tr '\0' 'x'
+  printf '%s\n' '"},"line_number":1,"submatches":[]}}'
+}
+echo '{"type":"summary","data":{}}'
+exit 0

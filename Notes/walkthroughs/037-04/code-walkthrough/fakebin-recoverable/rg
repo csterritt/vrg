@@ -1,0 +1,19 @@
+#!/bin/bash
+# Fake rg that emits one oversized match record (over the 64 MiB
+# payload limit) naming demo/huge.txt, followed by a valid
+# begin/match/end stream for demo/test.txt and a summary, then exits
+# 0. vrg should show the browse view with a warning overlay containing
+# the aggregate "1 oversized record skipped" followed by the
+# named-path detail "oversized record skipped for demo/huge.txt"; q
+# dismisses the overlay to browse and q again exits 0. The same
+# diagnostic is replayed to stderr after terminal restoration.
+{
+  printf '%s' '{"type":"match","data":{"path":{"text":"demo/huge.txt"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}],"lines":{"text":"'
+  head -c 70000000 /dev/zero | tr '\0' 'x'
+  printf '%s\n' '"}}}'
+}
+echo '{"type":"begin","data":{"path":{"text":"demo/test.txt"}}}'
+printf '%s\n' '{"type":"match","data":{"path":{"text":"demo/test.txt"},"lines":{"text":"hello world\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}'
+echo '{"type":"end","data":{"path":{"text":"demo/test.txt"},"binary_offset":null}}'
+echo '{"type":"summary","data":{}}'
+exit 0

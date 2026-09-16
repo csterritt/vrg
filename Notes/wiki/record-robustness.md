@@ -4,7 +4,9 @@ Robust handling of malformed, oversized, and unknown-type records in
 ripgrep JSON streams, delivered by
 [Issue #10](../issues/010-record-robustness-malformed-oversized-unknown.md)
 and extended by
-[Issue #36](../issues/036-stream-integrity-fatal-diagnostics.md).
+[Issue #36](../issues/036-stream-integrity-fatal-diagnostics.md)
+and
+[Issue #37](../issues/037-oversized-record-aggregate-anonymous-diagnostics.md).
 The collection pipeline distinguishes five deterministic categories —
 malformed records, oversized records, unknown event types,
 stream-integrity failures, and process failures — and a sixth
@@ -125,7 +127,33 @@ was reached. The diagnostic is of the form "oversized record skipped
 for <sanitized path>", where the path is sanitized through
 `safepresentation.EscapePath` (the Issue #6 utility). Records where
 the limit was reached before path recovery produce no diagnostic
-entry; only the count is reported.
+entry in `Index.OversizedDiagnostics()`; only the count is reported.
+
+Since Issue #37, the oversized component of the record-loss
+diagnostics always leads with a pluralized aggregate built from
+`Index.OversizedCount()` whenever the count is positive — exactly
+`1 oversized record skipped` for one record and
+`N oversized records skipped` for every other count — followed by one
+per-path detail line per distinct raw path, deduplicated and kept in
+deterministic first-occurrence order. The aggregate is never
+deduplicated: two oversized records naming the same recoverable path
+produce `2 oversized records skipped` followed by a single detail
+line for that path.
+
+Because the aggregate is emitted even when no per-path detail exists,
+an anonymous oversized record is never invisible:
+
+- Anonymous oversized record with zero usable results → record-loss
+  fatal overlay containing exactly the aggregate line — never an
+  empty overlay — exiting 2 on dismissal.
+- Anonymous oversized record with usable results → warning overlay
+  showing the aggregate, and the aggregate reaches the
+  post-restoration stderr replay rather than passing silently.
+
+The oversized component sits inside Issue #36's universal component
+order after the malformed aggregate and before the unknown-type
+warnings; within it, the per-path details always follow the
+aggregate.
 
 A file whose only records were oversized is absent from the file list
 while its path appears in the diagnostic.
@@ -161,9 +189,10 @@ Record-loss diagnostics are combined with process and
 integrity-cause diagnostics for the overlay text in Issue #36's
 universal component order (process → integrity → record-loss →
 unknown-type). The `recordLossDiagnostics` helper formats the
-malformed count ("N malformed record(s) skipped"), the per-record
-oversized path diagnostics (where Issue #37's aggregate oversized
-count will slot in ahead of them), and the unknown count ("N
+malformed count ("N malformed record(s) skipped"), the oversized
+component — Issue #37's pluralized aggregate ("N oversized record(s)
+skipped") followed by the per-path detail lines deduplicated by raw
+path in first-occurrence order — and the unknown count ("N
 unrecognised record types skipped") — oversized components precede
 unknown-type warnings.
 
