@@ -120,7 +120,11 @@ contract that a single frame needn't show head and tail at once.
 
 Key precedence while open: `ctrl+c` exits 130 globally; `up`/`down`
 scroll; `q`/`Esc` dismiss; every other key is ignored — including `c`,
-which cannot toggle the theme through the modal. Dismissal reveals the
+which cannot toggle the theme through the modal. The one exception is
+Issue #27's `r`, routed before the overlay's precedence case in browse
+state: the explicit reload is the retry route a failure overlay must
+not block, and it never dismisses the overlay — see
+[explicit-reload.md](explicit-reload.md). Dismissal reveals the
 base state, except on `stateOverlayOnly` where `q` and `Esc` both exit
 with the fixed status — the one place `Esc` terminates. From base
 states `Esc` never exits. Since Issue #15, `openOverlay` is the single

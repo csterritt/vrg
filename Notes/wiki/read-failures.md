@@ -17,9 +17,9 @@ fixed outcome status, the
 [Issue #11 stderr replay](stderr-replay.md) collection, the
 [Issue #24 filename-rule slot](file-list-layout.md), and the
 [Issue #13 matched-line cursor](match-navigation.md) whose file
-crossings drive the sequence. The `r` retry route is
-[Issue #27](../issues/027-explicit-reload-r.md)'s; appending future
-diagnostics beyond this case is Issue #32's.
+crossings drive the sequence. The `r` retry route is Issue #27's —
+delivered in [explicit-reload.md](explicit-reload.md); appending
+future diagnostics beyond this case is Issue #32's.
 
 ## Notification: current versus non-current
 

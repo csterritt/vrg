@@ -122,6 +122,10 @@ func (m *model) reveal() {
 	if !ok {
 		return
 	}
+	// A reveal intent — run now or pended — supersedes a recorded
+	// reload-anchor intent for the path: the latest selection's
+	// reveal takes precedence (Issue #27).
+	delete(m.pendingAnchor, ck)
 	rows := m.currentRows(ck)
 	h := m.contentRows()
 	if rows == nil || h < 1 {
@@ -245,9 +249,15 @@ func (m *model) layoutKey(path string, buf *filebuffer.Buffer) viewport.Key {
 // the live parameters demand — the only prepared data the frame render,
 // scrolling, and reveals may slice. A stale installed model (prepared
 // for a superseded key) is invisible: the panel shows the placeholder
-// until its replacement installs. Test fakes standing in for *Rows are
-// always taken as current.
+// until its replacement installs. So is a model whose path has a load
+// in flight: a reload replaces the display with "Loading…" until its
+// new revision's layout installs, never presenting the old content
+// mid-flight (Issue #27). Test fakes standing in for *Rows are always
+// taken as current.
 func (m *model) currentRows(path string) rowSource {
+	if _, ok := m.loading[path]; ok {
+		return nil
+	}
 	rows := m.rows[path]
 	r, ok := rows.(*viewport.Rows)
 	if !ok {
@@ -393,15 +403,18 @@ func (m *model) scrollBy(key string) {
 // fileLoadedMsg answers one requested load, keyed by the raw path and
 // the request's identity: a message whose pair does not match a live
 // request is discarded, so stale, forged, or superseded completions
-// can never touch the cache or the visible panel (Issue #25). The
-// command performed the read plus decode and byte→cell mapping off the
-// update path, so Update only files the result; it never does
+// can never touch the cache or the visible panel (Issue #25). reload
+// marks an explicit r reread: its completion records the anchor-
+// preservation intent rather than the file-change reveal (Issue #27).
+// The command performed the read plus decode and byte→cell mapping off
+// the update path, so Update only files the result; it never does
 // full-file work itself.
 type fileLoadedMsg struct {
-	path []byte
-	req  int
-	buf  *filebuffer.Buffer
-	err  error
+	path   []byte
+	req    int
+	reload bool
+	buf    *filebuffer.Buffer
+	err    error
 }
 
 // startLoad issues the current file's load command, or nil when the path
@@ -409,11 +422,7 @@ type fileLoadedMsg struct {
 // dropped, never queued, and there is no load cancellation. A
 // previously failed path retries here: minting the retry clears the
 // failure record so the panel reads "Loading…" until settlement marks
-// it content or "(unreadable)" (Issue #26). Each issued load mints a
-// request identity under the raw path that its completion must echo
-// back. The command runs the read under the test gate and the
-// decode/map phase under its own gate so "Loading…" provably spans
-// both, all off the update path.
+// it content or "(unreadable)" (Issue #26).
 func (m *model) startLoad() tea.Cmd {
 	if m.idx == nil || len(m.idx.Files) == 0 {
 		return nil
@@ -426,6 +435,35 @@ func (m *model) startLoad() tea.Cmd {
 	if _, ok := m.bufs[key]; ok {
 		return nil
 	}
+	return m.mintLoad(f, false)
+}
+
+// startReload issues the current file's explicit-r reread command, or
+// nil while a load for the path is already in flight — a duplicate r,
+// like a re-entry crossing during the load, is dropped and never
+// queued (Issue #27). Unlike startLoad it mints unconditionally: the
+// cached content is exactly what the reload replaces, and the reread
+// never reruns rg or touches the search-derived stops.
+func (m *model) startReload() tea.Cmd {
+	if m.idx == nil || len(m.idx.Files) == 0 {
+		return nil
+	}
+	f := m.idx.Files[m.curFile()]
+	if _, ok := m.loading[string(f.Path)]; ok {
+		return nil
+	}
+	return m.mintLoad(f, true)
+}
+
+// mintLoad marks path's request live under a fresh identity and
+// returns its worker command: the read runs under the test gate and
+// the decode/map phase under its own gate so "Loading…" provably spans
+// both, all off the update path. Minting clears a prior failure record
+// so the panel reads "Loading…" until settlement marks it content or
+// "(unreadable)", and a completion must echo the request identity back
+// to be filed.
+func (m *model) mintLoad(f searchindex.File, reload bool) tea.Cmd {
+	key := string(f.Path)
 	delete(m.failed, key)
 	m.loadSeq++
 	m.loading[key] = m.loadSeq
@@ -441,12 +479,12 @@ func (m *model) startLoad() tea.Cmd {
 		}
 		raw, err := read(path)
 		if err != nil {
-			return fileLoadedMsg{path: path, req: req, err: err}
+			return fileLoadedMsg{path: path, req: req, reload: reload, err: err}
 		}
 		if decode != nil {
 			decode()
 		}
-		return fileLoadedMsg{path: path, req: req, buf: filebuffer.Decode(raw, stops)}
+		return fileLoadedMsg{path: path, req: req, reload: reload, buf: filebuffer.Decode(raw, stops)}
 	}
 }
 

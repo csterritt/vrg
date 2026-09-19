@@ -100,7 +100,10 @@ The anchor is *retained state*, replaced only by deliberate movement:
   and reveals may consult: an installed `*Rows` whose key no longer
   matches the live layout is **invisible** — the panel shows
   "Loading…" until its replacement installs, and scroll/reveal on it
-  are no-ops. Stale layouts can never be rendered or mutate state.
+  are no-ops. So is a model whose path has a load in flight — Issue
+  #27's reload replaces the display with the placeholder for the whole
+  reread rather than showing the old revision mid-flight. Stale
+  layouts can never be rendered or mutate state.
 
 Three triggers issue requests: `fileLoadedMsg` (after caching the
 buffer and bumping its revision), `WindowSizeMsg` (the new text width
@@ -112,19 +115,31 @@ text width itself changes). `navigate` also requests the destination's
 layout so a **cached file with a stale layout gets a fresh preparation**
 rather than rendering obsolete rows.
 
-## Pending reveal intents
+## Pending reveal and anchor intents
 
 `model.reveal` can no longer assume a usable layout: when
-`currentRows` is nil — no model yet, or a stale one hidden pending its
-replacement — the reveal **pends** on `pendingReveals[path]` instead of
-running. When a matching completion installs for the still-current
-file, the intent commits against the fresh layout; the same branch
-covers a first visit's initial reveal (`!had` — no model was ever
-installed). Rapid `n`/`p` presses while a worker is gated leave only
-the **latest** intent: a single bool per path, overwritten each time.
-`navigate` itself still runs the full sequence — cursor step, reveal
-attempt, `startLoad`, pop-up — synchronously, so input stays actionable
-no matter how long preparation takes.
+`currentRows` is nil — no model yet, a stale one hidden pending its
+replacement, or a path with a load in flight — the reveal **pends** on
+`pendingReveals[path]` instead of running. When a matching completion
+installs for the still-current file, the intent commits against the
+fresh layout; the same branch covers a first visit's initial reveal
+(`!had` — no model was ever installed). Rapid `n`/`p` presses while a
+worker is gated leave only the **latest** intent: a single bool per
+path, overwritten each time. `navigate` itself still runs the full
+sequence — cursor step, reveal attempt, `startLoad`, pop-up —
+synchronously, so input stays actionable no matter how long
+preparation takes.
+
+Issue #27 adds a second intent kind to the same seam:
+`pendingAnchor[path]` records a **reload-anchor intent** — preserve
+the anchor, no reveal — minted when a `reload`-marked `fileLoadedMsg`
+completes for the current file, and committed (consumed, since the
+`Restore` above the switch already carried the anchor into the new
+rows) when the new revision's matching layout installs. A pending
+reveal outranks a pending anchor intent, and `reveal` clears a
+recorded `pendingAnchor` whenever it runs or pends — the precedence
+[Issue #28](../issues/028-load-completion-reveal.md) generalizes. See
+[explicit-reload.md](explicit-reload.md).
 
 ## Render-cost guarantees
 

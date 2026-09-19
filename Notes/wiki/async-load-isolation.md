@@ -33,9 +33,9 @@ toggles the scheme, resizes apply, and `q` still exits.
 ## Path-and-request-identity keying
 
 `model.loading` is now `map[string]int` — the in-flight **request
-identity** per raw path — fed by a `loadSeq` counter `startLoad`
-increments each time it issues a load. `fileLoadedMsg` carries
-`{path, req, buf, err}`: the command echoes back the identity it was
+identity** per raw path — fed by a `loadSeq` counter the load
+minter increments each time it issues a load. `fileLoadedMsg` carries
+`{path, req, reload, buf, err}`: the command echoes back the identity it was
 minted with, and `Update` applies a completion only when its
 `(path, req)` pair matches a live request. A completion naming a path
 with no request in flight, or carrying a different identity, is
@@ -68,14 +68,21 @@ live request keeps its identity, and settlement leaves nothing queued
 behind. There is no load cancellation; a settled placeholder is the
 user's only signal a load finished. Issue #26 has since made a failed
 path retryable: minting the retry clears the failure record — see
-[read-failures.md](read-failures.md).
+[read-failures.md](read-failures.md). Issue #27 shares the rule with
+`r`: `startReload` mints through the same `mintLoad` worker, so a
+duplicate `r` — or a re-entry crossing — while the path's reload is
+in flight is dropped the same way; see
+[explicit-reload.md](explicit-reload.md).
 
 ## Session-long retention
 
 A successful buffer enters `bufs` and stays for the session — no
-eviction, no memory bound. Revisiting a cached path serves the stored
-buffer and issues no load; the PRD explicitly accepts that cached
-content ignores disk edits until an `r` reload (Issue #27).
+eviction, no memory bound (Issue #27's failed reload is the one
+dropper: it evicts stale content so it is never presented as
+refreshed). Revisiting a cached path serves the stored buffer and
+issues no load; the PRD explicitly accepts that cached content
+ignores disk edits until an `r` reload — delivered in
+[explicit-reload.md](explicit-reload.md).
 
 ## Post-cancellation rejection
 
@@ -109,8 +116,8 @@ reads, decodes, or maps a full file itself.
   the whole-load gate and a genuinely large file.
 - Test-side `reqOf`/`mintRequest` read and mint request identities so
   fabricated completions stand in for real ones — including the reload
-  requests Issue #27 will mint — while deliberately wrong or absent
-  identities exercise the stale/forged drop.
+  requests Issue #27 mints through `mintLoad` — while deliberately
+  wrong or absent identities exercise the stale/forged drop.
 
 ## Tests
 

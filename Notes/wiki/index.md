@@ -193,6 +193,16 @@ Catalog of all wiki pages for the vrg project.
   independent of dismissal, the append-preserving-scroll primitive),
   composed-view robustness, the `WithLoader` injected-loader seam,
   and load failures never changing the fixed exit status
+- [explicit-reload.md](explicit-reload.md) — Issue #27: the `r`
+  reread route that never reruns `rg` or touches cursor stops, the
+  dropped-not-queued duplicate under the one-load-per-path rule and
+  the placeholder as the only completion signal, content revisions
+  re-keying layouts so pre-reload preparations die on arrival,
+  `currentRows` hiding the in-flight model, failure replacement
+  through the Issue #26 overlay, the `pendingAnchor` intent recorded
+  at load completion and committed on the matching install, the
+  lossy shrink clamp, the one-stop retry route, and cache stability
+  until `r`
 
 ## Catalogs
 

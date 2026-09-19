@@ -186,7 +186,11 @@ type model struct {
 	// preparation key per path, deduplicating requests; pendingReveals
 	// records per-path destination-reveal intents that could not run
 	// against a missing or stale layout and commit when a matching
-	// completion installs (Issue #17). listWBase is the index's
+	// completion installs (Issue #17); pendingAnchor records per-path
+	// reload-anchor intents — preserve the anchor, no reveal —
+	// minted when a reload's load completes and committed through the
+	// same installation path (Issue #27, generalized by Issue #28).
+	// listWBase is the index's
 	// longest escaped path width, prepared at search-done so the
 	// Issue #24 width formula never rescans the file list per frame.
 	// listVisible is the user's file-list visibility preference
@@ -208,6 +212,7 @@ type model struct {
 	revs           map[string]int
 	layoutReqs     map[string]viewport.Key
 	pendingReveals map[string]bool
+	pendingAnchor  map[string]bool
 	listWBase      int
 	listVisible    bool
 	notes          map[string]string
@@ -251,6 +256,7 @@ func newModel(cfg Config, opts options, child Child) *model {
 		revs:           map[string]int{},
 		layoutReqs:     map[string]viewport.Key{},
 		pendingReveals: map[string]bool{},
+		pendingAnchor:  map[string]bool{},
 		listVisible:    true,
 		notes:          map[string]string{},
 		wrap:           true,
@@ -382,12 +388,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.loading, key)
 		if msg.err != nil {
 			m.failed[key] = true
-			// Every load failure is a collected diagnostic and the
-			// path's recorded prior failure; only a current file's is
-			// also modal — the overlay opens with it or, while an
-			// overlay is already up, appends the single new occurrence
-			// without moving the reader's scroll position. A
-			// non-current failure stays diagnostic-only (Issue #26).
+			// A failed reload replaces the old display with
+			// "(unreadable)": the stale buffer and its layout are
+			// dropped so old content is never presented as refreshed
+			// (Issue #27). Every load failure is a collected
+			// diagnostic and the path's recorded prior failure; only
+			// a current file's is also modal — the overlay opens with
+			// it or, while an overlay is already up, appends the
+			// single new occurrence without moving the reader's
+			// scroll position. A non-current failure stays
+			// diagnostic-only (Issue #26).
+			delete(m.bufs, key)
+			delete(m.rows, key)
 			diag := loadDiag(msg.path, msg.err)
 			m.failDiag[key] = diag
 			m.collectDiags(diag)
@@ -402,9 +414,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// file-change reveal sequence against the latest cursor
 			// target — covering the startup file's first visit. With
 			// no layout installed yet the intent pends; it commits
-			// when the prepared row model arrives.
+			// when the prepared row model arrives. A reload owes no
+			// reveal: its intent is anchor preservation, recorded
+			// here and committed when the new revision's matching
+			// layout installs (Issue #27). A reveal already pending —
+			// navigation during the load — takes precedence.
 			if ck, ok := m.curKey(); ok && ck == key {
-				m.reveal()
+				if msg.reload {
+					m.pendingAnchor[key] = true
+				} else {
+					m.reveal()
+				}
 			}
 			return m, m.requestLayout(key)
 		}
@@ -427,12 +447,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			vp.Restore(msg.rows, m.contentRows())
 			m.vps[path] = vp
 		}
-		// A pending reveal intent — or a first visit's initial
-		// reveal — commits against the freshly installed layout when
-		// the file is still current.
-		if ck, ok := m.curKey(); ok && ck == path && (m.pendingReveals[path] || !had) {
-			delete(m.pendingReveals, path)
-			m.reveal()
+		// Intents owed to this file commit against the freshly
+		// installed layout when it is still current: a pending
+		// reveal — or a first visit's initial reveal — runs the
+		// file-change reveal sequence; a pending reload-anchor
+		// intent is done by the anchor restore above — preserve the
+		// position, no reveal (Issue #27). A pending reveal takes
+		// precedence over an anchor intent.
+		if ck, ok := m.curKey(); ok && ck == path {
+			switch {
+			case m.pendingReveals[path]:
+				delete(m.pendingReveals, path)
+				m.reveal()
+			case m.pendingAnchor[path]:
+				delete(m.pendingAnchor, path)
+			case !had:
+				m.reveal()
+			}
 		}
 		return m, nil
 	case failMsg:
@@ -464,6 +495,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = 130
 			m.quitting = true
 			return m, m.quitCmd()
+		case key == "r" && m.state == stateBrowse:
+			// r is the explicit reload: reread the current file from
+			// disk — never rerunning rg — while preserving the cursor
+			// and the viewport anchor. It also works while an overlay
+			// is open, and is the only retry route a one-stop index
+			// has (Issue #27).
+			return m, m.startReload()
 		case m.overlayOpen:
 			// The modal overlay takes precedence over base-state keys:
 			// up and down scroll the complete wrapped diagnostic,

@@ -150,15 +150,23 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   the notification split in `fileLoadedMsg`'s error path: a failure
   for the current file calls `openOverlay` (opening fresh or
   appending one occurrence scroll-preserved), a non-current failure
-  collects the diagnostic only. See
+  collects the diagnostic only. Issue #27 adds the `r` browse-state
+  route — placed before the overlay's precedence case so it retries
+  under an open failure overlay — the `reload` flag on
+  `fileLoadedMsg`, `pendingAnchor` as the per-path reload-anchor
+  intent map recorded on reload completion and committed through the
+  layout-install switch, and the failed-load eviction of `bufs`/`rows`
+  so a failed reload replaces the display with "(unreadable)" rather
+  than stale content. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
   [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md),
   [record-robustness.md](record-robustness.md),
   [stderr-replay.md](stderr-replay.md),
-  [async-load-isolation.md](async-load-isolation.md), and
-  [read-failures.md](read-failures.md).
+  [async-load-isolation.md](async-load-isolation.md),
+  [read-failures.md](read-failures.md), and
+  [explicit-reload.md](explicit-reload.md).
 - `internal/app/outcome.go` — Issue #9's pure outcome decision:
   `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
   `Integrity`, usable-results count, `RecordLoss`, caller `Warnings`)
@@ -291,10 +299,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `failDiag` on a file-changed entry into a failed path while a
   same-file step still issues nothing, and `options.loader`
   (`WithLoader`) substitutes `filebuffer.Read` as the injected-loader
-  test seam. See
+  test seam. Issue #27 splits the request minting into
+  `mintLoad(f, reload)` shared by `startLoad` and the new
+  `startReload` — `r`'s unconditional reread that skips the
+  cached-buffer check but keeps the one-in-flight drop — marks
+  completions with `fileLoadedMsg.reload`, and makes `currentRows`
+  hide a model whose path has a load in flight. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [read-failures.md](read-failures.md),
+  [explicit-reload.md](explicit-reload.md),
   [file-change-popup.md](file-change-popup.md),
   [viewport-scrolling.md](viewport-scrolling.md),
   [match-navigation.md](match-navigation.md),

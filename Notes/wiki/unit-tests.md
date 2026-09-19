@@ -939,6 +939,52 @@ ordinal):
   settle as a non-current diagnostic-only failure; a later re-entry
   runs the same sequence against the new prior state.
 
+`reload_test.go` (same package; Issue #27) drives the explicit-`r`
+reload contracts through the existing seams — `heldNthLoad` holds the
+reload's ordinal load, `gatedFailLoader` flips read outcomes, and the
+new `layoutHold` arms a layout gate mid-test so the initial install
+runs through while later workers are held; `reloadCmd` presses `r`,
+`rewriteFile` replaces a fixture's bytes on disk:
+
+- `TestRShowsLoadingAndRereadsOnce` — `r` shows "Loading…" over the
+  filename row still naming the path, mints exactly one reread under
+  the path's identity, and leaves the index pointer, the cursor, and
+  the pre-request revision untouched.
+- `TestDuplicateRDroppedNotQueued` — a second `r` while the reload is
+  held issues no leaf, re-mints nothing, and runs no extra worker;
+  after settlement `r` mints a fresh request.
+- `TestReentryDuringReloadDropped` — an `n`/`p` there-and-back onto a
+  path whose reload is held mints no second load and keeps the
+  placeholder up.
+- `TestReloadPreservesAnchor` — the intent waits for the matching
+  layout: while the new revision's worker is held the placeholder and
+  the saved viewport are untouched, and on install the anchor lands on
+  its row in the new rows — position preserved, cursor unmoved, no
+  reveal.
+- `TestReloadAnchorClampedOnShrink` — a shorter reread hits the lossy
+  clamp: the top pulls to `MaxTop` and the anchor rewrites to the
+  clamped top's location.
+- `TestFailedReloadReplacesContent` — the failed reread drops the
+  buffer and layout, shows "(unreadable)" plus the overlay, keeps the
+  filename row, and collects the one diagnostic.
+- `TestSecondConsecutiveReloadFailureAppends` — `r` fires while the
+  overlay is open (the retry route it cannot block, never dismissing
+  it); the second failure appends exactly one occurrence with the
+  reader's `overlayScroll` preserved and mirrored once in the
+  collection.
+- `TestReloadSuccessLeavesOverlayOpen` — a successful reread under the
+  prior-failure overlay shows the new content behind it and leaves the
+  overlay up until `Esc`.
+- `TestRWorksWithOneStopIndex` — the only retry route a single-stop
+  index has still rereads and bumps the revision.
+- `TestDiskChangeWithoutRIsStable` — a simulated disk edit changes
+  nothing without `r`: resize/scroll/re-entry mint no load and the
+  cached buffer, revision, and rows stay.
+- `TestPreReloadLayoutSupersededDiscarded` — a layout prepared for the
+  pre-reload revision and released after completion is discarded
+  without touching the installed model, viewport, anchor, or panel;
+  the new revision's layout then installs and the anchor commits.
+
 Since Issue #25, `injectLoad` (in `layout_test.go`) fills a
 fabricated completion with the live request's identity before
 feeding `Update` — a message for a path with no request in flight

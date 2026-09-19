@@ -35,7 +35,8 @@ computes (the same number `UsableResults` reports) for the no-op rules.
 - **No-op rules**: with zero stops or exactly one stop both directions
   are strict no-ops returning the zero `Move` — no wrap, no file
   change, so no downstream reload or pop-up (`r` is the explicit
-  one-entry retry route, Issue #27's). Multiple submatches on one
+  one-entry retry route — Issue #27's, see
+  [explicit-reload.md](explicit-reload.md)). Multiple submatches on one
   matched line share their stop — the line, not the submatch, is the
   unit of navigation.
 - Stop order is the prepared order — unsigned raw path bytes, then

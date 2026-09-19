@@ -994,3 +994,48 @@ index. Sources:
 `Notes/PRD-vrg.md` (File loading, cache, reload, and selection
 consistency), `internal/app/app.go`, `internal/app/browse.go`,
 `internal/app/readfail_test.go`, `internal/app/outcome_test.go`.
+
+## [2026-09-17] ingest | Issue #27 explicit reload — the `r` reread route
+
+Issue #27 lands the explicit reload: `r` in browse state rereads the
+current file directly from disk through `startReload` — a
+`mintLoad(f, reload)` variant that skips `startLoad`'s cached-buffer
+check but keeps the one-load-per-path drop, so a duplicate `r` or a
+re-entry crossing during the flight mints nothing and queues nothing.
+The reread never reruns `rg`: the index pointer, the matched-line
+cursor, and the search-derived stops are untouched, and the filename
+rule keeps naming the path over "Loading…". `currentRows` now also
+hides a model whose path has a load in flight, so the old revision
+never shows mid-flight; on success `revs` bumps, which re-keys the
+Issue #17 layout demand so a pre-reload layout arriving late is
+discarded by the key check. `fileLoadedMsg` gains `reload`: a
+current-file reload completion records `pendingAnchor[path]` — the
+reload-anchor intent (preserve, no reveal) — instead of calling
+`reveal`, and the layout-install switch consumes it when the new
+revision's matching model installs (`Restore` already mapped the
+anchor into the new rows; the lossy EOF clamp covers shrinks). A
+pending reveal outranks the anchor intent and `reveal` clears it —
+the precedence seam Issue #28 generalizes. A failed reload evicts
+`bufs`/`rows` so stale content is never presented as refreshed, then
+runs the Issue #26 split — "(unreadable)" plus the overlay for a
+current file; `r` precedes the overlay's key-precedence case so it
+retries under the open overlay without dismissing it, a second
+failure appends exactly one scroll-preserved occurrence, and a
+successful reload leaves the prior overlay up until dismissed. `r` is
+the one-stop index's only retry route, and cached content stays
+stable against disk edits until `r` — the PRD's accepted staleness.
+`internal/app/reload_test.go` adds the gated contracts plus the
+`layoutHold` arming helper, `reloadCmd`, and `rewriteFile`. Created
+[explicit-reload](explicit-reload.md); updated
+[async-load-isolation](async-load-isolation.md),
+[logical-anchor](logical-anchor.md),
+[match-navigation](match-navigation.md),
+[read-failures](read-failures.md),
+[error-overlay-and-outcomes](error-overlay-and-outcomes.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/027-explicit-reload-r.md`,
+`Notes/tasks/027-explicit-reload-r.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency), `internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/reload_test.go`.
