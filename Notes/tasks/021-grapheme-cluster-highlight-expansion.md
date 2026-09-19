@@ -4,7 +4,7 @@ Parent issue: #21
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #19, #20
 **Acceptance criteria**: AC1–AC4 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement cluster expansion in `internal/filebuffer` to satisfy Task 1: outward 
 
 ---
 
-### 3. Document grapheme highlight expansion
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the expansion rules, fallback cells, and the expanded-span contract for reveal and indicators.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #21 implementation and tests into the appropriate pages under `Notes/wiki`. Document outward cluster expansion, combining-only matches, standalone-cluster fallback cells, wide glyphs never split with blanks never painted as match cells, and the contract that the expanded span is the single source for highlights, reveal, and indicator visibility. Cross-reference Issue #21 and the Text, graphemes, and safe presentation section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the expansion walkthrough
+### 3. Create the expansion walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/021-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/021-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the expansion, fallback, and wrap-boundary rendering tests and the updated indicator tests, then run the manual cases: searching a file containing decomposed `e\u0301` for the combining mark bytes themselves (not precomposed `é`, which ripgrep will not match) so the whole `é` glyph is highlighted, a CJK search showing both cells highlighted, and a standalone combining mark at line start producing a visible highlighted fallback cell. Reference Issue #21 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

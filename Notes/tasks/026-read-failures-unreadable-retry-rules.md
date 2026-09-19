@@ -4,7 +4,7 @@ Parent issue: #26
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #9, #11, #24, #25
 **Acceptance criteria**: AC1–AC3, AC7–AC8 → Tasks 1–2; AC4–AC6 → Tasks 3–4
-**Manual verification**: Task 6 owns the issue's manual checks.
+**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,21 +56,11 @@ Implement the deterministic re-entry sequence in `internal/app` to satisfy Task 
 
 ---
 
-### 5. Document read failures and retries
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records failure notification, retry rules, the re-entry sequence, and the fixed-status guarantee.  
-**Depends on**: 4
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #26 implementation and tests into the appropriate pages under `Notes/wiki`. Document the current-file overlay and placeholder, the non-current diagnostic-only policy and its mid-session visibility limits, the same-file-step versus cross-file retry distinction, the five-step re-entry sequence with its exactly-one retry and append rules, composed-view robustness, and load failures never changing the fixed exit status including the all-fail, fixed-2, and composed all-fail-with-fixed-2 cases. Cross-reference Issue #26 and the File loading, cache, reload, and selection consistency section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 6. Create the read-failure walkthrough
+### 5. Create the read-failure walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/026-06/code-walkthrough`.  
-**Depends on**: 5
+**Depends on**: 4
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/026-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the injected-loader notification and outcome-row tests and the gated re-entry sequence tests, then, on an unprivileged shell, run the manual route against a disposable temporary fixture directory — never a repository file — by copying the two matched files into it, recording the original mode, and running every step under a shell trap that restores the original mode on exit or interruption: making the second matched file unreadable with `chmod 000`, startup showing file 1, `n` into file 2 showing the overlay and "(unreadable)", `Esc`, a same-file `n` with no new overlay, `p` `p` back into file 2 showing the overlay with "Loading…", dismissal, and `q` exiting 0 with the failures listed on stderr. Completing or interrupting the walkthrough must leave no file with altered permissions, and the injected-loader model tests remain the authoritative deterministic verification. Reference Issue #26 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

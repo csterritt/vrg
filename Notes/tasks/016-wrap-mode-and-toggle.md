@@ -4,7 +4,7 @@ Parent issue: #16
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #14
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement the shared grapheme policy in `internal/filebuffer` with its cluster b
 
 ---
 
-### 3. Document wrap mode and the grapheme policy
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records wrap and run-off-edge modes, the grapheme policy, tab stops, the row model, and the reserved indicator width.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #16 implementation and tests into the appropriate pages under `Notes/wiki`. Document wrapping on by default with the `w` toggle, grapheme-boundary wrapping with the blank-cell rule for unclusterable wide glyphs, the single shared segmentation and cell-width policy with FileBuffer as its source, eight-column tab stops independent of gutter and pan, continuation-row gutters, the reserved right-indicator width of zero or one, and the prepared row model keyed by path, content revision, text width, and wrap mode. Cross-reference Issue #16 and the Text, graphemes, and safe presentation and Layout and indicators sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the wrap-mode walkthrough
+### 3. Create the wrap-mode walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/016-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/016-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the wrap row-count, tab, reveal, and render-cost tests, then run the binary on a file with a 500-character line: wrapped rows with blank continuation gutters, `w` showing it as one clipped row, tabs aligned to eight-column stops, and a match near the end of the long line revealed on its own row after `n`. Reference Issue #16 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

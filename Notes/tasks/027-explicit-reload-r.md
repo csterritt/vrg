@@ -4,7 +4,7 @@ Parent issue: #27
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #26, #17
 **Acceptance criteria**: AC1–AC7 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -33,21 +33,11 @@ Implement `r` in `internal/app` to satisfy Task 1: the reload request with its d
 
 ---
 
-### 3. Document explicit reload
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the reload contract, dropped duplicates, content revisions, and the reload-anchor intent.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #27 implementation and tests into the appropriate pages under `Notes/wiki`. Document `r` rereading without rerunning the search or changing stops, the dropped-not-queued duplicate rule with the placeholder as the completion signal, anchor preservation clamped to new content and asserted through the matching layout, failure replacement with "(unreadable)", the one-stop retry route, intentional cache stability until `r`, content revisions and the superseded-layout discard, and the reload-anchor pending intent recorded on load completion and committed when the new revision's matching layout installs — the seam Issue #28 later generalizes. Cross-reference Issue #27 and the File loading, cache, reload, and selection consistency section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the reload walkthrough
+### 3. Create the reload walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/027-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/027-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the gated reload and revision-supersession tests, then run the manual cases: opening a file, scrolling, appending lines externally with the display unchanged, `r` showing new content at the same top position, deleting the file and pressing `r` for "(unreadable)", restoring it and pressing `r` for content again, and a single-match search reloading via `r`. Reference Issue #27 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

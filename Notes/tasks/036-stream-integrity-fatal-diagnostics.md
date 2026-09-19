@@ -4,7 +4,7 @@ Parent issue: #36
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: none
 **Acceptance criteria**: AC4–AC6 → Tasks 1–4; AC1–AC3, AC7–AC8 → Tasks 3–4; AC9 → Tasks 3–4; AC10 → Task 3
-**Manual verification**: Task 6 owns the issue's manual checks.
+**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,21 +56,11 @@ Rework `DecideOutcome` and `recordLossDiagnostics` in `internal/app/app.go`. Ext
 
 ---
 
-### 5. Document stream-integrity diagnostics
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the structured cause list, the per-cause diagnostic lines, the universal component order, and the multiplicity, determinism, and escaping rules.  
-**Depends on**: 4
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #36 implementation and tests into the appropriate pages under `Notes/wiki`. Document the structured integrity-cause model and each cause's stable diagnostic text, the one-integrity-cause-per-physical-record overlap precedence (including second-summary, post-summary lifecycle suppression, and post-summary unterminated-fragment behavior), the detection-order plus end-of-stream ordering (missing `end` by unsigned raw-path bytes, then missing `summary`, then the unterminated record when post-summary precedence does not replace it), the deliberately uncapped one-line-per-distinct-offending-record multiplicity, the dual representation of post-summary malformed, oversized, and unknown-type records with their independent malformed/oversized counts or unknown-type warning, Issue #36's ownership of the `context` exemption removal and lifecycle-row correction, `EscapePath` escaping, the universal process → integrity → record-loss → unknown-type component order shared by overlay and replay, and the rule that no process-status line is emitted for a 0/1 exit. Cross-reference Issue #36 and the *Result index, records, and stream integrity* and *Outcome and exit-status contract* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 6. Create the integrity-diagnostics walkthrough
+### 5. Create the integrity-diagnostics walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/036-06/code-walkthrough`.  
-**Depends on**: 5
+**Depends on**: 4
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/036-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the structured-cause and composed-diagnostic test suites, then run the issue's manual scenarios with the Issue #4 fake-rg harness: valid `begin`/`match`/`end` records terminating without `summary` and exiting 0 → the fatal overlay names the missing `summary` rather than `ripgrep exited with code 0`, dismissal exits 2, and the same diagnostic appears in stderr replay; repeat with a missing `end` for the only file, and with a damaged stream plus real child stderr showing all causes together. Capture every command, output, and exit status. Reference Issue #36 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

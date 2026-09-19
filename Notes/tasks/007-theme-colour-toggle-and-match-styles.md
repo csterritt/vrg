@@ -4,7 +4,7 @@ Parent issue: #7
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #5
 **Acceptance criteria**: AC1–AC4 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement `internal/theme` and its wiring to satisfy Task 1: the toggle with no 
 
 ---
 
-### 3. Document the theme module
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records both schemes, the style set, the toggle, and the inverse/underline rules.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #7 `internal/theme` implementation and tests into the appropriate pages under `Notes/wiki`. Document the initially dark scheme, the `c` toggle without persistence, the true-inverse match rule, the current-matched-line and current-file underlines, the indicator and overlay styles, and how rendering consumes the theme. Cross-reference Issue #7 and the Colours, overlays, and key precedence and Module Design sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the theme walkthrough
+### 3. Create the theme walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/007-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/007-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the Theme unit tests for both schemes and the App toggle test, then run the binary with a search invocation against a fixture with matches — for example `vrg func .` in a Go repository, as in Issue #5 — and press `c` to show the background and foreground swapping with matches still inverse and current-line matches underlined, and `c` again to return (bare `vrg` prints command-line help and exits, so it cannot demonstrate theme switching). Reference Issue #7 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

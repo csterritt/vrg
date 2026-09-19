@@ -4,7 +4,7 @@ Parent issue: #17
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #16
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2; AC6–AC11 → Tasks 3–4
-**Manual verification**: Task 6 owns the issue's manual checks.
+**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,21 +56,11 @@ Implement prepared-layout jobs completing via messages like file loads, keyed in
 
 ---
 
-### 5. Document the logical anchor and layout preparation
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the anchor model, the lossy EOF rule, prepared layouts, installation guards, and pending intents.  
-**Depends on**: 4
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #17 implementation and tests into the appropriate pages under `Notes/wiki`. Document the width-independent logical anchor with its replacement rules, the intentionally lossy EOF clamp, off-UI layout preparation keyed by path, content revision, text width, and wrap mode, installation-only-on-match guards with out-of-order discards, the model-carried pending reveal intent and its commit, cached-file stale-layout navigation with its fast path, and the render-cost guarantees. Cross-reference Issue #17 and the Navigation, viewport, and logical anchors and Resources and responsiveness sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 6. Create the anchor-and-layout walkthrough
+### 5. Create the anchor-and-layout walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/017-06/code-walkthrough`.  
-**Depends on**: 5
+**Depends on**: 4
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/017-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the anchor round-trip and EOF-clamp tests, the gated preparation and out-of-order isolation tests, and the cached-file stale-layout tests, then run the binary: scroll partway into a wrapped long line, narrow and widen the terminal with the same text staying at the top, press `w` twice with the same text, scroll to EOF then widen showing the top moving up and staying there, and resize a ~50 MB fixture repeatedly with `ctrl+c` mid-rewrap exiting promptly with 130. Reference Issue #17 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

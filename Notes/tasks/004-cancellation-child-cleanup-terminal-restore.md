@@ -4,7 +4,7 @@ Parent issue: #4
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #3
 **Acceptance criteria**: AC1–AC8 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement the cancellation and cleanup paths in `internal/app` and the process b
 
 ---
 
-### 3. Document cancellation and cleanup
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records cancellation rules, the cleanup sequence, terminal restoration, the failure hook, and the PTY harness.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #4 implementation and tests into the appropriate pages under `Notes/wiki`. Document the `q`-while-searching and `ctrl+c` cancellation rules including the post-exit preparation window, the exit-130 contract, child termination and reaping with its evidence side channel, display and PTY input-mode restoration on every controlled exit, the injected controlled-failure hook and the single post-restoration stderr writer with its exactly-once rule, and the reusable fake-rg/PTY harness later issues build on. Cross-reference Issue #4 and the Outcome and exit-status contract and Subprocess boundary sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the cancellation walkthrough
+### 3. Create the cancellation walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/004-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/004-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the PTY harness tests: `q` and `ctrl+c` against a blocked fake rg with exit 130, reap evidence, the display-restoration sequence, and termios equality; `q` during gate-held index preparation; and the injected controlled failure with its exactly-once post-restoration diagnostic and exit 2. Include a manual long-search cancellation showing the returned prompt, exit status 130, no orphaned rg, and `stty -a` matching its pre-run state. Reference Issue #4 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

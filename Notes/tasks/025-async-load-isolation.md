@@ -4,7 +4,7 @@ Parent issue: #25
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #13, #16
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement the keyed load machinery in `internal/app` to satisfy Task 1: path and
 
 ---
 
-### 3. Document asynchronous load isolation
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records keyed completions, the one-load rule, session caching, and the responsiveness contract.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #25 implementation and tests into the appropriate pages under `Notes/wiki`. Document navigation during loads, path-and-request-identity keying with panel isolation, the one-load-in-flight-per-path rule with dropped re-entry, session-long buffer retention with no eviction, post-cancellation rejection, and the separately gated decode/map phase with its actionable-input list. Cross-reference Issue #25 and the File loading, cache, reload, and selection consistency section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the load-isolation walkthrough
+### 3. Create the load-isolation walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/025-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/025-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the gated model tests, then run the manual case: a very large first file A and small second file B, pressing `n` immediately at startup so B shows while A still loads, then `p` so A shows content only once loaded, never before. Reference Issue #25 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

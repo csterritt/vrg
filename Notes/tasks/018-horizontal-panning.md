@@ -4,7 +4,7 @@ Parent issue: #18
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #16, #17
 **Acceptance criteria**: AC1–AC9 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement the pan units, the visible-lines extent clamp computed from the prepar
 
 ---
 
-### 3. Document horizontal panning and the extent policy
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records pan units, the visible-lines extent policy, the paintable-boundary maximum, and re-clamping consequences.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #18 implementation and tests into the appropriate pages under `Notes/wiki`. Document the pan units and clamping, the product-confirmed visible-lines extent policy with its three kept-distinct definitions (content extent, extent policy, maximum valid offset), the paintable-boundary maximum guaranteeing one fully painted cluster or marker cell, re-clamping on every visible-set change with no restoration, offset retention through wrap toggles with re-entry clamping, file-change reset, and split-cluster blank rendering. Cross-reference Issue #18 and the Navigation, viewport, and logical anchors and Layout and indicators sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the panning walkthrough
+### 3. Create the panning walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/018-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/018-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the pan-unit, extent, and re-clamp tests, then run the binary in run-off-edge mode: `.` and `>` shifting text left by one and ten columns, `]` by half the width, `,` at offset 0 doing nothing, `w` `w` keeping the offset, `n` into another file starting at offset 0, a half-clipped CJK glyph showing a blank rather than a broken glyph, panning to the maximum with the final cluster fully painted and further pans doing nothing, and scrolling into short lines re-clamping leftwards without restoration on return. Reference Issue #18 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

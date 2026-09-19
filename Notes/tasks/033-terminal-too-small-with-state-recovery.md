@@ -4,7 +4,7 @@ Parent issue: #33
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #32, #24
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement the too-small gate in `internal/app` to satisfy Task 1: the threshold 
 
 ---
 
-### 3. Document the too-small screen
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the threshold, active keys, preserved state, and the precedence rule over dismissal semantics.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #33 implementation and tests into the appropriate pages under `Notes/wiki`. Document the 20×3 minimum, the centred message, the `q` and `ctrl+c` exits with their state-applicable statuses, the `Esc` no-op, the complete preserved-state list including modal state and scroll positions, pop-up timer continuation, and the rule that too-small `q` exits rather than dismissing a logically open overlay. Cross-reference Issue #33 and the Layout and indicators section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the too-small walkthrough
+### 3. Create the too-small walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/033-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/033-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the threshold, recovery, and exit-semantics model tests, then run the manual cases: opening help, scrolling it, shrinking to 15×2 showing "Terminal too small", enlarging with help reappearing at the same scroll, shrinking again and pressing `q` to exit. Reference Issue #33 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

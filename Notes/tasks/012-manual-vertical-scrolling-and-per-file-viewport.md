@@ -4,7 +4,7 @@ Parent issue: #12
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #5
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement the Viewport scroll units and clamps over prepared row data, the per-f
 
 ---
 
-### 3. Document scrolling and the viewport state model
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records scroll units, clamping, placeholder behavior, per-file state, and prepared-row rendering.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #12 `internal/viewport` and `internal/app` implementation and tests into the appropriate pages under `Notes/wiki`. Document the one-row, half-page, and full-page units and their formulas, content height as panel height minus the filename row, BOF and EOF clamping with no avoidable blank rows, the placeholder no-op, per-file saved viewport state for revisits, and rendering from prepared viewport data with the visible-range-only cost guard. Cross-reference Issue #12 and the Navigation, viewport, and logical anchors and Module Design sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the scrolling walkthrough
+### 3. Create the scrolling walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/012-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/012-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the Viewport unit and clamp tests, the placeholder and render-cost tests, then run the binary on a long file showing `down`/`up`, `d`/`u`, and `pgdn`/`pgup` moving by the expected amounts, EOF stopping with the last row at the bottom, and `up` at the top doing nothing. Reference Issue #12 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

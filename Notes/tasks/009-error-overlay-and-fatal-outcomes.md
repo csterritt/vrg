@@ -4,7 +4,7 @@ Parent issue: #9
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #8
 **Acceptance criteria**: AC3 → Tasks 1–2; AC1–AC2, AC4–AC10 → Tasks 3–4
-**Manual verification**: Task 6 owns the issue's manual checks.
+**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,21 +56,11 @@ Implement the pure outcome function of process result, integrity, usable-result 
 
 ---
 
-### 5. Document the outcome contract
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the outcome table, lifecycle validation, the error overlay, and stderr classification.  
-**Depends on**: 4
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #9 implementation and tests into the appropriate pages under `Notes/wiki`. Document the full lifecycle transition matrix with its dispositions and binary-exclusion precedence, stream integrity assessed separately from process success, the pure outcome function and every outcome-table row, the modal error overlay's keys, wrapping, and sanitization, stderr classification with generated code-or-signal diagnostics, and the fixed-status rule with the `ctrl+c` override. Cross-reference Issue #9 and the Outcome and exit-status contract and Colours, overlays, and key precedence sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 6. Create the outcome-matrix walkthrough
+### 5. Create the outcome-matrix walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/009-06/code-walkthrough`.  
-**Depends on**: 5
+**Depends on**: 4
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/009-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the lifecycle matrix tests, the table-driven outcome matrix, the overlay key-routing and wrapping tests, and the PTY stderr-content fixture, then run manual fake-rg cases: two valid matches then exit 3 with stderr "boom" browsing with the overlay and exiting 2 after dismissal; exit 2 with no output naming the code; SIGKILL mid-stream naming the signal; and a "warn" stderr with a summary-only stream showing the warning overlay, the no-results screen, and exit 1. Reference Issue #9 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

@@ -4,7 +4,7 @@ Parent issue: #14
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #13
 **Acceptance criteria**: AC1–AC4 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement the reveal rules in `internal/viewport` and their App triggers to sati
 
 ---
 
-### 3. Document destination reveal
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the target definition, no-scroll rule, one-third placement, and starting-viewport sequence.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #14 implementation and tests into the appropriate pages under `Notes/wiki`. Document the display target as the first submatch's start cell, the rendered-row reveal requirement, visible-target no-scroll, one-third placement with BOF/EOF precedence, the saved-viewport and top-of-file starting points, and the saved-state replacement rules for moving versus no-scroll reveals. Cross-reference Issue #14 and the Navigation, viewport, and logical anchors and Testing Decisions sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the reveal walkthrough
+### 3. Create the reveal walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/014-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/014-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the Viewport reveal tests for visible, hidden, BOF-clamped, and EOF-clamped targets and the App startup-reveal tests, then run the binary on a long file with matches at lines 5 and 200: `n` placing line 200 about a third down, `p` returning to line 5 near the top, and `n` between two on-screen matches not scrolling. Reference Issue #14 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

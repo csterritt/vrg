@@ -4,7 +4,7 @@ Parent issue: #45
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: none — must land before Issues #46 and #48, which consume this seam
 **Acceptance criteria**: AC1, AC4 → Tasks 1–2; AC2 → Tasks 1–2; AC3, AC5 → Task 2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Split `cmd/vrg/main.go`'s test seams behind two narrow build-constrained boundar
 
 ---
 
-### 3. Document the test-hook build topology
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the `vrg_testhooks` variant, the two seam boundaries, the explicit hook manifest, and the clean-artifact boundary test.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #45 implementation into the appropriate pages under `Notes/wiki`. Document the two build-constrained boundaries (option/process wiring and the program-runner wrapper), the explicit vrg-consumed hook manifest and why fixture-owned variables are excluded, the `TestMain` tagged build, the untagged-artifact boundary test, and the rule that Issues #46 and #48 extend the same mechanism rather than adding production hooks. Cross-reference Issue #45 and the *Outcome and exit-status contract* and *Testing Decisions* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the test-hook-topology walkthrough
+### 3. Create the test-hook-topology walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/045-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/045-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the boundary test and both build variants, then run the issue's manual scenario: build the production binary (`go build ./cmd/vrg`), set each name in the explicit vrg-consumed hook manifest, and show none alter behaviour and `strings` on the artifact finds none of the hook names; then build the tagged binary and exercise `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` to confirm the override reaches an actual `program.Run()` result branch. Capture commands, outputs, and exit statuses. Reference Issue #45 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

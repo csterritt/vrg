@@ -4,7 +4,7 @@ Parent issue: #42
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: none
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Restructure `handleReload` and `startLoad` in `internal/app/app.go` so the one-l
 
 ---
 
-### 3. Document atomic reload admission
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the atomic admission check and the intent-preservation contract for dropped reloads.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #42 fix into the appropriate pages under `Notes/wiki`. Document that reload flags, presentation, and `IntentReloadAnchor` are applied only when a new load is actually accepted — atomically with the admission check — that a dropped `r` preserves the in-flight load's original intent, revision, and presentation, and that navigation re-entry is deliberately ungated. Cross-reference Issue #42 and the *File loading, cache, reload, and selection consistency* and *Navigation, viewport, and logical anchors* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the reload-admission walkthrough
+### 3. Create the reload-admission walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/042-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/042-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the admission tests, then run the issue's manual scenario: with a slow-loading file (test seam or genuinely large file), press `r` while the startup or navigation load is still in flight → nothing visible changes, and when the load completes the destination match is revealed per the normal rules — not anchor-preserved as if a reload had happened. Capture commands, outputs, and exit statuses. Reference Issue #42 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

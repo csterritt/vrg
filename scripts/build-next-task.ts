@@ -8,22 +8,22 @@ import { promisify } from "node:util";
 const execFileP = promisify(execFile);
 const ROOT = join(import.meta.dir, "..");
 const TASKS_DIR = join(ROOT, "Notes", "tasks");
-const WALKTHROUGHS_DIR = join(ROOT, "Notes", "walkthroughs");
+const FINISH_MARKERS_DIR = join(ROOT, "Notes", "finish-markers");
 const HISTORY_FILE = join(ROOT, "Notes", "History-my-base-workflow.md");
 const STOP_FILE = join(ROOT, "stop");
 const DEVIN_MODEL = "swe-2";
 const MODEL_LABEL = "SWE-2";
-const MIN_WALKTHROUGH_BYTES = 1024;
+const MIN_FINISH_MARKER_BYTES = 10;
 const RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 300_000, 600_000];
 const PREFIX_RE = /^(\d{3})/;
-const WALKTHROUGH_RE = /Notes\/walkthroughs\/(\d{3})-(\d+)\/code-walkthrough/g;
+const FINISH_MARKER_RE = /Notes\/finish-markers\/(\d{3})-(\d+)\/code-finish-marker/g;
 const DRY_RUN = process.argv.includes("--dry-run");
 
 interface Task {
   file: string;
   prefix: string;
   stepCount: number;
-  walkthrough: string;
+  finish_marker: string;
 }
 
 interface Usage {
@@ -57,10 +57,10 @@ async function run(command: string, args: string[]): Promise<string> {
   return stdout.toString().trim();
 }
 
-async function isCompleteWalkthrough(path: string): Promise<boolean> {
+async function isCompleteFinish_marker(path: string): Promise<boolean> {
   try {
     const details = await stat(path);
-    return details.isFile() && details.size > MIN_WALKTHROUGH_BYTES;
+    return details.isFile() && details.size > MIN_FINISH_MARKER_BYTES;
   } catch {
     return false;
   }
@@ -74,27 +74,27 @@ async function tasks(): Promise<Task[]> {
     const match = file.match(PREFIX_RE);
     if (!match) continue;
     const taskText = await readFile(join(TASKS_DIR, file), "utf8");
-    const walkthroughMatch = [...taskText.matchAll(WALKTHROUGH_RE)].find(
+    const finishMarkerMatch = [...taskText.matchAll(FINISH_MARKER_RE)].find(
       (candidate) => candidate[1] === match[1],
     );
-    if (!walkthroughMatch) {
-      throw new Error(`Task ${file} does not declare its expected walkthrough directory`);
+    if (!finishMarkerMatch) {
+      throw new Error(`Task ${file} does not declare its expected finish-marker directory`);
     }
-    const stepCount = Number(walkthroughMatch[2]);
-    const walkthrough = join(
-      WALKTHROUGHS_DIR,
-      `${walkthroughMatch[1]}-${walkthroughMatch[2]}`,
-      "code-walkthrough",
-      "walkthrough.md",
+    const stepCount = Number(finishMarkerMatch[2]);
+    const finish_marker = join(
+      FINISH_MARKERS_DIR,
+      `${finishMarkerMatch[1]}-${finishMarkerMatch[2]}`,
+      "code-finish-marker",
+      "finish-marker.md",
     );
-    result.push({ file, prefix: match[1], stepCount, walkthrough });
+    result.push({ file, prefix: match[1], stepCount, finish_marker });
   }
   return result;
 }
 
 async function nextTask(): Promise<Task | undefined> {
   for (const task of await tasks()) {
-    if (!(await isCompleteWalkthrough(task.walkthrough))) return task;
+    if (!(await isCompleteFinish_marker(task.finish_marker))) return task;
   }
   return undefined;
 }
@@ -178,14 +178,14 @@ async function implement(task: Task): Promise<Usage> {
     const result = await runDevin(task, attempt, sessionId);
     sessionId = result.sessionId;
     usage = result.usage;
-    const walkthroughComplete = await isCompleteWalkthrough(task.walkthrough);
-    if (result.exitCode === 0 && walkthroughComplete) {
-      log(`Walkthrough verified at ${task.walkthrough}`);
+    const finish_markerComplete = await isCompleteFinish_marker(task.finish_marker);
+    if (result.exitCode === 0 && finish_markerComplete) {
+      log(`Finish_marker verified at ${task.finish_marker}`);
       return usage;
     }
     const reasons = [
       result.exitCode === 0 ? undefined : `Devin exited with status ${result.exitCode}`,
-      walkthroughComplete ? undefined : `walkthrough is missing or not over ${MIN_WALKTHROUGH_BYTES} bytes`,
+      finish_markerComplete ? undefined : `finish-marker is missing or not over ${MIN_FINISH_MARKER_BYTES} bytes`,
     ].filter(Boolean);
     log(`Attempt ${attempt} failed: ${reasons.join("; ")}`);
     if (attempt === maxAttempts) break;
@@ -227,9 +227,9 @@ async function main(): Promise<void> {
       log("All tasks are implemented. Nothing to do.");
       return;
     }
-    const relativeWalkthrough = task.walkthrough.slice(ROOT.length + 1);
+    const relativeFinish_marker = task.finish_marker.slice(ROOT.length + 1);
     log(`Next task: Notes/tasks/${task.file}`);
-    log(`Expected walkthrough: ${relativeWalkthrough} (${task.stepCount} steps, over 1 KiB)`);
+    log(`Expected finish-marker: ${relativeFinish_marker} (${task.stepCount} steps, over 1 KiB)`);
     if (DRY_RUN) {
       log(`[dry-run] would run Devin with model ${DEVIN_MODEL} and retry delays of 30s, 1m, 2m, 5m, and 10m.`);
       log(`[dry-run] would describe as: Task Notes/tasks/${task.file} implemented by ${MODEL_LABEL}`);

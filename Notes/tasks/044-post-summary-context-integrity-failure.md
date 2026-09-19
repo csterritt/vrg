@@ -4,7 +4,7 @@ Parent issue: #44
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #36
 **Acceptance criteria**: AC1–AC4 → Task 1
-**Manual verification**: Task 3 owns the issue's manual checks.
+**Manual verification**: Task 2 owns the issue's manual checks.
 
 ## Tasks
 
@@ -20,21 +20,11 @@ Begin only after Issue #36 is complete. Issue #36 owns removing the `context` ex
 
 ---
 
-### 2. Document the summary-is-final contract
-
-**Type**: DOCUMENT
-**Output**: Wiki documentation records that `context` is lifecycle-exempt only before `summary`, that Issue #36 owns the parser/matrix correction, and that Issue #44 supplies dedicated regression coverage.
-**Depends on**: 1
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #44 verification into the appropriate pages under `Notes/wiki`. Document that *any* record after `summary` — including `context` — is a stream-integrity failure per the summary-is-final contract, that pre-`summary` context records remain ignored for match/lifecycle purposes, that Issue #9's former "context in any position" row is amended to cover only pre-`summary` positions, and that Issue #36 removed the exemption and corrected the lifecycle row before Issue #44 added focused coverage. Cross-reference Issues #36 and #44 and the *Result index, records, and stream integrity* section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 3. Create the summary-is-final walkthrough
+### 2. Create the summary-is-final walkthrough
 
 **Type**: CODE WALKTHROUGH
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/044-03/code-walkthrough`.
-**Depends on**: 2
+**Depends on**: 1
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/044-03/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the corrected lifecycle matrix row owned by Issue #36 and Issue #44's focused structured-cause and outcome assertions, then run the issue's manual scenario: a fake rg emitting valid records, then `summary`, then a `context` record, exiting 0 → the outcome is treated as a stream-integrity failure (fatal path per the outcome matrix) whose diagnostic names the after-`summary` cause, not silently accepted. Capture commands, outputs, and exit statuses. Reference Issues #36 and #44 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

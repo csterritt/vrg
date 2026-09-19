@@ -4,7 +4,7 @@ Parent issue: #34
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #10, #31
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Write the user-facing `README.md` at the repository root and the help overlay fo
 
 ---
 
-### 3. Document the release-facing documentation
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the README's scope, its synchronization tests, and the footer note.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #34 README, footer note, and synchronization tests into the appropriate pages under `Notes/wiki`. Document the README as the single user-facing documentation artifact, the binding-table and allow-list synchronization tests that keep it honest, the scale examples and their independence, the 64 MiB record limit and base64 caveat, the memory and termination limits, the exit-status table's agreement with the outcome function, and the Issue #6 sink-safety row covering the rendered help footer and any generated text path that accepts runtime strings. Cross-reference Issue #34 and the Resources and responsiveness and Out of Scope sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the documentation walkthrough
+### 3. Create the documentation walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/034-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/034-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the synchronization tests running green against the committed README, the help footer note rendering in the overlay, and the help-footer sink-safety row passing against Issue #6's hostile fixtures, then read through the README's scale, record-limit, memory, invocation, flag, binding, and exit-status sections against the implementation. Reference Issue #34 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

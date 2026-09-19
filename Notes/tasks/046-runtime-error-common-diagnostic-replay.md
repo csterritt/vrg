@@ -4,7 +4,7 @@ Parent issue: #46
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #45 — shared-file/harness ordering with #41 and #48 in `cmd/vrg`: never implement overlapping PTY work concurrently; whichever issue lands second adapts to the already-landed `outcome_test.go` changes and handshake helpers. If #48 has landed, these tests must use its acknowledgement harness with no fixed settling/inter-key delay, and any new key-sending helper must be added to #48's matrix and every new acknowledgement hook it requires to #45's hook manifest; if #46 lands first, #48's reciprocal adaptation clause applies
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Introduce a shutdown result / diagnostic snapshot in `cmd/vrg/main.go` and `inte
 
 ---
 
-### 3. Document the unified runtime-error path
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the diagnostic snapshot, the single shutdown sequence, and the three return-shape outcomes.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #46 implementation into the appropriate pages under `Notes/wiki`. Document the collector that decouples session diagnostics from the final-model assertion, the ordered shutdown sequence (terminal restoration → child termination/reap → replay of session diagnostics → invalid-final-model diagnostic → the runtime error exactly once), the exit-2 controlled-failure convention extended to runtime errors, and the tagged-runner injection used by the tests. Cross-reference Issue #46 and the *Outcome and exit-status contract* section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the runtime-error walkthrough
+### 3. Create the runtime-error walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/046-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/046-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the three return-shape subprocess tests, then run the issue's manual scenario: use the Issue #45 tagged program-runner control to return an error after diagnostics were collected in a real PTY lifecycle → the process exits 2, the terminal is restored, and stderr contains the session's collected diagnostics in order followed once by the application error. Capture commands, outputs, and exit statuses. Reference Issue #46 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

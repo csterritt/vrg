@@ -4,7 +4,7 @@ Parent issue: #29
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #22, #27, #28
 **Acceptance criteria**: AC1, AC5 → Tasks 1–2; AC2–AC4, AC6–AC7 → Tasks 3–4
-**Manual verification**: Task 6 owns the issue's manual checks.
+**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,21 +56,11 @@ Implement the stale note in the Issue #24 status slot with its reload recomputat
 
 ---
 
-### 5. Document stale validation
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the validation rules, fallback targets, the note, and the fixed-status guarantee.  
-**Depends on**: 4
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #29 implementation and tests into the appropriate pages under `Notes/wiki`. Document the best-effort validation checks and their undetectable cases, per-submatch drops with stale marking, surviving highlights, the three fallback landing rules with no invented highlights, the persistent filename-row note and its reload recomputation through the status slot, the two-stage fallback reveal, and the fixed-status guarantee. Cross-reference Issue #29 and the Encodings and stale-content validation section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 6. Create the stale-validation walkthrough
+### 5. Create the stale-validation walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/029-06/code-walkthrough`.  
-**Depends on**: 5
+**Depends on**: 4
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/029-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the FileBuffer validation and fallback tests and the App note and two-stage reveal tests, then run the manual cases: editing the matched word in a file to a same-length different word and entering it showing no highlight with the "file changed since search" note, deleting trailing matched lines landing on the last line without highlight, and reverting with `r` clearing the note. Reference Issue #29 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

@@ -4,7 +4,7 @@ Parent issue: #47
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: none
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Change the file-load diagnostic construction so `internal/app`'s `FileLoadComple
 
 ---
 
-### 3. Document single-line read-failure diagnostics
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the escaped-path-plus-reason construction and its single-line guarantee at every load site.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #47 fix into the appropriate pages under `Notes/wiki`. Document that read-failure diagnostics are composed from an `EscapePath`-escaped path and a sanitized reason that never repeats the raw path, that one failed read always yields exactly one diagnostic line in both the overlay and the replay, and that the construction is uniform across initial load, reload, and retry. Cross-reference Issue #47 and the *Text, graphemes, and safe presentation* and *File loading, cache, reload, and selection consistency* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the read-failure-diagnostic walkthrough
+### 3. Create the read-failure-diagnostic walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/047-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/047-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the single-line diagnostic tests, then run the issue's manual scenario entirely inside a disposable temporary directory: create files named with embedded newline, tab, invalid UTF-8, and ESC bytes, index each file, then deterministically remove or rename it before the gated read attempt so the real load fails → each failure surfaces as exactly one diagnostic line with the path escaped inline, in both the overlay and the exit stderr replay. If a permission-denial variant is also shown, install a cleanup trap that restores the mode and report an unsupported environment rather than passing when elevated privileges or ACLs permit the read. Capture cleanup evidence along with commands, outputs, and exit statuses. Reference Issue #47 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

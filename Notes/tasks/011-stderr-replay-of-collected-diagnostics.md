@@ -4,7 +4,7 @@ Parent issue: #11
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #4, #6, #9
 **Acceptance criteria**: AC1–AC2, AC4–AC5 → Tasks 1–2; AC3, AC6 → Tasks 3–4
-**Manual verification**: Task 6 owns the issue's manual checks.
+**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,21 +56,11 @@ Implement the application-side acknowledgement side channel gated for tests only
 
 ---
 
-### 5. Document the stderr replay contract
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the session collection, shutdown boundary, replay ordering, and exactly-once rules.  
-**Depends on**: 4
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #11 implementation and tests into the appropriate pages under `Notes/wiki`. Document the session diagnostic collection independent of display, the shutdown boundary for processed versus in-flight diagnostics, replay after terminal restoration in collection order and exactly once per occurrence, the controlled-failure unification with the Issue #4 writer, filename escaping in replayed text, and the acknowledgement side channel. Cross-reference Issue #11 and the Colours, overlays, and key precedence and Outcome and exit-status contract sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 6. Create the stderr-replay walkthrough
+### 5. Create the stderr-replay walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/011-06/code-walkthrough`.  
-**Depends on**: 5
+**Depends on**: 4
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/011-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the model collection and boundary tests and the PTY acknowledgement and ordering tests, then run the manual case: a fake rg emitting stderr "warn one" with a valid stream, browsing, `q`, and the shell showing "warn one" exactly once after the TUI closes. Reference Issue #11 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

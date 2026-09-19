@@ -4,7 +4,7 @@ Parent issue: #40
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #39 — this issue consumes #39's shared grapheme/cell helper and cluster-safe path geometry; landing it afterward prevents parallel rewrites of `renderBrowse`
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2; AC6 → Task 2 (the existing file-list behaviour tests and Issue #39's focused rendering regressions are the unchanged safety net)
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Restructure `internal/app/app.go` so immutable per-file groups, current-file ind
 
 ---
 
-### 3. Document the bounded render path
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the precomputed groups/path metadata and the O(visible rows) render bound.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #40 implementation into the appropriate pages under `Notes/wiki`. Document what is prepared once at search completion (per-file groups, current-file indexes, escaped path text, cluster boundaries, full cell width), what remains per-frame (visible-range rendering and current-width truncation), the strengthened cost guard spanning navigation `Update()` plus the resulting `View()` without resetting its access counter, and the roughly 100,000-matched-line responsiveness rationale. Cross-reference Issue #40 and the *Resources and responsiveness* and *File list and layout* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the bounded-render walkthrough
+### 3. Create the bounded-render walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/040-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/040-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the cost-guard tests, then run the issue's manual scenario: generate a large result set (tens of thousands of matched lines across many files) and hold `n` or `down`, or resize repeatedly → navigation and repainting stay responsive with no per-keystroke stall growing with index size. Capture commands, outputs, and exit statuses. Reference Issue #40 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

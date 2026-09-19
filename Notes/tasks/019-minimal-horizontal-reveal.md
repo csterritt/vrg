@@ -4,7 +4,7 @@ Parent issue: #19
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #18
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement the minimal horizontal reveal in `internal/viewport` and its App trigg
 
 ---
 
-### 3. Document minimal horizontal reveal
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the painted-cell visibility rule, the reveal arithmetic, and the geometric fallback.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #19 implementation and tests into the appropriate pages under `Notes/wiki`. Document painted-cell visibility as the reveal criterion, the right-edge and left-edge offset rules with cluster widths, the oversized-match start-cell rule, the geometric fallback for a cluster wider than the text area with its no-loop guarantee and indicator interplay, and the startup and per-navigation triggers after the file-change reset. Cross-reference Issue #19 and the Navigation, viewport, and logical anchors and Layout and indicators sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the horizontal-reveal walkthrough
+### 3. Create the horizontal-reveal walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/019-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/019-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the reveal arithmetic tests including the clipped-blank and oversized-cluster cases, then run the binary in run-off-edge mode on a file with matches at columns 5 and 300: `n` to the far match scrolling right just enough to show its start at the right edge, `n` back scrolling left just enough, a visible match causing no movement, and a CJK match at column 300 showing both cells of its first glyph painted. Reference Issue #19 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

@@ -4,7 +4,7 @@ Parent issue: #48
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #45 — shared-file/harness ordering with #41 and #46 in `cmd/vrg`: never implement overlapping PTY work concurrently; whichever issue lands second adapts to the already-landed tests and helpers. If #41 or #46 has landed, incorporate its tests and any key-sending helpers into the handshake matrix and remove fixed settling/inter-key delays; if #48 lands first, #41/#46 apply their reciprocal adaptation clauses
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement every row of the Task 1 handshake matrix with application-side acknowl
 
 ---
 
-### 3. Document the handshake harness
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the acknowledgement seams, the helper contract, and the bounded-poll allowance.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #48 implementation into the appropriate pages under `Notes/wiki`. Document the finite helper/action/postcondition/acknowledgement matrix, per-process/per-occurrence correlation that prevents stale-event consumption, the named acknowledgement hooks and their membership in Issue #45's explicit hook manifest and untagged artifact probe, the rewritten helpers' wait-on-handshake contract with bounded timeouts, the permitted bounded condition-poll sleeps (each iteration checking an explicit condition), and the confirmation that handshakes only observe production timing and are absent or inert in the production binary. Cross-reference Issue #48 and the *Testing Decisions* section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the handshake-harness walkthrough
+### 3. Create the handshake-harness walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/048-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/048-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the handshake contract tests and the no-fixed-sleep check, then run the issue's manual scenario: `go test ./cmd/vrg -count=10` and under `-race` → all PTY/subprocess tests pass deterministically with no fixed settling or inter-key delay remaining in any `cmd/vrg` PTY helper. Capture commands, outputs, and exit statuses. Reference Issue #48 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

@@ -4,7 +4,7 @@ Parent issue: #39
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #38
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Introduce one shared ANSI-aware cell-width helper implementing the existing `riv
 
 ---
 
-### 3. Document the unified rendering model
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the single shared grapheme/cell helper and every consumer routed through it.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #39 implementation into the appropriate pages under `Notes/wiki`. Document the shared ANSI-aware cell-width helper and its grapheme policy, the cluster-driven file-panel renderer, the full consumer list (line rendering, highlight styling, `visibleWidth`, list-entry padding, indicator sizing, filename-row fitting, pop-up truncation/centering, and Theme overlay sizing), the `truncateLeftCells` replacement, and the exact mechanical predicate: across every non-test production `.go` file under `internal/` and `cmd/`, `utf8.DecodeRuneInString` is permitted only in `internal/safepresentation/cellwidth.go`. Cross-reference Issue #39 and the *Text, graphemes, and safe presentation* and *Navigation, viewport, and logical anchors* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the unified-rendering walkthrough
+### 3. Create the unified-rendering walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/039-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/039-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the composed-view tests and the static guard, then run the issue's manual scenario: browse a file containing CJK text, a combining sequence such as `e` plus combining acute, and an emoji ZWJ sequence with a match overlapping them → each highlight covers the whole cluster at exactly its cell width, overlay text containing wide characters is sized and padded correctly, and nothing is clipped mid-cluster. Capture commands, outputs, and exit statuses. Reference Issue #39 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

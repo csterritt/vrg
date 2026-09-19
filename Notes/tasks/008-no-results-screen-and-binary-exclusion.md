@@ -4,7 +4,7 @@ Parent issue: #8
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #5, #6
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement only enough in `internal/searchindex` and `internal/app` to satisfy Ta
 
 ---
 
-### 3. Document the no-results outcome
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records binary exclusion, usable-results accounting, and the no-results screen contract.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #8 implementation and tests into the appropriate pages under `Notes/wiki`. Document binary exclusion via non-null `binary_offset` with its distinct-file count, usable results as retained stops after filtering, the "No results found" screen with its binary-skip suffix for both rg-1 and rg-0 all-filtered streams, and the exit-1 dismissal with `Esc` and `ctrl+c` behavior. Cross-reference Issue #8 and the Result index and Outcome and exit-status contract sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the no-results walkthrough
+### 3. Create the no-results walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/008-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/008-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the SearchIndex exclusion tests and the App outcome tests, then run the binary manually: `vrg zzzznotfound .` showing "No results found" with `q` exiting 1, and a directory containing only a binary file with a match showing "No results found (1 binary files skipped)" with `q` exiting 1. Reference Issue #8 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

@@ -4,7 +4,7 @@ Parent issue: #2
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #1
 **Acceptance criteria**: AC1 → RED 1 / GREEN 2; AC2 → RED 1 / GREEN 2; AC3 → RED 1 / GREEN 2; AC4 → RED 1 / GREEN 2; AC5 → RED 1 / GREEN 2; AC6 → RED 1 / GREEN 2; AC7 → RED 1 / GREEN 2; AC8 → RED 1 / GREEN 2; AC9 → RED 1 / GREEN 2; AC10 → RED 1 / GREEN 2; AC11 → RED 1 / GREEN 2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -42,21 +42,11 @@ Build child arguments exactly as `--json`, `--no-config`, ordered expanded user 
 
 ---
 
-### 3. Document the declaration-backed flag and argv contract
-
-**Type**: DOCUMENT
-**Output**: Wiki documentation records the shared declarations/preflight extension, ordered exact-spelling forwarding, combined/cumulative rules, assignment rejection, help precedence/regressions, generated search-flag help, `--`, and exact child argv.
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #2 implementation and tests into the appropriate pages under `Notes/wiki`. Document every allow-listed no-argument flag in both forms; the single shared declaration source for `mow.cli`, preflight validation, generated help, and later README synchronization; the raw scan's preservation of cross-option order and supplied aliases independently of nondeterministic callbacks; combined-short expansion and cumulative unrestricted boundaries across mixed aliases; lexical rejection of search/help assignment forms before `--` and positional treatment after it; local-help precedence and unchanged Issue #1 stdout/stderr/no-side-effect behavior; option placement, empty/literal/dash-leading patterns, and the first-versus-positional `--` distinction; and exact child argv with mandatory flags first. Cross-reference Issue #2 and the Invocation and child arguments section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the complete flag-parsing walkthrough
+### 3. Create the complete flag-parsing walkthrough
 
 **Type**: CODE WALKTHROUGH
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/002-04/code-walkthrough` and demonstrates every Issue #2 manual verification class plus retained Issue #1 help regressions.
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/002-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate focused tests and exact child argv for every accepted flag, `-i -s -i`, `-isi`, mixed long/short aliases, and options interleaved with both operands; combined-short and cumulative `-u` acceptance/rejection boundaries; unsupported and argument-taking flags; all specified boolean assignment rejections and their positional forms after `--`; empty, literal `-`, dash-leading, and literal `--` patterns; and the mandatory internal flags/order. Capture bare, first-token, mixed-flag, combined, and later help proving one stdout copy, empty stderr, exit 0, and no child/TUI, alongside the flags-only missing-pattern exit-2 case. Show generated help containing every supported search flag from the shared declarations. Reference Issue #2 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

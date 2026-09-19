@@ -4,7 +4,7 @@ Parent issue: #13
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #7, #12
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement the circular cursor in `internal/searchindex` and its App wiring to sa
 
 ---
 
-### 3. Document the navigation cursor
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the cursor model, stop ordering, no-op rules, and the passive file list.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #13 implementation and tests into the appropriate pages under `Notes/wiki`. Document the single global matched-line cursor, path-then-line stop order, circular `n`/`p` with the zero- and one-entry no-ops, the cursor-derived current file with load requests and viewport handoff, the list underline following selection, manual scrolling leaving the cursor unchanged, and the passive file list with no direct selection route. Cross-reference Issue #13 and the Navigation, viewport, and logical anchors section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the navigation walkthrough
+### 3. Create the navigation walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/013-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/013-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the SearchIndex cursor tests and the App wiring tests, then run the binary with several matched files: `n` repeatedly moving the current-line underline through lines and across files with the list underline following, wrapping from the last stop to the first, `p` reversing, and a manual scroll followed by `n` continuing from the previous stop. Reference Issue #13 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

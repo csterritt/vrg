@@ -4,7 +4,7 @@ Parent issue: #10
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #9
 **Acceptance criteria**: AC1, AC8, AC10 → Tasks 1–2; AC2–AC7, AC9 → Tasks 3–4
-**Manual verification**: Task 6 owns the issue's manual checks.
+**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,21 +56,11 @@ Implement the 64 MiB payload limit with an explicit bounded reader rather than a
 
 ---
 
-### 5. Document record robustness
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the malformed, oversized, and unknown-type rules with their dispositions and the record-loss outcome rows.  
-**Depends on**: 4
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #10 implementation and tests into the appropriate pages under `Notes/wiki`. Document the per-record and lifecycle disposition matrices as deterministic categories, the 64 MiB limit with its discard-and-resynchronize behavior and path-recovery diagnostics, the unterminated oversized final record rule, unknown-type counting and its after-`summary` interaction, missing-`end` retention with incomplete metadata, and the record-loss outcome rows including the after-filtering usable-results assessment. Cross-reference Issue #10 and the Result index, records, and stream integrity and Resources and responsiveness sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 6. Create the record-robustness walkthrough
+### 5. Create the record-robustness walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/010-06/code-walkthrough`.  
-**Depends on**: 5
+**Depends on**: 4
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/010-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the disposition matrix tests, the 64 MiB boundary and resynchronization tests, and the extended outcome matrix, then run the manual fake-rg stream from the issue: a valid `begin`, `match`, a garbage line, an unknown-type line, a valid `end`, and a `summary` with exit 0, showing the browse view, the overlay listing both skip counts, and `q` exiting 0. Reference Issue #10 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

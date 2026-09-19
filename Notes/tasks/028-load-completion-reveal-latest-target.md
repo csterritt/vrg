@@ -4,7 +4,7 @@ Parent issue: #28
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #15, #17, #19, #21, #23, #27
 **Acceptance criteria**: AC1–AC6, AC9–AC10 → Tasks 1–2; AC7–AC8 → Tasks 3–4
-**Manual verification**: Task 6 owns the issue's manual checks.
+**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,21 +56,11 @@ Implement the reload-intent transitions in `internal/app` to satisfy Task 3: int
 
 ---
 
-### 5. Document the two-stage completion contract
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records both stages, the intent model, the commit rules, and the reload transitions.  
-**Depends on**: 4
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #28 implementation and tests into the appropriate pages under `Notes/wiki`. Document stage one's limited responsibilities, the latest-selection reveal intent with its marker and cluster-expanded target geometry, obsolete-layout discards that never consume intents, the installation-guarded commit with its starting viewports, the startup visible-versus-hidden rules, and the reload transitions where navigation intent rather than cursor equality decides. Cross-reference Issue #28 and the File loading and Navigation sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 6. Create the completion walkthrough
+### 5. Create the completion walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/028-06/code-walkthrough`.  
-**Depends on**: 5
+**Depends on**: 4
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/028-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the gated two-stage and reload-transition tests, then run the manual cases: a slow first file with its first match at line 500 loading to place it about a third down, a first match at line 3 keeping top 0, a reload with an immediate `n` revealing the new stop rather than the old position, a scrolled-off match with `r` then `n` `p` revealed on completion, and a resize during the first file's load landing the reveal correctly for the new size. Reference Issue #28 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

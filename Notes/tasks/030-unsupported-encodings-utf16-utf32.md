@@ -4,7 +4,7 @@ Parent issue: #30
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #26, #27, #29
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement the BOM detection with its overlap ordering in `internal/filebuffer`, 
 
 ---
 
-### 3. Document unsupported encodings
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the BOM detection order, the placeholder, notification rules, and the no-validation exclusion.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #30 implementation and tests into the appropriate pages under `Notes/wiki`. Document the four BOMs with the longer-before-shorter overlap ordering and the UTF-8 non-misclassification, the placeholder with its diagnostic, retained indexing and reloadability, the current/non-current notification distinction, the exclusion of stale validation on these bytes, and the fixed-status guarantee. Cross-reference Issue #30 and the Encodings and stale-content validation and Invocation sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the unsupported-encoding walkthrough
+### 3. Create the unsupported-encoding walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/030-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/030-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the BOM detection tests including the overlap case, then run the manual route: creating a UTF-16 LE file with `printf '\xff\xfeh\0i\0\n\0'`, running `vrg hi .`, entering the file to show "(unsupported encoding)" with the overlay, dismissing it, pressing `r` for "Loading…" then the placeholder with a new overlay, dismissing again, and `q` exiting 0 with each encoding diagnostic on stderr. Reference Issue #30 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

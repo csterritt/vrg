@@ -4,7 +4,7 @@ Parent issue: #5
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #3, #4
 **Acceptance criteria**: AC7–AC8 → Tasks 1–2; AC1–AC6, AC9 → Tasks 3–4
-**Manual verification**: Task 6 owns the issue's manual checks.
+**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,21 +56,11 @@ Implement the first FileBuffer path, a minimal Viewport and Theme seam, and the 
 
 ---
 
-### 5. Document the browse tracer
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the browse composition, FileBuffer first path, safe-presentation core rules, and the sink-safety method.  
-**Depends on**: 4
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #5 `internal/filebuffer`, `internal/viewport`, `internal/theme`, and `internal/app` implementation and tests into the appropriate pages under `Notes/wiki`. Document the two-pane browse layout with its filename rule, gutter, and border rules; async loading with prepared buffers and the "Loading…" placeholder; the safe-presentation core's path and content rules with their byte→cell mappings including the provisional tab form; the hostile-fixture raw-output sink-safety method with its no-style composition path; and the fixed-width file list pending Issue #24. Cross-reference Issue #5 and the File list and layout, Text, graphemes, and safe presentation, and Module Design sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 6. Create the browse-tracer walkthrough
+### 5. Create the browse-tracer walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/005-06/code-walkthrough`.  
-**Depends on**: 5
+**Depends on**: 4
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/005-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the escaping unit tests, FileBuffer tests, model tests including the gated load, rendering tests, and the sink-safety raw-output tests, then run the binary in a repository to show the file list, filename rule, gutter, and inverse-video matches, a resize, and `q` exiting 0. Include the hostile-fixture manual case: a filename containing a newline and an ESC byte with a matching line containing an OSC sequence, showing escaped forms in the list, rule, and content with the terminal title unchanged. Reference Issue #5 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

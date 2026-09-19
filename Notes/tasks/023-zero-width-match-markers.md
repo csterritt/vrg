@@ -4,7 +4,7 @@ Parent issue: #23
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #20, #22
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement the zero-width marker in `internal/filebuffer` and `internal/viewport`
 
 ---
 
-### 3. Document zero-width markers
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records marker rendering, extent participation, and the ordinary-rule treatment of terminator-only markers.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #23 implementation and tests into the appropriate pages under `Notes/wiki`. Document the one-cell inverse marker with its current-line underline, no text shifting, effective-width extension for end-of-line and empty lines, cluster-start mapping, wrap-row occupation, marker extents in the paintable-boundary maximum, markers as reveal targets, and the terminator-only `$` marker as an ordinary marker following every shared rule. Cross-reference Issue #23 and the Text, graphemes, and safe presentation section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the marker walkthrough
+### 3. Create the marker walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/023-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/023-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the marker tests including the `hit\r\n` column-3 case and the marker-only-line extent, then run the manual cases: `vrg '^' file` showing an inverse cell at column 0 of each line including empty lines, `vrg '$' file` showing an inverse cell after each line's last character, `n` between them working, and run-off-edge panning past a marker setting the left `*`. Reference Issue #23 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

@@ -4,7 +4,7 @@ Parent issue: #15
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #6, #9, #13
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Implement the file-change pop-up in `internal/app` to satisfy Task 1: instance-k
 
 ---
 
-### 3. Document the file-change pop-up
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the pop-up lifecycle, instance-keyed timers, and cancellation rules.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #15 implementation and tests into the appropriate pages under `Notes/wiki`. Document the selection-time start independent of load completion, the one-second-or-keypress lifetime with the key performing its normal action, instance-keyed timers with stale-instance rejection, render-time centring and truncation on resize without timer restart, error-overlay cancellation with no return, and the sanitized single-line path. Cross-reference Issue #15 and the Colours, overlays, and key precedence section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the pop-up walkthrough
+### 3. Create the pop-up walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/015-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/015-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the instance-keyed model tests, then run the binary: `n` across a file boundary showing the centred pop-up and its ~1 s disappearance, a quick second `n` showing the new file's pop-up with the navigation still applied, a resize while shown re-centring it, and a hostile path rendering its escaped form. Reference Issue #15 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

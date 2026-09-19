@@ -4,7 +4,7 @@ Parent issue: #3
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #2
 **Acceptance criteria**: AC2–AC3 → Tasks 1–2; AC1, AC4–AC8 → Tasks 3–4
-**Manual verification**: Task 6 owns the issue's manual checks.
+**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,21 +56,11 @@ Implement the spawn and collection path in `internal/app` and its narrow process
 
 ---
 
-### 5. Document the search collection path
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the spawn contract, dual-pipe drainage, searching state, interim summary, start failure, and SearchIndex record rules.  
-**Depends on**: 4
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #3 `internal/searchindex` and `internal/app` implementation and tests into the appropriate pages under `Notes/wiki`. Document the child argv and working-directory contract, concurrent dual-pipe drainage for the whole child lifetime, the searching state spanning collection and post-exit processing, the test-gate hold on index preparation, the interim summary screen and its `q` exit 0, start failure's sanitized diagnostic and exit 2, and the SearchIndex record encodings, stop merging, ordering, and path resolution. Cross-reference Issue #3 and the Result index, records, and stream integrity and Module Design sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 6. Create the search-collection walkthrough
+### 5. Create the search-collection walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/003-06/code-walkthrough`.  
-**Depends on**: 5
+**Depends on**: 4
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/003-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the focused SearchIndex and App model tests, the fake-rg argv and working-directory subprocess test, and the dual-pipe backpressure fixture, then run the binary in a real repository to show "Searching…" followed by the interim summary with `q` exiting 0, and an rg-free `PATH` invocation by explicit binary path showing the start-failure diagnostic and exit 2. Reference Issue #3 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 

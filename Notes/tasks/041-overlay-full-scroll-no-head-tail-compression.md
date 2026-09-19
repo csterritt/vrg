@@ -4,7 +4,7 @@ Parent issue: #41
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: none — shared-file/harness ordering with #46 and #48 in `cmd/vrg`: never implement overlapping PTY or `outcome_test.go` work concurrently; whichever issue lands second adapts to the already-landed tests and helpers. If #48 has landed, use its acknowledgement harness with no fixed settling/inter-key delay and add any new key-sending helper to #48's matrix and every new acknowledgement hook it requires to #45's hook manifest; if #41 lands first, #46/#48 apply their reciprocal adaptation clauses
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
-**Manual verification**: Task 4 owns the issue's manual checks.
+**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,21 +32,11 @@ Remove the head-plus-ellipsis-plus-tail compression in `renderOverlay` (`interna
 
 ---
 
-### 3. Document full-scroll overlays
-
-**Type**: DOCUMENT  
-**Output**: Wiki documentation records the complete-row scrolling contract and the revised large-stderr fixture semantics.  
-**Depends on**: 2
-
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #41 implementation into the appropriate pages under `Notes/wiki`. Document that non-help overlays keep every wrapped row in the scrollable set with `overlayScroll` clamped to `[0, max(0, rows−height)]`, that render-time clipping at tiny sizes is preserved while model-level elision is forbidden, that this contract supersedes Issue #9's original simultaneous head/tail rendering requirement for the ≥ 1 MiB stderr fixture (drainage and completeness retained), and the unchanged modal key contract. Cross-reference Issue #41 and the *Colours, overlays, and key precedence* section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
-
----
-
-### 4. Create the full-scroll-overlay walkthrough
+### 3. Create the full-scroll-overlay walkthrough
 
 **Type**: CODE WALKTHROUGH  
 **Output**: Showboat walkthrough exists at `Notes/walkthroughs/041-04/code-walkthrough`.  
-**Depends on**: 3
+**Depends on**: 2
 
 Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/041-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the model-level complete-rows, clamp, and traversal tests plus the revised `TestStderrContentFixture`, then run the issue's manual scenario: a fatal outcome from a fake rg emitting stderr longer than the overlay's visible height → open the overlay and scroll from the first row to the last with repeated `up`/`down` (confirming `u`/`d`/page keys are ignored), verify every middle row is reachable with no ellipsis substituting for content, dismiss, and confirm scroll clamping at both ends. Capture commands, outputs, and exit statuses. Reference Issue #41 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
 
