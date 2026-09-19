@@ -222,15 +222,22 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   re-prepare, `rowSource` embeds `viewport.Model` for the anchor
   translations, `listWBase` fixes the list's longest-path width at
   search-done, and `listCell` escapes only the visible window's
-  entries through the `escapePath` seam. See
+  entries through the `escapePath` seam. Issue #18 adds
+  `isPanKey`/`panBy` (`,`/`.`/`<`/`>`/`[`/`]` — one cell, ten cells,
+  `HalfText` of the layout's text width — no-ops in wrap mode and on
+  placeholders), `navigate`'s `ResetOff` before the reveal on every
+  file change, `rowSource` now embedding `viewport.Extent`, and
+  `contentText`'s `off` window with blank cells for a cluster split
+  by the left clip edge. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [file-change-popup.md](file-change-popup.md),
   [viewport-scrolling.md](viewport-scrolling.md),
   [match-navigation.md](match-navigation.md),
   [destination-reveal.md](destination-reveal.md),
-  [wrap-mode.md](wrap-mode.md), and
-  [logical-anchor.md](logical-anchor.md).
+  [wrap-mode.md](wrap-mode.md),
+  [logical-anchor.md](logical-anchor.md), and
+  [horizontal-panning.md](horizontal-panning.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
@@ -240,9 +247,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `safepresentation.MapContent`, and produces `Buffer`/`Line` records
   with `GutterWidth`, source `Raw` bytes, `Highlights` mapped to
   display cells, and (Issue #16) `Clusters` — the shared
-  grapheme-cluster segmentation Viewport wraps from. See
-  [browse-tracer.md](browse-tracer.md) and
-  [wrap-mode.md](wrap-mode.md).
+  grapheme-cluster segmentation Viewport wraps from. Issue #18 adds
+  `Line.MaxStart(width)` — the paintable boundary: the largest cell
+  index where a cluster begins and fits within `width`, skipping an
+  over-wide trailing cluster and reporting 0 when none fits. See
+  [browse-tracer.md](browse-tracer.md),
+  [wrap-mode.md](wrap-mode.md), and
+  [horizontal-panning.md](horizontal-panning.md).
 - `internal/viewport/viewport.go` — `Viewport`, the file panel's
   vertical window (`Top`, `Scroll`, `Clamp`), the scroll-unit helpers
   `HalfPage` and `MaxTop` (the BOF/EOF clamp bound), and `Rows`, the
@@ -257,10 +268,24 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `Viewport.Anchor`/`Restore`, and the `Rows.AnchorAt`/`Rows.RowOf`
   translations; `Scroll`/`Reveal` replace the anchor only when the
   effective top moves and any clamp that pulls the top up rewrites it
-  (the lossy EOF rule). See
+  (the lossy EOF rule). Issue #18 adds `Viewport.off` (the horizontal
+  pan offset, per-file saved state), the `Extent` interface (`Model`
+  plus `Key`/`At`) that `Scroll`/`Restore`/`Clamp`/`Reveal` now take,
+  and `clampOff` — the wrap-aware re-clamp every visible-set change
+  runs against `MaxOff`. See
   [viewport-scrolling.md](viewport-scrolling.md),
-  [wrap-mode.md](wrap-mode.md), and
-  [logical-anchor.md](logical-anchor.md).
+  [wrap-mode.md](wrap-mode.md),
+  [logical-anchor.md](logical-anchor.md), and
+  [horizontal-panning.md](horizontal-panning.md).
+- `internal/viewport/pan.go` — Issue #18's horizontal panning:
+  `Viewport.Off`/`ResetOff`/`Pan` (the offset reader, the
+  file-change reset, and the per-keypress move-and-clamp that is a
+  strict no-op under a wrap model), `HalfText` (the `[`/`]` unit,
+  `max(1, floor(width / 2))`), and `MaxOff` — the largest valid
+  offset as the paintable boundary of the widest *currently
+  rendered* source line, derived from `Line.MaxStart` over only the
+  visible row range. See
+  [horizontal-panning.md](horizontal-panning.md).
 - `internal/viewport/reveal.go` — Issue #14's vertical destination
   reveal: `Target{Line, Cell}` (the display target — the first
   submatch's start cell), `Rows.StopTarget` (stop → target through the
@@ -272,8 +297,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `[0, MaxTop]`, reporting whether the viewport moved). Issue #17's
   `Reveal` is model-aware and replaces the logical anchor only when
   the viewport moves — a no-scroll reveal retains the logical column.
-  See [destination-reveal.md](destination-reveal.md) and
-  [logical-anchor.md](logical-anchor.md).
+  Issue #18 widens the parameter to `Extent` and re-clamps the
+  horizontal offset against the newly visible rows on a move. See
+  [destination-reveal.md](destination-reveal.md),
+  [logical-anchor.md](logical-anchor.md), and
+  [horizontal-panning.md](horizontal-panning.md).
 - `internal/theme/theme.go` — the active scheme's style set: `Dark()`
   (white on black, initially active), `Light()` (black on white), the
   pure `Toggled` flip behind the `c` key, `Plain()` (the no-style

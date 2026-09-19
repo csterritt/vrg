@@ -56,6 +56,8 @@ layout the key describes:
   yields one row.
 - **Run-off-edge mode** maps each source line to exactly one row; the
   render clips at the text width without splitting a grapheme.
+  Issue #18 gives this mode the horizontal pan window and offset —
+  see [horizontal-panning.md](horizontal-panning.md).
 - `Row{Line, Start, End}` is one rendered row — a half-open cell range
   of its source line — and `Row.Continuation()` (Start > 0) marks the
   rows that continue a wrapped line: their gutter is blank and their
@@ -73,7 +75,10 @@ layout the key describes:
   since Issue #17 — issues a `requestLayout` command preparing the
   current file's model under the new key off the update path; the
   retained logical anchor restores when it installs. The text width
-  itself changes with the reserved indicator column.
+  itself changes with the reserved indicator column. Since Issue #18
+  the horizontal pan offset is likewise retained through the toggle —
+  untouched while a wrap model is installed, re-clamped against the
+  visible rows on every run-off-edge re-entry.
 - `model.revs` is the per-path content revision: it bumps on every
   successful `fileLoadedMsg`, so a reload's row model never aliases the
   old content's.
@@ -84,10 +89,12 @@ layout the key describes:
   `requestLayout`/`layoutReadyMsg`: `w` and `WindowSizeMsg` record the
   new parameters and return a preparation command, and the keyed
   completion installs only while it still matches the live layout.
-- `contentText` renders a row's `[Start, End)` cells; `contentCell`
-  emits a blank gutter for continuation rows and pads the reserved
-  indicator column. A frame still queries `rowSource` only for the
-  visible range — `View()` never wraps the buffer.
+- `contentText` renders a row's `[Start, End)` cells — since Issue
+  #18 starting at the pan offset `off`, with blank cells for a cluster
+  split by the left clip edge; `contentCell` emits a blank gutter for
+  continuation rows and pads the reserved indicator column. A frame
+  still queries `rowSource` only for the visible range — `View()`
+  never wraps the buffer.
 
 ## Wrapped destination reveal
 

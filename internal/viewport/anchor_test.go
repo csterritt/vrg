@@ -9,10 +9,15 @@ import (
 )
 
 // seqRows is a Model stand-in for scroll and clamp tests: one rendered
-// row per source line, so a row index and its anchor coincide.
+// row per source line, so a row index and its anchor coincide. Its
+// rows carry no cells, so the horizontal extent is always zero.
 type seqRows int
 
 func (s seqRows) Len() int { return int(s) }
+
+func (s seqRows) Key() viewport.Key { return viewport.Key{TextWidth: 80} }
+
+func (s seqRows) At(i int) viewport.Row { return viewport.Row{} }
 
 func (s seqRows) AnchorAt(row int) viewport.Anchor {
 	return viewport.Anchor{Line: int64(row + 1)}

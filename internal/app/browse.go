@@ -21,8 +21,7 @@ import (
 // substitute a counting fake to prove a frame queries only the visible
 // row range.
 type rowSource interface {
-	viewport.Model
-	At(i int) viewport.Row
+	viewport.Extent
 	GutterWidth() int
 	// TargetRow is the rendered row holding the navigation stop's
 	// display target — the row a destination reveal must show.
@@ -77,8 +76,17 @@ func (m *model) navigate(next bool) tea.Cmd {
 	if cur, _ := m.idx.Cursor(); cur == from {
 		return nil
 	}
-	m.reveal()
 	ck, _ := m.curKey()
+	if mv.FileChanged {
+		// A file change resets the horizontal offset to zero before
+		// the reveal runs (Issue #18): a revisited file starts at its
+		// left edge, and Issue #19's horizontal reveal will operate
+		// on that zero — never on the saved pan.
+		vp := m.vps[ck]
+		vp.ResetOff()
+		m.vps[ck] = vp
+	}
+	m.reveal()
 	if !mv.FileChanged {
 		return m.requestLayout(ck)
 	}
@@ -228,6 +236,51 @@ func isScrollKey(key string) bool {
 	return false
 }
 
+// isPanKey reports whether key is a browse-state horizontal pan key.
+func isPanKey(key string) bool {
+	switch key {
+	case ",", ".", "<", ">", "[", "]":
+		return true
+	}
+	return false
+}
+
+// panBy applies one horizontal pan key to the current file's saved
+// viewport: ,/. move one display cell, </> ten, and [/] half the text
+// width — max(1, floor(textW / 2)) — each clamped to the paintable
+// boundary of the widest currently rendered line, re-evaluated on
+// every keypress. In wrap mode and on the placeholders the keys are
+// strict no-ops.
+func (m *model) panBy(key string) {
+	ck, ok := m.curKey()
+	if !ok {
+		return
+	}
+	rows := m.currentRows(ck)
+	h := m.contentRows()
+	if rows == nil || h < 1 {
+		return
+	}
+	var d int
+	switch key {
+	case ",":
+		d = -1
+	case ".":
+		d = 1
+	case "<":
+		d = -10
+	case ">":
+		d = 10
+	case "[":
+		d = -viewport.HalfText(rows.Key().TextWidth)
+	case "]":
+		d = viewport.HalfText(rows.Key().TextWidth)
+	}
+	vp := m.vps[ck]
+	vp.Pan(d, rows, h)
+	m.vps[ck] = vp
+}
+
 // scrollBy applies one vertical scroll key to the current file's saved
 // viewport: up/down move one rendered row, u/d a half page
 // (max(1, floor(h/2))), and pgup/pgdown a full page of the content
@@ -341,6 +394,7 @@ func (m *model) browseView() string {
 	failed := false
 	curLine := int64(-1)
 	top := 0
+	off := 0
 	if len(files) > 0 {
 		key := string(files[cur].Path)
 		rows, failed = m.currentRows(key), m.failed[key]
@@ -350,6 +404,11 @@ func (m *model) browseView() string {
 			top = m.vps[key].Top()
 			if max := viewport.MaxTop(rows.Len(), h-1); top > max {
 				top = max
+			}
+			// The horizontal window applies only in run-off-edge
+			// mode; wrap mode always renders from cell zero.
+			if !m.wrap {
+				off = m.vps[key].Off()
 			}
 		}
 		// The current matched line is the cursor's selected stop.
@@ -366,7 +425,7 @@ func (m *model) browseView() string {
 			sb.WriteString(m.listCell(listTop+r-1, listW))
 		}
 		if panelW > 0 {
-			sb.WriteString(m.contentCell(r-1, panelW, top, rows, failed, curLine))
+			sb.WriteString(m.contentCell(r-1, panelW, top, off, rows, failed, curLine))
 		}
 	}
 	return sb.String()
@@ -391,9 +450,10 @@ func (m *model) listCell(i, width int) string {
 // contentCell renders file-panel content row cr padded to width cells:
 // gutter plus text for the prepared row at index top+cr — a wrapped
 // continuation row carries a blank gutter — or the placeholder while
-// no row model is available. In run-off-edge mode the rightmost cell
-// is the reserved indicator column, left blank until Issue #20.
-func (m *model) contentCell(cr, width, top int, rows rowSource, failed bool, curLine int64) string {
+// no row model is available. In run-off-edge mode the text window
+// starts off cells into the line and the rightmost cell is the
+// reserved indicator column, left blank until Issue #20.
+func (m *model) contentCell(cr, width, top, off int, rows rowSource, failed bool, curLine int64) string {
 	if rows == nil {
 		placeholder := "Loading…"
 		if failed {
@@ -422,7 +482,7 @@ func (m *model) contentCell(cr, width, top int, rows rowSource, failed bool, cur
 		reserved = n
 	}
 	return m.theme.Gutter(gutter) +
-		m.contentText(row, width-gw-reserved, row.Line.Number == curLine) +
+		m.contentText(row, off, width-gw-reserved, row.Line.Number == curLine) +
 		strings.Repeat(" ", reserved)
 }
 
@@ -443,12 +503,15 @@ func (m *model) filenameRule(width int) string {
 }
 
 // contentText renders one rendered row's escaped cells into at most
-// textW terminal cells, wrapping each maximal run of highlighted cells
-// in the match style — the true inverse, additionally underlined when
-// the line is the current matched line — and padding the rest with
-// blanks. Clipping never splits a grapheme's cells: a cell that would
-// cross the boundary ends the row.
-func (m *model) contentText(row viewport.Row, textW int, cur bool) string {
+// textW terminal cells starting at display cell off, wrapping each
+// maximal run of highlighted cells in the match style — the true
+// inverse, additionally underlined when the line is the current
+// matched line — and padding the rest with blanks. Clipping never
+// splits a grapheme's cells: a cell that would cross the right
+// boundary ends the row, and a cluster straddling the left edge
+// contributes blank cells for its clipped portion — never half a
+// glyph.
+func (m *model) contentText(row viewport.Row, off, textW int, cur bool) string {
 	var sb strings.Builder
 	var run strings.Builder
 	runHL := false
@@ -476,15 +539,34 @@ func (m *model) contentText(row viewport.Row, textW int, cur bool) string {
 		return false
 	}
 	cells := row.Line.Cells
+	// The painted window starts at the horizontal offset: cells left
+	// of off are clipped away. A cluster straddling the edge — its
+	// first cell left of off, continuation cells inside the window —
+	// renders one blank per clipped cell rather than a partial glyph.
+	lo := row.Start
+	if off > lo {
+		lo = off
+	}
 	col := 0
-	for i := row.Start; i < row.End; i++ {
+	clipped := false
+	for i := lo; i < row.End; i++ {
 		c := cells[i]
+		cont := i > 0 && cells[i-1].Start == c.Start && cells[i-1].End == c.End
+		if !cont {
+			clipped = false
+		} else if i == lo {
+			clipped = true
+		}
 		text := c.Text
 		if text == "" {
-			if i > row.Start && cells[i-1].Start == c.Start && cells[i-1].End == c.End {
-				continue // continuation cell of a wide glyph
+			switch {
+			case !cont:
+				text = string(rune(0xfffd)) // an invalid byte's replacement char
+			case clipped:
+				text = " "
+			default:
+				continue // continuation cell of a painted wide glyph
 			}
-			text = string(rune(0xfffd)) // an invalid byte's replacement char
 		}
 		cw := safepresentation.CellWidth(text)
 		if col+cw > textW {

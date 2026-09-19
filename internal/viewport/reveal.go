@@ -83,14 +83,16 @@ func (r *Rows) TargetRow(st searchindex.Stop) int {
 // resulting top row's location; a no-scroll reveal keeps it — a
 // retained logical column is not discarded. Reveal reports whether the
 // viewport moved, distinguishing a saved-state replacement from a
-// no-scroll reveal.
-func (v *Viewport) Reveal(row int, m Model, height int) bool {
+// no-scroll reveal. A moving reveal re-clamps the horizontal offset
+// against the newly visible rows (Issue #18).
+func (v *Viewport) Reveal(row int, e Extent, height int) bool {
 	if height > 0 && row >= v.top && row < v.top+height {
 		return false
 	}
 	top := v.top
 	v.top = row - height/3
-	v.clamp(m.Len(), height)
-	v.reanchor(top, m)
+	v.clamp(e.Len(), height)
+	v.reanchor(top, e)
+	v.clampOff(e, height)
 	return v.top != top
 }

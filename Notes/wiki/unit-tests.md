@@ -633,6 +633,43 @@ the `crossFiles` single-stop fixture:
   counts provider queries: one frame over a 50-file index escapes only
   the visible list window plus the filename-rule path.
 
+`pan_test.go` (same package; Issue #18) drives the horizontal pan keys
+through `Update`/`View` under `theme.Plain()`, with `widenFrame`
+resizing the fixture frame so the flat text width is exactly 40 cells
+regardless of temporary-path length:
+
+- `TestPanKeysShiftText` — `.`/`>`/`]` move the offset 1, 10, and
+  `HalfText(40)` cells and the rendered text shifts left by the same
+  amount; `<`/`,`/`[` move it back symmetrically to 0.
+- `TestPanKeysNoOpInWrapMode` — all six keys leave the offset 0 and
+  the frame byte-identical while wrapping.
+- `TestPanKeysClampAtLeftEdge` — `,`/`<`/`[` at offset 0 move nothing
+  and change no frame.
+- `TestPanOffsetSurvivesWrapToggle` — `w` `w` keeps the offset 20 and
+  the row still renders from cell 20.
+- `TestPanResetsOnFileChange` — `n` to file B starts at offset 0 from
+  the left edge; `p` back to A finds A's offset reset too — the saved
+  10 is not restored.
+- `TestPanClippedClusterRendersBlank` — at offset 3 inside a
+  `ab文…` line's two-cell cluster the window opens with a blank cell
+  where 文's second half was clipped, then the following text — no
+  partial glyph anywhere in the row.
+- `TestPanMaximumPaintsFinalCluster` — panning to the maximum (40 on
+  `x`×40 + `文`) paints the whole trailing cluster then blanks; `.`,
+  `>`, and `]` there change neither the offset nor the frame.
+- `TestScrollReclampsOffsetLeftwards` — `down` past the 300-cell line
+  re-clamps the stored 200 to the pad lines' 2; `up` returns to the
+  long line without restoring it.
+- `TestRevealReclampsOffset` — `n` to a same-file stop whose reveal
+  scrolls into short lines re-clamps the offset.
+- `TestWrapReentryReclampsOffset` — offset retained through wrap,
+  `pgdn` deep into short lines while wrapped, then `w` re-entry
+  clamps it to 2.
+- `TestResizeReclampsOffset` — shrinking the frame's height so the
+  long line leaves the window re-clamps the stored offset.
+- `TestPanKeysNoOpOnPlaceholder` — pan keys over "Loading…" create no
+  viewport state and change nothing.
+
 ## internal/viewport
 
 `viewport_test.go` (external package `viewport_test`; Issue #12):
@@ -730,6 +767,49 @@ anchor over real prepared buffers:
   71), and a later shrink does not restore the pre-clamp top.
 - `TestRestoreEOFClampUpdatesAnchor` — `Restore` under a grown
   viewport that forces the clamp updates the anchor the same way.
+
+`pan_test.go` (external package; Issue #18) covers the horizontal
+offset and extent contracts over real prepared buffers:
+
+- `TestHalfTextUnit` — `HalfText` is `max(1, floor(width / 2))` over
+  odd and degenerate widths.
+- `TestPanUnitsMoveColumns` — the 1-, 10-, and half-width units move
+  the offset symmetrically right and left.
+- `TestPanClampsToPaintableBoundary` — overshooting pans clamp to the
+  widest visible line's last paintable start (99 for a 100-cell line),
+  and further pans change nothing; panning past the left edge clamps
+  to 0.
+- `TestPanNoOpInWrapMode` — `Pan` under a wrap model never moves the
+  offset and `MaxOff` reports 0.
+- `TestPanOffsetRetainedThroughWrapToggle` — `Restore` into wrap keeps
+  the offset, a wrap-mode `Scroll` leaves it, and re-entry keeps it
+  when still within the visible extent.
+- `TestWrapReentryClampsToNewVisibleSet` — scrolling deep into short
+  lines while wrapped, then restoring to flat, re-clamps to their
+  maximum — the retained offset is not restored.
+- `TestMaxOffFollowsVisibleLines` — the 300-cell line among 10-cell
+  lines gives 299 while visible and 9 once scrolled out; scrolling
+  back does not restore the stored offset, and a fresh pan
+  re-evaluates the live visible rows.
+- `TestMaxOffEmptyViews` — a nil-buffer model and an all-empty view
+  both report and clamp to 0.
+- `TestMaxOffTrailingWideCluster` — a line ending in a two-cell
+  cluster stops at the cluster's start, and at width 1 falls back to
+  the last fitting cluster's start.
+- `TestMaxOffUnpaintableFinalCluster` — a final cluster wider than the
+  text width falls back to the last fitting start, or 0 when none
+  fits; panning such a line stays at 0.
+- `TestRevealReclampsOffset`, `TestClampReclampsOffset` — a moving
+  reveal and a window-shrinking `Clamp` each re-clamp the stored
+  offset against the rows still visible.
+- `TestUniformLinesAllHiddenLeftIsLegal` — every visible 50-cell line
+  permits offset 49 (its last paintable start), the geometry Issue
+  #20's `_` indicator needs on every line.
+- `TestResetOff` — `ResetOff` zeroes the offset for the file-change
+  reset.
+- `TestExtentEvaluationTouchesOnlyVisibleRows` — the `countingExtent`
+  fake records exactly `[top, top + n)` queries for a pan, a scroll's
+  re-clamp, and a `MaxOff` call — the render-cost guard.
 
 ## internal/theme
 

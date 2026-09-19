@@ -85,6 +85,23 @@ func (b *Buffer) GutterWidth() int {
 	return digits + 2
 }
 
+// MaxStart is the largest display-cell index where one of the line's
+// grapheme clusters begins and fits entirely within width cells — the
+// paintable boundary (Issue #18) a horizontal offset may reach so at
+// least one whole cluster still paints. A trailing cluster wider than
+// width is skipped, falling back to the last fitting cluster's start,
+// and a line with no fitting cluster reports 0. Issue #23's
+// end-of-line marker will join the candidate set once it exists.
+func (l Line) MaxStart(width int) int {
+	max := 0
+	for _, cl := range l.Clusters {
+		if w := cl.End - cl.Start; w >= 1 && w <= width && cl.Start > max {
+			max = cl.Start
+		}
+	}
+	return max
+}
+
 // makeLine prepares one raw line — terminator included — for display:
 // the content bytes are mapped through the safe-presentation core and
 // the line's recorded highlight byte ranges are mapped onto cells.

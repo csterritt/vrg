@@ -465,6 +465,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// viewport; it never moves the matched-line cursor, and
 			// on a placeholder it is a no-op.
 			m.scrollBy(key)
+		case m.state == stateBrowse && isPanKey(key):
+			// , . < > [ ] pan horizontally in run-off-edge mode —
+			// one cell, ten cells, or half the text width — clamped
+			// to the widest visible line's paintable boundary
+			// (Issue #18). In wrap mode and on placeholders they are
+			// strict no-ops.
+			m.panBy(key)
 		case key == "q" && m.state == stateNoResults:
 			// q dismisses the no-results screen to exit 1 through
 			// the same cleanup path; Esc is a no-op here and

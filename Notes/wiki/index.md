@@ -117,6 +117,15 @@ Catalog of all wiki pages for the vrg project.
   hiding, `pendingReveals` intents committing on install, the
   cached-file stale-layout re-request and fast path, and the
   visible-window-only render-cost bounds
+- [horizontal-panning.md](horizontal-panning.md) — Issue #18: the
+  run-off-edge horizontal window, the `,`/`.`/`<`/`>`/`[`/`]` pan
+  units (one cell, ten cells, `HalfText`), the visible-lines extent
+  policy and the three distinct extent definitions, the
+  paintable-boundary `MaxOff`/`Line.MaxStart` clamp, re-clamping on
+  every visible-set change with no restoration, wrap-mode retention
+  and re-entry clamping, the file-change `ResetOff` before reveal,
+  split-cluster blank cells at the left edge, the `Extent` interface,
+  and the visible-rows-only extent-evaluation guard
 
 ## Catalogs
 

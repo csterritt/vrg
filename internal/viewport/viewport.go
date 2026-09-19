@@ -13,7 +13,9 @@
 // Issue #17 lands the logical anchor: the width-independent (source
 // line, display-column) reading position that survives rewraps, wrap
 // toggles, and resizes, updated by scrolling, moving reveals, and the
-// lossy EOF clamp. Horizontal state arrives in later issues.
+// lossy EOF clamp. Issue #18 lands the horizontal pan offset: the
+// run-off-edge cell window, its pan units, the visible-lines extent
+// policy, and the paintable-boundary clamp — all in pan.go.
 package viewport
 
 import "vrg/internal/filebuffer"
@@ -42,6 +44,21 @@ type Model interface {
 	RowOf(a Anchor) int
 }
 
+// Extent is a Model that also exposes its rendered rows and layout
+// key — the contract the horizontal pan offset consults. Every
+// visible-set change re-clamps the offset against MaxOff, so the
+// operations that move the effective top all take an Extent.
+type Extent interface {
+	Model
+	// Key is the layout the model was prepared for: TextWidth is the
+	// paintable boundary's width, and Wrap suppresses panning and the
+	// re-clamp entirely.
+	Key() Key
+	// At returns rendered row i; it panics outside [0, Len), as a
+	// slice index does.
+	At(i int) Row
+}
+
 // Viewport is the file panel's vertical window over one loaded file's
 // prepared rows. The zero value shows the top of the file.
 //
@@ -51,9 +68,15 @@ type Model interface {
 // a no-scroll reveal leaves it — keeping a logical column that is
 // inside rather than at the start of the top row — and end-of-file
 // clamping rewrites it to the clamped top, the documented lossy case.
+// off is the horizontal pan offset in display cells (Issue #18):
+// meaningful only under a run-off-edge model, retained untouched while
+// a wrap model is installed, and re-clamped to the paintable boundary
+// of the visible rows on every visible-set change — pan, scroll,
+// reveal, rewrap, restore, or clamp.
 type Viewport struct {
 	top    int
 	anchor Anchor
+	off    int
 }
 
 // Top is the index of the first visible rendered row.
@@ -66,12 +89,15 @@ func (v Viewport) Anchor() Anchor { return v.anchor }
 // of the file — then clamps to valid content: the result is never below
 // 0 and never past MaxTop. A scroll that moved the effective top
 // replaces the logical anchor with the resulting top row's location; a
-// clamped no-move scroll leaves a retained column intact.
-func (v *Viewport) Scroll(d int, m Model, height int) {
+// clamped no-move scroll leaves a retained column intact. The
+// horizontal offset re-clamps against the newly visible rows — a
+// stored offset is never restored when a wide line returns.
+func (v *Viewport) Scroll(d int, e Extent, height int) {
 	top := v.top
 	v.top += d
-	v.clamp(m.Len(), height)
-	v.reanchor(top, m)
+	v.clamp(e.Len(), height)
+	v.reanchor(top, e)
+	v.clampOff(e, height)
 }
 
 // Restore re-derives the effective top under a replacement row model —
@@ -81,22 +107,28 @@ func (v *Viewport) Scroll(d int, m Model, height int) {
 // the anchor's line shows as one row while its cell is kept, and
 // wrapping again restores the row containing that cell. EOF clamping
 // may pull the effective top upward; when it does, the anchor is
-// updated to the resulting top — the documented lossy rule.
-func (v *Viewport) Restore(m Model, height int) {
-	v.top = m.RowOf(v.anchor)
+// updated to the resulting top — the documented lossy rule. A
+// run-off-edge model re-clamps the horizontal offset against the rows
+// visible under the restored top, so re-entry after a wrap toggle
+// applies the current visible set's maximum.
+func (v *Viewport) Restore(e Extent, height int) {
+	v.top = e.RowOf(v.anchor)
 	top := v.top
-	v.clamp(m.Len(), height)
-	v.reanchor(top, m)
+	v.clamp(e.Len(), height)
+	v.reanchor(top, e)
+	v.clampOff(e, height)
 }
 
 // Clamp brings the top row back into the valid range after the row
 // count or content height changes, dropping positions that would leave
 // avoidable blank rows below EOF — the lossy clamp: a moved top updates
-// the anchor to the resulting top row's location.
-func (v *Viewport) Clamp(m Model, height int) {
+// the anchor to the resulting top row's location. The horizontal
+// offset re-clamps against the rows still visible.
+func (v *Viewport) Clamp(e Extent, height int) {
 	top := v.top
-	v.clamp(m.Len(), height)
-	v.reanchor(top, m)
+	v.clamp(e.Len(), height)
+	v.reanchor(top, e)
+	v.clampOff(e, height)
 }
 
 // clamp bounds the top row to [0, MaxTop].
@@ -114,6 +146,24 @@ func (v *Viewport) clamp(rows, height int) {
 func (v *Viewport) reanchor(old int, m Model) {
 	if v.top != old && m.Len() > 0 {
 		v.anchor = m.AnchorAt(v.top)
+	}
+}
+
+// clampOff pulls the horizontal offset back to the paintable boundary
+// of the rows visible now — the re-clamp every visible-set change
+// applies so a stored offset can never exceed what the current window
+// paints. A wrap model keeps the offset untouched: it is retained
+// through the toggle and re-clamped on re-entry into run-off-edge
+// mode.
+func (v *Viewport) clampOff(e Extent, height int) {
+	if e.Key().Wrap {
+		return
+	}
+	if max := MaxOff(e, v.top, height); v.off > max {
+		v.off = max
+	}
+	if v.off < 0 {
+		v.off = 0
 	}
 }
 

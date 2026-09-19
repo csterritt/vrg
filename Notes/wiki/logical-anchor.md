@@ -133,7 +133,11 @@ PRD *Resources and responsiveness* bounds both panes' per-frame work:
 - The frame render still queries `rowSource` only for the visible
   range `[top, top + content height)` — `contentCell` slices prepared
   spans; `View()` never wraps or rescans the buffer (the
-  `countingRows` fake test stands).
+  `countingRows` fake test stands). Issue #18 extends the same bound
+  horizontally: `MaxOff` extent evaluation queries only the visible
+  rows of the prepared layout (the `countingExtent` fake proves it),
+  and it runs on the write paths — pans and visible-set changes —
+  never inside `View()`.
 - The file list is equally bounded: `listWBase` — the longest escaped
   path width plus one — is computed **once** at `searchDoneMsg`, and
   `listCell` escapes only the visible window's entries through
@@ -158,4 +162,8 @@ toggles discarding superseded layouts, an obsolete completion for a
 non-current file leaving all state untouched, the superseded-revision
 discard, the cached-file stale-layout re-request and matching-layout
 fast path, the pending reveal committing on install, and the
-file-list escape-count bound. See [unit-tests.md](unit-tests.md).
+file-list escape-count bound. Issue #18 widened `Model` into
+`Extent` (`Key`/`At` added) for the operations that re-clamp the
+horizontal offset — see
+[horizontal-panning.md](horizontal-panning.md). See
+[unit-tests.md](unit-tests.md).

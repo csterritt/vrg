@@ -234,6 +234,11 @@ type countingRows struct {
 func (c *countingRows) Len() int         { return c.n }
 func (c *countingRows) GutterWidth() int { return 3 }
 
+// Key reports the fake as a wrap-mode model so horizontal panning and
+// its extent evaluation stay inert — the render-cost guard counts only
+// the frame's own queries.
+func (c *countingRows) Key() viewport.Key { return viewport.Key{Wrap: true} }
+
 func (c *countingRows) At(i int) viewport.Row {
 	c.queries = append(c.queries, i)
 	return viewport.Row{Line: filebuffer.Line{Number: int64(i + 1)}}

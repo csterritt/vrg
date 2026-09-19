@@ -626,3 +626,43 @@ index. Sources: `Notes/issues/017-logical-anchor-through-rewrap-and-resize.md`,
 Design → Viewport), `internal/viewport/viewport.go`,
 `internal/viewport/reveal.go`, `internal/app/app.go`,
 `internal/app/browse.go`, and the new/updated test files.
+
+## [2026-09-17] ingest | Issue #18 horizontal panning
+
+Ingested the completed Issue #18 implementation: run-off-edge mode
+gains a horizontal window driven by `,`/`.` (one cell), `<`/`>` (ten
+cells), and `[`/`]` (`HalfText` = `max(1, floor(text width / 2))` of
+the installed layout's text width). `Viewport` carries the new `off`
+state — per-file saved with `top`/`anchor` in `m.vps`, meaningful only
+under a flat model — plus `Off`/`ResetOff`/`Pan` and `MaxOff` in the
+new `internal/viewport/pan.go`. The clamp follows the visible-lines
+extent policy: `MaxOff` is the paintable boundary of the widest
+currently rendered source line — the largest cell index where a
+cluster begins and fits within the text width — computed by the new
+`filebuffer.Line.MaxStart` over only the `[top, top + n)` prepared
+rows; wrap models, empty models, and all-empty views report 0, a
+trailing over-wide cluster falls back to the last fitting start, and
+the definition is forward-compatible with Issue #23's marker cell.
+`Model` widened into `Extent` (`Key`/`At` added) so `Scroll`,
+`Restore`, `Clamp`, and a moving `Reveal` each run `clampOff` — the
+re-clamp on every visible-set change — while wrap models skip it,
+which is exactly what retains the offset through a `w` toggle yet
+re-clamps on re-entry; a stored offset clamped leftwards is never
+restored when a wide line returns. `navigate` resets the destination's
+offset to zero before the reveal on every file change. `contentText`
+takes the offset and renders blank cells for a cluster split by the
+left clip edge — never half a glyph; right-edge clipping is unchanged.
+The frame render does no extent evaluation; the `countingExtent` fake
+proves pans, scroll re-clamps, and `MaxOff` query only the visible row
+range. Created [horizontal-panning](horizontal-panning.md); updated
+[wrap-mode](wrap-mode.md), [logical-anchor](logical-anchor.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/018-horizontal-panning.md`,
+`Notes/tasks/018-horizontal-panning.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors; Layout
+and indicators), `internal/viewport/pan.go`,
+`internal/viewport/viewport.go`, `internal/viewport/reveal.go`,
+`internal/filebuffer/filebuffer.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/viewport/pan_test.go`,
+`internal/app/pan_test.go`.
