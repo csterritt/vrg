@@ -93,17 +93,57 @@ the scan (each declared flag recorded verbatim, help never forwarded).
 - `TestSubmatchRangeBoundaries` — ranges may touch the ends of the
   decoded line; zero-width matches are in range.
 
+## internal/safepresentation
+
+`safepresentation_test.go` (external package `safepresentation_test`;
+Issue #5) covers the escaping core and the byte→cell maps:
+
+- `TestEscapePath` — every path rule: `\n`/`\r`/`\t` escapes, backslash
+  doubling, C0/DEL caret notation, C1 `\uXXXX` escapes, invalid-UTF-8
+  `\xNN`, valid Unicode preserved.
+- `TestEscapePathEmitsNoRawControls` — no control byte survives in the
+  escaped path output.
+- `TestMapContentPlainText` — printable text maps cell-for-cell with
+  byte mappings.
+- `TestMapContentEscapes` — C0/DEL caret forms, C1 `\uXXXX` escapes,
+  invalid bytes as U+FFFD cells with retained byte mappings.
+- `TestMapContentStandaloneCR` — a bare CR renders `^M`.
+- `TestMapContentTabPlaceholder` — the provisional single-cell `→`
+  placeholder for tab.
+- `TestMapContentByteCellMaps` — escaped forms map every displayed cell
+  back to the producing byte range.
+- `TestMapContentWideGlyph` — wide graphemes occupy multiple cells all
+  mapping to the cluster's bytes.
+- `TestCellsCovering`, `TestCellsCoveringEscapedForms` — byte ranges map
+  to covering cell ranges; a match over ESC covers both `^` and `[`.
+
+## internal/filebuffer
+
+`filebuffer_test.go` (external package `filebuffer_test`; Issue #5):
+
+- `TestLoadCountsLines`, `TestLoadLineEndings`, `TestLoadEmptyFile` —
+  LF/CRLF splitting, unterminated final line, no phantom trailing line,
+  empty file.
+- `TestGutterWidth` — digit width of the largest line number plus two.
+- `TestLoadEscapedContent` — control bytes escaped per the
+  safepresentation contract; cell count, not byte count.
+- `TestHighlightSpans`, `TestHighlightCoversEscapedCells` — stop byte
+  ranges become display-cell ranges; a match over an escaped byte
+  covers the whole escape form.
+- `TestStopBeyondFileIgnored` — stops outside the loaded file contribute
+  nothing.
+- `TestLoadReadFailure` — a read error is returned, not panicked.
+
 ## internal/app
 
-`app_test.go` (same package; Issue #3), driving `Update`/`View` and the
-`Init` command directly:
+`app_test.go` (same package; Issues #3–5), driving `Update`/`View` and
+the `Init` command directly:
 
 - `TestSearchingScreenShownDuringCollection`,
-  `TestCompletionTransitionsToSummary` — the model opens on
-  "Searching…" and a completion message moves it to
-  `N files, M matched lines`.
-- `TestQOnSummaryExitsZero` — `q` on the summary returns the quit
-  command with status 0.
+  `TestCompletionTransitionsToBrowse` — the model opens on
+  "Searching…" and a completion message moves it to the browse state.
+- `TestQOnBrowseQuitsThroughCollection` — `q` in browse returns the
+  quit command with status 0.
 - `TestResizeDuringSearching` — `WindowSizeMsg` handled without blocking.
 - `TestGateHeldPreparationStaysSearching` — the gate holds index
   preparation after a completed `Wait`; the model stays searching until
@@ -111,6 +151,30 @@ the scan (each declared flag recorded verbatim, help never forwarded).
 - `TestRunStartFailureExit2`, `TestRunStartFailureSanitizesError` —
   `app.Run` with a failing `Start` returns 2 and writes a sanitized
   single-line diagnostic; the TUI is never entered.
+
+`browse_test.go` (same package; Issue #5) drives the browse
+composition, the async load lifecycle, and sink safety:
+
+- `TestSearchDonePresentsBrowseWithLoading` — search completion
+  transitions to `stateBrowse`, issues the load command, and the view
+  shows "Loading…" until the buffer arrives.
+- `TestLoadCompletionRendersContent` — `fileLoadedMsg` carries the
+  prepared buffer; content rows render with gutter and filename rule.
+- `TestCurrentFileListEntryUnderlined`, `TestGutterRightJustified` —
+  list order by raw path with the current entry underlined; the
+  right-justified gutter plus two spaces.
+- `TestGatedLoadStaysResponsive` — `WithLoadGate` holds the load worker
+  while keys and resizes are still handled.
+- `TestCtrlCDuringHeldLoadExits130`, `TestQOnBrowseExitsZero` —
+  `ctrl+c` is 130 through the cleanup path; `q` in browse is 0.
+- `TestResizeRecomposesBrowse` — a resize recomposes the frame.
+- `TestHostileFixtureRawOutput` — the OSC/CSI/C0/C1/DEL/standalone-CR/
+  invalid-UTF-8/embedded-newline fixture through the real composition
+  path on the `theme.Plain()` no-style path; assertions run on raw
+  output before any ANSI stripping (valid UTF-8, no surviving controls,
+  escaped forms in all three sinks, frame still `height` rows).
+- `TestLateLoadForOtherFileIgnored` — a completion for a non-current
+  path cannot replace the visible panel.
 
 `rg_test.go` (same package) exercises the real `spawn` against fake `rg`
 scripts on `PATH`:
@@ -131,7 +195,7 @@ cleanup path that forgets to terminate hangs instead of passing;
 only after the child is reaped:
 
 - `TestQWhileSearchingCancels`, `TestCtrlCWhileSearchingCancels`,
-  `TestCtrlCOnSummaryCancels` — `q` while searching and `ctrl+c` in any
+  `TestCtrlCOnBrowseCancels` — `q` while searching and `ctrl+c` in any
   state begin the controlled exit, terminate/reap the still-running
   child (reap report observed), and set status 130.
 - `TestEscWhileSearchingNoOp` — `Esc` while searching changes nothing
@@ -139,8 +203,8 @@ only after the child is reaped:
 - `TestLateCompletionAfterCancelDiscarded`,
   `TestQDuringGateHeldPreparationCancels` — a `searchDoneMsg` arriving
   after cancellation (including the one a released gate produces) cannot
-  revive the summary; gate-held `q` is 130.
-- `TestOrdinaryQuitTerminatesRunningChild` — the summary `q` against a
+  revive the browse view; gate-held `q` is 130.
+- `TestOrdinaryQuitTerminatesRunningChild` — the browse `q` against a
   still-running `killChild` proves ordinary exits terminate and reap.
 - `TestFailMsgTriggersCleanup` — `failMsg` records `failErr` and runs
   the same cleanup.
@@ -173,7 +237,7 @@ stdout/stderr/status separately:
   line on stderr, and exactly one generated usage block after it (no
   library `Error:`/`incorrect usage` text).
 - `TestDashFileRootAtProcessBoundary` — `./-` in a real temp dir now runs
-  the search under a pty and reaches the summary.
+  the search under a pty and reaches the browse view.
 - `TestHelpAssignmentSpellingsAreNotHelp` — `--help=`/`-h=` spellings
   (`=false` and `=true`) are exit-2 usage errors.
 
@@ -188,15 +252,16 @@ boundary tests:
 - `TestStartFailureExit2` — rg-free `PATH` gives the sanitized
   start-failure diagnostic and exit 2 with empty stdout and no TUI.
 - `TestDualPipeBackpressure` — fake `rg` writes ≈1.1 MiB to stderr
-  interleaved with 18 match records; vrg shows `1 files, 18 matched
-  lines` (no lost stream), the `VRG_TEST_HANDSHAKE` file exists (the
-  child finished writing both pipes), and `q` exits 0.
+  interleaved with 18 match records; the final content frame shows all
+  18 recorded matches as inverse-video spans (no lost stream), the
+  `VRG_TEST_HANDSHAKE` file exists (the child finished writing both
+  pipes), and `q` exits 0.
 - `TestStderrCapturedWithoutBlocking` — stderr diagnostics with a
-  well-formed stream and exit 0 still reach the summary.
+  well-formed stream and exit 0 still reach the browse file list.
 - `TestGateHeldPreparationKeepsSearching` — with `VRG_TEST_GATE` set, the
   `VRG_TEST_COLLECT_ACK` file proves rg exited and the stream was
   collected while the screen still shows only "Searching…"; removing the
-  gate file produces the summary and `q` exits 0.
+  gate file produces the browse view and `q` exits 0.
 
 `cancel_test.go` (Issue #4; `//go:build unix`) extends the harness:
 `startVrgTermPTY` opens the pty pair itself, keeps the slave fd, and
@@ -209,12 +274,12 @@ code, the recorded pid's absence, the `VRG_TEST_REAP` side-channel line
 (`\x1b[?1049l`, `\x1b[?25h`), and termios equality:
 
 - `TestCancelWhileSearchingKillsChild` (`q` and `ctrl+c` subtests) —
-  cancellation exits 130 with no summary screen, the blocked child gone
+  cancellation exits 130 with no browse screen, the blocked child gone
   and reaped (`code=-1`), display and termios restored.
 - `TestQDuringGateHeldPreparationCancels` — `q` after the collect-ack
   while the gate holds preparation exits 130; the released completion
   never renders; the already-exited child reaps as `code=0`.
-- `TestOrdinaryQuitLeavesNoChild` — the summary `q` exits 0 with reap
+- `TestOrdinaryQuitLeavesNoChild` — the browse `q` exits 0 with reap
   evidence (`code=0`), restoration, and termios equality.
 - `TestControlledFailureCleanupExit2` — `VRG_TEST_FAIL` triggered after
   the child's ready signal: exit 2, the sanitized

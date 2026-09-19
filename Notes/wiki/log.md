@@ -101,3 +101,41 @@ and key precedence; Module Design → App; Testing Decisions),
 `cmd/vrg/main.go`, `cmd/vrg/cancel_test.go`, `cmd/vrg/search_test.go`,
 `internal/app/app.go`, `internal/app/rg.go`, `internal/app/app_test.go`,
 `internal/app/cancel_test.go`.
+
+## [2026-09-16] ingest | Issue #5 browse tracer: file list, file panel, safe presentation
+
+Ingested the completed Issue #5 implementation: the interim summary is
+replaced by `stateBrowse`, a two-pane view — full-width filename rule on
+row 0, fixed-width file list (longest escaped path + 1, Issue #24 owns
+the real formula) with the current entry underlined, and a file panel
+with a right-justified gutter plus inverse-video match runs. The current
+file loads asynchronously through a `tea.Cmd` that runs the whole
+`filebuffer.Load` (read + decode/map) so `fileLoadedMsg` carries a
+prepared buffer; "Loading…" and "(unreadable)" are the panel
+placeholders, in-flight loads are deduplicated, and late completions for
+a non-current path update only their cache slot. `internal/filebuffer`
+splits LF/CRLF, maps each line through the new
+`internal/safepresentation` escaping core (path `\n`/`\r`/`\t`/caret/
+`\uXXXX`/`\xNN` rules; content caret forms, standalone-CR `^M`,
+provisional single-cell `→` tab, U+FFFD invalid bytes) and converts stop
+byte ranges to display-cell ranges via `CellsCovering`. `internal/viewport`
+and `internal/theme` land minimal seams (top-of-file window; `Dark()` +
+the `Plain()` no-style composition path). New seam:
+`WithLoadGate`/`VRG_TEST_LOAD_GATE`. `TestHostileFixtureRawOutput` drives
+the hostile fixture through the real composition path and asserts on raw
+output before ANSI stripping. Created [browse-tracer](browse-tracer.md);
+updated [project-overview](project-overview.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md),
+[search-collection](search-collection.md),
+[cancellation-cleanup](cancellation-cleanup.md), and the index. Sources:
+`Notes/issues/005-browse-tracer-file-list-and-file-panel.md`,
+`Notes/tasks/005-browse-tracer-file-list-and-file-panel.md`,
+`Notes/PRD-vrg.md` (File list and layout; File loading, cache, reload;
+Layout and indicators; Text, graphemes, and safe presentation; Module
+Design), `cmd/vrg/main.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/app/browse_test.go`,
+`internal/filebuffer/filebuffer.go`, `internal/filebuffer/filebuffer_test.go`,
+`internal/safepresentation/safepresentation.go`,
+`internal/safepresentation/cellwidth.go`,
+`internal/safepresentation/safepresentation_test.go`,
+`internal/viewport/viewport.go`, `internal/theme/theme.go`.

@@ -13,7 +13,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"vrg/internal/cli"
+	"vrg/internal/filebuffer"
 	"vrg/internal/searchindex"
+	"vrg/internal/theme"
+	"vrg/internal/viewport"
 )
 
 // Config is the validated search invocation plus the process's I/O
@@ -49,6 +52,10 @@ type options struct {
 	// fail, when set, is the injectable controlled-failure hook: a
 	// non-nil return is a controlled application failure.
 	fail func() error
+	// loadGate, when set, runs inside each file-load command before the
+	// read — the hold proving "Loading…" spans the whole load: disk read
+	// plus decode and byte→cell mapping, all off the update path.
+	loadGate func()
 }
 
 // WithGate holds index preparation until fn returns.
@@ -64,35 +71,61 @@ func WithReapReport(fn func(Result)) Option { return func(o *options) { o.reap =
 // from fn fails the application under vrg's control.
 func WithFailFunc(fn func() error) Option { return func(o *options) { o.fail = fn } }
 
+// WithLoadGate holds each file load — read and decode/map together —
+// until fn returns.
+func WithLoadGate(fn func()) Option { return func(o *options) { o.loadGate = fn } }
+
 type state int
 
 const (
 	stateSearching state = iota
-	stateSummary
+	stateBrowse
 )
 
 // model is the Bubble Tea model: "Searching…" while collection and index
-// preparation run off the update path, then the interim summary.
+// preparation run off the update path, then the two-pane browse view.
 type model struct {
 	cfg   Config
 	opts  options
 	child Child
 
-	state          state
-	width, height  int
-	files, matched int
-	status         int
+	state         state
+	width, height int
+	status        int
 	// quitting marks that a controlled exit is underway; messages
-	// arriving after it — including late search completions — are
-	// discarded so they cannot revive the UI.
+	// arriving after it — including late search and load completions —
+	// are discarded so they cannot revive the UI.
 	quitting bool
 	// failErr is a controlled application failure reported through the
 	// single post-restoration stderr writer in Run.
 	failErr error
+
+	// Browse state. idx is the prepared search index; cur is the current
+	// file's index into idx.Files (the first stop's file — Issue #13
+	// owns navigation). Files load asynchronously: loading marks the
+	// in-flight raw paths, bufs caches prepared buffers, and failed
+	// records read failures, all keyed by the raw path bytes — never by
+	// an escaped display form.
+	idx     *searchindex.Index
+	cur     int
+	loading map[string]bool
+	bufs    map[string]*filebuffer.Buffer
+	failed  map[string]bool
+	vp      viewport.Viewport
+	theme   theme.Theme
 }
 
 func newModel(cfg Config, opts options, child Child) *model {
-	return &model{cfg: cfg, opts: opts, child: child, state: stateSearching}
+	return &model{
+		cfg:     cfg,
+		opts:    opts,
+		child:   child,
+		state:   stateSearching,
+		loading: map[string]bool{},
+		bufs:    map[string]*filebuffer.Buffer{},
+		failed:  map[string]bool{},
+		theme:   theme.Dark(),
+	}
 }
 
 // searchDoneMsg carries the collected result and prepared index from the
@@ -143,10 +176,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case searchDoneMsg:
-		m.state = stateSummary
-		m.files = len(msg.idx.Files)
-		for _, f := range msg.idx.Files {
-			m.matched += len(f.Stops)
+		m.state = stateBrowse
+		m.idx = msg.idx
+		return m, m.startLoad()
+	case fileLoadedMsg:
+		key := string(msg.path)
+		delete(m.loading, key)
+		if msg.err != nil {
+			m.failed[key] = true
+		} else {
+			m.bufs[key] = msg.buf
 		}
 	case failMsg:
 		if msg.err == nil {
@@ -168,7 +207,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = 130
 			m.quitting = true
 			return m, m.quitCmd()
-		case msg.Text == "q" && m.state == stateSummary:
+		case msg.Text == "q" && m.state == stateBrowse:
+			// q in ordinary browsing exits with the fixed
+			// search-derived status through the same cleanup path.
 			m.status = 0
 			m.quitting = true
 			return m, m.quitCmd()
@@ -201,20 +242,19 @@ func reapChild(c Child, report func(Result)) {
 }
 
 func (m *model) View() tea.View {
-	var s string
-	if m.state == stateSummary {
-		s = fmt.Sprintf("%d files, %d matched lines", m.files, m.matched)
-	} else {
-		s = "Searching…"
+	s := center("Searching…", m.width, m.height)
+	if m.state == stateBrowse {
+		s = m.browseView()
 	}
-	v := tea.NewView(center(s, m.width, m.height))
+	v := tea.NewView(s)
 	v.AltScreen = true
 	return v
 }
 
 // Run is the whole search lifecycle: spawn the child, show "Searching…"
-// until the stream is collected and the index prepared, then the interim
-// summary. A start failure prints a sanitized diagnostic to cfg.Err and
+// until the stream is collected and the index prepared, then the
+// two-pane browse view. A start failure prints a sanitized diagnostic to
+// cfg.Err and
 // returns exit 2 without entering the TUI. Every controlled exit —
 // ordinary, cancellation, or a controlled application failure —
 // terminates and reaps the child and restores the terminal; a controlled

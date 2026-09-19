@@ -139,15 +139,16 @@ func (s *ptySession) waitExit() int {
 	}
 }
 
-// runVrgWithQuit runs vrg on a pty, waits for the interim summary, sends
+// runVrgWithQuit runs vrg on a pty, waits for the browse view — marked
+// by the filename rule, present while loading and loaded alike — sends
 // q, and returns the captured output and exit code.
 func runVrgWithQuit(t *testing.T, dir string, env []string, args ...string) (string, int) {
 	t.Helper()
 	s := startVrgPTY(t, dir, env, args...)
-	if !s.waitFor("matched lines") {
+	if !s.waitFor("─ ") {
 		s.cmd.Process.Kill()
 		<-s.done
-		t.Fatalf("summary never appeared; output: %q", s.output())
+		t.Fatalf("browse view never appeared; output: %q", s.output())
 	}
 	s.send("q")
 	return s.output(), s.waitExit()
@@ -256,10 +257,18 @@ func TestStartFailureExit2(t *testing.T) {
 }
 
 // A fake rg writing well over pipe capacity to stderr — interleaved with
-// a valid stdout stream — must neither deadlock vrg nor lose records.
-// The handshake file is written only after both writes complete.
+// a valid stdout stream — must neither deadlock vrg nor lose records:
+// all 18 recorded matches surface as inverse-video spans once the file
+// loads. The handshake file is written only after both writes complete.
 func TestDualPipeBackpressure(t *testing.T) {
 	dir := t.TempDir()
+	var content strings.Builder
+	for i := 0; i < 18; i++ {
+		content.WriteString("x f\n")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "f"), []byte(content.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	handshake := filepath.Join(dir, "done")
 	fakebin := fakeRG(t, `
 printf '%s\n' '{"type":"begin","data":{"path":{"text":"./f"}}}'
@@ -274,12 +283,28 @@ printf '%s\n' '{"type":"summary","data":{"stats":{}}}'
 [ -n "$VRG_TEST_HANDSHAKE" ] && : > "$VRG_TEST_HANDSHAKE"
 `)
 	env := testEnv(fakebin, "VRG_TEST_HANDSHAKE="+handshake)
-	out, code := runVrgWithQuit(t, dir, env, "foo")
+
+	s := startVrgPTY(t, dir, env, "foo")
+	if !s.waitFor("18  x ") {
+		s.cmd.Process.Kill()
+		<-s.done
+		t.Fatalf("loaded content never appeared; output: %q", s.output())
+	}
+	s.send("q")
+	out, code := s.output(), s.waitExit()
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output: %q", code, out)
 	}
-	if !strings.Contains(out, "1 files, 18 matched lines") {
-		t.Fatalf("stdout stream lost records: summary missing %q in %q", "1 files, 18 matched lines", out)
+	// The final content frame begins at the last line-1 gutter; every
+	// recorded match survives as an inverse-video span there. The
+	// renderer normalizes the reset sequence, so count the inverse-video
+	// marker before each matched f rather than a full styled run.
+	last := strings.LastIndex(out, " 1  x ")
+	if last < 0 {
+		t.Fatalf("content frame missing: %q", out)
+	}
+	if n := strings.Count(out[last:], "\x1b[7mf"); n != 18 {
+		t.Fatalf("inverse-video matches = %d, want 18 — records lost", n)
 	}
 	if _, err := os.Stat(handshake); err != nil {
 		t.Fatalf("handshake missing: child could not finish writing both pipes: %v", err)
@@ -298,8 +323,8 @@ printf '%s\n' 'rg: another warning line' >&2
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output: %q", code, out)
 	}
-	if !strings.Contains(out, "2 files, 3 matched lines") {
-		t.Fatalf("summary missing from output: %q", out)
+	if !strings.Contains(out, "a.go") || !strings.Contains(out, "b.go") {
+		t.Fatalf("browse file list missing from output: %q", out)
 	}
 }
 
@@ -319,13 +344,13 @@ func TestGateHeldPreparationKeepsSearching(t *testing.T) {
 	s := startVrgPTY(t, dir, env, "foo")
 	waitForFile(t, ack) // rg has exited and its stream is fully collected
 	// While the gate holds, the searching screen is the only possible
-	// state: the summary cannot render until the file is removed.
+	// state: the browse view cannot render until the file is removed.
 	if !s.waitFor("Searching") {
 		s.cmd.Process.Kill()
 		<-s.done
 		t.Fatalf("searching screen never appeared; output: %q", s.output())
 	}
-	if out := s.output(); strings.Contains(out, "matched lines") {
+	if out := s.output(); strings.Contains(out, "─") {
 		s.cmd.Process.Kill()
 		<-s.done
 		t.Fatalf("gate-held view wrong: %q", out)
@@ -333,10 +358,10 @@ func TestGateHeldPreparationKeepsSearching(t *testing.T) {
 	if err := os.Remove(gate); err != nil {
 		t.Fatal(err)
 	}
-	if !s.waitFor("2 files, 3 matched lines") {
+	if !s.waitFor("─ ") {
 		s.cmd.Process.Kill()
 		<-s.done
-		t.Fatalf("summary never appeared after gate release; output: %q", s.output())
+		t.Fatalf("browse view never appeared after gate release; output: %q", s.output())
 	}
 	s.send("q")
 	if code := s.waitExit(); code != 0 {

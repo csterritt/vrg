@@ -47,10 +47,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 // VRG_TEST_GATE=<file> holds index preparation while the file exists;
 // VRG_TEST_COLLECT_ACK=<file> records a line once the child's output has
 // been fully collected, so tests can observe that rg exited while
-// preparation is still held. VRG_TEST_REAP=<file> records the child's
-// reaped wait status once per process — the side channel proving vrg's
-// wait/reap path ran. VRG_TEST_FAIL=<file> injects a controlled failure
-// once the file exists.
+// preparation is still held. VRG_TEST_LOAD_GATE=<file> holds each file
+// load — read and decode/map together — while the file exists.
+// VRG_TEST_REAP=<file> records the child's reaped wait status once per
+// process — the side channel proving vrg's wait/reap path ran.
+// VRG_TEST_FAIL=<file> injects a controlled failure once the file exists.
 func testSeamOptions() []app.Option {
 	var opts []app.Option
 	if p := os.Getenv("VRG_TEST_COLLECT_ACK"); p != "" {
@@ -58,6 +59,9 @@ func testSeamOptions() []app.Option {
 	}
 	if p := os.Getenv("VRG_TEST_GATE"); p != "" {
 		opts = append(opts, app.WithGate(func() { waitFileGone(p) }))
+	}
+	if p := os.Getenv("VRG_TEST_LOAD_GATE"); p != "" {
+		opts = append(opts, app.WithLoadGate(func() { waitFileGone(p) }))
 	}
 	if p := os.Getenv("VRG_TEST_REAP"); p != "" {
 		opts = append(opts, app.WithReapReport(func(res app.Result) {

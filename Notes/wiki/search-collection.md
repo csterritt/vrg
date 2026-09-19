@@ -4,7 +4,8 @@ The first real Bubble Tea application path, delivered by
 [Issue #3](../issues/003-spawn-rg-collect-results-searching-screen.md):
 spawn `rg`, collect its JSON event stream into the SearchIndex, hold a
 "Searching…" screen for the whole of collection **and** post-exit index
-preparation, then show the interim summary. Relevant PRD sections:
+preparation, then move on to browsing (the Issue #3 interim summary was
+replaced by the [Issue #5 browse view](browse-tracer.md)). Relevant PRD sections:
 *Implementation Decisions → Invocation and child arguments* (bullets
 7–9), *Result index, records, and stream integrity* (bullets 1–3), and
 *Module Design → SearchIndex / App* in [`Notes/PRD-vrg.md`](../PRD-vrg.md).
@@ -58,12 +59,14 @@ held". Issue #4 added `VRG_TEST_REAP` and `VRG_TEST_FAIL` (see
 [cancellation-cleanup.md](cancellation-cleanup.md)). Issue #45 will move
 these env-var seams behind the `vrg_testhooks` build tag.
 
-## Interim summary and start failure
+## Search completion and start failure
 
 Completion delivers `searchDoneMsg` carrying the collected result and the
-prepared index; the model transitions to `stateSummary`, which renders
-`N files, M matched lines`. `q` there returns `tea.Quit` with the fixed
-exit status 0. Later issues replace this screen with browsing.
+prepared index; Issue #3 transitioned to an interim `stateSummary`
+rendering `N files, M matched lines`. Issue #5 replaced that screen:
+the model now transitions to `stateBrowse` and starts loading the first
+file — see [browse-tracer.md](browse-tracer.md). `q` in browse returns
+`tea.Quit` with the fixed exit status 0.
 
 A start failure (rg absent, exec error) is detected in `app.Run` **before**
 `tea.NewProgram` runs: a sanitized single-line diagnostic
@@ -105,7 +108,8 @@ summary completeness) is Issue #9's; skip/oversize counting is Issue
 
 See [unit-tests.md](unit-tests.md): `internal/searchindex/index_test.go`
 covers the record/index contracts; `internal/app/app_test.go` covers the
-model lifecycle and `rg_test.go` the spawn seam; `cmd/vrg/search_test.go`
-drives the real binary on a pty (`runVrgWithQuit`) for the exact child
-argv/workdir, the ≥1 MiB dual-pipe backpressure fixture, stderr capture,
-the gate-held searching state, and `TestStartFailureExit2`.
+model lifecycle, `browse_test.go` the browse view, and `rg_test.go` the
+spawn seam; `cmd/vrg/search_test.go` drives the real binary on a pty
+(`runVrgWithQuit`) for the exact child argv/workdir, the ≥1 MiB
+dual-pipe backpressure fixture, stderr capture, the gate-held searching
+state, and `TestStartFailureExit2`.

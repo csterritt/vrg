@@ -119,13 +119,13 @@ func TestCtrlCWhileSearchingCancels(t *testing.T) {
 	}
 }
 
-// ctrl+c on the interim summary overrides the fixed search-derived
-// status with 130 and cleans up the same way.
-func TestCtrlCOnSummaryCancels(t *testing.T) {
+// ctrl+c on the browse view overrides the fixed search-derived status
+// with 130 and cleans up the same way.
+func TestCtrlCOnBrowseCancels(t *testing.T) {
 	m := newTestModel(newKillChild(Result{Code: 0}), options{})
 	m.Update(doneMsg())
-	if m.state != stateSummary {
-		t.Fatalf("state = %v, want summary", m.state)
+	if m.state != stateBrowse {
+		t.Fatalf("state = %v, want browse", m.state)
 	}
 	_, cmd := m.Update(keyCtrlC)
 	if !m.quitting {
@@ -153,21 +153,21 @@ func TestEscWhileSearchingNoOp(t *testing.T) {
 }
 
 // A search completion arriving after cancellation must not revive the
-// UI: the state stays cancelled and the summary never appears.
+// UI: the state stays cancelled and the browse view never appears.
 func TestLateCompletionAfterCancelDiscarded(t *testing.T) {
 	m := newTestModel(fakeChild{res: Result{Stdout: []byte(happyStream)}}, options{})
 	_, cmd := m.Update(keyQ)
 	runQuittingCmd(t, cmd)
 
 	m.Update(doneMsg())
-	if m.state == stateSummary {
-		t.Fatal("late completion revived the summary after cancellation")
+	if m.state == stateBrowse {
+		t.Fatal("late completion revived the browse view after cancellation")
 	}
 	if m.status != 130 {
 		t.Fatalf("status = %d, want the cancellation's 130", m.status)
 	}
-	if v := viewText(m); strings.Contains(v, "matched lines") {
-		t.Fatalf("view = %q after cancellation, want no summary", v)
+	if v := viewText(m); strings.Contains(v, "─") {
+		t.Fatalf("view = %q after cancellation, want no browse frame", v)
 	}
 }
 
@@ -199,24 +199,24 @@ func TestQDuringGateHeldPreparationCancels(t *testing.T) {
 
 	close(release)
 	m.Update(<-done)
-	if m.state == stateSummary {
-		t.Fatal("released gate completion revived the summary after cancellation")
+	if m.state == stateBrowse {
+		t.Fatal("released gate completion revived the browse view after cancellation")
 	}
-	if v := viewText(m); strings.Contains(v, "matched lines") {
-		t.Fatalf("view = %q after cancellation, want no summary", v)
+	if v := viewText(m); strings.Contains(v, "─") {
+		t.Fatalf("view = %q after cancellation, want no browse frame", v)
 	}
 }
 
 // An ordinary exit while the child still runs terminates and reaps it:
-// the quit command cannot complete without doing both, so a summary quit
+// the quit command cannot complete without doing both, so a browse quit
 // never leaves a running or unreaped child behind.
 func TestOrdinaryQuitTerminatesRunningChild(t *testing.T) {
 	reaped := make(chan Result, 1)
 	child := newKillChild(Result{Code: 0})
 	m := newTestModel(child, options{reap: func(r Result) { reaped <- r }})
 	m.Update(doneMsg())
-	if m.state != stateSummary {
-		t.Fatalf("state = %v, want summary", m.state)
+	if m.state != stateBrowse {
+		t.Fatalf("state = %v, want browse", m.state)
 	}
 	_, cmd := m.Update(keyQ)
 	runQuittingCmd(t, cmd)

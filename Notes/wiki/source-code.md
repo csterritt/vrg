@@ -10,9 +10,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   diagnostic + usage on stderr, exit 2, search → `app.Run` with the
   protected child argv and the invocation working directory. It also
   wires the `VRG_TEST_*` seam env vars (`VRG_TEST_GATE`,
-  `VRG_TEST_COLLECT_ACK`, `VRG_TEST_REAP`, `VRG_TEST_FAIL`) into
-  `app.Option`s — see [search-collection.md](search-collection.md) and
-  [cancellation-cleanup.md](cancellation-cleanup.md).
+  `VRG_TEST_COLLECT_ACK`, `VRG_TEST_REAP`, `VRG_TEST_FAIL`,
+  `VRG_TEST_LOAD_GATE`) into `app.Option`s — see
+  [search-collection.md](search-collection.md),
+  [cancellation-cleanup.md](cancellation-cleanup.md), and
+  [browse-tracer.md](browse-tracer.md).
 
 ## internal/cli
 
@@ -47,22 +49,38 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `Child.Terminate` and an idempotent `Wait` backing the cleanup path.
 - `internal/app/app.go` — the Bubble Tea model and `app.Run`: the
   "Searching…" state covering collection and post-exit index
-  preparation, the `WithGate`/`WithCollectAck` test seams, the interim
-  `N files, M matched lines` summary with `q` → exit 0, the sanitized
-  start-failure diagnostic with exit 2 before the TUI, and the Issue #4
-  surface: `ctrl+c`/`q` cancellation to 130, the `quitCmd`/`reapChild`
-  cleanup boundary, `WithFailFunc`/`WithReapReport`, the `quitting`
-  discard of late completions, alt-screen views, `ErrInterrupted` → 130,
-  and `writeFailureDiag` (the single post-restoration stderr writer) →
-  exit 2. See [cancellation-cleanup.md](cancellation-cleanup.md).
+  preparation, the `WithGate`/`WithCollectAck` test seams, the
+  `stateBrowse` transition on completion with `q` → exit 0, the
+  sanitized start-failure diagnostic with exit 2 before the TUI, and the
+  Issue #4 surface: `ctrl+c`/`q` cancellation to 130, the
+  `quitCmd`/`reapChild` cleanup boundary, `WithFailFunc`/
+  `WithReapReport`, the `quitting` discard of late completions,
+  alt-screen views, `ErrInterrupted` → 130, and `writeFailureDiag` (the
+  single post-restoration stderr writer) → exit 2. See
+  [cancellation-cleanup.md](cancellation-cleanup.md).
+- `internal/app/browse.go` — the Issue #5 browse view: async
+  `filebuffer.Load` commands gated by `WithLoadGate`, the
+  `loading`/`bufs`/`failed` caches keyed by raw path, `fileLoadedMsg`,
+  the full-width filename rule, the fixed-width file list with the
+  current entry underlined, the right-justified gutter, inverse-video
+  match runs, and the "Loading…"/"(unreadable)" placeholders. See
+  [browse-tracer.md](browse-tracer.md).
 - `internal/app/doc.go` — package comment.
 
-## Package boundaries awaiting their issues
+## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
 
-Each is a documented empty package mirroring PRD Module Design:
-
-- `internal/filebuffer` — per-file loading/classification into safe
-  display-ready lines and validated highlights.
-- `internal/viewport` — logical reading position and rendered-row
-  visibility.
-- `internal/theme` — active colour scheme and styles.
+- `internal/filebuffer/filebuffer.go` — `Load` reads the file by raw
+  path bytes, splits LF/CRLF, maps each line through
+  `safepresentation.MapContent`, and produces `Buffer`/`Line` records
+  with `GutterWidth`, source `Raw` bytes, and `Highlights` mapped to
+  display cells. See [browse-tracer.md](browse-tracer.md).
+- `internal/viewport/viewport.go` — the minimal top-of-file vertical
+  window seam (`Viewport`, `Visible`, `Top`); scrolling and reveal are
+  later issues.
+- `internal/theme/theme.go` — the initial `Dark()` scheme (`Inverse`,
+  `Underline`) and `Plain()`, the no-style composition path for
+  sink-safety tests.
+- `internal/safepresentation/safepresentation.go` — `EscapePath`,
+  `MapContent`, `Mapped`/`Cell`/`CellsCovering` byte→cell maps.
+- `internal/safepresentation/cellwidth.go` — `CellWidth` and the
+  package-internal rune decoder (Issue #39 boundary).

@@ -25,7 +25,7 @@ Builds on the [Issue #3 search path](search-collection.md).
   exits 130 — never 0.
 - `Esc` during searching is a no-op.
 - Cancellation shows no further screen: the exit is immediate and the
-  interim summary (or any later UI) never appears.
+  browse view (or any later UI) never appears.
 
 ## The cleanup boundary
 

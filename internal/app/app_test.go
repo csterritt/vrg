@@ -57,26 +57,32 @@ func TestSearchingScreenShownDuringCollection(t *testing.T) {
 	}
 }
 
-// A collected stream becomes the interim summary once the completion
-// message lands.
-func TestCompletionTransitionsToSummary(t *testing.T) {
+// A collected stream becomes the browse view once the completion
+// message lands: the file list in raw-path order and "Loading…" while
+// the current file's prepared buffer is in flight.
+func TestCompletionTransitionsToBrowse(t *testing.T) {
 	m := newTestModel(fakeChild{res: Result{Stdout: []byte(happyStream)}}, options{})
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.Update(runCollectCmd(t, m))
-	if m.state != stateSummary {
-		t.Fatalf("state = %v, want summary after completion", m.state)
+	if m.state != stateBrowse {
+		t.Fatalf("state = %v, want browse after completion", m.state)
 	}
-	if v := viewText(m); !strings.Contains(v, "2 files, 3 matched lines") {
-		t.Fatalf("summary view = %q, want %q", v, "2 files, 3 matched lines")
+	v := viewText(m)
+	if !strings.Contains(v, "a.go") || !strings.Contains(v, "b.go") {
+		t.Fatalf("browse view = %q, want the file list", v)
+	}
+	if !strings.Contains(v, "Loading…") {
+		t.Fatalf("browse view = %q, want the Loading… placeholder", v)
 	}
 }
 
-// q on the interim summary quits with the fixed successful status.
-func TestQOnSummaryExitsZero(t *testing.T) {
+// q on the browse view quits with the fixed successful status.
+func TestQOnBrowseQuitsThroughCollection(t *testing.T) {
 	m := newTestModel(fakeChild{res: Result{Stdout: []byte(happyStream)}}, options{})
 	m.Update(runCollectCmd(t, m))
 	_, cmd := m.Update(tea.KeyPressMsg{Text: "q", Code: 'q'})
 	if cmd == nil {
-		t.Fatal("q on summary returned nil command, want tea.Quit")
+		t.Fatal("q on browse returned nil command, want tea.Quit")
 	}
 	if _, ok := cmd().(tea.QuitMsg); !ok {
 		t.Fatalf("q command produced %T, want tea.QuitMsg", cmd())
@@ -140,11 +146,11 @@ func TestGateHeldPreparationStaysSearching(t *testing.T) {
 	close(release)
 	msg := <-done
 	m.Update(msg)
-	if m.state != stateSummary {
-		t.Fatalf("state = %v after gate release, want summary", m.state)
+	if m.state != stateBrowse {
+		t.Fatalf("state = %v after gate release, want browse", m.state)
 	}
-	if v := viewText(m); !strings.Contains(v, "2 files, 3 matched lines") {
-		t.Fatalf("summary view = %q, want %q", v, "2 files, 3 matched lines")
+	if v := viewText(m); !strings.Contains(v, "a.go") {
+		t.Fatalf("browse view = %q, want the file list", v)
 	}
 }
 

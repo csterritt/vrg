@@ -155,7 +155,7 @@ func TestCancelWhileSearchingKillsChild(t *testing.T) {
 			if code != 130 {
 				t.Fatalf("exit = %d, want 130; output: %q", code, out)
 			}
-			if strings.Contains(out, "matched lines") {
+			if strings.Contains(out, "─ ") {
 				t.Fatalf("cancellation rendered a further screen: %q", out)
 			}
 			assertDisplayRestored(t, out)
@@ -198,8 +198,8 @@ func TestQDuringGateHeldPreparationCancels(t *testing.T) {
 	if code != 130 {
 		t.Fatalf("exit = %d, want 130 (cancellation, not browse quit); output: %q", code, out)
 	}
-	if strings.Contains(out, "matched lines") {
-		t.Fatalf("late completion revived the summary after cancellation: %q", out)
+	if strings.Contains(out, "─ ") {
+		t.Fatalf("late completion revived the browse view after cancellation: %q", out)
 	}
 	assertDisplayRestored(t, out)
 	s.assertTermiosRestored()
@@ -208,7 +208,7 @@ func TestQDuringGateHeldPreparationCancels(t *testing.T) {
 	}
 }
 
-// An ordinary exit reaps the child through the same cleanup: the summary
+// An ordinary exit reaps the child through the same cleanup: the browse
 // quit leaves vrg's wait/reap evidence behind and no live rg process.
 func TestOrdinaryQuitLeavesNoChild(t *testing.T) {
 	dir := t.TempDir()
@@ -220,10 +220,10 @@ func TestOrdinaryQuitLeavesNoChild(t *testing.T) {
 		"VRG_TEST_REAP="+reapFile)
 
 	s := startVrgTermPTY(t, dir, env, "foo")
-	if !s.waitFor("matched lines") {
+	if !s.waitFor("─ ") {
 		s.cmd.Process.Kill()
 		<-s.done
-		t.Fatalf("summary never appeared; output: %q", s.output())
+		t.Fatalf("browse view never appeared; output: %q", s.output())
 	}
 	s.send("q")
 	code := s.waitExit()

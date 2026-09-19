@@ -28,6 +28,13 @@ Catalog of all wiki pages for the vrg project.
   and PTY termios restoration, the `WithFailFunc` hook and the single
   post-restoration `writeFailureDiag` → exit 2, and the
   `VRG_TEST_REAP`/`VRG_TEST_FAIL` seams with the termios PTY harness
+- [browse-tracer.md](browse-tracer.md) — Issue #5 browse view: the
+  two-pane file list + file panel with the filename rule, gutter, and
+  inverse-video matches; async `filebuffer` loading with prepared
+  buffers and "Loading…"; the safe-presentation escape rules and
+  byte→cell maps; the minimal viewport/theme seams; the
+  `VRG_TEST_LOAD_GATE` seam; and the hostile-fixture raw-output
+  sink-safety method
 
 ## Catalogs
 
