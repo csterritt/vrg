@@ -91,11 +91,12 @@ func wantPlainMatch(t *testing.T, v, text string) {
 }
 
 // wantUnderlinedEntry asserts the file list underlines exactly the
-// given file's entry.
+// given file's entry — the path left-truncated to the list's cells
+// with a leading … when it does not fit (Issue #24).
 func wantUnderlinedEntry(t *testing.T, m *model, f searchindex.File) {
 	t.Helper()
 	v := viewText(m)
-	want := "\x1b[37;40;4m" + escapedPath(f) + "\x1b[37;40;24m"
+	want := "\x1b[37;40;4m" + leftTruncate(escapedPath(f), m.listWidth()) + "\x1b[37;40;24m"
 	if !strings.Contains(v, want) {
 		t.Fatalf("view = %q, want list entry underlined as %q", v, want)
 	}
@@ -357,7 +358,8 @@ func TestNavigationWhileLoadInFlight(t *testing.T) {
 
 // The file list is a passive overview: keys beyond n/p never move the
 // cursor or change the current file — there is no direct selection
-// route.
+// route. left/right/tab/shift+tab are not passive: they are Issue
+// #24's list visibility toggles.
 func TestFileListHasNoDirectSelection(t *testing.T) {
 	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
 	idx := navIndex(t, navFiles)
@@ -366,9 +368,6 @@ func TestFileListHasNoDirectSelection(t *testing.T) {
 
 	passive := []tea.KeyPressMsg{
 		{Code: tea.KeyEnter},
-		{Code: tea.KeyTab},
-		{Code: tea.KeyRight},
-		{Code: tea.KeyLeft},
 		{Text: " ", Code: ' '},
 		{Text: "l", Code: 'l'},
 		{Text: "e", Code: 'e'},

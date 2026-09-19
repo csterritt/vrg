@@ -180,7 +180,7 @@ func TestCurrentFileListEntryUnderlined(t *testing.T) {
 	startBrowse(t, m, idx)
 
 	v := viewText(m)
-	underlined := "\x1b[37;40;4m" + escapedPath(idx.Files[0]) + "\x1b[37;40;24m"
+	underlined := "\x1b[37;40;4m" + leftTruncate(escapedPath(idx.Files[0]), m.listWidth()) + "\x1b[37;40;24m"
 	if !strings.Contains(v, underlined) {
 		t.Fatalf("view = %q, want the current entry underlined as %q", v, underlined)
 	}

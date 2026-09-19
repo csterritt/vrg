@@ -166,6 +166,17 @@ Catalog of all wiki pages for the vrg project.
   (`MaxStart` candidate, marker-only `MaxOff` 0) and the
   `_`/`*` indicators, and the terminator-only `$` on `hit\r\n` as an
   ordinary marker with no special cases
+- [file-list-layout.md](file-list-layout.md) — Issue #24: the
+  three-term list-width formula (`longest + 2`, `floor(0.40 × w)`,
+  terminal minus gutter + 10 + reserved indicator) with the
+  nonnegative clamp, `floor` rounding, recompute through the keyed
+  layout path on load/gutter/mode/resize/hide-show, the zero-width
+  allocation that retains the visibility preference, `left`/`tab`
+  and `right`/`shift+tab` toggles with the list initially shown,
+  grapheme-safe `…` left-truncation, active-entry auto-scroll, the
+  filename-rule status-note slot (synthetic until Issues #26/#29/#30
+  supply notes), anchor preservation through every relayout, and the
+  visible-window-only render-cost guard
 
 ## Catalogs
 

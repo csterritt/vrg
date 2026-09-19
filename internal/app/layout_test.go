@@ -62,10 +62,27 @@ func injectLoad(t *testing.T, m *model, msg fileLoadedMsg) {
 
 // frameWidthFor returns the terminal width at which path's cached
 // buffer is laid out with text width tw under the current wrap mode —
-// so a resize can target an exact layout key regardless of how long the
-// fixture's temporary path is.
+// so a resize can target an exact layout key regardless of how long
+// the fixture's temporary path is.
 func frameWidthFor(m *model, path string, tw int) int {
-	return m.listWBase + m.bufs[path].GutterWidth() + viewport.ReservedIndicator(m.wrap) + tw
+	return frameWidthForG(m, m.bufs[path].GutterWidth(), tw)
+}
+
+// frameWidthForG is frameWidthFor with the gutter given explicitly —
+// for sizing a frame before the file's buffer exists. Text width
+// grows monotonically with frame width under the Issue #24 formula,
+// so the first hit is the tightest frame reaching tw.
+func frameWidthForG(m *model, gutter, tw int) int {
+	ind := viewport.ReservedIndicator(m.wrap)
+	for w := tw + gutter + ind; ; w++ {
+		lw := fileListWidth(m.listWBase, w, gutter, ind)
+		if !m.listVisible {
+			lw = 0
+		}
+		if w-lw-gutter-ind == tw {
+			return w
+		}
+	}
 }
 
 // gatedFiles is the responsiveness fixture: a.txt's three stops give

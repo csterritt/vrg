@@ -82,7 +82,7 @@ func TestGutterMarkPerVisibleLine(t *testing.T) {
 		{"whole line hidden left", 5, "5_ " + strings.Repeat(" ", 41)},
 	}
 	for _, c := range cases {
-		if row := frameRow(t, m, c.row)[listW:]; row != c.want {
+		if row := dropCells(frameRow(t, m, c.row), listW); row != c.want {
 			t.Fatalf("%s: row = %q, want %q", c.name, row, c.want)
 		}
 	}
@@ -127,7 +127,7 @@ func TestRightStarFollowsCurrentLine(t *testing.T) {
 		{2, want(2, "two", " ")},
 		{3, want(3, "tre", " ")},
 	} {
-		if row := frameRow(t, m, c.row)[listW:]; row != c.want {
+		if row := dropCells(frameRow(t, m, c.row), listW); row != c.want {
 			t.Fatalf("current line 1: row = %q, want %q", row, c.want)
 		}
 	}
@@ -144,7 +144,7 @@ func TestRightStarFollowsCurrentLine(t *testing.T) {
 		{2, want(2, "two", "*")},
 		{3, want(3, "tre", " ")},
 	} {
-		if row := frameRow(t, m, c.row)[listW:]; row != c.want {
+		if row := dropCells(frameRow(t, m, c.row), listW); row != c.want {
 			t.Fatalf("current line 2: row = %q, want %q", row, c.want)
 		}
 	}
@@ -170,7 +170,7 @@ func TestRightStarAbsentWhenCurrentLineOffScreen(t *testing.T) {
 	listW := m.listWidth()
 
 	// Line 1 is current and visible with "far" hidden right.
-	if row := frameRow(t, m, 1)[listW:]; !strings.HasSuffix(row, "*") {
+	if row := dropCells(frameRow(t, m, 1), listW); !strings.HasSuffix(row, "*") {
 		t.Fatalf("current visible row = %q, want the right star", row)
 	}
 
@@ -181,7 +181,7 @@ func TestRightStarAbsentWhenCurrentLineOffScreen(t *testing.T) {
 		t.Fatal("pgdn did not scroll line 1 off-screen")
 	}
 	for i := 1; i < 24; i++ {
-		if row := frameRow(t, m, i)[listW:]; strings.HasSuffix(row, "*") {
+		if row := dropCells(frameRow(t, m, i), listW); strings.HasSuffix(row, "*") {
 			t.Fatalf("row %d = %q carries the right star with the current line off-screen", i, row)
 		}
 	}
@@ -203,7 +203,7 @@ func TestBothStarsAppearTogether(t *testing.T) {
 	listW := m.listWidth()
 	panTo(t, m, key, 20)
 
-	if row := frameRow(t, m, 1)[listW:]; row != "1* "+strings.Repeat("x", 40)+"*" {
+	if row := dropCells(frameRow(t, m, 1), listW); row != "1* "+strings.Repeat("x", 40)+"*" {
 		t.Fatalf("row = %q, want the gutter star and the right star together", row)
 	}
 }
@@ -229,7 +229,7 @@ func TestPartiallyVisibleMatchShowsNoStar(t *testing.T) {
 
 	// At offset 0 the line-1 match at cells 38–43 paints cells 38–39:
 	// partially visible, so no right star even on the current line.
-	if row := frameRow(t, m, 1)[listW:]; row != "1  "+strings.Repeat("x", 38)+"ne"+" " {
+	if row := dropCells(frameRow(t, m, 1), listW); row != "1  "+strings.Repeat("x", 38)+"ne"+" " {
 		t.Fatalf("right-edge partial match: row = %q, want a blank reserved column", row)
 	}
 
@@ -237,10 +237,10 @@ func TestPartiallyVisibleMatchShowsNoStar(t *testing.T) {
 	// partially visible, so its gutter is '_', never '*'. Line 1's
 	// match is fully painted at this offset — still no right star.
 	panTo(t, m, key, 10)
-	if row := frameRow(t, m, 2)[listW:]; row != "2_ "+"edle"+strings.Repeat("x", 36)+" " {
+	if row := dropCells(frameRow(t, m, 2), listW); row != "2_ "+"edle"+strings.Repeat("x", 36)+" " {
 		t.Fatalf("left-edge partial match: row = %q, want '_' not '*'", row)
 	}
-	if row := frameRow(t, m, 1)[listW:]; row != "1_ "+strings.Repeat("x", 28)+"needle"+strings.Repeat("x", 6)+" " {
+	if row := dropCells(frameRow(t, m, 1), listW); row != "1_ "+strings.Repeat("x", 28)+"needle"+strings.Repeat("x", 6)+" " {
 		t.Fatalf("now-visible match: row = %q, want a blank reserved column", row)
 	}
 }
@@ -263,14 +263,14 @@ func TestLastCellMatchWithFartherMatchHidden(t *testing.T) {
 
 	// "near" fills the last text cell and is fully painted; the star
 	// reports only the entirely hidden "far".
-	if row := frameRow(t, m, 1)[listW:]; row != "1  "+strings.Repeat("x", 36)+"near"+"*" {
+	if row := dropCells(frameRow(t, m, 1), listW); row != "1  "+strings.Repeat("x", 36)+"near"+"*" {
 		t.Fatalf("row = %q, want the last-cell match painted then the right star", row)
 	}
 
 	// Pan so "far" enters the window: both matches painted, the star
 	// is gone — and the left gutter shows only '_'.
 	panTo(t, m, key, 30)
-	if row := frameRow(t, m, 1)[listW:]; row != "1_ "+strings.Repeat("x", 6)+"near"+strings.Repeat("x", 20)+"far"+strings.Repeat("x", 7)+" " {
+	if row := dropCells(frameRow(t, m, 1), listW); row != "1_ "+strings.Repeat("x", 6)+"near"+strings.Repeat("x", 20)+"far"+strings.Repeat("x", 7)+" " {
 		t.Fatalf("row = %q, want no star once the far match paints", row)
 	}
 }
@@ -301,7 +301,7 @@ func TestSplitGlyphBlanksCountHidden(t *testing.T) {
 	// 文 renders its clipped in-window cell as a blank — not a
 	// partially visible match — so the current line earns the right
 	// star.
-	if row := frameRow(t, m, 1)[listW:]; row != "1  "+strings.Repeat("x", 39)+" "+"*" {
+	if row := dropCells(frameRow(t, m, 1), listW); row != "1  "+strings.Repeat("x", 39)+" "+"*" {
 		t.Fatalf("right-edge clipped 文: row = %q, want a blank text cell then the star", row)
 	}
 
@@ -310,10 +310,10 @@ func TestSplitGlyphBlanksCountHidden(t *testing.T) {
 	// 文 now paints whole, and its cell-0 match is hidden left — the
 	// left star shows while the right one is gone.
 	panTo(t, m, key, 3)
-	if row := frameRow(t, m, 2)[listW:]; row != "2*  "+strings.Repeat("x", 39)+" " {
+	if row := dropCells(frameRow(t, m, 2), listW); row != "2*  "+strings.Repeat("x", 39)+" " {
 		t.Fatalf("left-edge clipped 文: row = %q, want '*' then the clipping blank", row)
 	}
-	if row := frameRow(t, m, 1)[listW:]; row != "1* "+strings.Repeat("x", 36)+"文"+strings.Repeat("x", 2)+" " {
+	if row := dropCells(frameRow(t, m, 1), listW); row != "1* "+strings.Repeat("x", 36)+"文"+strings.Repeat("x", 2)+" " {
 		t.Fatalf("painted 文: row = %q, want the left star only", row)
 	}
 }
@@ -337,7 +337,7 @@ func TestUniformLinesMarkEveryVisibleRow(t *testing.T) {
 	// All 23 visible rows show '_': every line has text hidden left
 	// and the only match — line 1's at cells 30–32 — is painted.
 	for i := 1; i <= 23; i++ {
-		row := frameRow(t, m, i)[listW:]
+		row := dropCells(frameRow(t, m, i), listW)
 		if row[2] != '_' {
 			t.Fatalf("row %d = %q, want '_' in the gutter's first trailing space", i, row)
 		}
@@ -363,7 +363,7 @@ func TestWrapModeDrawsNoIndicators(t *testing.T) {
 
 	// In run-off-edge mode at offset 0 the far "needle" match is
 	// entirely hidden right: the reserved column proves itself.
-	if row := frameRow(t, m, 1)[listW:]; !strings.HasSuffix(row, "*") {
+	if row := dropCells(frameRow(t, m, 1), listW); !strings.HasSuffix(row, "*") {
 		t.Fatalf("flat-mode row = %q, want the right star", row)
 	}
 
@@ -373,11 +373,11 @@ func TestWrapModeDrawsNoIndicators(t *testing.T) {
 	_, wc := m.Update(keyW)
 	deliverLayout(t, m, wc)
 	textW := m.textWidth(3)
-	if row := frameRow(t, m, 1)[listW:]; row != "1  "+strings.Repeat("x", textW) {
+	if row := dropCells(frameRow(t, m, 1), listW); row != "1  "+strings.Repeat("x", textW) {
 		t.Fatalf("wrap-mode row = %q, want a blank gutter and text through the last column", row)
 	}
 	for i := 1; i <= 8; i++ {
-		row := frameRow(t, m, i)[listW:]
+		row := dropCells(frameRow(t, m, i), listW)
 		if row[1] != ' ' {
 			t.Fatalf("wrapped row %d = %q carries a gutter mark", i, row)
 		}

@@ -811,6 +811,50 @@ half of grapheme-cluster highlight expansion under the styled scheme:
 - `TestCJKMatchPaintsBothCells` — a `文` match paints both cells
   inside one inverse-styled run.
 
+`filelist_test.go` (same package; Issue #24) drives the file-list
+layout contracts, with the `dropCells` cell-aware slicing helper
+(`…` occupies three bytes but one cell):
+
+- `TestFileListWidthFormula` — each of the three terms winning in
+  turn, `floor(0.40 × w)` rounding at an odd width, the ten-cell
+  text reservation outranking the 40% cap, gutter growth narrowing
+  the list, and the zero clamp.
+- `TestListHideShowToggles` — `left`/`tab` hiding and
+  `right`/`shift+tab` showing, each issuing a re-keyed layout whose
+  install reclaims the panel width.
+- `TestListToggleIdempotent` — a repeated hide or show key changes
+  nothing.
+- `TestZeroWidthListRetainsPreference` — a computed zero width
+  leaves the preference set; the list returns when the terminal
+  widens.
+- `TestLeftTruncateGraphemeSafe` and
+  `TestListEntriesLeftTruncate` — the `…` tail truncation never
+  splitting a grapheme, in the helper and in rendered list cells.
+- `TestFilenameRuleStatusSlot` and `TestFilenameRuleNoNote` — the
+  synthetic note inside the rule with the path truncated around it,
+  the note clipping under a tiny width, and the note-free rule
+  unchanged.
+- `TestListAutoScrollsToActiveEntry` — `n` crossings scrolling the
+  list window so the active entry stays visible.
+- `TestAnchorSurvivesListToggle` and
+  `TestAnchorSurvivesGutterGrowth` — the same logical line at the
+  top of the panel after a hide/show round trip and after a
+  gutter-widening file load.
+- `TestHiddenListEscapesNoEntries` — the render-cost guard: a
+  hidden list escapes zero entries; a visible one escapes only the
+  visible window's.
+
+`nav_test.go`'s `TestFileListHasNoDirectSelection` drops the
+`tab`/`left`/`right` passive-key rows now that they toggle
+visibility, and `wantUnderlinedEntry` compares against the
+`leftTruncate`-clipped entry. `layout_test.go`'s `frameWidthFor`
+delegates to `frameWidthForG` — frame sizing under the new formula
+with the gutter given explicitly. The panning, indicator,
+grapheme, and wrap suites move their panel-row slicing to
+`dropCells`, and `TestRevealMatchDeepInWrappedLine` uses a deeper
+fixture target since the wider text panel leaves a shallow one
+inside the initial window.
+
 ## internal/viewport
 
 `viewport_test.go` (external package `viewport_test`; Issue #12):

@@ -144,26 +144,73 @@ func (m *model) reveal() {
 // minus the filename-rule row it shares with the file list.
 func (m *model) contentRows() int { return m.height - 1 }
 
-// listWidth is the file list's rendered width under the Issue #5
-// heuristic: the longest displayed path plus one padding cell, capped
-// at the terminal width. The longest-path width is prepared once per
-// index (m.listWBase) so a frame render never rescans the list.
-// Issue #24 owns the real formula (40% cap, minimum text width, left
-// truncation).
-func (m *model) listWidth() int {
-	if w := m.listWBase; w < m.width {
-		return w
+// fileListWidth is the file list's rendered width under Issue #24's
+// three-term formula: the nonnegative minimum of the longest
+// displayed path width plus two cells, floor(0.40 × the terminal
+// width), and the terminal width minus the file panel's reservation
+// (gutter width + 10 text cells + reserved indicator width). The
+// third term keeps the panel's minimum content width ahead of the
+// 40% cap; it is also the only term that can drive the result to
+// zero, and the clamp keeps it there rather than negative.
+func fileListWidth(longest, width, gutter, resInd int) int {
+	w := longest + 2
+	if c := width * 2 / 5; c < w { // floor(0.40 × width)
+		w = c
 	}
-	return m.width
+	if c := width - gutter - 10 - resInd; c < w {
+		w = c
+	}
+	if w < 0 {
+		return 0
+	}
+	return w
+}
+
+// listWidthFor is the file list's rendered width under a given
+// line-number gutter — zero while the list is hidden (Issue #24),
+// otherwise the three-term formula. The longest-path term is
+// prepared once per index (m.listWBase) so a frame render never
+// rescans the list.
+func (m *model) listWidthFor(gutter int) int {
+	if !m.listVisible {
+		return 0
+	}
+	return fileListWidth(m.listWBase, m.width, gutter, viewport.ReservedIndicator(m.wrap))
+}
+
+// listWidth is the file list's rendered width this frame, under the
+// current file's gutter — the value the frame layout and its tests
+// share.
+func (m *model) listWidth() int {
+	return m.listWidthFor(m.gutterWidth())
+}
+
+// gutterWidth is the line-number gutter the current file's panel
+// renders with: the installed row model's when one is current, else
+// the cached buffer's — so the list width always matches the gutter
+// a rendered frame would show. Three cells is the minimum a real
+// buffer produces and the fallback while nothing is loaded.
+func (m *model) gutterWidth() int {
+	if ck, ok := m.curKey(); ok {
+		if rows := m.currentRows(ck); rows != nil {
+			return rows.GutterWidth()
+		}
+		if buf := m.bufs[ck]; buf != nil {
+			return buf.GutterWidth()
+		}
+	}
+	return 3
 }
 
 // textWidth is a buffer's file-panel text width: the panel width minus
 // the line-number gutter and the reserved right-indicator column —
 // zero while wrapping, one in run-off-edge mode where Issue #20's
-// right-edge star draws. All wrapping, clipping, and reveal math uses
-// this width.
+// right-edge star draws. The list width is computed for that buffer's
+// own gutter so a key minted for any path is self-consistent. All
+// wrapping, clipping, and reveal math uses this width, and the clamp
+// keeps pathological dimensions nonnegative.
 func (m *model) textWidth(gutter int) int {
-	w := m.width - m.listWidth() - gutter - viewport.ReservedIndicator(m.wrap)
+	w := m.width - m.listWidthFor(gutter) - gutter - viewport.ReservedIndicator(m.wrap)
 	if w < 0 {
 		return 0
 	}
@@ -448,14 +495,16 @@ func (m *model) browseView() string {
 }
 
 // listCell renders the file-list entry at index i padded to width
-// cells; the current entry is underlined. Only the visible window's
-// entries are escaped — the frame render never queries the provider
-// for off-window paths.
+// cells; the current entry is underlined. A path wider than its
+// cells left-truncates with a leading … so the basename end stays
+// visible (Issue #24). Only the visible window's entries are
+// escaped — the frame render never queries the provider for
+// off-window paths.
 func (m *model) listCell(i, width int) string {
 	if i >= len(m.idx.Files) {
 		return strings.Repeat(" ", width)
 	}
-	clipped := clipCells(m.escapePath(m.idx.Files[i].Path), width)
+	clipped := leftTruncate(m.escapePath(m.idx.Files[i].Path), width)
 	entry := m.theme.FileList(clipped)
 	if i == m.curFile() {
 		entry = m.theme.CurrentFile(clipped)
@@ -525,18 +574,36 @@ func (m *model) contentCell(cr, width, top, off int, rows rowSource, failed bool
 
 // filenameRule renders the current file's escaped path embedded in a
 // horizontal rule across the full frame width above both panes:
-// "─ path ────".
+// "─ path ────". The buffer-status note slot sits inside the rule
+// after the path — "─ path note ────" — and the path left-truncates
+// with a leading … to make room for the note where possible
+// (Issue #24 provides the slot; Issues 26, 29, and 30 supply the
+// notes).
 func (m *model) filenameRule(width int) string {
-	name := ""
+	name, note := "", ""
 	if m.idx != nil && len(m.idx.Files) > 0 {
 		name = m.escapePath(m.idx.Files[m.curFile()].Path)
+		note = m.notes[string(m.idx.Files[m.curFile()].Path)]
 	}
 	if width <= 4 {
-		return padTo(clipCells(name, width), width)
+		return padTo(leftTruncate(name, width), width)
 	}
-	clipped := clipCells(name, width-3)
+	noteW := safepresentation.CellWidth(note)
+	if note != "" {
+		noteW++ // the trailing space closing the note's slot
+	}
+	if noteW > width-3 {
+		// The path yields its cells to the slot first; the note
+		// itself clips to whatever the slot leaves.
+		note = clipCells(note, width-4)
+		noteW = safepresentation.CellWidth(note) + 1
+	}
+	clipped := leftTruncate(name, width-3-noteW)
 	rule := "─ " + clipped + " "
-	return m.theme.FilenameRule(rule + strings.Repeat("─", width-3-safepresentation.CellWidth(clipped)))
+	if note != "" {
+		rule += note + " "
+	}
+	return m.theme.FilenameRule(rule + strings.Repeat("─", width-safepresentation.CellWidth(rule)))
 }
 
 // contentText renders one rendered row's escaped cells into at most

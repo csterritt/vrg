@@ -126,7 +126,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   return a `requestLayout` command, and installs `Restore` the saved
   viewport's anchor into the fresh model. `options.layoutGate` and
   `options.escapePath` (`WithLayoutGate`/`WithEscapePath`) are the new
-  test seams. Issue #11 adds the session
+  test seams. Issue #24 adds the `listWBase`/`listVisible`/`notes`
+  fields — the longest sanitized path width prepared once at
+  `searchDoneMsg`, the visibility preference (initially shown), and
+  the synthetic per-file status-note map — and the
+  `left`/`tab`/`right`/`shift+tab` browse routes that flip the
+  preference and re-key the current file's layout. Issue #11 adds the session
   diagnostic collection `model.diags`: `collectDiags` appends sanitized
   lines as `Update` processes `stderrLineMsg` (forwarded from
   `Child.Diags()` by a `prog.Send` goroutine in `Run`),
@@ -249,7 +254,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   shifts), and a cell past `len(cells)` — the end-of-line marker —
   paints one inverse-video space clipped by the same
   `col + 1 > textW` bound, underlined by `CurrentMatch` on the
-  current matched line. See
+  current matched line. Issue #24 makes the file list responsive:
+  `fileListWidth` computes the nonnegative three-term minimum
+  (`longest + 2`, `floor(0.40 × width)`, `width − gutter − 10 −
+  reserved indicator`), `listWidthFor`/`listWidth`/`gutterWidth`/
+  `textWidth` apply it under the current file's gutter — returning
+  zero while `listVisible` is false without touching the preference
+  — `listCell` left-truncates its escaped path with a leading `…`
+  for the requested visible entry only, `browseView` scrolls the
+  list window to keep the active entry visible, and `filenameRule`
+  gains the `─ path note ────` status-note slot whose synthetic
+  `m.notes` string the path truncates around (Issues #26/#29/#30
+  supply the real notes). See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [file-change-popup.md](file-change-popup.md),
@@ -261,8 +277,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [horizontal-panning.md](horizontal-panning.md),
   [horizontal-reveal.md](horizontal-reveal.md),
   [hidden-content-indicators.md](hidden-content-indicators.md),
-  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md), and
-  [zero-width-markers.md](zero-width-markers.md).
+  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
+  [zero-width-markers.md](zero-width-markers.md), and
+  [file-list-layout.md](file-list-layout.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation

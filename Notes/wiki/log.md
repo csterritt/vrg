@@ -874,3 +874,41 @@ indicators), `internal/filebuffer/filebuffer.go`,
 `internal/viewport/viewport.go`,
 `internal/viewport/marker_test.go`,
 `internal/app/browse.go`.
+
+## [2026-09-17] ingest | Issue #24 file-list layout — width formula, truncation, toggle
+
+Issue #24 makes the file list responsive. `fileListWidth` computes
+the nonnegative minimum of `longest + 2`, `floor(0.40 × terminal
+width)`, and `width − gutter − 10 − reserved indicator` — minimum
+text width outranking the 40% cap — prepared once per index through
+`listWBase` so frames never rescan. `listWidthFor` returns zero
+while `listVisible` (initially shown) is false, but a computed zero
+width never clears the preference. `left`/`tab` hide,
+`right`/`shift+tab` show, both re-keying the current file's layout
+through `requestLayout`; every text-width change — hide/show,
+gutter growth on load, mode, resize — flows through the keyed
+prepared-layout path and restores the logical anchor. `listCell`
+left-truncates only the requested visible entry with a leading `…`
+(grapheme-safe via `leftTruncate`/`tailCells`), `browseView`
+auto-scrolls the list window to keep the active entry visible, and
+`filenameRule` gains the `─ path note ────` status-note slot whose
+synthetic `m.notes` string the path truncates around — Issues
+#26/#29/#30 supply the real notes. `internal/app/filelist_test.go`
+covers each formula term, floor rounding, gutter growth, the
+ten-cell reservation, zero-width preference retention, grapheme-safe
+truncation, the note slot, toggles, auto-scroll, anchor survival,
+and the visible-entry render-cost guard; `dropCells` joins the test
+helpers and the panning/indicator/grapheme/wrap suites slice by
+cells now that entries carry the multi-byte `…`. Created
+[file-list-layout](file-list-layout.md); updated
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/024-file-list-layout-width-truncation-toggle.md`,
+`Notes/tasks/024-file-list-layout-width-truncation-toggle.md`,
+`Notes/PRD-vrg.md` (File list and layout; Layout and indicators),
+`internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/filelist_test.go`, `internal/app/layout_test.go`,
+`internal/app/nav_test.go`, `internal/app/pan_test.go`,
+`internal/app/indicators_test.go`, `internal/app/hreveal_test.go`,
+`internal/app/grapheme_test.go`, `internal/app/wrap_test.go`,
+`internal/app/browse_test.go`.

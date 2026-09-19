@@ -164,8 +164,14 @@ type model struct {
 	// records per-path destination-reveal intents that could not run
 	// against a missing or stale layout and commit when a matching
 	// completion installs (Issue #17). listWBase is the index's
-	// longest escaped path width plus one, prepared at search-done so
-	// listWidth never rescans the file list per frame.
+	// longest escaped path width, prepared at search-done so the
+	// Issue #24 width formula never rescans the file list per frame.
+	// listVisible is the user's file-list visibility preference
+	// (Issue #24): shown at startup, hidden by left/tab, shown by
+	// right/shift+tab — a computed zero width never changes it.
+	// notes is the per-file buffer-status note the filename row's
+	// slot renders — Issue #24 provides the slot; Issues 26, 29, and
+	// 30 supply the texts.
 	// wrap is the session's wrap mode (Issue #16): on initially,
 	// toggled by w between wrapped rows and run-off-edge clipping.
 	idx            *searchindex.Index
@@ -178,6 +184,8 @@ type model struct {
 	layoutReqs     map[string]viewport.Key
 	pendingReveals map[string]bool
 	listWBase      int
+	listVisible    bool
+	notes          map[string]string
 	wrap           bool
 	theme          theme.Theme
 
@@ -217,6 +225,8 @@ func newModel(cfg Config, opts options, child Child) *model {
 		revs:           map[string]int{},
 		layoutReqs:     map[string]viewport.Key{},
 		pendingReveals: map[string]bool{},
+		listVisible:    true,
+		notes:          map[string]string{},
 		wrap:           true,
 		theme:          theme.Dark(),
 	}
@@ -303,7 +313,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.listWBase = w
 			}
 		}
-		m.listWBase++
 		var cmd tea.Cmd
 		in := OutcomeInput{
 			Result:    msg.res,
@@ -450,6 +459,25 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// indicator column — and prepared off the update path;
 			// the retained anchor restores when it installs.
 			m.wrap = !m.wrap
+			var cmd tea.Cmd
+			if ck, ok := m.curKey(); ok {
+				cmd = m.requestLayout(ck)
+			}
+			return m, cmd
+		case m.state == stateBrowse && (key == "left" || key == "tab"):
+			// left and tab hide the file list (Issue #24). The text
+			// width changes, so the current file's layout is
+			// re-keyed through the prepared-layout path and the
+			// retained anchor carries the reading position across.
+			m.listVisible = false
+			var cmd tea.Cmd
+			if ck, ok := m.curKey(); ok {
+				cmd = m.requestLayout(ck)
+			}
+			return m, cmd
+		case m.state == stateBrowse && (key == "right" || key == "shift+tab"):
+			// right and shift+tab show the file list again.
+			m.listVisible = true
 			var cmd tea.Cmd
 			if ck, ok := m.curKey(); ok {
 				cmd = m.requestLayout(ck)
