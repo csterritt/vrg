@@ -88,6 +88,16 @@ its never-exits rule. For the error-over-help row the sequence
 continues: a second `q`/`Esc` closes help to browse, and only a
 further base-state `q` exits.
 
+## The too-small exception
+
+Issue #33's gate adds one deliberate exception to this table: below
+the 20×3 minimum the modal stack is invisible but logically intact,
+and `q` **exits** with the state-applicable status instead of
+demoting to a dismissal — the screen can never trap the user behind a
+hidden modal. `Esc` stays a strict no-op there (it does not dismiss
+the hidden overlay either). See
+[terminal-too-small.md](terminal-too-small.md).
+
 ## `Esc` never exits a base state
 
 `Esc` is an overlay-dismissal key only: no base-state routing case

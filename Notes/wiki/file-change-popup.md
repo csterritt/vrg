@@ -43,6 +43,12 @@ single-line path).
   [help-overlay.md](help-overlay.md); Issue #32 verifies both
   cancellation routes in
   [overlay-precedence.md](overlay-precedence.md).
+- **Too-small gate (Issue #33).** The timer keeps running below the
+  20×3 minimum — `popupExpireMsg` handling is not gated, so an expiry
+  landing while too-small dismisses its instance permanently; a
+  still-live instance reappears on recovery. The box is never
+  composited on the too-small screen. See
+  [terminal-too-small.md](terminal-too-small.md).
 - **Test seam.** `options.popupTimer`, when set, builds the expiry
   command in place of the real tick — model tests substitute an
   instantly resolving command and drive expiry by injecting

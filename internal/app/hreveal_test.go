@@ -231,7 +231,15 @@ func TestHorizontalRevealUnpaintableClusterFallback(t *testing.T) {
 		},
 	}})
 	cmd := startBrowse(t, m, idx)
-	m.Update(tea.WindowSizeMsg{Width: frameWidthForG(m, 3, 6), Height: 24})
+	// The dimensions are set directly and the model returned to
+	// unsized rather than reported: the 9-column frame this fixture
+	// needs is below the Issue #33 minimum, where a real
+	// WindowSizeMsg raises the too-small gate and the key map
+	// collapses to q/ctrl+c. The gate leaves the reveal arithmetic
+	// itself live, so the fallback is exercised here on an unsized
+	// model — the only model state in which a sub-minimum text area
+	// can still exist.
+	m.width, m.height, m.sized = frameWidthForG(m, 3, 6), 24, false
 	m.Update(keyW)
 	finishLoad(t, m, cmd)
 

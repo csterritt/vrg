@@ -1243,3 +1243,39 @@ index. Sources:
 and exit-status contract), `internal/app/app.go`,
 `internal/app/overlay.go`, `internal/app/help.go`,
 `internal/app/precedence_test.go`.
+## [2026-09-17] ingest | Issue #33 "Terminal too small" gate with full state recovery
+
+`internal/app/toosmall_test.go` (new) plus production changes in
+`internal/app/app.go` and `internal/app/browse.go` implement the
+20-column/3-row gate: `minTermWidth`/`minTermHeight`/`tooSmallNote`
+constants, the `sized` field (unreported size vs reported
+sub-minimum), `tooSmall()` gating `WindowSizeMsg` (no layout or modal
+work sub-minimum), `layoutReadyMsg` (stale completions discarded
+uninstalled), `requestLayout` (nil while gated), `KeyPressMsg`
+routing to `tooSmallKey` (the whole gated key map — `q` exits the
+state-applicable status, `ctrl+c` 130, everything else a strict
+no-op), and `View` short-circuiting to the centred, clipped note with
+no state/modal/pop-up compositing. `q` while gated exits rather than
+demoting to an Issue #32 dismissal — the screen never traps the user
+behind an invisible modal — while `Esc` stays a no-op and a
+logically open overlay reopens at its scroll on recovery. Pop-up
+timers run on behind the gate (expiry dismisses permanently; live
+instances reappear) and the box never renders there. Resizes wholly
+inside the gate mutate nothing; recovery runs at the final
+dimensions. Two existing fixtures collided with the minimum:
+`popup_test.go`'s resize-recentring moved from 12×5 to 20×5, and
+`hreveal_test.go`'s unpaintable-cluster fixture (a 9-column frame
+with a text area narrower than a tab expansion — unreachable at the
+20-column minimum) now sizes the model directly and returns it to
+unsized to exercise the fallback arithmetic at the only level it can
+still exist. Created [terminal-too-small](terminal-too-small.md);
+updated [source-code](source-code.md), [unit-tests](unit-tests.md),
+[overlay-precedence](overlay-precedence.md),
+[file-change-popup](file-change-popup.md),
+[help-overlay](help-overlay.md),
+[file-list-layout](file-list-layout.md), and the index. Sources:
+`Notes/issues/033-terminal-too-small-with-state-recovery.md`,
+`Notes/tasks/033-terminal-too-small-with-state-recovery.md`,
+`Notes/PRD-vrg.md` (Layout and indicators), `internal/app/app.go`,
+`internal/app/browse.go`, `internal/app/toosmall_test.go`,
+`internal/app/hreveal_test.go`, `internal/app/popup_test.go`.

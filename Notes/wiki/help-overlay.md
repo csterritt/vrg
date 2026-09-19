@@ -27,8 +27,11 @@ error overlay and the help dialog each own one (`m.overlay`,
 `m.help`), and `compositeBox` draws either: the `theme.Overlay`
 single-line bordered box centred on the frame carrying the visible
 window of wrapped rows in the base colours. At tiny sizes above the
-20×3 minimum the box clips to the terminal — there is **no borderless
-mode** — and growth restores the normal layout.
+[20×3 minimum](terminal-too-small.md) the box clips to the terminal —
+there is **no borderless mode** — and growth restores the normal
+layout. Below it the Issue #33 gate replaces the frame entirely: the
+dialog stays logically open at its scroll position and reappears on
+recovery.
 
 ## Key routing (`internal/app/app.go`)
 

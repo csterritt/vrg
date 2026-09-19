@@ -54,6 +54,10 @@ dimension ever goes negative.
 at `searchDoneMsg` from `escapePath` output — frame rendering never
 rescans the file list.
 
+None of this runs below the 20×3 terminal minimum: the Issue #33
+gate replaces the frame and skips layout work entirely — see
+[terminal-too-small.md](terminal-too-small.md).
+
 ## Recompute triggers
 
 The list width is a pure function of live parameters, so every

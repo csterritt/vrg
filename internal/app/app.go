@@ -126,6 +126,17 @@ func WithLoader(fn func([]byte) ([]byte, error)) Option {
 type state int
 
 const (
+	// minTermWidth and minTermHeight are the fixed terminal minimum —
+	// 20 columns by 3 rows (PRD Layout and indicators). Below either,
+	// the model installs the too-small gate (Issue #33).
+	minTermWidth  = 20
+	minTermHeight = 3
+	// tooSmallNote is the message the gate centres on the frame,
+	// clipped to what fits.
+	tooSmallNote = "Terminal too small"
+)
+
+const (
 	stateSearching state = iota
 	// stateNoResults is the centred "No results found" screen: a
 	// complete successful search left no usable results.
@@ -146,7 +157,11 @@ type model struct {
 
 	state         state
 	width, height int
-	status        int
+	// sized marks that a terminal size has been reported; until then
+	// the too-small gate stays off and the model still opens on
+	// "Searching…" (Issue #33).
+	sized  bool
+	status int
 	// quitting marks that a controlled exit is underway; messages
 	// arriving after it — including late search and load completions —
 	// are discarded so they cannot revive the UI.
@@ -322,6 +337,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.sized = true
+		if m.tooSmall() {
+			// Below the minimum the gate holds: no ordinary
+			// layout is installed at the pathological
+			// dimensions, and no anchor, viewport, or modal
+			// state is touched — the preserved state is what
+			// the first size back above the minimum recovers
+			// (Issue #33).
+			return m, nil
+		}
 		m.clampOverlayScroll()
 		m.clampHelpScroll()
 		// The new text width re-keys every prepared layout: the
@@ -469,6 +494,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.layoutReqs[path] == msg.key {
 			delete(m.layoutReqs, path)
 		}
+		if m.tooSmall() {
+			// The gate installs no ordinary layout — not even
+			// a completion minted before it went up; recovery
+			// re-requests at the size that lifts it
+			// (Issue #33).
+			return m, nil
+		}
 		buf := m.bufs[path]
 		if buf == nil || msg.key != m.layoutKey(path, buf) {
 			// Obsolete: prepared for parameters since superseded, or
@@ -521,6 +553,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.KeyPressMsg:
 		key := msg.Keystroke()
+		if m.tooSmall() {
+			return m.tooSmallKey(key)
+		}
 		// Any key press dismisses a file-change pop-up and still
 		// performs its normal action in the same update — the pop-up
 		// never delays navigation or quitting.
@@ -669,6 +704,36 @@ func recordWarnings(ix *searchindex.Index) []string {
 	return nil
 }
 
+// tooSmall reports whether the reported terminal size is below the
+// fixed minimum — under 20 columns or under 3 rows — so the gate
+// replaces the ordinary presentation and key map (Issue #33). Before
+// any size is reported the gate stays off: the model still opens on
+// "Searching…".
+func (m *model) tooSmall() bool {
+	return m.sized && (m.width < minTermWidth || m.height < minTermHeight)
+}
+
+// tooSmallKey is the too-small screen's entire key map (Issue #33):
+// only q and ctrl+c act. ctrl+c keeps its global 130; q exits with the
+// state-applicable outcome — 130 while searching, otherwise the status
+// the completed search fixed (0 or 2 browsing, 1 on no-results, 2 on
+// the fatal overlay) — exiting past a logically open overlay rather
+// than merely dismissing it. That precedence beats Issue #32's
+// dismissal semantics so the screen can never trap the user behind an
+// invisible modal. Esc and every other key are strict no-ops: no
+// pop-up dismissal, no state change — a logically open overlay stays
+// open for the recovery render.
+func (m *model) tooSmallKey(key string) (tea.Model, tea.Cmd) {
+	if key != "q" && key != "ctrl+c" {
+		return m, nil
+	}
+	if key == "ctrl+c" || m.state == stateSearching {
+		m.status = 130
+	}
+	m.quitting = true
+	return m, m.quitCmd()
+}
+
 // quitCmd is the single cleanup path every controlled exit routes
 // through: terminate and reap the child, report the reaped status, then
 // quit so the program restores the terminal.
@@ -726,25 +791,34 @@ func (m *model) collectSearchDiags(res Result, in OutcomeInput) {
 }
 
 func (m *model) View() tea.View {
-	s := center("Searching…", m.width, m.height)
-	switch m.state {
-	case stateNoResults:
-		s = center(m.noResultsText(), m.width, m.height)
-	case stateBrowse:
-		s = m.browseView()
-	case stateOverlayOnly:
-		// The fatal overlay has no underlying state: it floats over a
-		// blank frame.
-		s = ""
-	}
-	if m.popupID != 0 {
-		s = m.compositePopup(s)
-	}
-	if m.helpOpen {
-		s = m.compositeBox(s, &m.help)
-	}
-	if m.overlayOpen {
-		s = m.compositeBox(s, &m.overlay)
+	var s string
+	if m.tooSmall() {
+		// The gate's whole presentation is the centred note,
+		// clipped to what fits — the state, modal, and pop-up
+		// renderings behind it stay suspended, never composited
+		// (Issue #33).
+		s = center(clipCells(tooSmallNote, m.width), m.width, m.height)
+	} else {
+		s = center("Searching…", m.width, m.height)
+		switch m.state {
+		case stateNoResults:
+			s = center(m.noResultsText(), m.width, m.height)
+		case stateBrowse:
+			s = m.browseView()
+		case stateOverlayOnly:
+			// The fatal overlay has no underlying state: it floats
+			// over a blank frame.
+			s = ""
+		}
+		if m.popupID != 0 {
+			s = m.compositePopup(s)
+		}
+		if m.helpOpen {
+			s = m.compositeBox(s, &m.help)
+		}
+		if m.overlayOpen {
+			s = m.compositeBox(s, &m.overlay)
+		}
 	}
 	v := tea.NewView(m.theme.Base(s))
 	v.AltScreen = true

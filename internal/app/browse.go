@@ -285,10 +285,15 @@ type layoutReadyMsg struct {
 // returns nil when the installed model already matches (the fast path),
 // when an identical request is already in flight, when no buffer is
 // cached yet, or when the buffer is unsupported — an Issue #30
-// placeholder has no rows to prepare. The completion carries its key,
-// so a superseded or out-of-order delivery is discarded rather than
-// installed.
+// placeholder has no rows to prepare — and while the too-small gate is
+// up, when no ordinary layout is prepared at the pathological
+// dimensions (Issue #33); the resize lifting the gate re-requests at
+// the final size. The completion carries its key, so a superseded or
+// out-of-order delivery is discarded rather than installed.
 func (m *model) requestLayout(path string) tea.Cmd {
+	if m.tooSmall() {
+		return nil
+	}
 	buf := m.bufs[path]
 	if buf == nil || buf.Unsupported() != "" {
 		return nil

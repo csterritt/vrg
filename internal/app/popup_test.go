@@ -337,17 +337,18 @@ func TestPopupRecentresOnResizeWithoutRestart(t *testing.T) {
 	path := escapedPath(idx.Files[1])
 	popupBox(t, m, safepresentation.CellWidth(path)+4)
 
-	// Shrinking re-truncates: at 12 columns the interior is 8 cells —
-	// a leading … plus the tail of the path — on the box's content row
-	// (top = (5-3)/2 = 1, so the path sits on row 2).
-	m.Update(tea.WindowSizeMsg{Width: 12, Height: 5})
+	// Shrinking re-truncates: at 20 columns — the minimum, below
+	// which Issue #33's gate replaces the frame — the interior is 16
+	// cells, a leading … plus the tail of the path, on the box's
+	// content row (top = (5-3)/2 = 1, so the path sits on row 2).
+	m.Update(tea.WindowSizeMsg{Width: 20, Height: 5})
 	rows := strings.Split(viewText(m), "\n")
 	if !strings.Contains(rows[2], "…") {
 		t.Fatalf("narrowed pop-up row = %q, want a truncated …-led path", rows[2])
 	}
 	for i, row := range rows {
-		if w := safepresentation.CellWidth(row); w > 12 {
-			t.Fatalf("row %d is %d cells at a 12-cell frame: %q", i, w, row)
+		if w := safepresentation.CellWidth(row); w > 20 {
+			t.Fatalf("row %d is %d cells at a 20-cell frame: %q", i, w, row)
 		}
 	}
 

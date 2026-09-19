@@ -824,7 +824,12 @@ run-off-edge mode:
 - `TestHorizontalRevealUnpaintableClusterFallback` — a match on a
   six-cell tab cluster at text width 5 sets `off` to its start column
   2, the in-window cells render all blank, and repeated `n` round
-  trips land on 2 again — no panning loop.
+  trips land on 2 again — no panning loop. Since Issue #33 the
+  9-column frame the fixture needs sits below the too-small minimum —
+  a text area under a tab expansion is unreachable at any reported
+  size — so the test sizes the model directly and returns it to
+  unsized, exercising the fallback arithmetic at the only model level
+  a sub-minimum frame can still exist.
 - `TestHorizontalRevealInertInWrapMode` — startup on a wrapped layout
   records no horizontal offset even with a far-off match.
 
@@ -1245,6 +1250,39 @@ dismissal key:
   full three-key sequence — close error, close help, then base `q`.
 - `TestCtrlCOverErrorOverHelpExits130` — the global override outranks
   the whole stack, exiting 130 over error-over-help.
+
+`toosmall_test.go` (same package; Issue #33) drives the too-small
+gate through `Update`/`View` — the helpers `resizeTo`/`updCmd` send
+sizes and messages and capture the issued commands:
+
+- `TestTooSmallThresholdAndDisplay` — 19×10 and 40×2 install the gate
+  (note alone, centred; nothing composites over it), a 10-column frame
+  clips the note to `Terminal t`, and 20×3 is the ordinary boundary.
+- `TestTooSmallQExitsPerState` — the per-state `q` table: 130
+  searching, the fixed status browsing (before and after an ordinary
+  dismissal), exit-2-past-the-overlay with a browse error logically
+  open, 1 on no-results (with or without a warning overlay logically
+  open), and 2 with the fatal overlay logically open — `q` exits, it
+  never demotes to a dismissal.
+- `TestTooSmallCtrlCExits130` — the global override holds at 130.
+- `TestTooSmallKeysAreNoOps` — a 28-key sweep (`Esc`, navigation,
+  scroll, pan, toggles, modal keys, misc) mutates nothing behind the
+  gate — cursor, loads, pop-up, theme, wrap, list, overlay scroll —
+  and growth reopens the logically open overlay at its scroll.
+- `TestTooSmallRoundTripPreservesModalStack` — scrolled help at 5,
+  scrolled error at 7, and an error-at-3-over-help-at-`suspended`
+  stack all reopen at their positions.
+- `TestTooSmallRoundTripPreservesBrowseState` — cursor, both files'
+  saved viewports (top, mid-line anchor, pan offset), wrap off, light
+  theme, and hidden list all survive 19×10 → 80×24.
+- `TestTooSmallResizeWithinGateDefersRecovery` — 19×2 → 10×1 → 25×8:
+  no layout command issued, no layout installed, no anchor or modal
+  mutation inside the gate, and recovery runs at the final 25×8 with
+  the error-over-help stack and nontrivial viewport intact.
+- `TestTooSmallPopupContinuesWithoutDisplay` — the timer runs behind
+  the gate: an expiry landing while too-small dismisses the instance
+  permanently (absent after recovery) while a live instance reappears
+  on growth; the box never renders on the too-small screen.
 
 ## internal/viewport
 

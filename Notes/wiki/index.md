@@ -250,6 +250,14 @@ Catalog of all wiki pages for the vrg project.
   pop-up cancellation by help and error, the full `q`/`Esc`
   dismissal-outcome table including the fatal-overlay exit-2 route,
   and `Esc` never exiting a base state
+- [terminal-too-small.md](terminal-too-small.md) — Issue #33: the
+  20-column/3-row gate — centred clipped "Terminal too small", the
+  `q`/`ctrl+c`-only key map with `q` exiting the state-applicable
+  status rather than dismissing a hidden overlay, `Esc` and all other
+  keys strict no-ops, state-preserving layout/key/completion gates,
+  full cursor/anchor/viewport/modal-stack recovery at the final
+  dimensions after in-gate resizes, and the pop-up timer running on
+  with the pop-up never composited
 
 ## Catalogs
 

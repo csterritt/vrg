@@ -185,7 +185,17 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   dismissal-outcome table (fatal overlays exiting 2 for both keys,
   `Esc` otherwise never exiting a base state), and the error-over-help
   suspension/restoration — all contracts the predecessors already
-  satisfied, now verified end to end. See
+  satisfied, now verified end to end. Issue #33 adds the too-small
+  gate: `minTermWidth`/`minTermHeight` (20×3) and `tooSmallNote`, the
+  `sized` field distinguishing an unreported size from a reported
+  sub-minimum one, `tooSmall()` gating `WindowSizeMsg` (dimensions
+  recorded, then no layout or modal work), `layoutReadyMsg` (stale
+  completions discarded uninstalled), and `KeyPressMsg` (routing to
+  `tooSmallKey` before pop-up dismissal and the precedence stack) —
+  `tooSmallKey` is the whole gated key map, `q` exiting the
+  state-applicable status and `ctrl+c` 130 with everything else a
+  strict no-op — and `View` short-circuiting to the centred, clipped
+  note with no state, modal, or pop-up compositing. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
@@ -197,8 +207,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [explicit-reload.md](explicit-reload.md),
   [load-completion-reveal.md](load-completion-reveal.md),
   [unsupported-encodings.md](unsupported-encodings.md),
-  [help-overlay.md](help-overlay.md), and
-  [overlay-precedence.md](overlay-precedence.md).
+  [help-overlay.md](help-overlay.md),
+  [overlay-precedence.md](overlay-precedence.md), and
+  [terminal-too-small.md](terminal-too-small.md).
 - `internal/app/outcome.go` — Issue #9's pure outcome decision:
   `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
   `Integrity`, usable-results count, `RecordLoss`, caller `Warnings`)
@@ -372,7 +383,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   string, `requestLayout` returns nil for the row-less buffer,
   `currentRows` rejects an unsupported buffer's model, and
   `encodingDiag` composes the `cannot display <path>: unsupported
-  encoding <name>` diagnostic. See
+  encoding <name>` diagnostic. Issue #33 makes `requestLayout` return
+  nil while the too-small gate is up — no ordinary layout is prepared
+  at pathological dimensions; the resize lifting the gate re-requests
+  at the final size. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [read-failures.md](read-failures.md),
@@ -390,8 +404,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
   [zero-width-markers.md](zero-width-markers.md),
   [file-list-layout.md](file-list-layout.md),
-  [async-load-isolation.md](async-load-isolation.md), and
-  [unsupported-encodings.md](unsupported-encodings.md).
+  [async-load-isolation.md](async-load-isolation.md),
+  [unsupported-encodings.md](unsupported-encodings.md), and
+  [terminal-too-small.md](terminal-too-small.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
