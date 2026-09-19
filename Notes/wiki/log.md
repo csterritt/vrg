@@ -1209,3 +1209,37 @@ index. Sources:
 `internal/app/app.go`, `internal/app/overlay.go`,
 `internal/app/help.go`, `internal/app/help_test.go`,
 `internal/app/sinksafety_test.go`.
+
+## [2026-09-17] ingest | Issue #32 overlay precedence — suspension, appends, and the `q`/`Esc` dismissal table
+
+`internal/app/precedence_test.go` adds the composed
+overlay-precedence verification: error suspends help and restores its
+retained scroll position on dismissal by either `q` or `Esc`, a second
+error appends under the reader's preserved `overlay.scroll` (the Issue
+#26 primitive generalized to all appended errors), `openHelp` and
+`openOverlay` each cancel the file-change pop-up permanently (its
+stale expiry never returns a suspended pop-up), `Esc` is a strict
+no-op in bare browse and bare no-results, the error case routes keys
+first while the error-over-help stack is up, `ctrl+c` exits 130 above
+the whole stack, and the full dismissal-outcome table runs for both
+`q` and `Esc` — browse error/help/error-over-help and no-results
+warning/help dismiss to their running base states whose follow-up `q`
+exits the fixed status (browse) or 1 (no-results), while the fatal
+no-results and record-loss overlays exit 2 on the first dismissal
+because there is no underlying state, making that `Esc` exit the
+single exception to `Esc`-never-exits. No production change was
+needed: Issues #15, #26, and #31 already deliver the stack — the
+tests pin the composed contracts. Created
+[overlay-precedence](overlay-precedence.md); updated
+[source-code](source-code.md), [unit-tests](unit-tests.md),
+[help-overlay](help-overlay.md),
+[file-change-popup](file-change-popup.md),
+[read-failures](read-failures.md),
+[error-overlay-and-outcomes](error-overlay-and-outcomes.md), and the
+index. Sources:
+`Notes/issues/032-overlay-precedence-esc-semantics.md`,
+`Notes/tasks/032-overlay-precedence-esc-semantics.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence; Outcome
+and exit-status contract), `internal/app/app.go`,
+`internal/app/overlay.go`, `internal/app/help.go`,
+`internal/app/precedence_test.go`.

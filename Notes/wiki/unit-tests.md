@@ -1216,6 +1216,36 @@ shared `scrollBox`/`compositeBox` component:
 - `TestHelpCancelsPopup` — a live file-change pop-up is cleared on
   open and never returns after help closes.
 
+`precedence_test.go` (same package; Issue #32) pins the composed
+overlay-precedence stack through `Update` — the rig driving a browse
+or no-results model into each modal combination before injecting the
+dismissal key:
+
+- `TestErrorSuspendsHelpAndRestoresScroll` — an error arriving over
+  scrolled help suspends it; dismissing the error with `q` or `Esc`
+  restores help at its retained scroll position, and a second error
+  while suspended appends without touching the suspended help.
+- `TestAppendedErrorPreservesReaderPosition` — a second diagnostic
+  appends under the scrolled reader's position and remains reachable
+  in the complete row set.
+- `TestHelpCancelsPopup` / `TestErrorArrivalCancelsPopup` — opening
+  help or an error clears the live pop-up's ID; its stale expiry
+  mints no return after dismissal.
+- `TestEscWithNoOverlayIsNoOp` — `Esc` in bare browse and bare
+  no-results changes nothing: no overlay, no quit, no command.
+- `TestErrorOverHelpRoutesKeysToError` — while the stack is up the
+  error case wins: `up`/`down` scroll the error, never the suspended
+  help.
+- `TestDismissalOutcomeTable` — the full `q`/`Esc` table across both
+  keys: browse error/help/error-over-help dismiss to running base
+  states whose follow-up `q` exits the fixed status (browse) or 1
+  (no-results) while follow-up `Esc` is a no-op; the fatal
+  no-results and record-loss overlays exit 2 on the first dismissal
+  because there is no underlying state; error-over-help needs the
+  full three-key sequence — close error, close help, then base `q`.
+- `TestCtrlCOverErrorOverHelpExits130` — the global override outranks
+  the whole stack, exiting 130 over error-over-help.
+
 ## internal/viewport
 
 `viewport_test.go` (external package `viewport_test`; Issue #12):

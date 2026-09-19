@@ -18,8 +18,9 @@ fixed outcome status, the
 [Issue #24 filename-rule slot](file-list-layout.md), and the
 [Issue #13 matched-line cursor](match-navigation.md) whose file
 crossings drive the sequence. The `r` retry route is Issue #27's —
-delivered in [explicit-reload.md](explicit-reload.md); appending
-future diagnostics beyond this case is Issue #32's.
+delivered in [explicit-reload.md](explicit-reload.md); Issue #32
+generalizes the appended-diagnostic contract beyond this case in
+[overlay-precedence.md](overlay-precedence.md).
 
 ## Notification: current versus non-current
 
@@ -76,7 +77,8 @@ a different file:
    old without touching `overlay.scroll`, so the reader's position
    holds — and collects exactly one new occurrence for the
    [stderr replay](stderr-replay.md). A success collects nothing new.
-   Issue #32 will generalize the primitive to all appended errors.
+   Issue #32 verifies the primitive for all appended errors — see
+   [overlay-precedence.md](overlay-precedence.md).
 5. Navigating away while the retry is in flight lets it settle per
    Issue #25 — updating only that path's cache/failure state — and a
    later re-entry runs the same sequence again against the new prior

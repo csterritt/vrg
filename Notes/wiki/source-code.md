@@ -180,7 +180,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `WindowSizeMsg` clamping `help.scroll`, and `View` compositing
   pop-up then help then the error overlay — an open error always
   draws on top and suspends help, which resumes at its retained
-  scroll on dismissal. See
+  scroll on dismissal. Issue #32 pins the composed stack: `ctrl+c`
+  over modal error over help over pop-up over base keys, the `q`/`Esc`
+  dismissal-outcome table (fatal overlays exiting 2 for both keys,
+  `Esc` otherwise never exiting a base state), and the error-over-help
+  suspension/restoration — all contracts the predecessors already
+  satisfied, now verified end to end. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
@@ -191,8 +196,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [read-failures.md](read-failures.md),
   [explicit-reload.md](explicit-reload.md),
   [load-completion-reveal.md](load-completion-reveal.md),
-  [unsupported-encodings.md](unsupported-encodings.md), and
-  [help-overlay.md](help-overlay.md).
+  [unsupported-encodings.md](unsupported-encodings.md),
+  [help-overlay.md](help-overlay.md), and
+  [overlay-precedence.md](overlay-precedence.md).
 - `internal/app/outcome.go` — Issue #9's pure outcome decision:
   `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
   `Integrity`, usable-results count, `RecordLoss`, caller `Warnings`)

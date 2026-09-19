@@ -45,8 +45,9 @@ mode** — and growth restores the normal layout.
   case and the base-state keys: `ctrl+c` over modal error over help
   over pop-up over base keys. An error opening while help is up
   suspends it — `helpOpen` and `help.scroll` are retained, and
-  dismissing the error restores help at its position (Issue #32 owns
-  the combined-precedence verification). Issue #27's `r` route is
+  dismissing the error restores help at its position; Issue #32
+  verifies the combined stack in
+  [overlay-precedence.md](overlay-precedence.md). Issue #27's `r` route is
   guarded by `!m.helpOpen`: the explicit reload still fires under an
   error overlay but never under help.
 - **View order.** `View` composites pop-up, then help, then the error

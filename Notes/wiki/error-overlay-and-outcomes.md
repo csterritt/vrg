@@ -133,7 +133,10 @@ with the fixed status — the one place `Esc` terminates. From base
 states `Esc` never exits. Since Issue #15, `openOverlay` is the single
 open-or-append entry point: it also clears any live file-change
 pop-up, which never returns after the overlay closes — see
-[file-change-popup.md](file-change-popup.md).
+[file-change-popup.md](file-change-popup.md). Issue #32 pins the
+composed precedence stack and the full `q`/`Esc` dismissal-outcome
+table — including error-over-help suspension with retained help
+scroll — in [overlay-precedence.md](overlay-precedence.md).
 
 ## Tests
 

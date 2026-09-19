@@ -243,6 +243,13 @@ Catalog of all wiki pages for the vrg project.
   routing and precedence stack, pop-up cancellation on open, the
   `helpBindings` single binding-table data source, and the reserved
   escaped `helpFooter` slot for Issue #34
+- [overlay-precedence.md](overlay-precedence.md) — Issue #32: the
+  composed key-precedence stack (`ctrl+c` over modal error over help
+  over pop-up over base keys), error-suspends-help with retained
+  scroll, append-preserving error scroll generalized, permanent
+  pop-up cancellation by help and error, the full `q`/`Esc`
+  dismissal-outcome table including the fatal-overlay exit-2 route,
+  and `Esc` never exiting a base state
 
 ## Catalogs
 
