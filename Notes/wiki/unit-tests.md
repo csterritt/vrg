@@ -291,6 +291,22 @@ the table driver.
   range of `文` covers both cells `[2,4)` together.
 - `TestHighlightEmojiZWJCluster` — a partial-byte match inside
   `👨‍👩‍👧` expands to the whole two-cell ZWJ cluster.
+- `TestZeroWidthMarkerPositions` — Issue #23: the marker cell each
+  zero-width or terminator-only span records — beginning of line,
+  inside text, inside a wide cluster's bytes and inside a combining
+  cluster (both map to the cluster start — no split glyph), end of
+  line, the LF terminator byte, an empty line and its terminator,
+  the `$` on `hit\r\n` plus the `\r`-only and whole-`\r\n` spans all
+  landing on display column 3, and a position past the line — each
+  asserting `MarkerAt` and the recorded empty `[c,c)` span.
+- `TestEOLMarkerExtendsEffectiveWidth` — `Line.Extent()` adds one
+  only for an end-of-line marker: an empty matched line's extent is
+  1, BOL and mid-text markers add nothing, `ab文` plus its marker is
+  5, and BOL+EOL markers together extend once.
+- `TestMarkerFeedsPaintableBoundary` — `MaxStart` counts the EOL
+  marker as a one-cell candidate (3 even at width 1, so the marker
+  can paint alone), a marker-only line reports 0, and a BOL marker
+  adds no candidate of its own.
 - `TestStopBeyondFileIgnored` — stops outside the loaded file contribute
   nothing.
 - `TestLoadReadFailure` — a read error is returned, not panicked.
@@ -991,6 +1007,35 @@ hidden-content mark predicates over real prepared lines:
   boundaries — entirely hidden left when the cluster start is hidden
   left, entirely hidden right when the window ends inside it, no star
   when the whole cluster paints.
+
+`marker_test.go` (external package; Issue #23) covers the zero-width
+marker through the row model — recorded byte spans loaded through the
+real FileBuffer path, so empty spans arrive as marker positions:
+
+- `TestEOLMarkerWrapRows` — the end-of-line marker joins a wrapped
+  row with a cell to spare (width 5 → `[{0,4}]`, width 2 →
+  `[{0,2},{2,4}]`) and occupies its own continuation row `[{3,4}]`
+  after an exactly full row (width 3).
+- `TestEOLMarkerFlatRows` — run-off-edge rows span the effective
+  width: `hit` plus its `$` marker is `[0,4)`; an empty matched
+  line's marker is its single cell `[0,1)`.
+- `TestMarkerExtentFeedsMaxOff` — the marker's start feeds the
+  paintable-boundary maximum (`MaxOff` 3 for `hit` + `$`, the offset
+  where the marker paints alone, `CellVisible` true there), and a
+  marker-only line has extent 1 with `MaxOff` 0 — `Pan` cannot move
+  the offset off it.
+- `TestMarkerHiddenDrivesIndicators` — LF and CRLF (`hit\r\n` byte-4
+  `$` → column 3) markers alike: entirely hidden left upgrades the
+  gutter to `*`, painted marker beside hidden text leaves `_`,
+  entirely hidden right earns the reserved `*`, painted earns
+  neither.
+- `TestMarkerIsRevealTarget` — `StopTarget` resolves the empty first
+  submatch to the marker cell, `TargetRow`/`RowOf` find the marker's
+  own wrapped row after a full text row (the line's single row in
+  flat mode), and a marker-only line's cell 0 is equally a target.
+- `TestRevealLandsOnMarkerRow` — a reveal aimed at the marker's own
+  row below the window moves the viewport by the one-third placement
+  clamped to EOF, landing the marker row visible at the bottom.
 
 ## internal/theme
 

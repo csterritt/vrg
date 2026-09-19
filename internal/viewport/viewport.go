@@ -22,6 +22,10 @@
 // reveal.go. Issue #20 lands the hidden-content indicators — the
 // per-line left-gutter mark and the current-line right-column star —
 // derived from the same painted-cell visibility in indicators.go.
+// Issue #23 lands the zero-width marker in the row model: an
+// end-of-line marker is a one-cell unit past the line's last cluster,
+// so spans measure the line's Extent — the marker joins a row with
+// room or occupies the next whole, and a marker-only line is one cell.
 package viewport
 
 import "vrg/internal/filebuffer"
@@ -226,8 +230,10 @@ func ReservedIndicator(wrap bool) int {
 type Row struct {
 	// Line is the source line the row belongs to.
 	Line filebuffer.Line
-	// Start and End are the half-open display-cell range of Line.Cells
-	// the row renders.
+	// Start and End are the half-open display-cell range the row
+	// renders, measured over the line's effective extent: End may
+	// reach len(Line.Cells)+1 when an end-of-line marker occupies the
+	// cell past the last cluster (Issue #23).
 	Start, End int
 }
 
@@ -272,7 +278,7 @@ func Prepare(buf *filebuffer.Buffer, key Key) *Rows {
 		if key.Wrap {
 			r.wrapLine(i, l, key.TextWidth)
 		} else {
-			r.spans = append(r.spans, span{i, 0, len(l.Cells)})
+			r.spans = append(r.spans, span{i, 0, l.Extent()})
 		}
 	}
 	r.firstRow = append(r.firstRow, len(r.spans))
@@ -283,7 +289,10 @@ func Prepare(buf *filebuffer.Buffer, key Key) *Rows {
 // whole clusters as fit in width cells; a cluster that does not fit in
 // the row's remaining cells starts the next row, so a row may end with
 // blank cells but never with a split cluster. A line — even an empty
-// one — always yields at least one row.
+// one — always yields at least one row. An end-of-line marker wraps
+// like a final one-cell cluster: it joins a row that has a cell to
+// spare and occupies the next row whole when the row is exactly full
+// (Issue #23).
 func (r *Rows) wrapLine(li int, l filebuffer.Line, width int) {
 	if width < 1 {
 		r.spans = append(r.spans, span{li, 0, 0})
@@ -298,7 +307,16 @@ func (r *Rows) wrapLine(li int, l filebuffer.Line, width int) {
 		}
 		col += w
 	}
-	r.spans = append(r.spans, span{li, start, len(l.Cells)})
+	end := len(l.Cells)
+	if l.MarkerAt(end) {
+		if col > 0 && col+1 > width {
+			r.spans = append(r.spans, span{li, start, end})
+			start, col = end, 0
+		}
+		col++
+		end++
+	}
+	r.spans = append(r.spans, span{li, start, end})
 }
 
 // Key returns the layout key the model was prepared for.

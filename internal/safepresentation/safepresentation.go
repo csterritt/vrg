@@ -96,8 +96,8 @@ type Mapped struct {
 // CellsCovering maps a half-open source byte range to the half-open
 // cell range covering every cell produced by those bytes, so a match
 // covering an ESC byte highlights both ^ and [. It reports false when no
-// cell came from the range — including empty ranges; zero-width match
-// markers are Issue #23's.
+// cell came from the range — including empty ranges; the zero-width
+// match markers of Issue #23 layer on in filebuffer.Line.CellsCovering.
 func (m Mapped) CellsCovering(start, end int) (lo, hi int, ok bool) {
 	for i, c := range m.Cells {
 		if c.Start < end && c.End > start {

@@ -64,7 +64,8 @@ original raw bytes including the terminator, and carries `Highlights`:
 each stop's recorded union byte ranges mapped to display-cell ranges
 (spans wholly on removed terminator bytes now land on the display
 end-of-line position — [Issue #22](line-structure.md) landed the
-coordinate-separated mapping; painting the marker is Issue #23's).
+coordinate-separated mapping; the marker cell painted there is
+[Issue #23](zero-width-markers.md)'s).
 `GutterWidth` is the digit width of the largest line number
 plus two spaces, minimum one digit slot. Stale-match validation is Issue
 #29's; UTF-16/32 classification is Issue #30's.

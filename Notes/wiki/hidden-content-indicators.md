@@ -34,7 +34,8 @@ indicators inherit directly:
 - A match straddling an edge is **partially visible** and earns no
   hidden-match indicator for that side: the star requires a match
   *entirely* hidden.
-- Zero-width and end-of-line marker cells count as one-cell targets —
+- Zero-width and end-of-line marker cells
+  ([Issue #23](zero-width-markers.md)) count as one-cell targets —
   an empty highlight span is judged at its single marker position, so
   a hidden marker upgrades the marks exactly like a hidden match.
 - The unpaintable-cluster geometric fallback relaxes only the reveal:

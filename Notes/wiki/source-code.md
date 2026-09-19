@@ -243,7 +243,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   contributes one unstyled blank per in-window cell — clip blanks are
   never match cells — replacing the byte-range `cont`/`clipped`
   inference that styled a clipped cluster's blank when the cluster
-  was highlighted. See
+  was highlighted. Issue #23 makes `contentText` marker-aware: an
+  empty highlight span inside text marks the existing cell it lands
+  on (`MarkerAt` ORs into the per-cell highlight test — no text
+  shifts), and a cell past `len(cells)` — the end-of-line marker —
+  paints one inverse-video space clipped by the same
+  `col + 1 > textW` bound, underlined by `CurrentMatch` on the
+  current matched line. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [file-change-popup.md](file-change-popup.md),
@@ -254,8 +260,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [logical-anchor.md](logical-anchor.md),
   [horizontal-panning.md](horizontal-panning.md),
   [horizontal-reveal.md](horizontal-reveal.md),
-  [hidden-content-indicators.md](hidden-content-indicators.md), and
-  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md).
+  [hidden-content-indicators.md](hidden-content-indicators.md),
+  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md), and
+  [zero-width-markers.md](zero-width-markers.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
@@ -280,12 +287,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `Line.CellsCovering` maps rg-line ranges onto cells — removed
   terminator bytes, positions past the content end, and zero-width
   positions in them landing on the display end-of-line position —
-  while a standalone `\r` stays content as `^M`. See
+  while a standalone `\r` stays content as `^M`. Issue #23 adds the
+  marker surface: `Line.MarkerAt(cell)` reports an empty highlight
+  span at a cell, `Line.Extent()` is the effective display width —
+  the cell count plus one for an end-of-line marker — and `MaxStart`
+  counts the EOL marker as a one-cell paintable candidate, so a
+  marker-only line reports 0. See
   [browse-tracer.md](browse-tracer.md),
   [wrap-mode.md](wrap-mode.md),
   [horizontal-panning.md](horizontal-panning.md),
-  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md), and
-  [line-structure.md](line-structure.md).
+  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
+  [line-structure.md](line-structure.md), and
+  [zero-width-markers.md](zero-width-markers.md).
 - `internal/viewport/viewport.go` — `Viewport`, the file panel's
   vertical window (`Top`, `Scroll`, `Clamp`), the scroll-unit helpers
   `HalfPage` and `MaxTop` (the BOF/EOF clamp bound), and `Rows`, the
@@ -304,11 +317,17 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   pan offset, per-file saved state), the `Extent` interface (`Model`
   plus `Key`/`At`) that `Scroll`/`Restore`/`Clamp`/`Reveal` now take,
   and `clampOff` — the wrap-aware re-clamp every visible-set change
-  runs against `MaxOff`. See
+  runs against `MaxOff`. Issue #23 makes the row model marker-aware:
+  flat spans run to `Line.Extent()` so `Row.End` can reach
+  `len(Line.Cells) + 1`, and `wrapLine` appends the end-of-line
+  marker as an unbreakable one-cell unit — joining a partially full
+  row, starting its own row after a full one, and giving an empty
+  matched line one `[0,1)` row. See
   [viewport-scrolling.md](viewport-scrolling.md),
   [wrap-mode.md](wrap-mode.md),
   [logical-anchor.md](logical-anchor.md),
-  [horizontal-panning.md](horizontal-panning.md), and
+  [horizontal-panning.md](horizontal-panning.md),
+  [zero-width-markers.md](zero-width-markers.md), and
   [hidden-content-indicators.md](hidden-content-indicators.md) (what
   `ReservedIndicator`'s column holds).
 - `internal/viewport/pan.go` — Issue #18's horizontal panning:

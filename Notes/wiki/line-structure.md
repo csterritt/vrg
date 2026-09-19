@@ -14,7 +14,7 @@ stale-content validation* (the UTF-8 BOM bullet) in
 [safe-presentation.md](safe-presentation.md) (`Mapped` — the escaped
 text plus byte→cell map — and the standalone-CR `^M` escape); the
 end-of-line *marker* these mappings locate is
-[Issue #23](../issues/023-zero-width-match-markers.md)'s, and the
+[Issue #23](zero-width-markers.md)'s, and the
 stale validation that consumes the retained bytes is Issue #29's.
 
 ## Terminators and line counting
@@ -70,8 +70,8 @@ the last cell:
   of `hit\r\n` — maps to display column 3; so does a span covering
   only terminator bytes (`\r` alone or the whole `\r\n`). The recorded
   highlight is the empty cell span `[3,3)`, the marker position
-  Issue #23 paints; the indicators already treat an empty span as the
-  one-cell position of a marker.
+  [Issue #23](zero-width-markers.md) paints; the indicators treat an
+  empty span as the one-cell position of a marker.
 - A span covering visible text plus terminator — `.*` matching
   `hit\r` on a CRLF line — highlights only the visible text `[0,3)`;
   removed bytes add no cell.

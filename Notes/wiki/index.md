@@ -157,6 +157,15 @@ Catalog of all wiki pages for the vrg project.
   and removed bytes, visible-text-only highlights across
   terminators, and the leading UTF-8 BOM's three-byte adjustment
   with non-leading `U+FEFF` as content
+- [zero-width-markers.md](zero-width-markers.md) — Issue #23: the
+  one-cell inverse-video marker for zero-width matches, in-text
+  marking without shifting text, the end-of-line marker's effective
+  width extension (`Line.Extent()`, an empty matched line's extent
+  1), cluster-start mapping, the marker's own wrap row after a full
+  one, marker cells as reveal targets feeding pan clamping
+  (`MaxStart` candidate, marker-only `MaxOff` 0) and the
+  `_`/`*` indicators, and the terminator-only `$` on `hit\r\n` as an
+  ordinary marker with no special cases
 
 ## Catalogs
 

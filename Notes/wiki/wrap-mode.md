@@ -106,7 +106,7 @@ target's start cell, so a match deep inside a wrapped line reveals its
 own row — not the line's first — under the unchanged visible-target
 no-scroll and one-third placement rules. A target cell past the line's
 cells lands on the line's last row, the end-of-line marker position
-(Issue #23).
+([Issue #23](zero-width-markers.md)).
 
 ## Tests
 

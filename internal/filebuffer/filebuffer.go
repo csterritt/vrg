@@ -12,7 +12,11 @@
 // separates the coordinate views — raw-file bytes, the rg-line view
 // ripgrep's offsets index, and display cells — so a leading UTF-8 BOM
 // stays invisible yet accounted for and removed terminator bytes still
-// map to the display end-of-line position. Stale-match validation is
+// map to the display end-of-line position. Issue #23 turns the
+// zero-width and terminator-only mappings into markers: an empty
+// highlight span records the marker's cell — the existing cell it
+// marks inside text, or the one-cell unit past the last cluster that
+// extends the effective line width. Stale-match validation is
 // Issue #29's and unsupported encodings are Issue #30's.
 package filebuffer
 
@@ -34,8 +38,10 @@ var utf8BOM = []byte{0xef, 0xbb, 0xbf}
 // retained for identity and later validation, and the matched spans as
 // display-cell ranges in Highlights — each expanded outward to whole
 // grapheme clusters, the single span source Viewport and App consume
-// (Issue #21). Cell byte offsets are raw-file coordinates; the rg-line
-// coordinate view ripgrep's offsets index is SearchBytes.
+// (Issue #21). An empty span records a zero-width marker's position —
+// the display cell it marks (Issue #23). Cell byte offsets are raw-file
+// coordinates; the rg-line coordinate view ripgrep's offsets index is
+// SearchBytes.
 type Line struct {
 	safepresentation.Mapped
 	Number     int64
@@ -64,8 +70,9 @@ func (l Line) SearchBytes() []byte { return l.Raw[l.searchOff:] }
 // Bytes display removed — the line terminator — and positions past the
 // content end all land on the display end-of-line position one past
 // the last cell, as does a range lying beyond the line; a zero-width
-// position inside content lands on the cell holding its byte. Issue
-// #23 paints the markers these boundary results locate.
+// position inside content lands on the cell holding its byte. The
+// empty results — lo == hi — are the marker positions Issue #23
+// paints: MarkerAt reports them.
 func (l Line) CellsCovering(start, end int) (lo, hi int, ok bool) {
 	s, e := start+l.searchOff, end+l.searchOff
 	if e <= s {
@@ -150,19 +157,51 @@ func (b *Buffer) GutterWidth() int {
 	return digits + 2
 }
 
+// MarkerAt reports whether a zero-width marker sits at display cell
+// cell — an empty highlight span's single position (Issue #23). A
+// position inside text marks the existing cell it lands on; the
+// end-of-line position len(Cells) is the marker cell that extends the
+// effective line width.
+func (l Line) MarkerAt(cell int) bool {
+	for _, s := range l.Highlights {
+		if s.Start == s.End && s.Start == cell {
+			return true
+		}
+	}
+	return false
+}
+
+// Extent is the line's effective display width in cells: the display
+// cell count plus one when an end-of-line marker occupies the cell
+// past the last cluster — an empty matched line therefore has width
+// one. Wrapping, clipping, horizontal extent, and the paintable
+// boundary all measure this width (Issue #23).
+func (l Line) Extent() int {
+	n := len(l.Cells)
+	if l.MarkerAt(n) {
+		n++
+	}
+	return n
+}
+
 // MaxStart is the largest display-cell index where one of the line's
-// grapheme clusters begins and fits entirely within width cells — the
+// grapheme clusters — or its end-of-line marker, a one-cell unit at
+// the extent — begins and fits entirely within width cells: the
 // paintable boundary (Issue #18) a horizontal offset may reach so at
-// least one whole cluster still paints. A trailing cluster wider than
-// width is skipped, falling back to the last fitting cluster's start,
-// and a line with no fitting cluster reports 0. Issue #23's
-// end-of-line marker will join the candidate set once it exists.
+// least one whole cluster or the marker still paints. A trailing
+// cluster wider than width is skipped, falling back to the last
+// fitting cluster's start, and a line with no fitting cluster reports
+// 0. A marker-only line — an empty line's marker at cell 0 — has
+// extent 1 and maximum offset 0.
 func (l Line) MaxStart(width int) int {
 	max := 0
 	for _, cl := range l.Clusters {
 		if w := cl.End - cl.Start; w >= 1 && w <= width && cl.Start > max {
 			max = cl.Start
 		}
+	}
+	if n := len(l.Cells); n > max && width >= 1 && l.MarkerAt(n) {
+		max = n
 	}
 	return max
 }

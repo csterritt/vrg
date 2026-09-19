@@ -35,8 +35,8 @@ inside the window `[off, off + width)`:
   textW` break — its cell is a blank too, so a **geometrically inside
   position can still be hidden**.
 - The end-of-line marker position (one cell past the line's last, the
-  Issue #23 marker) counts as a one-cell target — an empty matched
-  line's cell 0 included.
+  [Issue #23](zero-width-markers.md) marker) counts as a one-cell
+  target — an empty matched line's cell 0 included.
 
 ## Reveal arithmetic — `Viewport.RevealOff(target, row, extent)`
 

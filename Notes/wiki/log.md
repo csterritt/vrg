@@ -824,3 +824,53 @@ and stale-content validation),
 `internal/filebuffer/filebuffer.go`,
 `internal/filebuffer/filebuffer_test.go`,
 `internal/viewport/reveal.go`.
+## [2026-09-17] ingest | Issue #23 zero-width match markers
+
+A zero-width submatch now paints as exactly one inverse-video space at
+its mapped display cell — underlined on the current matched line — and
+participates in every display system under ordinary match rules.
+`filebuffer.Line` gains `MarkerAt(cell)` (an empty `Highlights` span
+recording a marker position) and `Extent()` — the effective display
+width: `len(Cells)` plus one when a marker sits at the end-of-line
+position, so an empty matched line has extent 1. A marker inside text
+marks the existing cell it maps to — no text shifts — and a position
+inside a grapheme cluster maps to the cluster start, so no wide glyph
+or ZWJ sequence splits. `MaxStart` counts the EOL marker as a one-cell
+paintable candidate: the offset can reach the position where the
+marker paints alone, and a marker-only line reports `MaxStart` 0 under
+Issue #18's paintable-boundary rule. Viewport flat spans run to
+`Extent()` (`Row.End` can reach `len(Cells) + 1`) and `wrapLine`
+appends the EOL marker as an unbreakable one-cell unit — joining a
+partially full row, occupying its own continuation row after an
+exactly full one, and emitting a `[0,1)` row for an empty matched
+line. `contentText` ORs `MarkerAt` into the per-cell highlight test
+and paints a cell past `len(Cells)` as one inverse space clipped by
+the same `col + 1 > textW` bound. Markers are navigable reveal targets
+(`StopTarget` → marker cell, `TargetRow` → the marker's own row), feed
+`RevealOff` by the single-cell right-edge rule, and a hidden marker
+counts as an entirely hidden match for both the gutter `*` and the
+reserved `*`. The terminator-only `$` on `hit\r\n` — rg `(4,4)` →
+display column 3 — follows every rule with no CRLF-specific handling.
+`internal/filebuffer/filebuffer_test.go` gains the marker tables
+(positions through `MarkerAt`, `Extent`, the paintable boundary) and
+`internal/viewport/marker_test.go` covers wrap/flat rows, `MaxOff`,
+indicators, and reveal targets. Created
+[zero-width-markers](zero-width-markers.md); updated
+[line-structure](line-structure.md),
+[browse-tracer](browse-tracer.md),
+[grapheme-highlight-expansion](grapheme-highlight-expansion.md),
+[horizontal-panning](horizontal-panning.md),
+[horizontal-reveal](horizontal-reveal.md),
+[destination-reveal](destination-reveal.md),
+[wrap-mode](wrap-mode.md),
+[hidden-content-indicators](hidden-content-indicators.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/023-zero-width-match-markers.md`,
+`Notes/tasks/023-zero-width-match-markers.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; Layout and
+indicators), `internal/filebuffer/filebuffer.go`,
+`internal/filebuffer/filebuffer_test.go`,
+`internal/viewport/viewport.go`,
+`internal/viewport/marker_test.go`,
+`internal/app/browse.go`.

@@ -24,16 +24,18 @@ the reveal starts from).
   (`CellsCovering`), so an escaped byte's widened cells and a
   mid-cluster start land on the right cell — the cell is not the byte
   offset. A submatch whose bytes produced no cell — a zero-width
-  position or terminator-only span, Issues #22/#23 — targets the marker
-  cell one past the line's last cell. Submatches arrive sorted by
-  `(Start, End)`, so `Submatches[0]` is the first submatch.
+  position or terminator-only span, Issues
+  [#22](line-structure.md)/[#23](zero-width-markers.md) — targets the
+  marker cell one past the line's last cell. Submatches arrive sorted
+  by `(Start, End)`, so `Submatches[0]` is the first submatch.
 - `Rows.TargetRow` maps the target to the **rendered row** a reveal must
   show. Since [Issue #16](wrap-mode.md) made the row model wrap-aware,
   it scans the destination line's wrapped rows for the span containing
   the target's start cell — a match deep in a wrapped line reveals its
   own row — and a target cell past the line's cells lands on the line's
-  last row, the end-of-line marker position (Issue #23). A line number
-  outside the prepared rows clamps to the nearest real row.
+  last row, the end-of-line marker position
+  ([Issue #23](zero-width-markers.md)). A line number outside the
+  prepared rows clamps to the nearest real row.
 
 ## Placement rules — `Viewport.Reveal(row, rows, height)`
 

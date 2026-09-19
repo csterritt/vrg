@@ -33,7 +33,7 @@ cells — a zero-width position or a terminator-only range — now lands
 on the marker position Issue #22's
 [coordinate-separated mapping](line-structure.md) defines (the display
 end-of-line position for terminator bytes), recorded as an empty cell
-span awaiting Issue #23's marker cells.
+span — [Issue #23](zero-width-markers.md)'s marker position.
 
 The recorded `Line.Highlights` cell spans are the only highlight
 source the pipeline consumes:

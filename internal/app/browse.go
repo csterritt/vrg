@@ -547,6 +547,11 @@ func (m *model) filenameRule(width int) string {
 // splits a grapheme's cells: a cluster straddling either boundary
 // contributes one blank per in-window cell for its clipped portion —
 // never half a glyph, and never a match-styled blank (Issue #21).
+// Zero-width markers paint with the match style like any other match
+// cell (Issue #23): a marker inside text marks the existing cell it
+// lands on — no text shifts — and the end-of-line marker is the
+// one-cell unit past the line's last cluster, rendered as an inverse
+// space and clipped at the right edge like text.
 func (m *model) contentText(row viewport.Row, off, textW int, cur bool) string {
 	var sb strings.Builder
 	var run strings.Builder
@@ -588,6 +593,21 @@ func (m *model) contentText(row viewport.Row, off, textW int, cur bool) string {
 	col := 0
 	ci := 0 // cursor into the clusters tiling the row's cells
 	for i := lo; i < row.End; i++ {
+		if i >= len(cells) {
+			// The end-of-line marker cell — a one-cell unit past the
+			// line's clusters: an inverse space, clipped at the right
+			// edge like any other cell.
+			if col+1 > textW {
+				break
+			}
+			if hl := row.Line.MarkerAt(i); hl != runHL {
+				flush()
+				runHL = hl
+			}
+			run.WriteString(" ")
+			col++
+			continue
+		}
 		for ci < len(clusters) && i >= clusters[ci].End {
 			ci++
 		}
@@ -597,7 +617,7 @@ func (m *model) contentText(row viewport.Row, off, textW int, cur bool) string {
 		cl := clusters[ci]
 		c := cells[i]
 		text := c.Text
-		hl := highlighted(i)
+		hl := highlighted(i) || row.Line.MarkerAt(i)
 		switch {
 		case cl.Start < lo || cl.End-lo > textW:
 			text, hl = " ", false // a clip blank — never a match cell

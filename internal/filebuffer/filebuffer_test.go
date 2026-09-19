@@ -485,6 +485,115 @@ func TestNonLeadingFEFFIsOrdinaryContent(t *testing.T) {
 	}
 }
 
+// A zero-width submatch records a marker position — the display cell
+// it marks — as an empty highlight span. Positions map through the
+// same coordinate rules as any other span: beginning of line lands on
+// cell 0, a position inside content lands on the cell holding its
+// byte — inside a cluster, the cluster's start, so no wide glyph is
+// split — and end of line, removed terminator bytes, and empty-line
+// positions land on the end-of-line cell one past the last.
+func TestZeroWidthMarkerPositions(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		span    [2]int
+		want    int // the marker's display cell
+	}{
+		{"beginning of line", "hit\n", [2]int{0, 0}, 0},
+		{"inside text", "hit\n", [2]int{1, 1}, 1},
+		// 文 is bytes [2,5) over cells [2,4): a position inside its
+		// bytes marks the cluster's start cell — no split wide glyph.
+		{"inside a wide cluster", "ab文cd\n", [2]int{3, 3}, 2},
+		{"wide cluster's last byte", "ab文cd\n", [2]int{4, 4}, 2},
+		// é is the cluster e+́ over bytes [3,6) at cell 3.
+		{"inside a combining cluster", "cafe\xcc\x81x\n", [2]int{4, 4}, 3},
+		{"end of line", "hit\n", [2]int{3, 3}, 3},
+		{"the LF terminator byte", "hit\n", [2]int{3, 4}, 3},
+		{"empty line", "\n", [2]int{0, 0}, 0},
+		{"empty line's terminator", "\n", [2]int{0, 1}, 0},
+		// The rg $ on hit\r\n reports start=end=4; terminator-only
+		// spans of either byte or the whole \r\n land identically.
+		{"$ on CRLF", "hit\r\n", [2]int{4, 4}, 3},
+		{"CR byte only", "hit\r\n", [2]int{3, 4}, 3},
+		{"whole CRLF", "hit\r\n", [2]int{3, 5}, 3},
+		{"a position past the line", "hit\n", [2]int{9, 9}, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := load(t, writeFile(t, tc.content), stop(1, tc.span)).Lines()[0]
+			if !l.MarkerAt(tc.want) {
+				t.Fatalf("span %v on %q: no marker at cell %d — Markers/Highlights %v",
+					tc.span, tc.content, tc.want, l.Highlights)
+			}
+			found := false
+			for _, s := range l.Highlights {
+				if s.Start == s.End && s.Start == tc.want {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("span %v on %q: highlights = %v, want an empty span {%d %d} recording the marker",
+					tc.span, tc.content, l.Highlights, tc.want, tc.want)
+			}
+		})
+	}
+}
+
+// An end-of-line marker extends the effective line width by one cell:
+// it is a one-cell unit past the last cluster, so an empty matched
+// line has width one. A marker inside text marks an existing cell and
+// adds nothing.
+func TestEOLMarkerExtendsEffectiveWidth(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		stops   []searchindex.Stop
+		want    int
+	}{
+		{"no marker", "hit\n", nil, 3},
+		{"EOL marker", "hit\n", []searchindex.Stop{stop(1, [2]int{3, 3})}, 4},
+		{"empty line's marker is width one", "\n", []searchindex.Stop{stop(1, [2]int{0, 0})}, 1},
+		{"BOL marker adds no cell", "hit\n", []searchindex.Stop{stop(1, [2]int{0, 0})}, 3},
+		{"mid-text marker adds no cell", "hit\n", []searchindex.Stop{stop(1, [2]int{1, 1})}, 3},
+		{"wide line plus marker", "ab文\n", []searchindex.Stop{stop(1, [2]int{5, 5})}, 5},
+		{"BOL and EOL markers extend once", "hit\n",
+			[]searchindex.Stop{stop(1, [2]int{0, 0}, [2]int{3, 3})}, 4},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := load(t, writeFile(t, tc.content), tc.stops...).Lines()[0]
+			if got := l.Extent(); got != tc.want {
+				t.Fatalf("%q: Extent = %d, want %d", tc.content, got, tc.want)
+			}
+		})
+	}
+}
+
+// The end-of-line marker joins the paintable boundary's candidate set
+// like any cluster: its start cell feeds Issue #18's maximum, so the
+// offset can reach the position where the marker paints alone. A
+// marker-only line — an empty line's marker at cell 0 — has extent 1
+// and a maximum offset of 0.
+func TestMarkerFeedsPaintableBoundary(t *testing.T) {
+	l := load(t, writeFile(t, "hit\n"), stop(1, [2]int{3, 3})).Lines()[0]
+	if got := l.MaxStart(4); got != 3 {
+		t.Fatalf("MaxStart(4) = %d, want 3 — the marker's start paints it alone", got)
+	}
+	if got := l.MaxStart(1); got != 3 {
+		t.Fatalf("MaxStart(1) = %d, want 3 — the one-cell marker still fits", got)
+	}
+	empty := load(t, writeFile(t, "\n"), stop(1, [2]int{0, 0})).Lines()[0]
+	if got := empty.MaxStart(10); got != 0 {
+		t.Fatalf("marker-only line MaxStart = %d, want 0 — extent 1, maximum offset 0", got)
+	}
+	// A BOL marker adds no boundary candidate of its own: the cell 0
+	// cluster start already covers it.
+	bol := load(t, writeFile(t, "hit\n"), stop(1, [2]int{0, 0})).Lines()[0]
+	if got := bol.MaxStart(4); got != 2 {
+		t.Fatalf("BOL-marker line MaxStart(4) = %d, want 2 — the last cluster start", got)
+	}
+}
+
 // Stops outside the loaded file's range contribute nothing.
 func TestStopBeyondFileIgnored(t *testing.T) {
 	b := load(t, writeFile(t, "one\ntwo\n"), stop(99, [2]int{0, 2}))

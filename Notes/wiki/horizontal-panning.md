@@ -45,8 +45,10 @@ strict no-ops that create no viewport state.
 
 The clamp contract deliberately separates three quantities:
 
-1. **Content extent** — a line's effective display width: the cell
-   count today; Issue #23's end-of-line marker extends it by one cell.
+1. **Content extent** — a line's effective display width,
+   `Line.Extent()`: the cell count plus one when an end-of-line
+   marker sits past the last cell
+   ([Issue #23](zero-width-markers.md)).
 2. **Extent policy** — which lines count: the **widest currently
    rendered source line** only (the `visible-lines extent policy`,
    confirmed by the product owner) — never the whole file. `MaxOff`
@@ -62,9 +64,9 @@ ending at extent `E` yields `E − 1` for single-cell content; a line
 ending in a two-cell cluster yields that cluster's **start** (`E − 2`),
 so the offset can never land inside it; a final cluster wider than the
 text width is skipped, falling back to the last fitting cluster's
-start; a line with no fitting cluster at all reports 0. `MaxStart`
-takes the width as a parameter so Issue #23's marker cell can join the
-candidate set without signature changes.
+start; a line with no fitting cluster at all reports 0. Issue #23's
+end-of-line marker joins the candidate set as a one-cell unit at
+`len(Line.Cells)` — a marker-only line reports `MaxStart` 0.
 
 `viewport.MaxOff(e, top, n)` is the model-level bound: `0` for a wrap
 model, a degenerate text width, an empty model, or an all-empty
