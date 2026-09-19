@@ -492,9 +492,9 @@ func TestOutcomeMatrix(t *testing.T) {
 				if m.status != tc.status {
 					t.Fatalf("load failures changed the fixed status to %d, want %d", m.status, tc.status)
 				}
-				if !m.overlayOpen || !strings.Contains(m.overlayText, "cannot read") {
+				if !m.overlayOpen || !strings.Contains(m.overlay.text, "cannot read") {
 					t.Fatalf("overlay open=%v text=%q, want the current file's load failure shown",
-						m.overlayOpen, m.overlayText)
+						m.overlayOpen, m.overlay.text)
 				}
 			}
 
@@ -557,9 +557,9 @@ func TestOutcomeMatrix(t *testing.T) {
 					t.Fatalf("unsupported loads changed the fixed status to %d, want %d",
 						m.status, tc.status)
 				}
-				if !m.overlayOpen || !strings.Contains(m.overlayText, "unsupported encoding") {
+				if !m.overlayOpen || !strings.Contains(m.overlay.text, "unsupported encoding") {
 					t.Fatalf("overlay open=%v text=%q, want the current file's encoding diagnostic shown",
-						m.overlayOpen, m.overlayText)
+						m.overlayOpen, m.overlay.text)
 				}
 			}
 

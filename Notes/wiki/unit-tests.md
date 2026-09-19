@@ -418,10 +418,11 @@ command after the load leaf — and `navSendsNoLoad` (in
 `popup_test.go`) asserts a crossing issued no `fileLoadedMsg` leaf.
 
 `sinksafety_test.go` (same package; Issue #6) hosts the shared
-sink-safety table `sinkSafetySinks` — eight rows over every sink
+sink-safety table `sinkSafetySinks` — nine rows over every sink
 existing at this point (file-list entry, filename rule, panel content,
 the Issue #9 error overlay, the Issue #15 file-change pop-up driven
-through `popupFixtureView`, usage-error stderr, CLI-help stdout, and
+through `popupFixtureView`, the Issue #31 TUI help dialog driven
+through `helpFixtureView`, usage-error stderr, CLI-help stdout, and
 the Issue #11 stderr replay) — and
 `TestSinkSafetyTable` runs `sinktest.Run` over it: each
 `<sink>/<fixture>` subtest asserts clean raw output on the no-style
@@ -429,8 +430,9 @@ path and, for the styled TUI rows, that no fixture payload follows an
 unescaped ESC. Each row also proves the fixture reached the sink
 (escaped name in the list/rule region, mapped content forms in the
 panel, escaped diagnostic pieces in the overlay frame, `EscapePath`
-operand in the stderr block); the help row injects the hostile operand
-into argv while rendering help, which has no substitution points.
+operand in the stderr block); the help row substitutes the hostile
+bytes into the `helpFooter` slot the renderer routes through
+`EscapeDiagnostic`.
 
 `rg_test.go` (same package) exercises the real `spawn` against fake `rg`
 scripts on `PATH`:
@@ -997,7 +999,7 @@ ordinal):
   shows content, collects nothing new, and leaves the prior-failure
   overlay up until dismissed.
 - `TestReentryRetrySecondFailureAppends` — the append-preserving
-  scroll primitive: the reader's `overlayScroll` survives the second
+  scroll primitive: the reader's `overlay.scroll` survives the second
   failure's single appended occurrence, mirrored once in the
   collection.
 - `TestReentryRetryAwayAndBack` — navigating away lets the retry
@@ -1035,7 +1037,7 @@ runs through while later workers are held; `reloadCmd` presses `r`,
 - `TestSecondConsecutiveReloadFailureAppends` — `r` fires while the
   overlay is open (the retry route it cannot block, never dismissing
   it); the second failure appends exactly one occurrence with the
-  reader's `overlayScroll` preserved and mirrored once in the
+  reader's `overlay.scroll` preserved and mirrored once in the
   collection.
 - `TestReloadSuccessLeavesOverlayOpen` — a successful reread under the
   prior-failure overlay shows the new content behind it and leaves the
@@ -1184,6 +1186,35 @@ feeding `Update` — a message for a path with no request in flight
 is discarded exactly like a stale one — and the
 replay/sink-safety/reveal/scroll/popup fabrications mint requests
 with `mintRequest`, the same way Issue #27's reload will mint them.
+
+`help_test.go` (same package; Issue #31) covers the modal help
+dialog — the binding-table `helpBindings` rendered through the
+shared `scrollBox`/`compositeBox` component:
+
+- `TestHelpOpensFromBrowseAndCloses` — `h` and `?` both open the
+  bordered dialog over ordinary browse; each of `q`, `Esc`, `h`, and
+  `?` closes back to the base state with no command and no exit.
+- `TestHelpOpensFromNoResults` — `h`/`?` open over the no-results
+  screen and closing restores it, after which an ordinary `q` still
+  exits 1.
+- `TestHelpIgnoresBaseKeys` — the ignored-keys sweep (`n`, `p`, `w`,
+  `c`, `r`, plus the other base bindings) mutates nothing behind the
+  modal: cursor, saved viewport, wrap flag, theme, list visibility,
+  and the loading set all unchanged.
+- `TestHelpScrollsRenderedRows` — `up`/`down` move the first visible
+  wrapped row through the complete table, clamped at both ends.
+- `TestHelpCtrlCExits130` — the global override outranks the help
+  modal.
+- `TestHelpWrapsUnbrokenSubstitution` — a 200-cell unbroken
+  `helpFooter` substitution wraps within the single-line border; no
+  rendered row exceeds the frame width and every cell survives.
+- `TestHelpClippedAtTinySize` — at 25×8 the dialog clips to the
+  terminal, still bordered and present with no borderless fallback
+  and no panic; enlarging restores the normal layout.
+- `TestHelpRendersBindingTable` — iterating `helpBindings`, every
+  binding's `keys` and `desc` appears in the rendered dialog.
+- `TestHelpCancelsPopup` — a live file-change pop-up is cleared on
+  open and never returns after help closes.
 
 ## internal/viewport
 

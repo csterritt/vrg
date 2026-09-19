@@ -85,8 +85,8 @@ func TestUnsupportedCurrentShowsOverlayAndPlaceholder(t *testing.T) {
 		t.Fatal("a current-file encoding detection did not open the overlay")
 	}
 	want := encodingDiag(idx.Files[1].Path, "UTF-16 LE")
-	if !strings.Contains(m.overlayText, want) {
-		t.Fatalf("overlay = %q, want the encoding diagnostic %q", m.overlayText, want)
+	if !strings.Contains(m.overlay.text, want) {
+		t.Fatalf("overlay = %q, want the encoding diagnostic %q", m.overlay.text, want)
 	}
 	v := viewText(m)
 	if !strings.Contains(v, "(unsupported encoding)") {
@@ -176,9 +176,9 @@ func TestUnsupportedReloadPreservesPlaceholder(t *testing.T) {
 	if v := viewText(m); !strings.Contains(v, "(unsupported encoding)") {
 		t.Fatalf("view = %q, want the placeholder again after the unchanged reload", v)
 	}
-	if !m.overlayOpen || !strings.Contains(m.overlayText, want) {
+	if !m.overlayOpen || !strings.Contains(m.overlay.text, want) {
 		t.Fatalf("overlay open=%v text=%q, want the reissued detection shown",
-			m.overlayOpen, m.overlayText)
+			m.overlayOpen, m.overlay.text)
 	}
 	assertReplayLines(t, m.diags, []string{want, want})
 }

@@ -56,9 +56,9 @@ func TestOverlayKeyRoutingAndScrolling(t *testing.T) {
 		if _, cmd := m.Update(k); cmd != nil {
 			t.Fatalf("key %v returned a command; the overlay ignores it", k)
 		}
-		if !m.overlayOpen || m.overlayScroll != 0 || m.quitting {
+		if !m.overlayOpen || m.overlay.scroll != 0 || m.quitting {
 			t.Fatalf("key %v disturbed the overlay: open=%v scroll=%d quitting=%v",
-				k, m.overlayOpen, m.overlayScroll, m.quitting)
+				k, m.overlayOpen, m.overlay.scroll, m.quitting)
 		}
 	}
 	if m.theme != theme.Dark() {
@@ -66,17 +66,17 @@ func TestOverlayKeyRoutingAndScrolling(t *testing.T) {
 	}
 
 	// up at the top is a clamp, not an error.
-	if _, cmd := m.Update(keyUp); cmd != nil || m.overlayScroll != 0 {
-		t.Fatalf("up at scroll 0: scroll=%d cmd=%v", m.overlayScroll, cmd)
+	if _, cmd := m.Update(keyUp); cmd != nil || m.overlay.scroll != 0 {
+		t.Fatalf("up at scroll 0: scroll=%d cmd=%v", m.overlay.scroll, cmd)
 	}
 
 	m.Update(keyDown)
-	if m.overlayScroll != 1 {
-		t.Fatalf("scroll after down = %d, want 1", m.overlayScroll)
+	if m.overlay.scroll != 1 {
+		t.Fatalf("scroll after down = %d, want 1", m.overlay.scroll)
 	}
 	m.Update(keyUp)
-	if m.overlayScroll != 0 {
-		t.Fatalf("scroll after up = %d, want 0", m.overlayScroll)
+	if m.overlay.scroll != 0 {
+		t.Fatalf("scroll after up = %d, want 0", m.overlay.scroll)
 	}
 
 	// The scrollable set is the complete wrapped diagnostic: scroll
@@ -90,8 +90,8 @@ func TestOverlayKeyRoutingAndScrolling(t *testing.T) {
 		t.Fatalf("diagnostic did not overflow the frame: rows=%d visible=%d",
 			len(m.overlayRows()), m.overlayVisible())
 	}
-	if m.overlayScroll != maxScroll {
-		t.Fatalf("scroll clamped at %d, want %d", m.overlayScroll, maxScroll)
+	if m.overlay.scroll != maxScroll {
+		t.Fatalf("scroll clamped at %d, want %d", m.overlay.scroll, maxScroll)
 	}
 	v := viewText(m)
 	if !strings.Contains(v, "diag-029") {

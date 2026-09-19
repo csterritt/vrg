@@ -1170,3 +1170,42 @@ child arguments; the FileBuffer module contract),
 `internal/filebuffer/filebuffer.go`, `internal/app/app.go`,
 `internal/app/browse.go`, `internal/filebuffer/encoding_test.go`,
 `internal/app/encoding_test.go`, `internal/app/outcome_test.go`.
+
+## [2026-09-17] ingest | Issue #31 help overlay — the `h`/`?` modal binding table
+
+`internal/app` now has the modal help dialog: `h`/`?` open it over
+`stateBrowse` and `stateNoResults`, and it renders the single
+`helpBindings` binding-table data source (`internal/app/help.go` — one
+`{keys, desc}` row per binding, consumed by `helpText` and iterated by
+Issue #34's documentation tests, with the reserved `helpFooter` slot
+under the table routed through `safepresentation.EscapeDiagnostic` so
+its substitution can never emit control bytes). `internal/app/
+overlay.go` factors the Issue #9 overlay body into the shared
+`scrollBox` component — `text` re-wrapped into interior-width rows on
+every render (`wrapCells`: grapheme boundaries, unbroken strings split
+mid-run) and `scroll` clamped to the complete row set — and
+`compositeBox` draws the `theme.Overlay` single-line bordered box
+centred over the base frame, clipping to the terminal at tiny sizes
+with no borderless fallback; `m.overlay` and `m.help` are its two
+instances, with `overlayRows`/`scrollOverlay`/`clampOverlayScroll`
+kept as the error-overlay façade. Routing gains the modal `helpOpen`
+case between the error-overlay case and the base keys — `up`/`down`
+scroll, `q`/`Esc`/`h`/`?` close, `ctrl+c` keeps the global 130
+override, and every other key (`n`, `p`, `w`, `c`, `r`, …) is ignored
+with the state behind untouched — `openHelp` clears `popupID` so a
+live file-change pop-up is cancelled and never returns, `WindowSizeMsg`
+clamps `help.scroll`, the `r` route is guarded by `!m.helpOpen`, and
+`View` composites pop-up then help then the error overlay, an open
+error always drawing on top and suspending help until dismissed.
+`internal/app/help_test.go` adds the open/close/scroll/ignored-keys/
+wrap/tiny-size/binding-table/pop-up coverage; `sinksafety_test.go`
+gains the "TUI help dialog" row driven through `helpFixtureView`.
+Created [help-overlay](help-overlay.md); updated
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/031-help-overlay.md`,
+`Notes/tasks/031-help-overlay.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence),
+`internal/app/app.go`, `internal/app/overlay.go`,
+`internal/app/help.go`, `internal/app/help_test.go`,
+`internal/app/sinksafety_test.go`.

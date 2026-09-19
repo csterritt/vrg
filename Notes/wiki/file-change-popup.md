@@ -38,9 +38,10 @@ single-line path).
   beyond the dismissal.
 - **Error-overlay cancellation.** `openOverlay` clears `popupID`, so
   an overlay arriving while a pop-up is up cancels it permanently — no
-  pop-up returns after the overlay is dismissed. Help-overlay
-  cancellation and combined-precedence testing are owned by Issues #31
-  and #32.
+  pop-up returns after the overlay is dismissed. Issue #31's
+  `openHelp` does the same for the help dialog — see
+  [help-overlay.md](help-overlay.md); combined-precedence testing is
+  owned by Issue #32.
 - **Test seam.** `options.popupTimer`, when set, builds the expiry
   command in place of the real tick — model tests substitute an
   instantly resolving command and drive expiry by injecting

@@ -8,6 +8,50 @@ import (
 	"vrg/internal/safepresentation"
 )
 
+// scrollBox is the wrapped, scrollable overlay component the error
+// overlay (Issue #9) and the help dialog (Issue #31) share: text
+// re-wraps into interior-width rows on every render — unbroken strings
+// split mid-run so no row exceeds the interior — and scroll is the
+// first visible wrapped row, clamped to the complete row set so both
+// ends of an oversized body stay reachable.
+type scrollBox struct {
+	text   string
+	scroll int
+}
+
+// rows wraps the box text into rows of at most w cells: each input
+// line splits at the width on grapheme-cluster boundaries, an unbroken
+// string splits mid-run, and an empty input still yields one row.
+func (s *scrollBox) rows(w int) []string {
+	var rows []string
+	for _, line := range strings.Split(s.text, "\n") {
+		rows = append(rows, wrapCells(line, w)...)
+	}
+	return rows
+}
+
+// scrollBy moves the first-visible-row index by d, clamped to the
+// scrollable range of the complete wrapped body.
+func (s *scrollBox) scrollBy(d, w, vis int) {
+	s.scroll += d
+	s.clamp(w, vis)
+}
+
+// clamp keeps the first visible row inside the scrollable range —
+// also after a resize changes the row count or visible height.
+func (s *scrollBox) clamp(w, vis int) {
+	max := len(s.rows(w)) - vis
+	if max < 0 {
+		max = 0
+	}
+	if s.scroll > max {
+		s.scroll = max
+	}
+	if s.scroll < 0 {
+		s.scroll = 0
+	}
+}
+
 // overlayInteriorWidth is the overlay's content width in cells: the
 // frame width minus the two border columns and their padding.
 func (m *model) overlayInteriorWidth() int {
@@ -17,27 +61,13 @@ func (m *model) overlayInteriorWidth() int {
 	return 1
 }
 
-// overlayVisible is the number of diagnostic rows the box shows at
-// once: the frame height minus the two border rows.
+// overlayVisible is the number of body rows the box shows at once:
+// the frame height minus the two border rows.
 func (m *model) overlayVisible() int {
 	if v := m.height - 2; v > 0 {
 		return v
 	}
 	return 0
-}
-
-// overlayRows wraps the escaped diagnostic text into interior-width
-// rows on grapheme boundaries: lines split at the width, and an
-// unbroken string splits mid-run so no row exceeds the interior. The
-// complete wrapped set stays in the model — scrolling reaches both
-// ends of a diagnostic larger than the frame.
-func (m *model) overlayRows() []string {
-	w := m.overlayInteriorWidth()
-	var rows []string
-	for _, line := range strings.Split(m.overlayText, "\n") {
-		rows = append(rows, wrapCells(line, w)...)
-	}
-	return rows
 }
 
 // wrapCells splits s into rows of at most w cells on grapheme-cluster
@@ -76,42 +106,41 @@ func wrapCells(s string, w int) []string {
 // returns after the overlay closes.
 func (m *model) openOverlay(text string, dismissExits bool) {
 	if m.overlayOpen {
-		m.overlayText += "\n" + text
+		m.overlay.text += "\n" + text
 	} else {
-		m.overlayText = text
-		m.overlayScroll = 0
+		m.overlay.text = text
+		m.overlay.scroll = 0
 	}
 	m.overlayOpen = true
 	m.overlayExit = dismissExits
 	m.popupID = 0
 }
 
-// scrollOverlay moves the first-visible-row index by d, clamped to the
-// scrollable range of the complete wrapped diagnostic.
+// overlayRows is the error overlay's complete wrapped row set.
+func (m *model) overlayRows() []string {
+	return m.overlay.rows(m.overlayInteriorWidth())
+}
+
+// scrollOverlay moves the error overlay's first-visible-row index by
+// d, clamped to the scrollable range of the complete wrapped
+// diagnostic.
 func (m *model) scrollOverlay(d int) {
-	m.overlayScroll += d
-	m.clampOverlayScroll()
+	m.overlay.scrollBy(d, m.overlayInteriorWidth(), m.overlayVisible())
 }
 
-// clampOverlayScroll keeps the first visible row inside the scrollable
-// range — also after a resize changes the row count or visible height.
+// clampOverlayScroll keeps the error overlay's first visible row
+// inside the scrollable range — also after a resize changes the row
+// count or visible height.
 func (m *model) clampOverlayScroll() {
-	max := len(m.overlayRows()) - m.overlayVisible()
-	if max < 0 {
-		max = 0
-	}
-	if m.overlayScroll > max {
-		m.overlayScroll = max
-	}
-	if m.overlayScroll < 0 {
-		m.overlayScroll = 0
-	}
+	m.overlay.clamp(m.overlayInteriorWidth(), m.overlayVisible())
 }
 
-// compositeOverlay draws the open overlay over the base frame: the
-// single-line bordered box, centered on the frame, carrying the visible
-// window of wrapped diagnostic rows in the base colours.
-func (m *model) compositeOverlay(base string) string {
+// compositeBox draws one scrollBox's open overlay over the base frame:
+// the single-line bordered box, centered on the frame, carrying the
+// visible window of wrapped rows in the base colours. At tiny sizes
+// the box clips to the terminal — there is no borderless mode; growth
+// restores the normal layout.
+func (m *model) compositeBox(base string, box *scrollBox) string {
 	w, h := m.width, m.height
 	if w <= 0 || h <= 0 {
 		return base
@@ -124,12 +153,12 @@ func (m *model) compositeOverlay(base string) string {
 		rows = rows[:h]
 	}
 
-	all := m.overlayRows()
+	all := box.rows(m.overlayInteriorWidth())
 	vis := m.overlayVisible()
 	if vis > len(all) {
 		vis = len(all)
 	}
-	scroll := m.overlayScroll
+	scroll := box.scroll
 	if max := len(all) - vis; scroll > max {
 		scroll = max
 	}
@@ -146,17 +175,17 @@ func (m *model) compositeOverlay(base string) string {
 			maxw = cw
 		}
 	}
-	box := m.theme.Overlay(padded)
+	boxRows := m.theme.Overlay(padded)
 	boxW := maxw + 4
 	top := 0
-	if len(box) < h {
-		top = (h - len(box)) / 2
+	if len(boxRows) < h {
+		top = (h - len(boxRows)) / 2
 	}
 	left := 0
 	if boxW < w {
 		left = (w - boxW) / 2
 	}
-	for i, brow := range box {
+	for i, brow := range boxRows {
 		r := top + i
 		if r >= h {
 			break

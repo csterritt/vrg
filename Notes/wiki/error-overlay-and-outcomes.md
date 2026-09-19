@@ -116,7 +116,10 @@ grapheme boundaries to the interior width, splitting unbroken strings
 mid-run so no row exceeds it. The complete wrapped row set stays in the
 model: `up`/`down` scroll one row at a time, clamped to
 `[0, rows − visible]`, and the set re-wraps on resize — Issue #41's
-contract that a single frame needn't show head and tail at once.
+contract that a single frame needn't show head and tail at once. Since
+Issue #31 this wrapping/scrolling/bordered-compositing body is the
+shared `scrollBox`/`compositeBox` component that also backs the help
+dialog — see [help-overlay.md](help-overlay.md).
 
 Key precedence while open: `ctrl+c` exits 130 globally; `up`/`down`
 scroll; `q`/`Esc` dismiss; every other key is ignored — including `c`,

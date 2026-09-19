@@ -235,6 +235,14 @@ Catalog of all wiki pages for the vrg project.
   retained cursor stops and the unchanged `r` reload route, no
   forced encoding flag in the child argv, and the all-unsupported
   outcome-matrix row proving the fixed status unchanged
+- [help-overlay.md](help-overlay.md) — Issue #31: the `h`/`?` modal
+  help dialog over browse and no-results, the shared `scrollBox`/
+  `compositeBox` component refactored out of the error overlay,
+  wrapped-and-scrollable rows including split unbroken strings,
+  tiny-size clipping with no borderless fallback, the modal key
+  routing and precedence stack, pop-up cancellation on open, the
+  `helpBindings` single binding-table data source, and the reserved
+  escaped `helpFooter` slot for Issue #34
 
 ## Catalogs
 

@@ -73,7 +73,7 @@ utility:
   generated help's layout tabs expand to fixed columns — the stdout
   help sink is routed through the utility like every other. This is the
   Issue #1 command-line help, distinct from the Issue #31 TUI help
-  dialog that adds its own sink-safety row later.
+  dialog, which adds its own sink-safety row through `helpFixtureView`.
 - `internal/app` and `cmd/vrg` stderr diagnostics (start failure, the
   post-restoration `writeFailureDiag`, the working-directory error)
   escape embedded error text via `EscapePath` — external data
@@ -101,10 +101,13 @@ bytes, and an embedded filename newline — plus two shared assertions:
 as `<sink>/<fixture>` subtests; each row's `Render` returns the raw
 output of the real composition path and must fail when the fixture
 never reached the sink (a silent drop cannot masquerade as a pass). The
-current table lives in `internal/app/sinksafety_test.go` with eight
+current table lives in `internal/app/sinksafety_test.go` with nine
 rows — file-list entry, filename rule, panel content, the Issue #9
 error overlay, the Issue #15 file-change pop-up (see
-[file-change-popup.md](file-change-popup.md)), usage-error stderr,
+[file-change-popup.md](file-change-popup.md)), the Issue #31 TUI help
+dialog (`helpFixtureView` substitutes the fixture into the `helpFooter`
+slot the renderer routes through `EscapeDiagnostic` — see
+[help-overlay.md](help-overlay.md)), usage-error stderr,
 CLI-help stdout, and the Issue #11
 stderr replay (a load-failure diagnostic embedding the fixture as a
 filename, collected and written through `replayDiags` — see
@@ -112,8 +115,8 @@ filename, collected and written through `replayDiags` — see
 
 **Later-sink ownership**: each issue that introduces a sink routes it
 through this utility and extends the table — Issue #9 (error overlay),
-Issue #11 (stderr replay), and Issue #15 (pop-up) are landed; still to
-come: Issue #31 (TUI help dialog), Issue #34 (generated
+Issue #11 (stderr replay), Issue #15 (pop-up), and Issue #31 (TUI help
+dialog) are landed; still to come: Issue #34 (generated
 documentation text) — reusing `sinktest.Fixtures` without duplicating
 them.
 

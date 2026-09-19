@@ -358,9 +358,9 @@ func TestFailedReloadReplacesContent(t *testing.T) {
 	if m.rows[keyA] != nil {
 		t.Fatal("the failed reload kept the stale layout")
 	}
-	if !m.overlayOpen || !strings.Contains(m.overlayText, "cannot read") {
+	if !m.overlayOpen || !strings.Contains(m.overlay.text, "cannot read") {
 		t.Fatalf("overlay open=%v text=%q, want the current-file failure shown",
-			m.overlayOpen, m.overlayText)
+			m.overlayOpen, m.overlay.text)
 	}
 	v := viewText(m)
 	if !strings.Contains(v, "(unreadable)") {
@@ -402,8 +402,8 @@ func TestSecondConsecutiveReloadFailureAppends(t *testing.T) {
 		t.Fatal("the first r failure did not open the overlay")
 	}
 	m.scrollOverlay(2)
-	if m.overlayScroll != 2 {
-		t.Fatalf("overlay scroll = %d, want 2 — the diagnostic must be scrollable", m.overlayScroll)
+	if m.overlay.scroll != 2 {
+		t.Fatalf("overlay scroll = %d, want 2 — the diagnostic must be scrollable", m.overlay.scroll)
 	}
 
 	// The second r is pressed while the overlay is still open — the
@@ -424,12 +424,12 @@ func TestSecondConsecutiveReloadFailureAppends(t *testing.T) {
 	}
 	m.Update(msg)
 
-	if n := strings.Count(m.overlayText, "cannot read"); n != 2 {
+	if n := strings.Count(m.overlay.text, "cannot read"); n != 2 {
 		t.Fatalf("overlay occurrences = %d, want the second failure appended exactly once: %q",
-			n, m.overlayText)
+			n, m.overlay.text)
 	}
-	if m.overlayScroll != 2 {
-		t.Fatalf("overlay scroll = %d after the append, want the preserved 2", m.overlayScroll)
+	if m.overlay.scroll != 2 {
+		t.Fatalf("overlay scroll = %d after the append, want the preserved 2", m.overlay.scroll)
 	}
 	want := loadDiag(idx.Files[0].Path, longErr)
 	assertReplayLines(t, m.diags, []string{want, want})

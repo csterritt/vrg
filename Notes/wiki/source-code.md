@@ -171,7 +171,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   whose buffer reports `Unsupported()` collects `encodingDiag` and
   opens the overlay only when the loaded path is current — the
   Issue #26 notification split reused — with no layout prepared for
-  the row-less placeholder. See
+  the row-less placeholder. Issue #31 adds the help state — `helpOpen`
+  and `help scrollBox` — with `h`/`?` opening `openHelp` from
+  `stateBrowse` and `stateNoResults`, a modal `helpOpen` routing case
+  (`up`/`down` scroll; `q`/`Esc`/`h`/`?` close; everything else
+  ignored) between the error-overlay case and the base-state keys, the
+  `r` route guarded by `!m.helpOpen`, `openHelp` clearing `popupID`,
+  `WindowSizeMsg` clamping `help.scroll`, and `View` compositing
+  pop-up then help then the error overlay — an open error always
+  draws on top and suspends help, which resumes at its retained
+  scroll on dismissal. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
@@ -181,8 +190,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [async-load-isolation.md](async-load-isolation.md),
   [read-failures.md](read-failures.md),
   [explicit-reload.md](explicit-reload.md),
-  [load-completion-reveal.md](load-completion-reveal.md), and
-  [unsupported-encodings.md](unsupported-encodings.md).
+  [load-completion-reveal.md](load-completion-reveal.md),
+  [unsupported-encodings.md](unsupported-encodings.md), and
+  [help-overlay.md](help-overlay.md).
 - `internal/app/outcome.go` — Issue #9's pure outcome decision:
   `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
   `Integrity`, usable-results count, `RecordLoss`, caller `Warnings`)
@@ -201,14 +211,34 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `tailDiags` (integrity + record loss + warnings) so the session
   collection shares it without re-collecting incrementally delivered
   stderr.
-- `internal/app/overlay.go` — Issue #9's modal error overlay:
-  grapheme-boundary `wrapCells` to the interior width (unbroken strings
-  split mid-run), the complete wrapped row set scrolled by
-  `up`/`down` clamped to `[0, rows − visible]`, and `compositeOverlay`
-  centering the single-line bordered box over the base frame. Issue #15
-  adds `openOverlay` — the shared open-or-append entry point that also
-  clears any live file-change pop-up, which never returns after the
-  overlay closes.
+- `internal/app/overlay.go` — the shared wrapped, scrollable overlay
+  component behind the Issue #9 error overlay and the Issue #31 help
+  dialog: `scrollBox` holds `text` re-wrapped into interior-width rows
+  on every render (`scrollBox.rows` over `wrapCells` —
+  grapheme-cluster boundaries, unbroken strings split mid-run) and
+  `scroll`, the first visible row, moved and clamped by
+  `scrollBox.scrollBy`/`clamp` to `[0, rows − visible]`; `compositeBox`
+  draws the `theme.Overlay` single-line bordered box centred over the
+  base frame carrying the visible window, clipping to the terminal at
+  tiny sizes with no borderless fallback. Issue #15 adds `openOverlay`
+  — the shared open-or-append entry point that also clears any live
+  file-change pop-up, which never returns after the overlay closes.
+  Issue #31's refactor makes `m.overlay` and `m.help` the two
+  `scrollBox` instances; `overlayRows`, `scrollOverlay`, and
+  `clampOverlayScroll` remain as the error-overlay façade over it.
+- `internal/app/help.go` — Issue #31's help dialog: `helpBinding`, the
+  single binding-table type; `helpBindings`, the one data source every
+  routed binding is rendered from (navigation, scrolling, panning, the
+  list toggles, wrap, colour, reload, help, quit/cancel — the same
+  table Issue #34's documentation tests iterate); `helpFooter`, the
+  reserved footer slot under the table (empty until Issue #34 fills it
+  with the scale-and-limits note), escaped through
+  `safepresentation.EscapeDiagnostic` by `helpText` so its substitution
+  can never emit control bytes; and `openHelp` — the entry point that
+  composes the body into `m.help` and clears `popupID`, so opening
+  help cancels a live pop-up that never returns. `scrollHelp` and
+  `clampHelpScroll` drive the shared `scrollBox` mechanics. See
+  [help-overlay.md](help-overlay.md).
 - `internal/app/popup.go` — Issue #15's file-change pop-up:
   `popupExpireMsg{id}` and `startPopup` minting a fresh instance ID per
   file crossing with a one-second `tea.Tick` expiry (or the

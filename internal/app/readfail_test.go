@@ -115,8 +115,8 @@ func TestCurrentFileFailureShowsOverlay(t *testing.T) {
 		t.Fatal("a current-file read failure did not open the error overlay")
 	}
 	want := loadDiag(idx.Files[0].Path, errUnreadable)
-	if !strings.Contains(m.overlayText, want) {
-		t.Fatalf("overlay = %q, want the load diagnostic %q", m.overlayText, want)
+	if !strings.Contains(m.overlay.text, want) {
+		t.Fatalf("overlay = %q, want the load diagnostic %q", m.overlay.text, want)
 	}
 	v := viewText(m)
 	if !strings.Contains(v, "(unreadable)") {
@@ -222,8 +222,8 @@ func TestCrossFileEntryRetriesFailedFile(t *testing.T) {
 		t.Fatal("re-entering a failed file did not show the prior failure")
 	}
 	want := loadDiag(idx.Files[1].Path, errUnreadable)
-	if n := strings.Count(m.overlayText, "cannot read"); n != 1 || !strings.Contains(m.overlayText, want) {
-		t.Fatalf("overlay = %q, want exactly the prior failure %q", m.overlayText, want)
+	if n := strings.Count(m.overlay.text, "cannot read"); n != 1 || !strings.Contains(m.overlay.text, want) {
+		t.Fatalf("overlay = %q, want exactly the prior failure %q", m.overlay.text, want)
 	}
 	if v := viewText(m); !strings.Contains(v, "Loading…") {
 		t.Fatalf("view = %q, want Loading… for the minted retry", v)
@@ -238,8 +238,8 @@ func TestCrossFileEntryRetriesFailedFile(t *testing.T) {
 	}
 	m.Update(msg)
 	assertReplayLines(t, m.diags, []string{want, want})
-	if n := strings.Count(m.overlayText, "cannot read"); n != 2 {
-		t.Fatalf("overlay = %q, want the second failure appended once", m.overlayText)
+	if n := strings.Count(m.overlay.text, "cannot read"); n != 2 {
+		t.Fatalf("overlay = %q, want the second failure appended once", m.overlay.text)
 	}
 }
 
@@ -355,8 +355,8 @@ func TestReentryShowsPriorFailureAndStartsOneRetry(t *testing.T) {
 		t.Fatal("re-entry did not show the prior-failure overlay")
 	}
 	want := loadDiag(rig.idx.Files[1].Path, errUnreadable)
-	if !strings.Contains(rig.m.overlayText, want) {
-		t.Fatalf("overlay = %q, want the prior failure %q", rig.m.overlayText, want)
+	if !strings.Contains(rig.m.overlay.text, want) {
+		t.Fatalf("overlay = %q, want the prior failure %q", rig.m.overlay.text, want)
 	}
 	if v := viewText(rig.m); !strings.Contains(v, "Loading…") {
 		t.Fatalf("view = %q, want Loading… for the in-flight retry", v)
@@ -412,9 +412,9 @@ func TestReentryRetryEscLeavesLoadUndisturbed(t *testing.T) {
 	if v := viewText(rig.m); !strings.Contains(v, "(unreadable)") {
 		t.Fatalf("view = %q, want (unreadable) after the second failure", v)
 	}
-	if !rig.m.overlayOpen || !strings.Contains(rig.m.overlayText, "cannot read") {
+	if !rig.m.overlayOpen || !strings.Contains(rig.m.overlay.text, "cannot read") {
 		t.Fatalf("overlay open=%v text=%q, want the second failure shown",
-			rig.m.overlayOpen, rig.m.overlayText)
+			rig.m.overlayOpen, rig.m.overlay.text)
 	}
 	want := loadDiag(rig.idx.Files[1].Path, errUnreadable)
 	assertReplayLines(t, rig.m.diags, []string{want, want})
@@ -459,8 +459,8 @@ func TestReentryRetrySecondFailureAppends(t *testing.T) {
 	worker := rig.reenter(t)
 
 	rig.m.scrollOverlay(2)
-	if rig.m.overlayScroll != 2 {
-		t.Fatalf("overlay scroll = %d, want 2 — the prior failure must be scrollable", rig.m.overlayScroll)
+	if rig.m.overlay.scroll != 2 {
+		t.Fatalf("overlay scroll = %d, want 2 — the prior failure must be scrollable", rig.m.overlay.scroll)
 	}
 
 	close(rig.gate.release)
@@ -472,12 +472,12 @@ func TestReentryRetrySecondFailureAppends(t *testing.T) {
 	if !rig.m.failed[rig.keyB] {
 		t.Fatal("the second failure left no failure record")
 	}
-	if n := strings.Count(rig.m.overlayText, "cannot read"); n != 2 {
+	if n := strings.Count(rig.m.overlay.text, "cannot read"); n != 2 {
 		t.Fatalf("overlay occurrences = %d, want the second failure appended exactly once: %q",
-			n, rig.m.overlayText)
+			n, rig.m.overlay.text)
 	}
-	if rig.m.overlayScroll != 2 {
-		t.Fatalf("overlay scroll = %d after the append, want the preserved 2", rig.m.overlayScroll)
+	if rig.m.overlay.scroll != 2 {
+		t.Fatalf("overlay scroll = %d after the append, want the preserved 2", rig.m.overlay.scroll)
 	}
 	want := loadDiag(rig.idx.Files[1].Path, longErr)
 	assertReplayLines(t, rig.m.diags, []string{want, want})
@@ -522,9 +522,9 @@ func TestReentryRetryAwayAndBack(t *testing.T) {
 	if _, ok := rig.m.loading[rig.keyB]; !ok {
 		t.Fatal("the later re-entry minted no retry")
 	}
-	if !rig.m.overlayOpen || !strings.Contains(rig.m.overlayText, want) {
+	if !rig.m.overlayOpen || !strings.Contains(rig.m.overlay.text, want) {
 		t.Fatalf("overlay open=%v text=%q, want the new prior failure shown",
-			rig.m.overlayOpen, rig.m.overlayText)
+			rig.m.overlayOpen, rig.m.overlay.text)
 	}
 	if v := viewText(rig.m); !strings.Contains(v, "Loading…") {
 		t.Fatalf("view = %q, want Loading… for the new retry", v)
@@ -534,7 +534,7 @@ func TestReentryRetryAwayAndBack(t *testing.T) {
 		t.Fatal("the later re-entry batch carried no retry leaf")
 	}
 	rig.m.Update(msg)
-	if n := strings.Count(rig.m.overlayText, "cannot read"); n != 2 {
+	if n := strings.Count(rig.m.overlay.text, "cannot read"); n != 2 {
 		t.Fatalf("overlay occurrences = %d, want the new failure appended once", n)
 	}
 	assertReplayLines(t, rig.m.diags, []string{want, want, want})

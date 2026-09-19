@@ -73,7 +73,7 @@ a different file:
 4. A second failure appends exactly one new occurrence to the open
    overlay — the append-preserving-scroll primitive this issue owns:
    `openOverlay` on an open overlay joins the new diagnostic under the
-   old without touching `overlayScroll`, so the reader's position
+   old without touching `overlay.scroll`, so the reader's position
    holds — and collects exactly one new occurrence for the
    [stderr replay](stderr-replay.md). A success collects nothing new.
    Issue #32 will generalize the primitive to all appended errors.

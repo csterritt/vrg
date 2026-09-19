@@ -223,13 +223,18 @@ type model struct {
 	// to it ahead of the base state, and only ctrl+c outranks it.
 	// overlayExit marks a fatal overlay with no underlying state:
 	// dismissal exits with the fixed status instead of revealing a
-	// screen. overlayText is the escaped diagnostic body; it re-wraps
-	// to the interior width on every render, and overlayScroll — the
-	// first visible wrapped row — clamps to the complete row set.
-	overlayOpen   bool
-	overlayExit   bool
-	overlayText   string
-	overlayScroll int
+	// screen. overlay is its scrollBox: the escaped diagnostic body
+	// re-wraps to the interior width on every render, and scroll —
+	// the first visible wrapped row — clamps to the complete row set.
+	// helpOpen marks the Issue #31 help dialog up: it sits below the
+	// error overlay in the precedence stack — an error opening while
+	// help is up suspends it, and dismissing the error restores help
+	// at its retained scroll position (Issue #32).
+	overlayOpen bool
+	overlayExit bool
+	overlay     scrollBox
+	helpOpen    bool
+	help        scrollBox
 
 	// File-change pop-up (Issue #15). popupID is the live instance's
 	// identity — 0 means none is up; popupSeq mints each new ID so an
@@ -318,6 +323,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.clampOverlayScroll()
+		m.clampHelpScroll()
 		// The new text width re-keys every prepared layout: the
 		// current file's replacement is requested here and prepared
 		// off the update path — the retained logical anchor, not the
@@ -525,17 +531,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = 130
 			m.quitting = true
 			return m, m.quitCmd()
-		case key == "r" && m.state == stateBrowse:
+		case key == "r" && m.state == stateBrowse && !m.helpOpen:
 			// r is the explicit reload: reread the current file from
 			// disk — never rerunning rg — while preserving the cursor
-			// and the viewport anchor. It also works while an overlay
-			// is open, and is the only retry route a one-stop index
-			// has (Issue #27).
+			// and the viewport anchor. It also works while an error
+			// overlay is open — though never under help — and is the
+			// only retry route a one-stop index has (Issue #27).
 			return m, m.startReload()
 		case m.overlayOpen:
-			// The modal overlay takes precedence over base-state keys:
-			// up and down scroll the complete wrapped diagnostic,
-			// q and Esc dismiss it, and every other key is ignored.
+			// The modal overlay takes precedence over help and the
+			// base-state keys: up and down scroll the complete wrapped
+			// diagnostic, q and Esc dismiss it, and every other key is
+			// ignored.
 			switch key {
 			case "up":
 				m.scrollOverlay(-1)
@@ -551,6 +558,24 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.overlayOpen = false
 			}
+		case m.helpOpen:
+			// The help dialog is modal over the base state: up and
+			// down scroll the complete wrapped table, q, Esc, h, and
+			// ? close it, and every other key is ignored — nothing
+			// reaches the content behind (Issue #31).
+			switch key {
+			case "up":
+				m.scrollHelp(-1)
+			case "down":
+				m.scrollHelp(1)
+			case "q", "esc", "h", "?":
+				m.helpOpen = false
+			}
+		case (key == "h" || key == "?") && (m.state == stateBrowse || m.state == stateNoResults):
+			// h and ? open modal help over ordinary browsing and the
+			// no-results screen; closing returns to the underlying
+			// base state. Opening cancels any file-change pop-up.
+			m.openHelp()
 		case key == "q" && m.state == stateSearching:
 			// q while searching — including gate-held index
 			// preparation after rg has exited — is cancellation.
@@ -715,8 +740,11 @@ func (m *model) View() tea.View {
 	if m.popupID != 0 {
 		s = m.compositePopup(s)
 	}
+	if m.helpOpen {
+		s = m.compositeBox(s, &m.help)
+	}
 	if m.overlayOpen {
-		s = m.compositeOverlay(s)
+		s = m.compositeBox(s, &m.overlay)
 	}
 	v := tea.NewView(m.theme.Base(s))
 	v.AltScreen = true

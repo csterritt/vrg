@@ -60,7 +60,10 @@ On this screen `q` exits the fixed status-1 outcome through the Issue #4
 `ctrl+c` keeps its global 130 override. Issue #9's outcome decision can
 open a warning overlay on top of this screen when diagnostics exist —
 dismissal reveals the same no-results state; see
-[error-overlay-and-outcomes.md](error-overlay-and-outcomes.md). The
+[error-overlay-and-outcomes.md](error-overlay-and-outcomes.md). Since
+Issue #31, `h`/`?` also open the help dialog over this screen —
+closing restores it and a subsequent `q` still exits 1; see
+[help-overlay.md](help-overlay.md). The
 record-loss outcome rows stay Issue #10 scope.
 
 > ripgrep 15.x note: `binary_offset` end records appear only for files
