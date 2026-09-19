@@ -30,7 +30,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `Run()` untagged; tagged, it additionally applies
   `VRG_TEST_RUN_FINAL_MODEL` (`nil`/`invalid`) and
   `VRG_TEST_RUN_ERROR` overrides at the real `program.Run()` return
-  site for Issue #46's return shapes.
+  site — the seam Issue #46's `runshape_test.go` return-shape matrix
+  consumes.
 
 ## internal/cli
 
@@ -244,7 +245,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `Config.RunProgram`: when set it replaces `prog.Run()` at the real
   program-runner call site (nil defaults to direct delegation) — the
   channel through which the `vrg_testhooks` variant injects Issue #46's
-  return shapes. See
+  return shapes. Issue #46 adds `options.diagSink`: a `*[]string`
+  snapshot `Run` installs before constructing the model, which
+  `collectDiags` mirrors every collected line into — so the session
+  diagnostics reach the post-restoration replay even when the final
+  model is absent or the wrong type. `Run`'s post-`program.Run()`
+  section is now the single shutdown sequence every return shape
+  converges on: after the `reapChild` safety net it replays the
+  snapshot in collection order, then `invalidFinalModelDiag` (`vrg:
+  program ended without a valid final model`) when `final` asserts to
+  no `*model`, then the `Run()` error's `vrg: <escaped>` line exactly
+  once — `ErrInterrupted` still maps to 130, while any other error, an
+  unusable final model, or a recorded `failErr` exits 2. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),

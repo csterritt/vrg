@@ -71,7 +71,14 @@ diagnostic (`vrg: <EscapePath-escaped error text>`) and exits 2. A
 post-restoration write and status. As of Issue #11 the writer is
 `replayDiags`, the common stderr-replay sink: the failure diagnostic
 enters the session collection in `Update` before shutdown and replays
-exactly once after restoration — there is no separate direct write. See
+exactly once after restoration — there is no separate direct write.
+Issue #46 extended the same sequence to every `program.Run()` return
+shape: `Run` retains the session diagnostics in its own `diagSink`
+snapshot (mirrored by `collectDiags`, independent of the final-model
+assertion), replays them after restoration and reaping, adds
+`invalidFinalModelDiag` when the returned model is absent or the wrong
+type, and appends the runtime error exactly once — every failing shape
+exits 2. See
 [stderr-replay.md](stderr-replay.md).
 
 ## Test seams and the PTY harness

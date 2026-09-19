@@ -1,10 +1,13 @@
 # Stderr replay of collected diagnostics (Issue #11)
 
 Delivered by
-[Issue #11](../issues/011-stderr-replay-of-collected-diagnostics.md):
+[Issue #11](../issues/011-stderr-replay-of-collected-diagnostics.md)
+and unified by
+[Issue #46](../issues/046-runtime-error-common-diagnostic-replay.md):
 a session diagnostic collection independent of what any overlay
 displayed, replayed exactly once each to sanitized stderr after
-terminal/display restoration on every controlled exit. Relevant PRD
+terminal/display restoration on every controlled exit — including every
+`program.Run()` return shape. Relevant PRD
 sections: *Outcome and exit-status contract* (every controlled exit),
 *Colours, overlays, and key precedence* (the `ctrl+c`/`q` shutdown
 boundary), and *Testing Decisions → Subprocess boundary* in
@@ -73,14 +76,50 @@ in collection order, adding only the newline framing — collected lines
 are already sanitized (`EscapeDiagnostic` for stream text,
 `EscapePath` for embedded filenames). It runs on every controlled exit:
 ordinary quit, `q`/`ctrl+c` cancellation (exit 130), and controlled
-failure (exit 2, failure line last). A `program.Run` error that never
-reached the model is appended after the collection through the same
-writer — still exactly once. No persistent log is written.
+failure (exit 2, failure line last). No persistent log is written.
 
 The exactly-once invariant holds across both mechanism generations:
 the incremental `stderrLineMsg` route and the completion-time stderr
 route never both collect the same bytes, and the controlled-failure
 diagnostic has no writer outside the collection.
+
+## The unified shutdown sequence (Issue #46)
+
+Before Issue #46 the replay read the collection only through the
+final-model type assertion, so a `program.Run()` error still wrote its
+own line but a nil or wrong-type final model dropped every collected
+diagnostic and exited 2 silently. Now `Run` owns the snapshot itself:
+`options.diagSink` is a `*[]string` `Run` installs before constructing
+the model, and `collectDiags` mirrors each appended line into it as
+`Update` runs — the assertion is no longer the collection's only
+channel to stderr.
+
+Every `Run()` return shape then converges on one ordered shutdown
+replay, emitted only after the program has returned (terminal
+restored) and the child is terminated and reaped:
+
+1. the retained session diagnostics in collection order;
+2. `invalidFinalModelDiag` — `vrg: program ended without a valid final
+   model` — when the returned model is absent or the wrong type, so
+   that shape never exits silently;
+3. the `program.Run()` runtime error itself, appended exactly once —
+   no duplicate emission from a direct write plus the replay.
+
+Every failing shape is a controlled application failure exiting 2, the
+startup-failure convention extended to runtime errors;
+`ErrInterrupted` keeps its cancellation mapping to 130. The matrix:
+
+| `program.Run()` returns | Replay | Exit |
+|---|---|---|
+| valid model + error | diags, then `vrg: <error>` once | 2 |
+| nil/invalid model + error | diags, invalid-final-model diagnostic, `vrg: <error>` once | 2 |
+| nil/invalid model + nil error | diags, invalid-final-model diagnostic | 2 |
+| valid model + nil error | diags | the model's status |
+
+The tagged `vrg_testhooks` runner injects each tuple at the real
+`program.Run()` boundary via `VRG_TEST_RUN_FINAL_MODEL` and
+`VRG_TEST_RUN_ERROR` — see
+[test-hook-topology.md](test-hook-topology.md).
 
 ## Filename escaping in replayed text
 
@@ -111,8 +150,14 @@ rather than racing it.
 See [unit-tests.md](unit-tests.md): `internal/app/replay_test.go`
 covers ordered exactly-once collection, never-displayed diagnostics,
 the `ctrl+c` and `q`/gate-held shutdown boundaries, the incremental vs
-completion stderr routes, controlled-failure collection, and hostile
-embedded filenames; `cmd/vrg/replay_test.go` drives the real binary on
+completion stderr routes, controlled-failure collection, the
+`diagSink` snapshot mirror, and hostile embedded filenames;
+`cmd/vrg/replay_test.go` drives the real binary on
 a pty — acknowledgement, replay-after-restoration ordering and
 exactly-once on the cancellation, gate-held, normal-quit, and
 controlled-failure routes, plus the escaped hostile filename.
+`cmd/vrg/runshape_test.go` (Issue #46) drives the full
+`program.Run()` return-shape matrix through the tagged runner on a
+real PTY lifecycle with diagnostics acknowledged as collected first —
+each cell asserting the ordered replay, exactly-once emission,
+terminal restoration, child termination/reaping, and the exit status.

@@ -88,6 +88,14 @@ type options struct {
 	// deterministic in model tests rather than depending on
 	// filesystem permission bits (Issue #26).
 	loader func(path []byte) ([]byte, error)
+	// diagSink, when set, is Run's retained snapshot of the session
+	// collection: collectDiags mirrors every appended line into it, so
+	// the collected diagnostics reach the post-restoration replay even
+	// when the program's final model is absent or the wrong type — the
+	// final-model assertion is not the collection's only channel
+	// (Issue #46). Run always installs it; it is a shutdown contract,
+	// not a test seam.
+	diagSink *[]string
 }
 
 // WithGate holds index preparation until fn returns.
@@ -179,7 +187,9 @@ type model struct {
 	// diags is the session diagnostic collection — sanitized lines
 	// appended in the order Update processed the messages carrying them,
 	// independent of what any overlay displayed. Run replays it to
-	// stderr after terminal restoration on every controlled exit.
+	// stderr after terminal restoration on every controlled exit,
+	// through the diagSink snapshot it installs so the replay survives
+	// an absent or wrong-type final model.
 	diags []string
 
 	// Browse state. idx is the prepared search index; the current file
@@ -789,6 +799,9 @@ func reapChild(c Child, report func(Result)) {
 func (m *model) collectDiags(lines ...string) {
 	for _, line := range lines {
 		m.diags = append(m.diags, line)
+		if m.opts.diagSink != nil {
+			*m.opts.diagSink = append(*m.opts.diagSink, line)
+		}
 		if m.opts.diagAck != nil {
 			m.opts.diagAck()
 		}
@@ -858,6 +871,11 @@ func (m *model) noResultsText() string {
 	return "No results found"
 }
 
+// invalidFinalModelDiag names the shutdown condition in which
+// program.Run returned no usable final model — nil or a foreign type —
+// so that return shape's exit is never silent.
+const invalidFinalModelDiag = "vrg: program ended without a valid final model"
+
 // Run is the whole search lifecycle: spawn the child, show "Searching…"
 // until the stream is collected and the index prepared, then the
 // two-pane browse view. A start failure prints a sanitized diagnostic to
@@ -867,7 +885,11 @@ func (m *model) noResultsText() string {
 // terminates and reaps the child and restores the terminal; the session
 // diagnostic collection — everything the model processed, whether or
 // not an overlay showed it — is then replayed to stderr exactly once
-// each, in collection order, through replayDiags. No persistent log is
+// each, in collection order, through replayDiags. The collection reaches
+// the replay through Run's own snapshot, so it survives a nil or
+// wrong-type final model — that shape instead adds the
+// invalid-final-model diagnostic and exits 2 — while a program.Run
+// error is appended once after the collection. No persistent log is
 // written.
 func Run(ctx context.Context, cfg Config, opts ...Option) int {
 	errOut := cfg.Err
@@ -894,6 +916,13 @@ func Run(ctx context.Context, cfg Config, opts ...Option) int {
 		report := o.reap
 		o.reap = func(r Result) { once.Do(func() { report(r) }) }
 	}
+	// sessionDiags is the shutdown snapshot: collectDiags mirrors every
+	// collected line into it as Update runs, so Run replays the session
+	// diagnostics even when the program's final model is absent or the
+	// wrong type — the post-Run assertion is no longer their only
+	// channel (Issue #46).
+	var sessionDiags []string
+	o.diagSink = &sessionDiags
 	m := newModel(cfg, o, child)
 	prog := tea.NewProgram(m, tea.WithContext(ctx))
 	if ch := child.Diags(); ch != nil {
@@ -916,23 +945,27 @@ func Run(ctx context.Context, cfg Config, opts ...Option) int {
 	// panic — still owe the child termination and reaping.
 	reapChild(child, o.reap)
 	fm, _ := final.(*model)
-	var diags []string
-	if fm != nil {
-		diags = fm.diags
+	// Every Run() return shape converges on the one shutdown replay:
+	// the program has returned — the terminal is restored — and the
+	// child is terminated and reaped, so now the retained session
+	// diagnostics are emitted in collection order, then a diagnostic
+	// naming an absent or wrong-type final model (never a silent
+	// exit), then the runtime error itself appended exactly once.
+	lines := sessionDiags
+	if fm == nil {
+		lines = append(lines, invalidFinalModelDiag)
 	}
-	if err != nil {
-		if errors.Is(err, tea.ErrInterrupted) {
-			replayDiags(errOut, diags)
-			return 130
-		}
+	if err != nil && !errors.Is(err, tea.ErrInterrupted) {
 		// A runtime failure never reached the session collection; it
 		// is appended after the collected diagnostics and emitted by
 		// the same post-restoration writer — exactly once.
-		replayDiags(errOut, append(diags, "vrg: "+safepresentation.EscapePath([]byte(err.Error()))))
-		return 2
+		lines = append(lines, "vrg: "+safepresentation.EscapePath([]byte(err.Error())))
 	}
-	replayDiags(errOut, diags)
-	if fm == nil || fm.failErr != nil {
+	replayDiags(errOut, lines)
+	if errors.Is(err, tea.ErrInterrupted) {
+		return 130
+	}
+	if err != nil || fm == nil || fm.failErr != nil {
 		return 2
 	}
 	return fm.status

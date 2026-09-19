@@ -73,7 +73,10 @@ Catalog of all wiki pages for the vrg project.
   terminal restoration on every controlled exit, the unified
   controlled-failure path, `EscapePath`-single-lined embedded
   filenames, and the `VRG_TEST_DIAGNOSTIC_TRIGGER` application-side
-  acknowledgement
+  acknowledgement; Issue #46 unifies every `program.Run()` return
+  shape onto that replay through `Run`'s `diagSink` snapshot — session
+  diagnostics, then the invalid-final-model diagnostic, then the
+  runtime error exactly once — exit 2 on every failing shape
 - [viewport-scrolling.md](viewport-scrolling.md) — Issue #12: the
   rendered-row scroll units (`up`/`down` one row, `u`/`d` half page,
   `pgup`/`pgdn` a page of the content height), the BOF/EOF clamps with

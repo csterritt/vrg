@@ -196,6 +196,20 @@ func TestControlledFailureEntersCollection(t *testing.T) {
 	}
 }
 
+// The shutdown snapshot mirrors the session collection independently
+// of the final-model assertion: every line Update processes lands in
+// Run's retained slice, so the replay survives a final model that is
+// absent or the wrong type (Issue #46).
+func TestDiagSinkMirrorsCollection(t *testing.T) {
+	var snapshot []string
+	m := newTestModel(fakeChild{res: Result{Code: 0}},
+		options{diagSink: &snapshot})
+	m.Update(stderrLineMsg{text: "warn one\n"})
+	m.Update(stderrLineMsg{text: "warn two\n"})
+	assertReplayLines(t, snapshot, []string{"warn one", "warn two"})
+	assertReplayLines(t, m.diags, snapshot)
+}
+
 // A child with the incremental stderr channel collects its stderr
 // through stderrLineMsg alone: the completion must not re-collect the
 // captured stderr, or the replay would repeat it.

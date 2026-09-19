@@ -1,0 +1,7 @@
+#!/bin/sh
+# Fake rg for the Issue #46 walkthrough: two stderr diagnostics, then a
+# pid record, then it blocks — so the diagnostics are collected while a
+# live child still has to be terminated and reaped at shutdown.
+printf 'warn one\nwarn two\n' >&2
+echo $$ > "$VRG_TEST_RG_PID"
+exec sleep 600

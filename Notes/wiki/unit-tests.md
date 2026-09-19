@@ -561,6 +561,10 @@ once the terminal is restored):
 - `TestCompletionDoesNotRecollectIncrementalStderr` — a child with the
   incremental `Diags()` channel does not have its captured stderr
   re-collected at completion.
+- `TestDiagSinkMirrorsCollection` (Issue #46) — `options.diagSink`
+  mirrors every collected line into the caller-owned snapshot, matching
+  `m.diags` line for line: the proof that `Run`'s replay input survives
+  a nil or wrong-type final model.
 - `TestReplayEscapesEmbeddedFilename` — a filename with newline and ESC
   bytes is `EscapePath`-escaped and single-lined in the collected and
   replayed diagnostic.
@@ -1934,3 +1938,23 @@ after the display-restoration sequence, in collection order:
   raw bytes never reach the terminal. Since Issue #26 the same
   failure opens the modal error overlay, so the test dismisses it
   with one `q` before the ordinary browse quit.
+
+`runshape_test.go` (Issue #46; `//go:build unix`) drives the
+`program.Run()` return-shape matrix through the tagged runner seam:
+`warnTwiceThenBlockRG` emits two stderr diagnostics, records its pid,
+and blocks, so `waitForAcks` proves both were collected before the
+injected return; a real `q` quit then lets `Run()` return and the
+`VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` controls substitute the
+tuple at the executable's boundary:
+
+- `TestRunReturnShapesShutdownReplay` — the six-cell table (valid /
+  nil / invalid final model × nil / injected error). Every cell
+  asserts the searching lifecycle ran, the display and termios
+  restored, the blocked child terminated and reaped (`code=-1`), and
+  one deterministic post-restoration replay sequence with each line
+  exactly once across the whole capture: session diagnostics in
+  collection order, then `invalidFinalModelDiag` for absent/wrong-type
+  models, then `vrg: <run error>` once. The control cell (valid model,
+  nil error) keeps the real quit's exit 130, proving the failing cells'
+  exit 2 comes from the post-`Run()` branches, not a controlled model
+  quit.

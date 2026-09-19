@@ -81,9 +81,13 @@ binary automatically. `testhooks_test.go` adds the boundary proofs:
   `program.Run()` return branches unchanged (exit status plus the
   replayed injected-error line).
 
-Issues #46 (runtime-error replay, see
+Issue #46 (runtime-error replay, see
 [stderr-replay.md](stderr-replay.md) and the PRD *Outcome and
-exit-status contract*) and #48 (acknowledgement handshakes, PRD
-*Testing Decisions*) extend this same mechanism and manifest rather
-than adding production hooks. `scripts/verify.sh` gates 3–4 keep the
+exit-status contract*) has landed on this seam: `cmd/vrg/runshape_test.go`
+injects the full final-model/error matrix through
+`VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` at the real
+`program.Run()` boundary and asserts the unified shutdown replay. Issue
+#48 (acknowledgement handshakes, PRD *Testing Decisions*) may still
+extend the same mechanism and manifest rather than adding production
+hooks. `scripts/verify.sh` gates 3–4 keep the
 tagged variant under `go build`/`go vet`.

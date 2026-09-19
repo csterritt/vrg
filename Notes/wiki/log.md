@@ -1761,3 +1761,39 @@ updated [source-code](../wiki/source-code.md),
 Decisions), `cmd/vrg/main.go`, `cmd/vrg/seams*.go`,
 `cmd/vrg/runner*.go`, `cmd/vrg/testhooks_test.go`,
 `internal/app/app.go`.
+## [2026-09-18] ingest | Issue #46 unified runtime-error shutdown — `diagSink` snapshot, ordered replay, exit 2
+
+Ingested the completed Issue #46 implementation
+([issue](../issues/046-runtime-error-common-diagnostic-replay.md),
+[task](../tasks/046-runtime-error-common-diagnostic-replay.md); audit
+Medium finding 11): every `program.Run()` return shape now goes through
+the single shutdown/diagnostic-replay path. `internal/app` gained
+`options.diagSink` — a `*[]string` snapshot `Run` installs before
+constructing the model; `collectDiags` mirrors each line into it, so
+session diagnostics survive a nil or wrong-type final model (the
+final-model assertion is no longer the collection's only channel to
+stderr). The post-`Run()` sequence replays the snapshot in collection
+order after terminal restoration and child termination/reaping, then
+emits `invalidFinalModelDiag` (`vrg: program ended without a valid
+final model`) when `final` asserts to no `*model` — never a silent
+exit — then the runtime error's `vrg: <escaped>` line exactly once;
+`ErrInterrupted` keeps 130, every other failing shape exits 2.
+`cmd/vrg/runshape_test.go` drives the six-cell matrix
+(valid/nil/invalid model × nil/injected error) through the
+`vrg_testhooks` runner controls `VRG_TEST_RUN_FINAL_MODEL`/
+`VRG_TEST_RUN_ERROR` on a real PTY lifecycle with two diagnostics
+acknowledged before the injected return; each cell asserts ordered
+exactly-once replay after restoration, termios equality, and child
+termination/reaping — the valid+nil control keeps exit 130, proving
+the failing cells reach the post-`Run()` branches rather than a
+controlled model quit. Updated
+[stderr-replay](../wiki/stderr-replay.md),
+[cancellation-cleanup](../wiki/cancellation-cleanup.md),
+[test-hook-topology](../wiki/test-hook-topology.md),
+[source-code](../wiki/source-code.md),
+[unit-tests](../wiki/unit-tests.md), and the index. Sources:
+`Notes/issues/046-runtime-error-common-diagnostic-replay.md`,
+`Notes/tasks/046-runtime-error-common-diagnostic-replay.md`,
+`Notes/PRD-vrg.md` (Outcome and exit-status contract),
+`internal/app/app.go`, `internal/app/replay_test.go`,
+`cmd/vrg/runshape_test.go`, `cmd/vrg/runner_testhooks.go`.
