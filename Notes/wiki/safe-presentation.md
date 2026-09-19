@@ -66,7 +66,12 @@ Three entry points cover the sink classes:
   `\xNN`, and a backslash is literal. Any external string embedded in a
   diagnostic — a filename, an error message — is escaped first with
   `EscapePath`, so its newline can never forge a diagnostic line
-  boundary.
+  boundary. Issue #47 applies the rule to read-failure diagnostics:
+  `loadDiag` composes `EscapePath(path)` plus a sanitized reason —
+  the `*fs.PathError`'s `Err` cause rather than `err.Error()` — so
+  one failed read produces exactly one diagnostic line in the
+  overlay and the replay at every load site
+  ([read-failures.md](read-failures.md)).
 
 `internal/safepresentation/sinktest` is the test-support half: the
 shared hostile fixture set and the raw-output assertions. Imported only

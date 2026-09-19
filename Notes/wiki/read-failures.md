@@ -1,7 +1,9 @@
 # Read failures — "(unreadable)", notification, and retry rules (Issue #26)
 
 Delivered by
-[Issue #26](../issues/026-read-failures-unreadable-retry-rules.md):
+[Issue #26](../issues/026-read-failures-unreadable-retry-rules.md),
+with the single-line diagnostic guarantee pinned by
+[Issue #47](../issues/047-read-failure-single-line-filenames.md):
 a failed file load shows "(unreadable)" in the panel, the
 current-versus-non-current notification split decides whether the
 [error overlay](error-overlay-and-outcomes.md) opens, and retries
@@ -28,7 +30,16 @@ Every load failure does two things unconditionally: it records
 `failed[path]` with the path's latest `loadDiag` text in `failDiag`,
 and it collects that single-line diagnostic into the session
 collection — `cannot read <EscapePath(path)>: <reason>` — regardless
-of what the display does. The display side splits on whether the
+of what the display does. Issue #47 pins the construction's
+single-line guarantee: `loadDiag` builds the diagnostic from the
+`EscapePath`-escaped raw path plus a sanitized reason — a
+`*fs.PathError` contributes only its `Err` cause, never
+`err.Error()`'s raw-path repetition — so a filename carrying a
+newline, tab, invalid UTF-8, or ESC bytes still yields exactly one
+diagnostic line in both the overlay row set and the stderr replay,
+and the identical construction serves every load site (initial load,
+`r` reload, and the re-entry retry, which all funnel through the one
+`fileLoadedMsg` settlement). The display side splits on whether the
 failed path is current **at completion-arrival time**:
 
 - **Current file**: `openOverlay(diag, false)` shows the error overlay
@@ -119,6 +130,11 @@ to 130.
 - `heldNthLoad` — a load-gate helper holding only the nth minted
   load, so the re-entry retry (a deterministic ordinal in the
   a→b→c→retry fixture) pends while later assertions run.
+- `heldCallSet` (Issue #47, `readdiag_test.go`) — the generalization
+  holding each listed load-call ordinal on its own entered/release
+  channel pair, so a test can hold both a file's first load and its
+  re-entry retry, removing the fixture under the gate to make the
+  real `os.ReadFile` fail deterministically.
 
 ## Tests
 
@@ -134,4 +150,10 @@ successful retry keeping the prior overlay until dismissed, the
 second failure's exactly-one append preserving scroll, and the
 navigate-away settle plus later re-entry against the new prior state.
 `outcome_test.go`'s `outcomeCase` gains the `failLoads` field driving
-the three new matrix rows.
+the three new matrix rows. `readdiag_test.go` (Issue #47) pins the
+single-line diagnostic contract with genuine read failures — gated
+loads whose fixtures are removed before the real `os.ReadFile` runs —
+for filenames carrying newline, tab, invalid UTF-8, and ESC bytes at
+the initial-load, `r`-reload, and re-entry-retry sites, asserting the
+escaped-path-plus-sanitized-reason line through the collection, the
+overlay row set, and the replay.

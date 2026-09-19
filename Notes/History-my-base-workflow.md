@@ -518,3 +518,14 @@ Usage
  Input tokens: 160567 tokens
  Output tokens: 47058 tokens
  Cached input tokens: 7539983 tokens
+
+----
+Task 047-read-failure-single-line-filenames.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 51 messages
+ Input tokens: 115347 tokens
+ Output tokens: 49497 tokens
+ Cached input tokens: 4340111 tokens

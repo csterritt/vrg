@@ -1163,6 +1163,33 @@ ordinal):
   settle as a non-current diagnostic-only failure; a later re-entry
   runs the same sequence against the new prior state.
 
+`readdiag_test.go` (same package; Issue #47) pins the single-line
+read-failure diagnostic with **genuine** `os.ReadFile` failures —
+never injected loader errors or permission bits: each fixture file
+is created on disk under `t.TempDir()`, indexed, its load held at
+the `loadGate`, the file removed, and the gate released so the real
+read returns a `*fs.PathError` (`fs.ErrNotExist` on the fixture's
+own path). `heldCallSet` holds each listed load-call ordinal on its
+own entered/release pair; `settleReadFailure` asserts the real
+`PathError` identity, then that the collected line is exactly
+`cannot read <EscapePath(path)>: <escaped unwrapped cause>` — one
+line, the raw path bytes never repeated in the reason;
+`assertOverlayDiag` asserts the overlay's text and row set are
+exactly the expected lines:
+
+- `TestInitialLoadFailureSingleLineDiag` — table over newline, tab,
+  invalid-UTF-8, and ESC filenames: the startup load's failure is
+  one escaped-path line in the collection, the overlay row set, and
+  the replay.
+- `TestReloadFailureSingleLineDiag` — the same table through the
+  `r` reload site (`heldNthLoad(2)` holds only the reread): the
+  identical single-line diagnostic plus "(unreadable)".
+- `TestReentryRetryFailureSingleLineDiag` — the re-entry retry site:
+  crossing back into the failed file shows the prior single-line
+  failure while the held retry is in flight; its second real failure
+  appends one identical occurrence to the open overlay and the
+  collection, and the replay carries both lines verbatim.
+
 `reload_test.go` (same package; Issue #27) drives the explicit-`r`
 reload contracts through the existing seams — `heldNthLoad` holds the
 reload's ordinal load, `gatedFailLoader` flips read outcomes, and the

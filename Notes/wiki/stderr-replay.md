@@ -47,7 +47,10 @@ any overlay ever displayed them. Producers:
 - `fileLoadedMsg` — a failed browse load collects `loadDiag`'s
   `cannot read <EscapePath(path)>: <reason>` (a `*fs.PathError`
   contributes only its cause, so the raw path never leaks through the
-  error string) whether or not the display side shows it. Since
+  error string) whether or not the display side shows it. Issue #47
+  pins the guarantee: one failed read — at the initial-load, `r`
+  reload, or re-entry-retry site — always yields exactly one
+  diagnostic line here, whatever bytes the filename carries. Since
   Issue #26 the collection is deliberately the *only* place a
   non-current failure surfaces mid-session: no overlay, no indicator,
   no review key — the replay is how it is seen without visiting the
@@ -126,7 +129,11 @@ The tagged `vrg_testhooks` runner injects each tuple at the real
 Diagnostics embed filenames only in `EscapePath`-escaped single-line
 form — a path carrying LF or ESC bytes can never forge a diagnostic
 line boundary or smuggle a control sequence into the replay. The
-stderr-replay sink is a row in the
+replay introduces no re-splitting: `readdiag_test.go` (Issue #47)
+asserts the replayed bytes are the collected single-line load
+diagnostics verbatim, produced by real `os.ReadFile` failures on
+fixtures removed under the load gate. The stderr-replay sink is a
+row in the
 [sink-safety table](safe-presentation.md): the hostile fixture set
 drives a load-failure diagnostic through the real
 `fileLoadedMsg` → collection → `replayDiags` path and asserts the raw

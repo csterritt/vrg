@@ -195,7 +195,10 @@ Catalog of all wiki pages for the vrg project.
   (prior-failure overlay, "Loading…", exactly one retry, settlement
   independent of dismissal, the append-preserving-scroll primitive),
   composed-view robustness, the `WithLoader` injected-loader seam,
-  and load failures never changing the fixed exit status
+  and load failures never changing the fixed exit status; Issue #47
+  adds the single-line `loadDiag` guarantee — `EscapePath` path plus
+  unwrapped-`PathError` reason, exactly one diagnostic line per
+  failed read at every load site, in the overlay and the replay
 - [explicit-reload.md](explicit-reload.md) — Issue #27: the `r`
   reread route that never reruns `rg` or touches cursor stops, the
   dropped-not-queued duplicate under the one-load-per-path rule and

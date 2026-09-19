@@ -1797,3 +1797,35 @@ controlled model quit. Updated
 `Notes/PRD-vrg.md` (Outcome and exit-status contract),
 `internal/app/app.go`, `internal/app/replay_test.go`,
 `cmd/vrg/runshape_test.go`, `cmd/vrg/runner_testhooks.go`.
+## [2026-09-18] ingest | Issue #47 single-line read-failure diagnostics — escaped path plus sanitized reason
+
+Ingested the completed Issue #47 work
+([issue](../issues/047-read-failure-single-line-filenames.md),
+[task](../tasks/047-read-failure-single-line-filenames.md); audit
+Medium finding 12). The `loadDiag` construction a failed load's
+`fileLoadedMsg` settlement collects — `cannot read
+<EscapePath(path)>: <reason>` with a `*fs.PathError` contributing
+only its `Err` cause, never `err.Error()`'s raw-path passthrough —
+was already the single funnel for every load site (initial load,
+`r` reload, re-entry retry); Issue #47 pins the contract with
+`internal/app/readdiag_test.go`: genuine `os.ReadFile` failures
+driven by creating hostile-named fixtures (embedded newline, tab,
+invalid UTF-8, ESC) under `t.TempDir()`, indexing them, holding each
+load at the `loadGate`, removing the fixture, and releasing the real
+read — no chmod/permission dependence. Each failure asserts exactly
+one diagnostic line carrying the `EscapePath`-escaped path and a
+sanitized reason with no raw-path repetition, identical through the
+overlay row set and the `replayDiags` stderr replay (no
+re-splitting), and identical across all three load sites. New test
+helper `heldCallSet` holds each listed load-call ordinal on its own
+entered/release pair. Updated
+[read-failures](../wiki/read-failures.md),
+[stderr-replay](../wiki/stderr-replay.md),
+[safe-presentation](../wiki/safe-presentation.md),
+[source-code](../wiki/source-code.md),
+[unit-tests](../wiki/unit-tests.md), and the index. Sources:
+`Notes/issues/047-read-failure-single-line-filenames.md`,
+`Notes/tasks/047-read-failure-single-line-filenames.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; File
+loading, cache, reload, and selection consistency),
+`internal/app/browse.go`, `internal/app/readdiag_test.go`.

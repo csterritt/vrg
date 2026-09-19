@@ -355,7 +355,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   true-inverse matches, underlined current match and current file).
   Issue #11's `loadDiag` composes the single-line `cannot read
   \<EscapePath(path)\>: \<reason\>` diagnostic a failed load collects
-  (`*fs.PathError` contributes only its cause). Issue #12 adds the
+  (`*fs.PathError` contributes only its cause) — Issue #47 pins that
+  construction with genuine gated `os.ReadFile` failures on hostile
+  filenames at every load site, so one failed read is always exactly
+  one diagnostic line in the overlay and the replay. Issue #12 adds the
   `rowSource` seam the frame render queries per visible row,
   `curKey`/`contentRows`, and `isScrollKey`/`scrollBy` — the
   `up`/`down`/`u`/`d`/`pgup`/`pgdown` handling that scrolls the
