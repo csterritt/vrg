@@ -129,8 +129,15 @@ including a blank frame for `stateOverlayOnly`. Interior text wraps on
 grapheme boundaries to the interior width, splitting unbroken strings
 mid-run so no row exceeds it. The complete wrapped row set stays in the
 model: `up`/`down` scroll one row at a time, clamped to
-`[0, rows − visible]`, and the set re-wraps on resize — Issue #41's
-contract that a single frame needn't show head and tail at once. Since
+`[0, max(0, rows − visible)]` both where the key handler moves the
+position and where the render path slices the visible window, and the
+set re-wraps on resize. Issue #41 makes that the explicit contract:
+nothing is elided from the model — no head-plus-ellipsis-plus-tail
+compression — every row is reachable by scrolling, render-time
+clipping at tiny sizes stays, and a single frame needn't show head
+and tail at once (superseding this issue's original ≥ 1 MiB fixture
+semantics) — see
+[full-scroll-overlay.md](full-scroll-overlay.md). Since
 Issue #31 this wrapping/scrolling/bordered-compositing body is the
 shared `scrollBox`/`compositeBox` component that also backs the help
 dialog — see [help-overlay.md](help-overlay.md).
@@ -164,7 +171,8 @@ plus `TestIntegrityDiagnostics`' complete ordered overlay/replay line
 lists;
 `internal/app/overlay_test.go` covers key routing, scroll clamping,
 unbroken-string wrapping within the border, the complete-diagnostic
-contract, and generated diagnostics; `sinksafety_test.go` gains the
+contract with its bounded-traversal and render-path-clamp proofs
+(Issue #41), and generated diagnostics; `sinksafety_test.go` gains the
 error-overlay row; `cmd/vrg/outcome_test.go` drives the real binary on
 a pty through the fatal/warning/signal and ≥1 MiB stderr-content
 fixture cases.

@@ -320,6 +320,15 @@ Catalog of all wiki pages for the vrg project.
   touching cursor state alone, and the counting `escapePath` guard
   spanning `Update()`+`View()` proving zero per-frame escapes or
   regrouping
+- [full-scroll-overlay.md](full-scroll-overlay.md) — Issue #41: the
+  error overlay's scrollable set is the complete wrapped diagnostic —
+  no head/ellipsis/tail compression — `scroll` clamped to
+  `[0, max(0, rows − visible)]` in both the key handler and the render
+  path, bounded row-by-row traversal reaching every row, appends
+  extending the set at the preserved position, render-time clipping at
+  tiny sizes kept while model elision is forbidden, the unchanged
+  modal key contract (`u`/`d`/page keys ignored), and the superseded
+  simultaneous head/tail semantics of the ≥ 1 MiB stderr fixture
 
 ## Catalogs
 

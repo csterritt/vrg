@@ -273,8 +273,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `scroll`, the first visible row, moved and clamped by
   `scrollBox.scrollBy`/`clamp` to `[0, rows − visible]`; `compositeBox`
   draws the `theme.Overlay` single-line bordered box centred over the
-  base frame carrying the visible window, clipping to the terminal at
-  tiny sizes with no borderless fallback. Issue #15 adds `openOverlay`
+  base frame carrying the visible window — re-clamping the slice index
+  itself so the render path honours the same bound — clipping to the
+  terminal at tiny sizes with no borderless fallback. The complete
+  row set is the scrollable set: Issue #41 forbids model-level elision
+  (see [full-scroll-overlay.md](full-scroll-overlay.md)). Issue #15
+  adds `openOverlay`
   — the shared open-or-append entry point that also clears any live
   file-change pop-up, which never returns after the overlay closes.
   Issue #31's refactor makes `m.overlay` and `m.help` the two

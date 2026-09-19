@@ -444,3 +444,22 @@ Usage
  Input tokens: 158951 tokens
  Output tokens: 42198 tokens
  Cached input tokens: 6154752 tokens
+
+----
+Task 041-overlay-full-scroll-no-head-tail-compression.md
+
+Agent SWE-2
+
+Usage
+ (not recorded)
+
+----
+Task 041-overlay-full-scroll-no-head-tail-compression.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 126 messages
+ Input tokens: 138235 tokens
+ Output tokens: 73402 tokens
+ Cached input tokens: 12466688 tokens

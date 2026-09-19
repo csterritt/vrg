@@ -739,8 +739,9 @@ the plain theme:
 mechanics:
 
 - `TestOverlayKeyRoutingAndScrolling` — `up`/`down` scroll the complete
-  wrapped row set clamped to `[0, rows − visible]`; `pgup`, `pgdown`,
-  and every other key — including `c` — are ignored while open.
+  wrapped row set clamped to `[0, rows − visible]`; `u`, `d`, `pgup`,
+  `pgdown`, and every other key — including `c` — are ignored while
+  open (Issue #41's unchanged modal key contract).
 - `TestOverlayDismissKeys` — `q` and `Esc` dismiss back to the base
   browse state with no command and no exit.
 - `TestOverlayCtrlCExits130` — the global override outranks the modal.
@@ -748,8 +749,18 @@ mechanics:
   wraps within the single-line border; no rendered row exceeds the
   frame width and the whole text survives across rows.
 - `TestOverlayKeepsCompleteDiagnostic` — a >1 MiB stderr diagnostic's
-  head and tail are both in the scrollable row set (Issue #41's
+  head and tail are both in the scrollable row set with no ellipsis
+  row injected, and the clamped scroll reaches the tail (Issue #41's
   contract: one frame needn't show both ends).
+- `TestOverlayBoundedTraversalReachesEveryRow` (Issue #41) — a
+  diagnostic barely taller than the box walks the visible window one
+  row per `down` to the final line — each step's scrolled-off row
+  leaving the frame — and back to the first per `up`, with clamping
+  past both ends and no ellipsis substituting for content.
+- `TestOverlayRenderClampsScroll` (Issue #41) — the render path clamps
+  an out-of-range scroll to the same bound the key handler enforces,
+  and growing the frame past the diagnostic reclamps the position to
+  the first row.
 - `TestGeneratedProcessDiagnostics` — a failed process without stderr
   gets the generated line naming the exit code or the signal.
 
@@ -1805,7 +1816,9 @@ bytes:
   valid stdout stream: the stream completes (all 18 matches as
   inverse-video spans after dismissal), the captured stderr heads the
   scrollable diagnostic, the handshake proves both pipes drained, and
-  `q` exits 0.
+  `q` exits 0. Since Issue #41 the fixture no longer requires head and
+  tail simultaneously rendered — tail reachability is the model-level
+  complete-rows and traversal tests' proof.
 
 `replay_test.go` (Issue #11; `//go:build unix`) drives the replay
 contract on the real binary: `waitForAcks` polls the

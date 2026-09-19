@@ -1575,3 +1575,36 @@ index. Sources:
 `internal/app/popup.go`, `internal/app/layout_test.go`,
 `internal/app/filelist_test.go`, PRD *Resources and responsiveness*
 and *File list and layout*.
+## [2026-09-18] ingest | Issue #41 full-scroll error overlay — no head/tail compression
+
+The error overlay's scrollable row set is the complete wrapped
+diagnostic: nothing is elided from the model — no
+head-plus-ellipsis-plus-tail compression — and every row of an
+arbitrarily long diagnostic is reachable by `up`/`down`. The
+`scrollBox` component already kept the complete set since the Issue
+#31 refactor (the head/tail compression the audit flagged predates
+it), so the issue lands as the explicit contract plus its missing
+proofs: `scroll` clamps to `[0, max(0, rows − visible)]` both where
+`scrollBy` moves it and where `compositeBox` slices the visible
+window, `clampOverlayScroll` re-applies the bound on every non-gated
+resize, and render-time clipping at tiny sizes stays while model
+elision is forbidden. New model tests:
+`TestOverlayBoundedTraversalReachesEveryRow` (a barely oversized
+diagnostic walks the window one row per `down` to the final line and
+back per `up`), `TestOverlayRenderClampsScroll` (out-of-range render
+clamp plus the growth reclamp), `TestOverlayKeepsCompleteDiagnostic`
+extended with the no-ellipsis sweep and the clamped tail reach, and
+`TestOverlayKeyRoutingAndScrolling`'s ignored-key sweep extended to
+`u`/`d`/`pgup`/`pgdn`. `TestStderrContentFixture`'s ≥ 1 MiB semantics
+— revised when the component landed — keep pipe drainage, complete
+stdout, captured-stderr inclusion, and completion while dropping the
+superseded simultaneous head/tail frame requirement. Created
+[full-scroll-overlay](full-scroll-overlay.md); updated
+[error-overlay-and-outcomes](error-overlay-and-outcomes.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/041-overlay-full-scroll-no-head-tail-compression.md`,
+`Notes/tasks/041-overlay-full-scroll-no-head-tail-compression.md`,
+`internal/app/overlay.go`, `internal/app/overlay_test.go`,
+`internal/app/precedence_test.go`, `cmd/vrg/outcome_test.go`, PRD
+*Colours, overlays, and key precedence* (user stories 80–83).
