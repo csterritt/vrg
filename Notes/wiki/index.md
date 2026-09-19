@@ -80,6 +80,12 @@ Catalog of all wiki pages for the vrg project.
   no avoidable blank rows, placeholder no-ops, the per-file saved
   viewport map, and prepared-row rendering with the visible-range-only
   render-cost guard
+- [match-navigation.md](match-navigation.md) — Issue #13: the single
+  global matched-line cursor (`Cursor`/`Move`, `Next`/`Prev` circular
+  steps, the zero- and one-stop strict no-ops, one stop per matched
+  line), the cursor-derived current file with its load request and
+  saved-viewport handoff, the list underline following selection,
+  scroll-independent navigation, and the passive file list
 
 ## Catalogs
 

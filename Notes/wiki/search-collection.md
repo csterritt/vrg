@@ -115,7 +115,11 @@ completeness, and `Index.Integrity()` — see
 [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md); the
 malformed/oversized/unknown skip counts and the 64 MiB record limit
 landed with Issue #10 — see
-[record-robustness.md](record-robustness.md).
+[record-robustness.md](record-robustness.md). Issue #13 landed the
+circular matched-line cursor (`cursor.go`): `Index.Cursor()`/
+`Next()`/`Prev()` walking the prepared stops in path-then-line order
+with a `Move{Wrapped, FileChanged}` report — see
+[match-navigation.md](match-navigation.md).
 
 ## Tests
 

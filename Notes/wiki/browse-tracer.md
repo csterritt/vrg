@@ -89,7 +89,11 @@ decorators with the full style set and the `c` toggle.
 
 `searchDoneMsg` now transitions to `stateBrowse` (the interim
 `stateSummary` screen is gone), stores the prepared index, and returns
-the current file's load command. The model keeps `loading` (in-flight),
+the current file's load command. Since Issue #13 the current file
+derives from the index's matched-line cursor (`model.curFile()`), and
+`n`/`p` navigation crosses into other files through `model.navigate` —
+see [match-navigation.md](match-navigation.md). The model keeps
+`loading` (in-flight),
 `bufs` (prepared buffers), and `failed` (read failures), all keyed by
 raw path bytes; `startLoad` drops repeated requests for a path already
 loading rather than queueing them, and the load command runs the whole
@@ -125,7 +129,10 @@ The frame is exactly `height` rows:
   top of the file — no reveal yet (Issue #14). Since Issue #12 the
   panel renders the prepared `viewport.Rows` model through the
   `rowSource` seam at the saved per-file top — see
-  [viewport-scrolling.md](viewport-scrolling.md).
+  [viewport-scrolling.md](viewport-scrolling.md). Since Issue #13 the
+  underlined current-line match is the cursor's selected stop and the
+  underlined list entry follows it — see
+  [match-navigation.md](match-navigation.md).
 
 ## Sink-safety method
 

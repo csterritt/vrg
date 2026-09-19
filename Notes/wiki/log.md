@@ -388,3 +388,47 @@ Design → Viewport; Resources and responsiveness),
 `internal/viewport/viewport.go`, `internal/viewport/viewport_test.go`,
 `internal/app/app.go`, `internal/app/browse.go`,
 `internal/app/scroll_test.go`.
+## [2026-09-17] ingest | Issue #13 n/p circular matched-line navigation
+
+Ingested Issue #13 ([issue](../issues/013-match-navigation-n-p-circular-cursor.md),
+[task](../tasks/013-match-navigation-n-p-circular-cursor.md)).
+`internal/searchindex` gained `cursor.go`: `Cursor{File, Stop}` positions
+into `Files`/`Stops` (the zero value is the startup selection — first stop
+in path-then-line order), `Index.Cursor()` reporting it (absent on an
+empty index), and `Next`/`Prev` stepping one stop circularly with wrap at
+both ends, returning `Move{Wrapped, FileChanged}` — the flags independent
+so a one-file wrap reports `Wrapped` alone; the prepared `stops` total
+makes zero- and one-stop indexes strict no-ops, and a matched line is one
+stop however many submatches it holds. `internal/app` dropped `model.cur`:
+`model.curFile()` derives the current file from the cursor everywhere
+(`curKey`, `startLoad`, list underline and scroll-keeping, filename rule)
+and `browseView`'s `curLine` is the cursor's stop — the Issue #7
+inverse-plus-underline style follows the selection. The browse `n`/`p`
+route calls `model.navigate`: a `FileChanged` move issues `startLoad` for
+the destination (deduplicated against cached/in-flight/failed), the panel
+switches immediately — reveal is Issue #14's, the stale-layout request is
+Issue #17's — and the departing file's viewport is already saved by scroll
+write-through, so destinations resume their saved top or start at the top.
+Manual scrolling never moves the cursor; the file list stays passive with
+no direct selection route. New tests:
+`internal/searchindex/cursor_test.go` (startup, both-direction order and
+wrap, flag reports, within-one-file wrap, single-stop and empty no-ops,
+submatches sharing a stop, prepared over stream order) and
+`internal/app/nav_test.go` (startup selection, same-file underline-only
+move, cross-file switch with load request and top-of-file start, wrap at
+both ends, single-stop no-op, scroll independence, saved-viewport restore,
+in-flight-load navigation with dedup, the passive list). Created
+[match-navigation](match-navigation.md); updated
+[search-collection](search-collection.md),
+[browse-tracer](browse-tracer.md),
+[viewport-scrolling](viewport-scrolling.md), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/issues/013-match-navigation-n-p-circular-cursor.md`,
+`Notes/tasks/013-match-navigation-n-p-circular-cursor.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors — first
+three bullets; Module Design → SearchIndex / App; File loading, cache,
+reload — navigation-active-while-loading bullet),
+`internal/searchindex/cursor.go`, `internal/searchindex/cursor_test.go`,
+`internal/searchindex/index.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/app/nav_test.go`,
+`internal/app/scroll_test.go`.

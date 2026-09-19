@@ -122,20 +122,19 @@ type model struct {
 	// stderr after terminal restoration on every controlled exit.
 	diags []string
 
-	// Browse state. idx is the prepared search index; cur is the current
-	// file's index into idx.Files (the first stop's file — Issue #13
-	// owns navigation). Files load asynchronously: loading marks the
-	// in-flight raw paths, bufs caches prepared buffers, and failed
+	// Browse state. idx is the prepared search index; the current file
+	// and current matched line derive from its circular matched-line
+	// cursor (Issue #13): n advances, p retreats, both wrap, and manual
+	// scrolling never moves it. Files load asynchronously: loading marks
+	// the in-flight raw paths, bufs caches prepared buffers, and failed
 	// records read failures, all keyed by the raw path bytes — never by
 	// an escaped display form.
 	// vps is the saved vertical viewport per file keyed by raw path:
-	// scrolling writes through to it, so a file revisited later
-	// (Issue #13) starts from its last position. rows caches each
-	// loaded file's prepared rendered-row model — built when its load
-	// completes — which the frame render slices instead of rescanning
-	// the buffer.
+	// scrolling writes through to it, so a file revisited later starts
+	// from its last position. rows caches each loaded file's prepared
+	// rendered-row model — built when its load completes — which the
+	// frame render slices instead of rescanning the buffer.
 	idx     *searchindex.Index
-	cur     int
 	loading map[string]bool
 	bufs    map[string]*filebuffer.Buffer
 	failed  map[string]bool
@@ -338,6 +337,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// c toggles the colour scheme between dark and light for
 			// the session; nothing persists.
 			m.theme = m.theme.Toggled()
+		case m.state == stateBrowse && (key == "n" || key == "p"):
+			// n advances and p retreats the circular matched-line
+			// cursor; crossing into another file's stop switches the
+			// panel and requests that file's load when uncached.
+			return m, m.navigate(key == "n")
 		case m.state == stateBrowse && isScrollKey(key):
 			// Manual vertical scrolling moves the current file's
 			// viewport; it never moves the matched-line cursor, and

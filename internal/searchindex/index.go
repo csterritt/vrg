@@ -73,8 +73,13 @@ type Index struct {
 	// record — so diagnostics can name the lost file.
 	Oversized      int
 	OversizedPaths [][]byte
-	acc            map[string]*fileAcc
-	excluded       map[string]struct{}
+	// cur is the single global matched-line cursor — the navigation
+	// position Next and Prev move. stops is the prepared total stop
+	// count the no-op rules consult.
+	cur      Cursor
+	stops    int
+	acc      map[string]*fileAcc
+	excluded map[string]struct{}
 	// Lifecycle validation state: open holds the decoded raw path bytes
 	// of files with an unclosed begin; sawSummary records that the
 	// final record arrived; broken accumulates every violation of the
@@ -322,6 +327,10 @@ func (ix *Index) Prepare(workdir string) {
 		return bytes.Compare(a.Path, b.Path)
 	})
 	ix.Files = files
+	ix.stops = 0
+	for _, f := range files {
+		ix.stops += len(f.Stops)
+	}
 }
 
 // resolvePath resolves a relative result path against the invocation

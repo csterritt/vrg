@@ -164,6 +164,25 @@ and `Integrity().Complete` together:
   unknown record without a `summary` fails integrity while counting
   unknown, not malformed.
 
+`cursor_test.go` (same external package; Issue #13) covers the circular
+matched-line cursor over real built indexes:
+
+- `TestCursorStartsAtFirstStop` — startup selects the first stop in
+  path-then-line order.
+- `TestNextWalksStopsAndWraps`, `TestPrevRetreatsAndWraps` — both
+  directions walk every stop in order and wrap circularly, with
+  `Move.Wrapped` and `Move.FileChanged` reported independently.
+- `TestWrapWithinOneFileReportsNoFileChange` — a one-file index wraps
+  its stops with `Wrapped` alone.
+- `TestSingleStopStrictNoOp` — one stop makes `Next`/`Prev` zero-Move
+  no-ops that cannot move the cursor.
+- `TestEmptyIndexNavigationNoOp` — no stops means no cursor position
+  and explicit no-ops.
+- `TestSubmatchesShareOneStop` — several submatches on one matched line
+  are one stop.
+- `TestCursorFollowsPreparedOrder` — the walk follows raw-path-then-line
+  order, not stream order.
+
 ## internal/safepresentation
 
 `safepresentation_test.go` (external package `safepresentation_test`;
@@ -410,13 +429,43 @@ scrolling and the per-file viewport:
   "Loading…" and "(unreadable)" placeholders changes nothing and
   creates no viewport state.
 - `TestViewportStateSavedPerFile` — file A's scrolled top is recorded
-  under A's raw path and survives a simulated leave-and-revisit while
-  file B keeps its own top-of-file state.
+  under A's raw path and survives an `n`/`p` leave-and-revisit (Issue
+  #13's navigation now drives the file change) while file B keeps its
+  own top-of-file state.
 - `TestRenderQueriesOnlyVisibleRows` — the `countingRows` fake proves a
   frame render queries the `rowSource` only for `[top, top + content
   height)`, each visible row exactly once — no O(N) buffer scan.
 - `TestResizeReclampsViewport` — growing the frame past the saved top's
   last valid position clamps it to the new `MaxTop`.
+
+`nav_test.go` (same package; Issue #13) drives `n`/`p` through `Update`
+over multi-stop fixtures (`navIndex`, `navFile`/`navStop`):
+
+- `TestStartupCursorAtFirstStop` — startup selects the first file's
+  first stop: its list entry is underlined and that line's match is
+  inverse-plus-underline while the later stop's match is plain inverse.
+- `TestNAdvancesWithinFile` — a same-file `n` returns no command and
+  only moves the current-line underline.
+- `TestNCrossingFileBoundarySwitchesPanel` — crossing to an uncached
+  file's stop issues its load command, moves the list underline and the
+  filename rule, shows "Loading…", and the completed file starts from
+  the top with its stop's match current-line styled.
+- `TestNavigationWrapsBothEnds` — `n` on the last stop wraps to the
+  first and `p` on the first wraps to the last, across file boundaries,
+  with cached destinations issuing no command.
+- `TestSingleStopIgnoresNavigation` — the one-stop index makes `n`/`p`
+  strict no-ops: no command, no cursor movement, no frame change.
+- `TestManualScrollLeavesCursor` — scrolling does not move the cursor;
+  `n` continues from the previously selected stop and leaves the
+  scrolled viewport in place.
+- `TestCrossFileRestoresDepartingViewport` — a scrolled file's saved
+  top survives a navigate-away-and-back.
+- `TestNavigationWhileLoadInFlight` — the cursor keeps moving while a
+  destination's load is in flight, and the in-flight load is not
+  reissued on return.
+- `TestFileListHasNoDirectSelection` — enter/tab/arrows and other keys
+  never move the cursor or change the current file: the file list is a
+  passive overview.
 
 `overlay_test.go` (same package; Issue #9) covers the modal overlay's
 mechanics:

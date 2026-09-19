@@ -196,13 +196,13 @@ func TestViewportStateSavedPerFile(t *testing.T) {
 		t.Fatalf("file A top = %d, want 3", got)
 	}
 
-	// Issue #13 will drive file changes through n/p; switching the
-	// current file directly proves the saved state is per raw path.
+	// Issue #13 drives file changes through n/p: n crosses to file B's
+	// stop and requests its load; the saved state is per raw path.
 	buf, err := filebuffer.Load(idx.Files[1].Path, idx.Files[1].Stops)
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.cur = 1
+	m.Update(keyN)
 	m.Update(fileLoadedMsg{path: idx.Files[1].Path, buf: buf})
 	if got := m.vps[string(idx.Files[1].Path)].Top(); got != 0 {
 		t.Fatalf("file B top = %d on its first visit, want 0", got)
@@ -211,7 +211,7 @@ func TestViewportStateSavedPerFile(t *testing.T) {
 		t.Fatalf("file B's first content row = %q, want its first line", row)
 	}
 
-	m.cur = 0 // revisit A
+	m.Update(keyP) // revisit A
 	if got := m.vps[keyA].Top(); got != 3 {
 		t.Fatalf("revisited file A top = %d, want the saved 3", got)
 	}

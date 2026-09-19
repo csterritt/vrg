@@ -46,14 +46,17 @@ height changes, and `MaxTop(rows, height)` is the largest valid top:
 - `model.vps map[string]viewport.Viewport` is the **per-file saved
   vertical state**, keyed by raw path like the other browse caches.
   Scrolling writes through to it on every keypress, so a file revisited
-  later (Issue #13's `n`/`p` navigation) starts from its last position;
-  a never-visited file's zero value starts at the top. `Update` re-clamps
+  later through Issue #13's `n`/`p` navigation starts from its last
+  position — the handoff needs no explicit save — and a never-visited
+  file's zero value starts at the top. `Update` re-clamps
   every prepared file's saved viewport on `WindowSizeMsg` and re-clamps a
   file's saved entry when its load completes.
 - Scroll keys are browse-state only (`isScrollKey` in `scrollBy`), so the
   open overlay keeps its own `up`/`down` handling and all other keys
   ignored, and the searching/no-results states are unaffected. Manual
-  scrolling never moves the matched-line cursor.
+  scrolling never moves the matched-line cursor — Issue #13's `n`/`p`
+  therefore continue from the last selected stop; see
+  [match-navigation.md](match-navigation.md).
 - **Placeholder no-op** — while the panel shows "Loading…" or
   "(unreadable)" there is no row model for the file and `scrollBy`
   returns without creating viewport state.

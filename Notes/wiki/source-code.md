@@ -59,6 +59,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [no-results-screen.md](no-results-screen.md),
   [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md), and
   [record-robustness.md](record-robustness.md).
+- `internal/searchindex/cursor.go` — Issue #13's circular matched-line
+  cursor: `Cursor{File, Stop}` positions, `Index.Cursor()` reporting
+  the position (absent on an empty index), `Next`/`Prev` stepping one
+  stop in path-then-line order with wrap at both ends, and the
+  `Move{Wrapped, FileChanged}` report — file change detected by
+  comparing the destination to the departing file so a one-file wrap
+  reports `Wrapped` alone. Zero or one total stops makes both keys
+  strict no-ops. See [match-navigation.md](match-navigation.md).
 - `internal/searchindex/oversized.go` — Issue #10's `MaxRecordBytes`
   (64 MiB payload limit) and the oversized-record accounting:
   `feedOversized` counts the record, recovers its path best-effort for
@@ -96,7 +104,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   warning from the index's `Unknown` count. Issue #12 adds the browse
   scroll-key route (`stateBrowse` + `isScrollKey` → `scrollBy`), the
   per-file `vps`/`rows` maps, saved-viewport re-clamping on resize and
-  on load completion. Issue #11 adds the session
+  on load completion. Issue #13 adds the `n`/`p` browse route to
+  `navigate` and drops `model.cur`: the current file and current
+  matched line derive from the index's matched-line cursor. Issue #11 adds the session
   diagnostic collection `model.diags`: `collectDiags` appends sanitized
   lines as `Update` processes `stderrLineMsg` (forwarded from
   `Child.Diags()` by a `prog.Send` goroutine in `Run`),
@@ -149,10 +159,17 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `curKey`/`contentRows`, and `isScrollKey`/`scrollBy` — the
   `up`/`down`/`u`/`d`/`pgup`/`pgdown` handling that scrolls the
   current file's saved per-file viewport clamped to the prepared row
-  count and content height, a no-op on placeholders. See
+  count and content height, a no-op on placeholders. Issue #13 adds
+  `curFile` (the cursor-derived current file read by `curKey`,
+  `startLoad`, the list underline, and the filename rule), the
+  cursor-derived `curLine` driving `CurrentMatch`, and `navigate` —
+  `n`/`p` step the index cursor and issue `startLoad` for the
+  destination only on `Move.FileChanged`, with the departing file's
+  viewport already saved by scroll write-through. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
-  [stderr-replay.md](stderr-replay.md), and
-  [viewport-scrolling.md](viewport-scrolling.md).
+  [stderr-replay.md](stderr-replay.md),
+  [viewport-scrolling.md](viewport-scrolling.md), and
+  [match-navigation.md](match-navigation.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation

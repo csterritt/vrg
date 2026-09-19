@@ -12,6 +12,7 @@ import (
 
 	"vrg/internal/filebuffer"
 	"vrg/internal/safepresentation"
+	"vrg/internal/searchindex"
 	"vrg/internal/viewport"
 )
 
@@ -24,6 +25,18 @@ type rowSource interface {
 	GutterWidth() int
 }
 
+// curFile is the cursor's current file index — the current file derives
+// from the matched-line cursor, never from a separate selection.
+func (m *model) curFile() int {
+	if m.idx == nil {
+		return 0
+	}
+	if cur, ok := m.idx.Cursor(); ok {
+		return cur.File
+	}
+	return 0
+}
+
 // curKey is the current file's raw-path map key — the identity for the
 // buffer, row-model, and per-file viewport caches — or false when the
 // index is empty.
@@ -31,7 +44,30 @@ func (m *model) curKey() (string, bool) {
 	if m.idx == nil || len(m.idx.Files) == 0 {
 		return "", false
 	}
-	return string(m.idx.Files[m.cur].Path), true
+	return string(m.idx.Files[m.curFile()].Path), true
+}
+
+// navigate moves the matched-line cursor one stop forward or back and
+// returns the destination file's load command when the move crossed
+// into a different file that is not already cached, in flight, or
+// failed. A same-file move only re-styles the current matched line —
+// destination reveal is Issue #14's — and needs no command. The
+// departing file's viewport is already saved by scroll write-through,
+// so the destination resumes from its saved viewport or the top.
+func (m *model) navigate(next bool) tea.Cmd {
+	if m.idx == nil {
+		return nil
+	}
+	var mv searchindex.Move
+	if next {
+		mv = m.idx.Next()
+	} else {
+		mv = m.idx.Prev()
+	}
+	if !mv.FileChanged {
+		return nil
+	}
+	return m.startLoad()
 }
 
 // contentRows is the file panel's content height: the frame height
@@ -102,7 +138,7 @@ func (m *model) startLoad() tea.Cmd {
 	if m.idx == nil || len(m.idx.Files) == 0 {
 		return nil
 	}
-	f := m.idx.Files[m.cur]
+	f := m.idx.Files[m.curFile()]
 	key := string(f.Path)
 	if m.loading[key] || m.failed[key] {
 		return nil
@@ -165,9 +201,10 @@ func (m *model) browseView() string {
 
 	// The list scrolls to keep the current entry visible; it shares the
 	// h-1 rows below the filename rule with the file panel.
+	cur := m.curFile()
 	listTop := 0
-	if m.cur >= h-1 {
-		listTop = m.cur - h + 2
+	if cur >= h-1 {
+		listTop = cur - h + 2
 	}
 
 	var rows rowSource
@@ -175,7 +212,7 @@ func (m *model) browseView() string {
 	curLine := int64(-1)
 	top := 0
 	if len(files) > 0 {
-		key := string(files[m.cur].Path)
+		key := string(files[cur].Path)
 		rows, failed = m.rows[key], m.failed[key]
 		if rows != nil {
 			// The saved top is clamped on every state change; clamp
@@ -185,10 +222,9 @@ func (m *model) browseView() string {
 				top = max
 			}
 		}
-		// Until Issue #13's navigation, the current matched line is the
-		// current file's first stop.
-		if stops := files[m.cur].Stops; len(stops) > 0 {
-			curLine = stops[0].Number
+		// The current matched line is the cursor's selected stop.
+		if c, ok := m.idx.Cursor(); ok {
+			curLine = files[c.File].Stops[c.Stop].Number
 		}
 	}
 
@@ -214,7 +250,7 @@ func (m *model) listCell(escaped []string, i, width int) string {
 	}
 	clipped := clipCells(escaped[i], width)
 	entry := m.theme.FileList(clipped)
-	if i == m.cur {
+	if i == m.curFile() {
 		entry = m.theme.CurrentFile(clipped)
 	}
 	return entry + strings.Repeat(" ", width-safepresentation.CellWidth(clipped))
@@ -252,7 +288,7 @@ func (m *model) contentCell(cr, width, top int, rows rowSource, failed bool, cur
 func (m *model) filenameRule(width int) string {
 	name := ""
 	if m.idx != nil && len(m.idx.Files) > 0 {
-		name = safepresentation.EscapePath(m.idx.Files[m.cur].Path)
+		name = safepresentation.EscapePath(m.idx.Files[m.curFile()].Path)
 	}
 	if width <= 4 {
 		return padTo(clipCells(name, width), width)
