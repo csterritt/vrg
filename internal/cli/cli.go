@@ -19,9 +19,10 @@ import (
 	"io/fs"
 	"os"
 	"strings"
-	"unicode/utf8"
 
 	mowcli "github.com/jawher/mow.cli"
+
+	"vrg/internal/safepresentation"
 )
 
 // appName is the fixed executable name used for the mow.cli application so
@@ -198,13 +199,13 @@ func Parse(args []string, out io.Writer, env Env) Result {
 		return usageErrorf(ErrExcessUnrestricted, "too many unrestricted options: -u/--unrestricted may appear at most twice")
 	}
 	if p.badOption != "" {
-		return usageErrorf(ErrUnsupportedOption, "unsupported option %s", Escape(p.badOption))
+		return usageErrorf(ErrUnsupportedOption, "unsupported option %s", safepresentation.EscapePath([]byte(p.badOption)))
 	}
 	switch {
 	case len(p.positionals) == 0:
 		return usageErrorf(ErrMissingPattern, "missing required argument PATTERN")
 	case len(p.positionals) > 2:
-		return usageErrorf(ErrExcessOperand, "unexpected extra operand %s", Escape(p.positionals[2]))
+		return usageErrorf(ErrExcessOperand, "unexpected extra operand %s", safepresentation.EscapePath([]byte(p.positionals[2])))
 	}
 
 	// The preflight has resolved every help request and rejected every
@@ -270,19 +271,23 @@ func checkRoot(stat func(string) (fs.FileInfo, error), root string) (Result, boo
 		if errors.Is(err, fs.ErrNotExist) {
 			reason = "does not exist"
 		}
-		return usageErrorf(ErrInvalidRoot, "invalid root %s: %s", Escape(root), reason), true
+		return usageErrorf(ErrInvalidRoot, "invalid root %s: %s", safepresentation.EscapePath([]byte(root)), reason), true
 	}
 	if !fi.IsDir() && !fi.Mode().IsRegular() {
-		return usageErrorf(ErrInvalidRoot, "invalid root %s: not a directory or regular file", Escape(root)), true
+		return usageErrorf(ErrInvalidRoot, "invalid root %s: not a directory or regular file", safepresentation.EscapePath([]byte(root))), true
 	}
 	return Result{}, false
 }
 
+// usageErrorf builds a classified usage error. Operands arrive already
+// single-line-escaped through the shared utility; the composed
+// diagnostic passes through it too, so the sink-facing contract —
+// sanitized, single-line — holds whatever the format carries.
 func usageErrorf(kind ErrorKind, format string, args ...any) Result {
 	return Result{
 		Kind:       KindUsageError,
 		ErrorKind:  kind,
-		Diagnostic: appName + ": " + fmt.Sprintf(format, args...),
+		Diagnostic: safepresentation.EscapeDiagnostic(appName + ": " + fmt.Sprintf(format, args...)),
 	}
 }
 
@@ -447,9 +452,11 @@ func HelpText() string {
 	return renderHelp()
 }
 
-// renderHelp generates the command-line help from the shared declarations.
-// It contains no external substitutions: the application name and every
-// description string are fixed.
+// renderHelp generates the command-line help from the shared
+// declarations. It contains no external substitutions: the application
+// name and every description string are fixed. The generated text still
+// passes through the shared utility like every sink — real line
+// boundaries are preserved and the layout tabs expand to columns.
 func renderHelp() string {
 	var b strings.Builder
 	b.WriteString("Usage: " + appName + " [OPTIONS]")
@@ -485,53 +492,5 @@ func renderHelp() string {
 		}
 		b.WriteString("  " + names + "\t" + d.desc + "\n")
 	}
-	return b.String()
-}
-
-// Escape renders external data safe for a single-line diagnostic or stub
-// substitution. Backslashes double; newline, carriage return, and tab
-// become \n, \r, \t; other C0 controls and DEL use caret notation; C1
-// controls use \u escapes; invalid UTF-8 bytes use \xNN. Printable text
-// passes through. This is the minimal Issue 1 escaper; Issue 6 generalizes
-// safe presentation for every sink.
-func Escape(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); {
-		c := s[i]
-		if c < utf8.RuneSelf {
-			switch {
-			case c == '\\':
-				b.WriteString(`\\`)
-			case c == '\n':
-				b.WriteString(`\n`)
-			case c == '\r':
-				b.WriteString(`\r`)
-			case c == '\t':
-				b.WriteString(`\t`)
-			case c < 0x20:
-				b.WriteByte('^')
-				b.WriteByte(c + '@')
-			case c == 0x7f:
-				b.WriteString(`^?`)
-			default:
-				b.WriteByte(c)
-			}
-			i++
-			continue
-		}
-		r, size := utf8.DecodeRuneInString(s[i:])
-		if r == utf8.RuneError && size == 1 {
-			fmt.Fprintf(&b, `\x%02x`, c)
-			i++
-			continue
-		}
-		if r >= 0x80 && r < 0xa0 {
-			fmt.Fprintf(&b, `\u%04x`, r)
-		} else {
-			b.WriteString(s[i : i+size])
-		}
-		i += size
-	}
-	return b.String()
+	return safepresentation.EscapeDiagnostic(b.String())
 }

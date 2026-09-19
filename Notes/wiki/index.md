@@ -35,6 +35,12 @@ Catalog of all wiki pages for the vrg project.
   byte→cell maps; the minimal viewport/theme seams; the
   `VRG_TEST_LOAD_GATE` seam; and the hostile-fixture raw-output
   sink-safety method
+- [safe-presentation.md](safe-presentation.md) — Issue #6 shared
+  safe-presentation utility: the canonical path/content/diagnostic
+  escaping contracts, the replaced Issue #1 `cli.Escape`, every sink
+  routed through `internal/safepresentation`, and the extensible
+  `sinktest` sink-safety table (no-style raw-output assertions plus the
+  styled payload-after-ESC check)
 
 ## Catalogs
 

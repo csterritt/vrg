@@ -22,11 +22,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   adapter. Contains the shared `optionDecls`/`argDecls` table (parser
   config + raw-token recognition + ordered flag records + generated
   help), the ordered `scanArgs` preflight with combined-short expansion
-  and cumulative unrestricted counting, `renderHelp`, `checkRoot`, the
-  `Escape` sanitizer, and the `Result`/`Kind`/`ErrorKind`/`Env` contract
-  including `Result.ChildArgs` (the protected `rg` argv). See
-  [cli-foundation.md](cli-foundation.md) and
-  [cli-flags-child-argv.md](cli-flags-child-argv.md).
+  and cumulative unrestricted counting, `renderHelp`, `checkRoot`, and
+  the `Result`/`Kind`/`ErrorKind`/`Env` contract including
+  `Result.ChildArgs` (the protected `rg` argv). Sanitization routes
+  through `internal/safepresentation` (the Issue #1 `Escape` is
+  replaced): usage diagnostics embed `EscapePath`-escaped operands and
+  pass through `EscapeDiagnostic`, as does generated help. See
+  [cli-foundation.md](cli-foundation.md),
+  [cli-flags-child-argv.md](cli-flags-child-argv.md), and
+  [safe-presentation.md](safe-presentation.md).
 
 ## internal/searchindex
 
@@ -82,5 +86,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   sink-safety tests.
 - `internal/safepresentation/safepresentation.go` — `EscapePath`,
   `MapContent`, `Mapped`/`Cell`/`CellsCovering` byte→cell maps.
+- `internal/safepresentation/diagnostic.go` — `EscapeDiagnostic`:
+  real line boundaries preserved (CRLF normalizes to LF), tabs expand
+  to eight-column stops, other controls escaped; embedded external
+  strings are `EscapePath`-escaped first.
 - `internal/safepresentation/cellwidth.go` — `CellWidth` and the
-  package-internal rune decoder (Issue #39 boundary).
+  package-internal rune decoders (Issue #39 boundary).
+- `internal/safepresentation/sinktest/sinktest.go` — test-support
+  package (imported only by `_test.go` files): the shared hostile
+  `Fixtures`, the `Sink` row type, the `AssertRawOutput`/
+  `AssertPayloadNotEscaped` raw-output assertions, and the `Run`
+  table driver. See [safe-presentation.md](safe-presentation.md).

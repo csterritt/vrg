@@ -12,8 +12,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"vrg/internal/cli"
 	"vrg/internal/filebuffer"
+	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
 	"vrg/internal/theme"
 	"vrg/internal/viewport"
@@ -271,7 +271,7 @@ func Run(ctx context.Context, cfg Config, opts ...Option) int {
 	}
 	child, err := start(ctx, cfg.Args, cfg.Dir)
 	if err != nil {
-		fmt.Fprintf(errOut, "vrg: cannot start ripgrep: %s\n", cli.Escape(err.Error()))
+		fmt.Fprintf(errOut, "vrg: cannot start ripgrep: %s\n", safepresentation.EscapePath([]byte(err.Error())))
 		return 2
 	}
 	var o options
@@ -311,7 +311,7 @@ func Run(ctx context.Context, cfg Config, opts ...Option) int {
 // emits one sanitized controlled-failure diagnostic, and only runs after
 // the program has returned and the terminal is restored.
 func writeFailureDiag(w io.Writer, err error) {
-	fmt.Fprintf(w, "vrg: %s\n", cli.Escape(err.Error()))
+	fmt.Fprintf(w, "vrg: %s\n", safepresentation.EscapePath([]byte(err.Error())))
 }
 
 // center pads s into a w×h field, centered horizontally and vertically.

@@ -1,8 +1,8 @@
-// Package safepresentation turns external bytes — searched paths and
-// file content — into terminal-safe display text. It is the Issue #5
-// core landed ahead of the first arbitrary-data render; Issue #6
-// generalizes it into the shared utility that also replaces the minimal
-// Issue #1 cli.Escape escaper.
+// Package safepresentation turns external bytes — searched paths, file
+// content, and text embedded in diagnostics — into terminal-safe
+// display text. It is the single shared utility every output sink
+// routes through: Issue #6 generalized the Issue #5 core and replaced
+// the minimal Issue #1 cli.Escape escaper.
 //
 // The terminal-safety contract is narrow and strong: raw control
 // sequences from external data never execute. Original bytes remain the

@@ -117,6 +117,26 @@ Issue #5) covers the escaping core and the byte→cell maps:
 - `TestCellsCovering`, `TestCellsCoveringEscapedForms` — byte ranges map
   to covering cell ranges; a match over ESC covers both `^` and `[`.
 
+`diagnostic_test.go` (external package; Issue #6) covers the diagnostic
+presentation rules of `EscapeDiagnostic`:
+
+- `TestEscapeDiagnostic` — real line boundaries preserved (LF kept,
+  CRLF normalized to LF), standalone CR → `^M`, tabs expand to the next
+  multiple of eight columns (including after a wide rune and reset per
+  line), C0/DEL caret forms, C1 `\uXXXX`, invalid UTF-8 `\xNN`, literal
+  backslash, printable Unicode kept.
+- `TestEscapeDiagnosticEmbeddedFilename` — an `EscapePath`-escaped
+  filename with a newline stays single-lined inside a multi-line
+  diagnostic.
+- `TestEscapeDiagnosticEmitsNoRawControls` — no C0 byte other than `\n`,
+  no DEL, no C1, and valid UTF-8 in the output.
+
+`internal/safepresentation/sinktest` is the shared test-support package:
+`Fixtures` (the hostile fixture set), `Sink` rows, `AssertRawOutput`
+(no-style raw-output cleanliness before ANSI stripping),
+`AssertPayloadNotEscaped` (styled payload-after-ESC check), and `Run`,
+the table driver.
+
 ## internal/filebuffer
 
 `filebuffer_test.go` (external package `filebuffer_test`; Issue #5):
@@ -175,6 +195,18 @@ composition, the async load lifecycle, and sink safety:
   escaped forms in all three sinks, frame still `height` rows).
 - `TestLateLoadForOtherFileIgnored` — a completion for a non-current
   path cannot replace the visible panel.
+
+`sinksafety_test.go` (same package; Issue #6) hosts the shared
+sink-safety table `sinkSafetySinks` — five rows over every sink
+existing at this point (file-list entry, filename rule, panel content,
+usage-error stderr, CLI-help stdout) — and `TestSinkSafetyTable` runs
+`sinktest.Run` over it: each `<sink>/<fixture>` subtest asserts clean
+raw output on the no-style path and, for the styled TUI rows, that no
+fixture payload follows an unescaped ESC. Each row also proves the
+fixture reached the sink (escaped name in the list/rule region, mapped
+content forms in the panel, `EscapePath` operand in the stderr block);
+the help row injects the hostile operand into argv while rendering
+help, which has no substitution points.
 
 `rg_test.go` (same package) exercises the real `spawn` against fake `rg`
 scripts on `PATH`:

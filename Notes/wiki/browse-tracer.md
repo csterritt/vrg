@@ -16,9 +16,10 @@ and *Module Design → FileBuffer / Viewport / Theme / App* in
 ## Safe-presentation core (`internal/safepresentation`)
 
 Issue #5 is the first to render arbitrary external bytes, so it lands the
-escaping core ahead of the first render; Issue #6 generalizes it into the
-shared all-sink utility that also replaces the Issue #1 `cli.Escape`
-escaper. The contract is narrow: raw control sequences from external
+escaping core ahead of the first render;
+[Issue #6](safe-presentation.md) has since generalized it into the
+shared all-sink utility and replaced the Issue #1 `cli.Escape` escaper.
+The contract is narrow: raw control sequences from external
 data never execute, and original bytes remain the key for identity,
 ordering, and file access — displayed strings never become filesystem
 keys.
@@ -132,8 +133,11 @@ any ANSI stripping, that the view is valid UTF-8 carrying no control
 rune except the row-separator newlines, that the frame is still exactly
 `height` rows (a survived filename newline would add one), and that the
 escaped forms appear in all three sinks — file-list entry, filename
-rule, and panel content. Issue #6 restructures this fixture set into
-the shared, extensible sink-safety table.
+rule, and panel content. [Issue #6](safe-presentation.md) has
+restructured this fixture set into the shared, extensible sink-safety
+table (`internal/safepresentation/sinktest` +
+`internal/app/sinksafety_test.go`), which adds the usage-error-stderr
+and CLI-help-stdout rows alongside the three browse sinks.
 
 ## Tests
 

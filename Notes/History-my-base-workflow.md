@@ -59,3 +59,14 @@ Usage
  Input tokens: 102200 tokens
  Output tokens: 38942 tokens
  Cached input tokens: 4044916 tokens
+
+----
+Task 006-safe-presentation-utility-for-all-sinks.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 34 messages
+ Input tokens: 62856 tokens
+ Output tokens: 13245 tokens
+ Cached input tokens: 1857063 tokens

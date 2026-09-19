@@ -92,12 +92,18 @@ child argv — see [cli-flags-child-argv.md](cli-flags-child-argv.md).
 
 ## Sanitization
 
-`cli.Escape` is the interim single-line escaper (Issue #6 generalizes):
-`\\` doubles, `\n`/`\r`/`\t` become escape spellings, other C0 controls
-and DEL use caret notation (`ESC` → `^[`), C1 controls use `\u` escapes,
-invalid UTF-8 bytes use `\xNN`. It covers usage diagnostics and, since
-Issue #3, the start-failure diagnostic (`vrg: cannot start ripgrep: …`);
-generated help contains only fixed text.
+Since Issue #6 the interim `cli.Escape` escaper is replaced by the
+shared safe-presentation utility — see
+[safe-presentation.md](safe-presentation.md). Usage diagnostics embed
+operands single-line-escaped via `safepresentation.EscapePath` (`\\`
+doubles, `\n`/`\r`/`\t` become escape spellings, other C0 controls and
+DEL use caret notation, C1 uses `\u` escapes, invalid UTF-8 uses
+`\xNN`), and `usageErrorf` passes the composed diagnostic through
+`safepresentation.EscapeDiagnostic`. Generated help — still only fixed
+text — also passes through `EscapeDiagnostic` at render, expanding its
+layout tabs to fixed columns. The start-failure diagnostic
+(`vrg: cannot start ripgrep: …`) and the other stderr diagnostics
+escape embedded error text via `EscapePath`.
 
 ## Tests consumed by later tasks
 

@@ -70,7 +70,8 @@ file — see [browse-tracer.md](browse-tracer.md). `q` in browse returns
 
 A start failure (rg absent, exec error) is detected in `app.Run` **before**
 `tea.NewProgram` runs: a sanitized single-line diagnostic
-(`vrg: cannot start ripgrep: …`, via `cli.Escape`) goes to stderr and the
+(`vrg: cannot start ripgrep: …`, the error text single-line-escaped via
+`safepresentation.EscapePath`) goes to stderr and the
 process exits 2 — no TUI is entered.
 
 ## SearchIndex record rules

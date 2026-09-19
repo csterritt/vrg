@@ -67,7 +67,7 @@ hook command with collection; a non-nil return becomes `failMsg`, which
 begins the same cleanup exit and records `failErr`. After the program
 has returned — terminal restored — `app.Run` hands the error to
 `writeFailureDiag`, the single post-restoration stderr writer
-(`vrg: <cli.Escape(...)>`), and exits 2. A `program.Run` error
+(`vrg: <EscapePath-escaped error text>`), and exits 2. A `program.Run` error
 (TTY/startup failure, caught panic) takes the same writer and status.
 The diagnostic is written exactly once and only after restoration; the
 writer is deliberately not yet a collection/replay mechanism — Issue #11

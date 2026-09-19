@@ -11,6 +11,7 @@ import (
 
 	"vrg/internal/app"
 	"vrg/internal/cli"
+	"vrg/internal/safepresentation"
 )
 
 func main() {
@@ -28,7 +29,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case cli.KindSearch:
 		cwd, err := os.Getwd()
 		if err != nil {
-			fmt.Fprintf(stderr, "vrg: cannot determine working directory: %s\n", cli.Escape(err.Error()))
+			fmt.Fprintf(stderr, "vrg: cannot determine working directory: %s\n", safepresentation.EscapePath([]byte(err.Error())))
 			return 2
 		}
 		return app.Run(context.Background(), app.Config{

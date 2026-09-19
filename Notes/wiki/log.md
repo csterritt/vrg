@@ -139,3 +139,46 @@ Design), `cmd/vrg/main.go`, `internal/app/app.go`,
 `internal/safepresentation/cellwidth.go`,
 `internal/safepresentation/safepresentation_test.go`,
 `internal/viewport/viewport.go`, `internal/theme/theme.go`.
+
+## [2026-09-16] ingest | Issue #6 shared safe-presentation utility and sink-safety table
+
+Ingested the completed Issue #6 implementation: `internal/safepresentation`
+is now the single shared utility every output sink routes through —
+`EscapePath` (paths/filenames, single-line) and `MapContent` (content
+lines with byte→cell maps) unchanged from Issue #5, plus the new
+`EscapeDiagnostic` (`internal/safepresentation/diagnostic.go`): real
+diagnostic line boundaries preserved (LF kept, CRLF normalized to LF),
+tabs expanded to eight-column stops, other controls escaped (standalone
+CR → `^M`, caret/C1 `\uXXXX`/invalid `\xNN`, literal backslash), with
+embedded external strings single-line-escaped via `EscapePath` first.
+The Issue #1 `cli.Escape` is removed: `internal/cli` usage diagnostics
+embed `EscapePath`-escaped operands and pass through `EscapeDiagnostic`
+(`usageErrorf`), `renderHelp` output passes through `EscapeDiagnostic`
+(expanding its layout tabs — routing the CLI-help stdout sink), and the
+`internal/app`/`cmd/vrg` stderr diagnostics escape embedded error text
+via `EscapePath`. The new test-support package
+`internal/safepresentation/sinktest` holds the restructured hostile
+fixture set (OSC, CSI, C0 run, C1, DEL, standalone CR, invalid UTF-8,
+embedded filename newline) plus `AssertRawOutput` (no-style raw-output
+cleanliness before ANSI stripping) and `AssertPayloadNotEscaped`
+(styled payload-after-ESC); `internal/app/sinksafety_test.go` hosts the
+five-row table — file-list entry, filename rule, panel content,
+usage-error stderr, CLI-help stdout — that Issues #9/#11/#15/#31/#34
+extend for their sinks. Issue #5 escaping tests, the browse
+sink-safety test, and the Issue #1 CLI output tests pass unchanged.
+Created [safe-presentation](safe-presentation.md); updated
+[cli-foundation](cli-foundation.md), [browse-tracer](browse-tracer.md),
+[search-collection](search-collection.md),
+[cancellation-cleanup](cancellation-cleanup.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/006-safe-presentation-utility-for-all-sinks.md`,
+`Notes/tasks/006-safe-presentation-utility-for-all-sinks.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation),
+`cmd/vrg/main.go`, `internal/app/app.go`,
+`internal/app/sinksafety_test.go`, `internal/cli/cli.go`,
+`internal/safepresentation/safepresentation.go`,
+`internal/safepresentation/diagnostic.go`,
+`internal/safepresentation/cellwidth.go`,
+`internal/safepresentation/diagnostic_test.go`,
+`internal/safepresentation/sinktest/sinktest.go`.

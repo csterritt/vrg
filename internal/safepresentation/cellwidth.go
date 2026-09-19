@@ -15,3 +15,6 @@ func CellWidth(s string) int { return uniseg.StringWidth(s) }
 // the Issue #39 boundary: display-geometry code elsewhere never decodes
 // runes itself.
 func decodeRune(b []byte) (rune, int) { return utf8.DecodeRune(b) }
+
+// decodeRuneInString is the string form of decodeRune.
+func decodeRuneInString(s string) (rune, int) { return utf8.DecodeRuneInString(s) }
