@@ -17,3 +17,25 @@ the index. Sources: `Notes/issues/001-go-scaffold-cli-positionals-and-root.md`,
 Testing Decisions → CLI), `cmd/vrg/main.go`, `internal/cli/cli.go`,
 `internal/cli/cli_test.go`, `internal/cli/internal_test.go`,
 `cmd/vrg/main_test.go`.
+
+## [2026-09-16] ingest | Issue #2 CLI flag allow-list and child argv
+
+Ingested the completed Issue #2 implementation: `optionDecls` extended to
+all eleven allow-listed no-argument search flags (single source for
+mow.cli config, scan recognition, ordered flag records, and generated
+help); `scanArgs`/`scanOption` record accepted spellings in encounter
+order with combined-short expansion, lexically reject every `=`
+assignment form (closing Issue #1's `--help=true` parsed-value seam), and
+count cumulative `-u`/`--unrestricted` with a two-occurrence cap;
+`Result.ChildArgs` carries the exact protected argv
+`--json --no-config <flags> -- <pattern> <root>`; the `cmd/vrg` stub
+prints `search stub: argv=rg …`. Created
+[cli-flags-child-argv](cli-flags-child-argv.md); updated
+[cli-foundation](cli-foundation.md), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/issues/002-cli-flag-allow-list-and-child-argv.md`,
+`Notes/tasks/002-cli-flag-allow-list-and-child-argv.md`,
+`Notes/PRD-vrg.md` (Invocation and child arguments, Module Design → CLI),
+`internal/cli/cli.go`, `internal/cli/cli_test.go`,
+`internal/cli/internal_test.go`, `cmd/vrg/main.go`,
+`cmd/vrg/main_test.go`.

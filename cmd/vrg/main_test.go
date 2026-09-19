@@ -148,6 +148,9 @@ func TestGeneratedHelpStdout(t *testing.T) {
 		{"foo", "bar", "baz", "--help"},
 		{"-i", "--help"},
 		{"-ih"},
+		{"-iw", "--help"},
+		{"-ih", "foo"},
+		{"-uuu", "--help"},
 		{"--unsupported", "--help"},
 		{"foo", "/nonexistent", "--help"},
 	}
@@ -280,19 +283,27 @@ func TestExecutableBoundary(t *testing.T) {
 	}
 
 	res := runVrg(t, "foo")
-	if !strings.Contains(res.stdout, `root="."`) && !strings.Contains(res.stdout, "root=.") {
-		t.Fatalf("default root missing from stub output: %q", res.stdout)
+	if res.stdout != "search stub: argv=rg --json --no-config -- foo .\n" {
+		t.Fatalf("default-root stub output = %q, want the exact child argv", res.stdout)
 	}
 
 	errorCases := [][]string{
-		{"--"},            // missing pattern
-		{"a", "b", "c"},   // excess operands
-		{"--unsupported"}, // unsupported option
-		{"foo", "-x"},     // unsupported short option
+		{"--"},                         // missing pattern
+		{"a", "b", "c"},                // excess operands
+		{"--unsupported"},              // unsupported option
+		{"foo", "-e"},                  // unsupported short option
+		{"-e", "foo"},                  // -e is not allow-listed
+		{"--type", "go", "foo"},        // argument-taking option
+		{"-uuu", "foo"},                // third cumulative -u
+		{"-u", "-uu", "foo"},           // third -u across tokens
+		{"foo", "--ignore-case=false"}, // assignment form rejected
+		{"foo", "-i=false"},            // short assignment form rejected
+		{"foo", "--unrestricted=false"},
 		{"foo", "/nonexistent-vrg-root"},
 		{"foo", "-"}, // stdin root
 		{"foo", "/dev/null"},
-		{"-i"}, // flags only, no pattern
+		{"-i"},   // flags only, no pattern
+		{"-iwF"}, // combined flags only, no pattern
 	}
 	for _, args := range errorCases {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
@@ -322,16 +333,56 @@ func TestDashFileRootAtProcessBoundary(t *testing.T) {
 	}
 }
 
-// Help assignment spellings that disable help are not help requests: no
-// help reaches stdout. The eventual status is Issue 2's and is not pinned.
+// The child argv at the process boundary: the stub prints the exact
+// protected vector — rg, mandatory internal flags, the ordered expanded
+// user flags, --, pattern, root.
+func TestChildArgvBoundary(t *testing.T) {
+	dir := t.TempDir()
+	subdir := filepath.Join(dir, "sub")
+	if err := os.Mkdir(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no flags", []string{"foo"}, "search stub: argv=rg --json --no-config -- foo .\n"},
+		{"combined flags with root", []string{"-iw", "foo", subdir}, "search stub: argv=rg --json --no-config -i -w -- foo " + subdir + "\n"},
+		{"repeated shorts", []string{"-i", "-s", "-i", "foo"}, "search stub: argv=rg --json --no-config -i -s -i -- foo .\n"},
+		{"combined expansion", []string{"-isi", "foo"}, "search stub: argv=rg --json --no-config -i -s -i -- foo .\n"},
+		{"combined -iwF", []string{"-iwF", "foo"}, "search stub: argv=rg --json --no-config -i -w -F -- foo .\n"},
+		{"mixed aliases keep spellings", []string{"--ignore-case", "-s", "-i", "foo"}, "search stub: argv=rg --json --no-config --ignore-case -s -i -- foo .\n"},
+		{"options interleaved with operands", []string{"foo", "-i", subdir, "-s"}, "search stub: argv=rg --json --no-config -i -s -- foo " + subdir + "\n"},
+		{"empty pattern", []string{"", "."}, "search stub: argv=rg --json --no-config --  .\n"},
+		{"literal dash pattern", []string{"-", "."}, "search stub: argv=rg --json --no-config -- - .\n"},
+		{"dash-leading pattern", []string{"--", "-foo"}, "search stub: argv=rg --json --no-config -- -foo .\n"},
+		{"literal -- pattern", []string{"--", "--"}, "search stub: argv=rg --json --no-config -- -- .\n"},
+		{"literal -- pattern with root", []string{"--", "--", "."}, "search stub: argv=rg --json --no-config -- -- .\n"},
+		{"unrestricted pair", []string{"-u", "--unrestricted", "foo"}, "search stub: argv=rg --json --no-config -u --unrestricted -- foo .\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := runVrg(t, tc.args...)
+			if res.code != 0 || res.stderr != "" {
+				t.Fatalf("vrg %v = exit %d stderr %q, want clean exit 0", tc.args, res.code, res.stderr)
+			}
+			if res.stdout != tc.want {
+				t.Fatalf("vrg %v printed %q, want %q", tc.args, res.stdout, tc.want)
+			}
+		})
+	}
+}
+
+// Help assignment spellings are not help requests: they are rejected
+// lexically as unsupported options before any value parsing.
 func TestHelpAssignmentSpellingsAreNotHelp(t *testing.T) {
 	for _, args := range [][]string{
 		{"foo", "--help=false"},
 		{"foo", "-h=false"},
+		{"foo", "--help=true"},
+		{"foo", "-h=true"},
 	} {
-		res := runVrg(t, args...)
-		if strings.Contains(res.stdout, "Usage:") {
-			t.Fatalf("vrg %v emitted help for a help-disabling spelling: %q", args, res.stdout)
-		}
+		assertUsageError(t, runVrg(t, args...), args)
 	}
 }

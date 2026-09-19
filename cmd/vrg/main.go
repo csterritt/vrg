@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"vrg/internal/cli"
 )
@@ -23,8 +24,15 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	case cli.KindSearch:
 		// Interim stub proving the end-to-end slice; later issues replace
-		// it with the search and the TUI.
-		fmt.Fprintf(stdout, "search stub: pattern=%s root=%s\n", cli.Escape(res.Pattern), cli.Escape(res.Root))
+		// it with the search and the TUI. It prints the exact protected
+		// child argv, one space-separated element at a time so an empty
+		// element stays visible as an empty field.
+		var b strings.Builder
+		b.WriteString("search stub: argv=rg")
+		for _, a := range res.ChildArgs {
+			b.WriteString(" " + cli.Escape(a))
+		}
+		fmt.Fprintln(stdout, b.String())
 		return 0
 	default:
 		fmt.Fprintln(stderr, res.Diagnostic)

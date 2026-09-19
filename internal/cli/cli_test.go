@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -76,9 +77,16 @@ func TestHelpOnlyResults(t *testing.T) {
 		{"help after unsupported option", []string{"--unsupported", "--help"}},
 		{"help between unsupported options", []string{"--bogus", "-h", "--bogus2"}},
 		{"flag-preceded help without pattern", []string{"-i", "--help"}},
+		{"search flags then help", []string{"-i", "-w", "--help"}},
+		{"search flags, pattern, then help", []string{"-i", "foo", "-h"}},
+		{"help after a root", []string{"foo", "someroot", "--help"}},
 		{"combined short help", []string{"-ih"}},
 		{"combined short help first", []string{"-hi"}},
+		{"combined short help with pattern", []string{"-ih", "foo"}},
 		{"combined short help with unknowns", []string{"-xh"}},
+		{"help beats unsupported option", []string{"-e", "--help"}},
+		{"help beats cumulative unrestricted limit", []string{"-uuu", "--help"}},
+		{"help beats assignment rejection", []string{"--help=false", "--help"}},
 		{"help token joined to letters", []string{"-help"}},
 		{"help before option terminator", []string{"-h", "--"}},
 		{"help before terminator and operand", []string{"--help", "--", "x"}},
@@ -89,7 +97,7 @@ func TestHelpOnlyResults(t *testing.T) {
 			if res.Kind != cli.KindHelp {
 				t.Fatalf("Parse(%q).Kind = %v, want KindHelp", tc.args, res.Kind)
 			}
-			if res.Pattern != "" || res.Root != "" {
+			if res.Pattern != "" || res.Root != "" || res.ChildArgs != nil {
 				t.Fatalf("help-only result carries search fields: %+v", res)
 			}
 			assertOneHelpCopy(t, out)
@@ -120,50 +128,45 @@ func TestGeneratedHelpContent(t *testing.T) {
 	}
 }
 
-// The library seam: a help value set through a successful parse (the
-// assignment spelling, which the raw-token preflight does not classify as
-// a help request) must still produce the help-only result before root
-// validation or search work. A bare --help=true without a pattern is not a
-// help request at all and stays a missing-pattern usage error.
-func TestParsedLocalHelpValue(t *testing.T) {
-	for _, args := range [][]string{
-		{"foo", "--help=true"},
-		{"foo", "-h=true"},
-		{"--help=true", "foo"},
+// Every allow-listed no-argument flag is a contract without values: the
+// scan rejects = assignment spellings lexically, for search flags and the
+// help option alike, before the library's permissive boolean parsing can
+// see them. None are help requests, none reach root validation, and none
+// produce a child argv.
+func TestOptionAssignmentFormsRejected(t *testing.T) {
+	for _, arg := range []string{
+		"--ignore-case=false", "-i=false",
+		"--ignore-case=true", "-i=true", "-i=1",
+		"--unrestricted=false", "--unrestricted=true", "-u=0",
+		"--hidden=true", "--fixed-strings=off", "-S=",
+		"--help=false", "-h=false", "--help=true", "-h=true",
+		"--help=", "-h=", "--ignore-case=", "--help=maybe",
 	} {
-		res, out := parse(t, args, failStat(t))
-		if res.Kind != cli.KindHelp {
-			t.Fatalf("Parse(%q).Kind = %v, want KindHelp from the parsed help value", args, res.Kind)
+		res, out := parse(t, []string{"foo", arg}, failStat(t))
+		if res.Kind != cli.KindUsageError || res.ErrorKind != cli.ErrUnsupportedOption {
+			t.Fatalf("Parse(foo %q) = kind %v err %v, want unsupported-option usage error", arg, res.Kind, res.ErrorKind)
 		}
-		assertOneHelpCopy(t, out)
-	}
-
-	res, _ := parse(t, []string{"--help=true"}, failStat(t))
-	if res.Kind != cli.KindUsageError || res.ErrorKind != cli.ErrMissingPattern {
-		t.Fatalf(`Parse(["--help=true"]).Kind = %v (%v), want missing-pattern usage error`, res.Kind, res.ErrorKind)
+		if res.ChildArgs != nil {
+			t.Fatalf("Parse(foo %q) produced a child argv on a rejected spelling: %q", arg, res.ChildArgs)
+		}
+		if out != "" {
+			t.Fatalf("Parse(foo %q) emitted help text for a rejected spelling: %q", arg, out)
+		}
+		assertSanitizedLine(t, res.Diagnostic)
 	}
 }
 
-// Assignment spellings that disable help are not help requests. They must
-// not produce the help-only result; the eventual exit status is Issue 2's
-// to change, so only the not-help contract is pinned.
-func TestHelpAssignmentSpellingsAreNotHelpRequests(t *testing.T) {
-	for _, arg := range []string{"--help=false", "-h=false"} {
-		t.Run(arg, func(t *testing.T) {
-			var calls []string
-			res, out := parse(t, []string{"foo", arg}, recordStat(&calls))
-			if res.Kind == cli.KindHelp {
-				t.Fatalf("Parse(%q) produced the help-only result for a help-disabling spelling", []string{"foo", arg})
-			}
-			if strings.Contains(out, "Usage:") {
-				t.Fatalf("help text emitted for %q: %q", arg, out)
-			}
-			// The normal parse path ran: root validation was reached for the
-			// defaulted root, which a help path would have skipped.
-			if len(calls) == 0 {
-				t.Fatalf("root validation never ran for %q; invocation was treated as help-only", arg)
-			}
-		})
+// The same assignment-shaped bytes are ordinary operands after the first
+// -- when arity permits.
+func TestAssignmentSpellingsAfterTerminator(t *testing.T) {
+	for _, arg := range []string{
+		"--ignore-case=false", "-i=false", "--unrestricted=false",
+		"--help=false", "-h=false",
+	} {
+		res, _ := parse(t, []string{"--", arg}, os.Stat)
+		if res.Kind != cli.KindSearch || res.Pattern != arg {
+			t.Fatalf(`Parse(["--", %q]) = kind %v pattern %q, want a search with that pattern`, arg, res.Kind, res.Pattern)
+		}
 	}
 }
 
@@ -211,8 +214,12 @@ func TestPositionalsAndRoot(t *testing.T) {
 		{"excess operands", []string{"a", "b", "c"}, cli.KindUsageError, cli.ErrExcessOperand, "", ""},
 		{"excess operand after terminator", []string{"a", "b", "--", "c"}, cli.KindUsageError, cli.ErrExcessOperand, "", ""},
 		{"unsupported long option", []string{"--unsupported"}, cli.KindUsageError, cli.ErrUnsupportedOption, "", ""},
-		{"unsupported short option", []string{"-x"}, cli.KindUsageError, cli.ErrUnsupportedOption, "", ""},
-		{"unsupported option after pattern", []string{"foo", "-x"}, cli.KindUsageError, cli.ErrUnsupportedOption, "", ""},
+		{"unsupported short option", []string{"-e"}, cli.KindUsageError, cli.ErrUnsupportedOption, "", ""},
+		{"unsupported option after pattern", []string{"foo", "-e"}, cli.KindUsageError, cli.ErrUnsupportedOption, "", ""},
+		{"argument-taking option rejected", []string{"--type", "go", "foo"}, cli.KindUsageError, cli.ErrUnsupportedOption, "", ""},
+		{"argument-taking short rejected", []string{"-t", "go", "foo"}, cli.KindUsageError, cli.ErrUnsupportedOption, "", ""},
+		{"undeclared combined letters rejected", []string{"-foo"}, cli.KindUsageError, cli.ErrUnsupportedOption, "", ""},
+		{"dash-leading pattern needs terminator", []string{"-foo", "."}, cli.KindUsageError, cli.ErrUnsupportedOption, "", ""},
 		{"invalid help assignment value", []string{"foo", "--help=maybe"}, cli.KindUsageError, cli.ErrUnsupportedOption, "", ""},
 		{"empty help assignment value", []string{"foo", "--help="}, cli.KindUsageError, cli.ErrUnsupportedOption, "", ""},
 		{"nonexistent root", []string{"foo", missing}, cli.KindUsageError, cli.ErrInvalidRoot, "", ""},
@@ -235,6 +242,7 @@ func TestPositionalsAndRoot(t *testing.T) {
 				if res.Pattern != tc.wantPattern || res.Root != tc.wantRoot {
 					t.Fatalf("Parse(%q) = pattern %q root %q, want %q %q", tc.args, res.Pattern, res.Root, tc.wantPattern, tc.wantRoot)
 				}
+				assertChildArgs(t, res, []string{"--json", "--no-config", "--", tc.wantPattern, tc.wantRoot})
 			case cli.KindUsageError:
 				if res.ErrorKind != tc.wantErr {
 					t.Fatalf("Parse(%q).ErrorKind = %v, want %v", tc.args, res.ErrorKind, tc.wantErr)
@@ -251,7 +259,9 @@ func TestUsageErrorsPrecedeRootValidation(t *testing.T) {
 		{"--"},
 		{"a", "b", "c"},
 		{"--unsupported"},
-		{"foo", "-x"},
+		{"foo", "-e"},
+		{"foo", "--ignore-case=false"},
+		{"-uuu", "foo"},
 	} {
 		res, _ := parse(t, args, failStat(t))
 		if res.Kind != cli.KindUsageError {
@@ -331,6 +341,169 @@ func TestUsageDiagnosticSafety(t *testing.T) {
 				t.Fatalf("diagnostic %q does not show the escaped form %q", res.Diagnostic, tc.wantContains)
 			}
 		})
+	}
+}
+
+// assertChildArgs requires the exact protected child argument vector:
+// --json --no-config, the ordered expanded user flags, --, pattern, root.
+func assertChildArgs(t *testing.T, res cli.Result, want []string) {
+	t.Helper()
+	if res.Kind != cli.KindSearch {
+		t.Fatalf("result kind = %v, want KindSearch (diagnostic %q)", res.Kind, res.Diagnostic)
+	}
+	if !slices.Equal(res.ChildArgs, want) {
+		t.Fatalf("child argv = %q, want %q", res.ChildArgs, want)
+	}
+}
+
+// Every allow-listed no-argument search flag is accepted in both spellings
+// and forwarded verbatim, ahead of --, the pattern, and the root.
+func TestSearchFlagsForwarded(t *testing.T) {
+	for _, flag := range []string{
+		"-i", "--ignore-case",
+		"-S", "--smart-case",
+		"-s", "--case-sensitive",
+		"-w", "--word-regexp",
+		"-x", "--line-regexp",
+		"-F", "--fixed-strings",
+		"--hidden", "--no-hidden", "--no-ignore",
+		"-u", "--unrestricted",
+		"-L", "--follow",
+	} {
+		res, out := parse(t, []string{flag, "foo"}, os.Stat)
+		if out != "" {
+			t.Fatalf("Parse(%q) wrote to the help writer on a search path: %q", flag, out)
+		}
+		assertChildArgs(t, res, []string{"--json", "--no-config", flag, "--", "foo", "."})
+	}
+}
+
+// Encounter order and supplied spellings survive to the child argv for
+// repeated, combined, mixed-alias, and operand-interleaved options. Order
+// comes from the ordered scan records, never from library value
+// assignment, and contradictory flags are forwarded without normalization.
+func TestOrderedChildArgs(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"no flags", []string{"foo"}, []string{"--json", "--no-config", "--", "foo", "."}},
+		{"repeated and interleaved shorts", []string{"-i", "-s", "-i", "foo"}, []string{"--json", "--no-config", "-i", "-s", "-i", "--", "foo", "."}},
+		{"combined shorts expand in order", []string{"-isi", "foo"}, []string{"--json", "--no-config", "-i", "-s", "-i", "--", "foo", "."}},
+		{"combined token -iwF", []string{"-iwF", "foo"}, []string{"--json", "--no-config", "-i", "-w", "-F", "--", "foo", "."}},
+		{"mixed long and short aliases", []string{"--ignore-case", "-s", "-i", "foo"}, []string{"--json", "--no-config", "--ignore-case", "-s", "-i", "--", "foo", "."}},
+		{"options interleaved with both operands", []string{"foo", "-i", dir, "-s"}, []string{"--json", "--no-config", "-i", "-s", "--", "foo", dir}},
+		{"options before and between operands", []string{"-w", "foo", "-F", dir}, []string{"--json", "--no-config", "-w", "-F", "--", "foo", dir}},
+		{"contradictory flags not normalized", []string{"--hidden", "--no-hidden", "foo"}, []string{"--json", "--no-config", "--hidden", "--no-hidden", "--", "foo", "."}},
+		{"same flag repeated", []string{"-i", "-i", "foo"}, []string{"--json", "--no-config", "-i", "-i", "--", "foo", "."}},
+		{"flags after both operands", []string{"foo", ".", "-s", "-w"}, []string{"--json", "--no-config", "-s", "-w", "--", "foo", "."}},
+		{"empty pattern", []string{"", "."}, []string{"--json", "--no-config", "--", "", "."}},
+		{"literal dash pattern", []string{"-", "."}, []string{"--json", "--no-config", "--", "-", "."}},
+		{"dash-leading pattern after terminator", []string{"--", "-foo"}, []string{"--json", "--no-config", "--", "-foo", "."}},
+		{"second terminator is the pattern", []string{"--", "--"}, []string{"--json", "--no-config", "--", "--", "."}},
+		{"second terminator with explicit root", []string{"--", "--", dir}, []string{"--json", "--no-config", "--", "--", dir}},
+		{"flags before terminator", []string{"-i", "--", "-x"}, []string{"--json", "--no-config", "-i", "--", "-x", "."}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res, out := parse(t, tc.args, os.Stat)
+			if out != "" {
+				t.Fatalf("Parse(%q) wrote to the help writer on a search path: %q", tc.args, out)
+			}
+			assertChildArgs(t, res, tc.want)
+		})
+	}
+}
+
+// Unrestricted occurrences are counted cumulatively across separate,
+// combined, short, and long spellings: two pass, a third is a classified
+// usage error with no root validation and no child argv.
+func TestUnrestrictedLimit(t *testing.T) {
+	accepted := [][]string{
+		{"-u", "foo"},
+		{"-uu", "foo"},
+		{"-iu", "foo"},
+		{"-iuu", "foo"},
+		{"-u", "--unrestricted", "foo"},
+		{"--unrestricted", "-u", "foo"},
+		{"-u", "-u", "foo"},
+	}
+	for _, args := range accepted {
+		res, out := parse(t, args, os.Stat)
+		if out != "" {
+			t.Fatalf("Parse(%q) wrote to the help writer: %q", args, out)
+		}
+		if res.Kind != cli.KindSearch {
+			t.Fatalf("Parse(%q).Kind = %v, want KindSearch (diagnostic %q)", args, res.Kind, res.Diagnostic)
+		}
+	}
+
+	rejected := [][]string{
+		{"-uuu", "foo"},
+		{"-u", "-uu", "foo"},
+		{"-iuuu", "foo"},
+		{"-u", "--unrestricted", "-u", "foo"},
+		{"--unrestricted", "-uu", "foo"},
+		{"-u", "-u", "-u", "foo"},
+		{"--unrestricted", "--unrestricted", "--unrestricted", "foo"},
+	}
+	for _, args := range rejected {
+		res, out := parse(t, args, failStat(t))
+		if res.Kind != cli.KindUsageError || res.ErrorKind != cli.ErrExcessUnrestricted {
+			t.Fatalf("Parse(%q) = kind %v err %v, want excess-unrestricted usage error", args, res.Kind, res.ErrorKind)
+		}
+		if res.ChildArgs != nil {
+			t.Fatalf("Parse(%q) produced a child argv past the unrestricted limit: %q", args, res.ChildArgs)
+		}
+		if out != "" {
+			t.Fatalf("Parse(%q) emitted help text: %q", args, out)
+		}
+		assertSanitizedLine(t, res.Diagnostic)
+	}
+}
+
+// Flags without a pattern remain the Issue 1 missing-pattern usage error.
+func TestFlagsOnlyMissingPattern(t *testing.T) {
+	for _, args := range [][]string{
+		{"-i"},
+		{"-iw"},
+		{"--hidden"},
+		{"-u", "-u"},
+		{"--ignore-case", "--follow"},
+	} {
+		res, out := parse(t, args, failStat(t))
+		if res.Kind != cli.KindUsageError || res.ErrorKind != cli.ErrMissingPattern {
+			t.Fatalf("Parse(%q) = kind %v err %v, want missing-pattern usage error", args, res.Kind, res.ErrorKind)
+		}
+		if res.ChildArgs != nil {
+			t.Fatalf("Parse(%q) produced a child argv without a pattern: %q", args, res.ChildArgs)
+		}
+		if out != "" {
+			t.Fatalf("Parse(%q) emitted help text: %q", args, out)
+		}
+	}
+}
+
+// Generated help lists every allow-listed search flag in short and long
+// form alongside the Issue 1 syntax, positional, and local-help entries.
+func TestGeneratedHelpListsSearchFlags(t *testing.T) {
+	for _, spelling := range []string{
+		"-i", "--ignore-case",
+		"-S", "--smart-case",
+		"-s", "--case-sensitive",
+		"-w", "--word-regexp",
+		"-x", "--line-regexp",
+		"-F", "--fixed-strings",
+		"--hidden", "--no-hidden", "--no-ignore",
+		"-u", "--unrestricted",
+		"-L", "--follow",
+		"-h", "--help",
+	} {
+		if !strings.Contains(cli.HelpText(), spelling) {
+			t.Errorf("generated help missing %q:\n%s", spelling, cli.HelpText())
+		}
 	}
 }
 

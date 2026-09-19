@@ -164,8 +164,6 @@ async function main(): Promise<void> {
     await run("jj", ["bookmark", "set", BRANCH, "-r", "@"]);
 
     log("Iteration complete.");
-
-    break
   }
 }
 

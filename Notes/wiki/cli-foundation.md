@@ -48,11 +48,11 @@ every call, the module prevents every emission:
 ## Shared declarations and preflight
 
 `optionDecls` and `argDecls` are one table feeding three consumers:
-mow.cli configuration (`Spec`, `BoolOptPtr`, `StringArgPtr`), raw-token
-recognition, and generated help — so the parser, the scan, and the help
-text cannot drift. Issue 2 extends the same table and the same scan to
-record allow-listed search-flag spellings in encounter order for child
-argv, instead of maintaining a separate allow-list.
+mow.cli configuration (`Spec`, `BoolOptPtr`/`BoolOpt`, `StringArgPtr`),
+raw-token recognition, and generated help — so the parser, the scan, and
+the help text cannot drift. Issue #2 extended the same table and the same
+scan to record allow-listed search-flag spellings in encounter order for
+child argv — see [cli-flags-child-argv.md](cli-flags-child-argv.md).
 
 ## Help contract
 
@@ -67,8 +67,11 @@ argv, instead of maintaining a separate allow-list.
   This is command-line help, distinct from the TUI key-binding overlay
   (Issue #31).
 - Assignment spellings `--help=false`/`-h=false` are **not** help
-  requests; `--help=true`/`-h=true` parse and still produce help-only via
-  the parsed-value check.
+  requests. Under Issue #1 `--help=true`/`-h=true` parsed and produced
+  help-only via the parsed-value check; Issue #2's lexical rejection of
+  all `=` assignment spellings closed that seam — every `=` form is now
+  an unsupported-option usage error, and the parsed-value check remains
+  only as a safety net.
 
 ## Positionals, `--`, and root validation
 
@@ -91,7 +94,8 @@ argv, instead of maintaining a separate allow-list.
 `\\` doubles, `\n`/`\r`/`\t` become escape spellings, other C0 controls
 and DEL use caret notation (`ESC` → `^[`), C1 controls use `\u` escapes,
 invalid UTF-8 bytes use `\xNN`. It covers usage diagnostics and the
-success stub; generated help contains only fixed text.
+success stub's per-element argv escaping; generated help contains only
+fixed text.
 
 ## Tests consumed by later tasks
 
