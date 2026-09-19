@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"vrg/internal/app"
@@ -29,6 +30,10 @@ import (
 // proving vrg's wait/reap path ran. VRG_TEST_FAIL_TRIGGER=<file>
 // injects a controlled failure once the file exists;
 // VRG_TEST_FAIL_DIAGNOSTIC overrides the injected failure's text.
+// VRG_TEST_EVENT_ACK=<file> is the Issue #48 handshake seam: the app
+// appends one "<seq> <event>" line per Update-processed message and
+// per awaited transition — seq monotonic per process — so a PTY test
+// waits on the exact acknowledgement its action caused.
 func testSeamOptions() []app.Option {
 	var opts []app.Option
 	if p := os.Getenv("VRG_TEST_COLLECT_ACK"); p != "" {
@@ -63,6 +68,20 @@ func testSeamOptions() []app.Option {
 		opts = append(opts, app.WithFailFunc(func() error {
 			waitFileExists(p)
 			return errors.New(diag)
+		}))
+	}
+	if p := os.Getenv("VRG_TEST_EVENT_ACK"); p != "" {
+		// One record per emitted event, sequence-numbered under the
+		// mutex: the collection goroutine's "collected" can interleave
+		// with the update path's records, and the counter keeps every
+		// record's order provable.
+		var mu sync.Mutex
+		seq := 0
+		opts = append(opts, app.WithEventAck(func(ev string) {
+			mu.Lock()
+			defer mu.Unlock()
+			seq++
+			appendLine(p, fmt.Sprintf("%d %s\n", seq, ev))
 		}))
 	}
 	return opts

@@ -26,6 +26,12 @@ type ptySession struct {
 	// quantum).
 	drained chan struct{}
 
+	// ackPath is the process's VRG_TEST_EVENT_ACK log — the tagged
+	// binary's per-event acknowledgement file, "" when the run
+	// installs no acknowledgement seam (e.g. an untagged production
+	// binary).
+	ackPath string
+
 	mu  sync.Mutex
 	out bytes.Buffer
 }
@@ -69,7 +75,7 @@ func startVrgPTYBin(t *testing.T, bin, dir string, env []string, args ...string)
 	if err != nil {
 		t.Fatalf("pty start: %v", err)
 	}
-	s := &ptySession{t: t, cmd: cmd, pt: pt, done: make(chan int, 1), drained: make(chan struct{})}
+	s := &ptySession{t: t, cmd: cmd, pt: pt, done: make(chan int, 1), drained: make(chan struct{}), ackPath: ackPathFromEnv(env)}
 	s.watch()
 	return s
 }
@@ -159,16 +165,33 @@ func (s *ptySession) waitExit() int {
 	}
 }
 
-// runVrgWithQuit runs vrg on a pty, waits for the browse view — marked
-// by the filename rule, present while loading and loaded alike — sends
-// q, and returns the captured output and exit code.
+// runVrgWithQuit runs the tagged harness binary on a pty with a fresh
+// event-acknowledgement log, waits for the browse-state
+// acknowledgement — the application-side handshake that search
+// completion was processed — sends q, waits for its key-processing
+// acknowledgement, and returns the captured output and exit code.
 func runVrgWithQuit(t *testing.T, dir string, env []string, args ...string) (string, int) {
 	t.Helper()
-	return runVrgWithQuitBin(t, binPath, dir, env, args...)
+	return runVrgWithQuitAckBin(t, binPath, dir, env, args...)
 }
 
-// runVrgWithQuitBin is runVrgWithQuit against an explicitly chosen
-// binary.
+// runVrgWithQuitAckBin is runVrgWithQuit's handshake against an
+// explicitly chosen vrg_testhooks binary.
+func runVrgWithQuitAckBin(t *testing.T, bin, dir string, env []string, args ...string) (string, int) {
+	t.Helper()
+	env = append(append([]string(nil), env...), ackEnv(t))
+	s := startVrgPTYBin(t, bin, dir, env, args...)
+	s.waitAck(t, "state:browse", 0)
+	s.send("q")
+	s.waitAck(t, keyEvent("q"), 0)
+	code := s.waitExit()
+	return s.output(), code
+}
+
+// runVrgWithQuitBin is the generic-binary quit driver: it runs
+// binaries that may carry no acknowledgement seam — the untagged
+// production build the boundary test probes — so it waits on the
+// rendered browse marker, an explicit output condition, before q.
 func runVrgWithQuitBin(t *testing.T, bin, dir string, env []string, args ...string) (string, int) {
 	t.Helper()
 	s := startVrgPTYBin(t, bin, dir, env, args...)
@@ -326,12 +349,13 @@ printf '%s\n' '{"type":"end","data":{"path":{"text":"./f"},"binary_offset":null,
 printf '%s\n' '{"type":"summary","data":{"stats":{}}}'
 [ -n "$VRG_TEST_HANDSHAKE" ] && : > "$VRG_TEST_HANDSHAKE"
 `)
-	env := testEnv(fakebin, "VRG_TEST_HANDSHAKE="+handshake)
+	env := testEnv(fakebin, "VRG_TEST_HANDSHAKE="+handshake, ackEnv(t))
 
 	s := startVrgPTY(t, dir, env, "foo")
 	// The captured stderr opens the warning overlay over the browse
 	// frame once collection completes; Esc dismisses to the repainted
 	// content.
+	s.waitAck(t, "overlay:open", 0)
 	if !s.waitFor("eeee") {
 		s.cmd.Process.Kill()
 		<-s.done
@@ -339,12 +363,14 @@ printf '%s\n' '{"type":"summary","data":{"stats":{}}}'
 	}
 	off := len(s.output())
 	s.send("\x1b")
+	s.waitAck(t, "overlay:dismissed", 0)
 	if !s.waitForFrom(off, "18  x ") {
 		s.cmd.Process.Kill()
 		<-s.done
 		t.Fatalf("loaded content never appeared after dismissal; output: %q", s.output())
 	}
 	s.send("q")
+	s.waitAck(t, keyEvent("q"), 0)
 	out, code := s.output(), s.waitExit()
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output: %q", code, out)
@@ -375,22 +401,26 @@ func TestStderrCapturedWithoutBlocking(t *testing.T) {
 printf '%s\n' 'rg: warning: a made-up diagnostic' >&2
 printf '%s\n' 'rg: another warning line' >&2
 `+happyStreamRG)
-	s := startVrgPTY(t, dir, testEnv(fakebin), "foo")
+	s := startVrgPTY(t, dir, testEnv(fakebin, ackEnv(t)), "foo")
+	s.waitAck(t, "overlay:open", 0)
 	if !s.waitFor("a made-up diagnostic") {
 		s.cmd.Process.Kill()
 		<-s.done
 		t.Fatalf("captured stderr never reached the warning overlay; output: %q", s.output())
 	}
 	// Esc dismisses the overlay to browse; the bare ESC must resolve
-	// before q is sent, so wait for the dismissal repaint first.
+	// before q is sent — the application-side dismissal
+	// acknowledgement and the repaint both precede it.
 	off := len(s.output())
 	s.send("\x1b")
+	s.waitAck(t, "overlay:dismissed", 0)
 	if !s.waitForFrom(off, "\x1b[") {
 		s.cmd.Process.Kill()
 		<-s.done
 		t.Fatalf("Esc did not dismiss the overlay; output: %q", s.output())
 	}
 	s.send("q")
+	s.waitAck(t, keyEvent("q"), 0)
 	out, code := s.output(), s.waitExit()
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output: %q", code, out)
@@ -412,9 +442,10 @@ func TestGateHeldPreparationKeepsSearching(t *testing.T) {
 	}
 	writeHappyFiles(t, dir)
 	fakebin := fakeRG(t, happyStreamRG)
-	env := testEnv(fakebin, "VRG_TEST_GATE="+gate, "VRG_TEST_COLLECT_ACK="+ack)
+	env := testEnv(fakebin, "VRG_TEST_GATE="+gate, "VRG_TEST_COLLECT_ACK="+ack, ackEnv(t))
 
 	s := startVrgPTY(t, dir, env, "foo")
+	s.waitAck(t, "state:searching", 0)
 	waitForFile(t, ack) // rg has exited and its stream is fully collected
 	// While the gate holds, the searching screen is the only possible
 	// state: the browse view cannot render until the file is removed.
@@ -431,12 +462,14 @@ func TestGateHeldPreparationKeepsSearching(t *testing.T) {
 	if err := os.Remove(gate); err != nil {
 		t.Fatal(err)
 	}
+	s.waitAck(t, "state:browse", 0)
 	if !s.waitFor("─ ") {
 		s.cmd.Process.Kill()
 		<-s.done
 		t.Fatalf("browse view never appeared after gate release; output: %q", s.output())
 	}
 	s.send("q")
+	s.waitAck(t, keyEvent("q"), 0)
 	if code := s.waitExit(); code != 0 {
 		t.Fatalf("exit = %d, want 0; output: %q", code, s.output())
 	}

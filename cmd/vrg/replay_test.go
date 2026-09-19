@@ -114,11 +114,13 @@ func TestCancelReplaysProcessedDiagnostic(t *testing.T) {
 			env := testEnv(fakebin,
 				"VRG_TEST_RG_PID="+pidFile,
 				"VRG_TEST_DIAGNOSTIC_TRIGGER="+ack,
-				"VRG_TEST_REAP="+reapFile)
+				"VRG_TEST_REAP="+reapFile,
+				ackEnv(t))
 
 			s := startVrgTermPTY(t, dir, env, "foo")
 			waitForAcks(t, ack, 1) // processed into the collection
 			s.send(tc.key)
+			s.waitAck(t, keyEvent(tc.key), 0)
 			code := s.waitExit()
 			out := s.output()
 			if code != 130 {
@@ -151,11 +153,13 @@ func TestQDuringGateHeldPreparationReplaysDiagnostic(t *testing.T) {
 	env := testEnv(fakebin,
 		"VRG_TEST_GATE="+gate,
 		"VRG_TEST_DIAGNOSTIC_TRIGGER="+ack,
-		"VRG_TEST_REAP="+reapFile)
+		"VRG_TEST_REAP="+reapFile,
+		ackEnv(t))
 
 	s := startVrgTermPTY(t, dir, env, "foo")
 	waitForAcks(t, ack, 1) // collected while the gate still holds
 	s.send("q")
+	s.waitAck(t, keyEvent("q"), 0)
 	code := s.waitExit()
 	out := s.output()
 	if code != 130 {
@@ -184,17 +188,21 @@ func TestNormalQuitReplaysDiagnosticsInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	fakebin := fakeRG(t, warnStreamRG)
-	env := testEnv(fakebin, "VRG_TEST_DIAGNOSTIC_TRIGGER="+ack)
+	env := testEnv(fakebin, "VRG_TEST_DIAGNOSTIC_TRIGGER="+ack, ackEnv(t))
 
 	s := startVrgTermPTY(t, dir, env, "foo")
 	waitForAcks(t, ack, 2)
+	s.waitAck(t, "overlay:open", 0)
 	if !s.waitFor("warn one") {
 		s.cmd.Process.Kill()
 		<-s.done
 		t.Fatalf("warning overlay never appeared; output: %q", s.output())
 	}
 	s.send("q") // dismiss the warning overlay
+	s.waitAck(t, "overlay:dismissed", 0)
+	s.waitAck(t, keyEvent("q"), 0)
 	s.send("q") // ordinary browse quit — each keypress is a discrete message
+	s.waitAck(t, keyEvent("q"), 1)
 	code := s.waitExit()
 	out := s.output()
 	if code != 0 {
@@ -220,13 +228,15 @@ func TestControlledFailureReplaysViaCollection(t *testing.T) {
 		"VRG_TEST_RG_PID="+pidFile,
 		"VRG_TEST_DIAGNOSTIC_TRIGGER="+ack,
 		"VRG_TEST_REAP="+reapFile,
-		"VRG_TEST_FAIL_TRIGGER="+trigger)
+		"VRG_TEST_FAIL_TRIGGER="+trigger,
+		ackEnv(t))
 
 	s := startVrgTermPTY(t, dir, env, "foo")
 	waitForAcks(t, ack, 1) // "warn one" is collected
 	if err := os.WriteFile(trigger, []byte("go"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	s.waitAck(t, "fail", 0) // the injected failure was processed
 	code := s.waitExit()
 	out := s.output()
 	if code != 2 {
@@ -250,17 +260,21 @@ func TestReplayEscapesHostileFilename(t *testing.T) {
 	dir := t.TempDir()
 	ack := filepath.Join(dir, "diag.ack")
 	fakebin := fakeRG(t, hostileNameRG)
-	env := testEnv(fakebin, "VRG_TEST_DIAGNOSTIC_TRIGGER="+ack)
+	env := testEnv(fakebin, "VRG_TEST_DIAGNOSTIC_TRIGGER="+ack, ackEnv(t))
 
 	s := startVrgTermPTY(t, dir, env, "foo")
 	waitForAcks(t, ack, 1) // the load failure is collected
+	s.waitAck(t, "load:fail", 0)
 	if !s.waitFor("─ ") {
 		s.cmd.Process.Kill()
 		<-s.done
 		t.Fatalf("browse view never appeared; output: %q", s.output())
 	}
 	s.send("q") // dismiss the Issue #26 failure overlay
+	s.waitAck(t, "overlay:dismissed", 0)
+	s.waitAck(t, keyEvent("q"), 0)
 	s.send("q") // ordinary browse quit — each keypress is a discrete message
+	s.waitAck(t, keyEvent("q"), 1)
 	code := s.waitExit()
 	out := s.output()
 	if code != 0 {

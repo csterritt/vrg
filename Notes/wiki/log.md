@@ -1829,3 +1829,45 @@ entered/release pair. Updated
 `Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; File
 loading, cache, reload, and selection consistency),
 `internal/app/browse.go`, `internal/app/readdiag_test.go`.
+## [2026-09-18] ingest | Issue #48 deterministic PTY handshakes — VRG_TEST_EVENT_ACK per-occurrence acknowledgements
+
+Ingested the completed Issue #48 work
+([issue](../issues/048-pty-tests-deterministic-handshakes.md),
+[task](../tasks/048-pty-tests-deterministic-handshakes.md)) replacing
+fixed/implicit ordering assumptions in the PTY/subprocess tests with
+the PRD *Testing Decisions* handshake: one `"<seq> <event>"` record per
+`Update`-processed message and per awaited transition on the
+`vrg_testhooks` seam. `internal/app` gains `options.event` /
+`WithEventAck` and splits `Update` into a thin wrapper over the renamed
+`update` dispatch emitting `key:<keystroke>`, `state:<name>`,
+`overlay:open`/`append`/`dismissed`, `load:ok`/`fail`/`stale`,
+`layout`/`layout:stale`, `diag`, `collected`, `fail`/`fail:nil`, and
+the remaining per-message records — a nil sink is inert, so the
+production binary neither wires nor contains the hook (manifest member;
+`TestProductionBinaryIgnoresHookManifest` probes it).
+`cmd/vrg/handshake_test.go` owns the contract: `ackEnv`/
+`ackPathFromEnv`/`ackRecords`/`ackCount`/`awaitAck`/`waitAck` implement
+per-process, per-occurrence correlated waits (baseline the count before
+acting; a stale same-kind record can never satisfy a later wait; a
+missing ack fails bounded with the event, occurrence, log, and output),
+the helper/action/postcondition/acknowledgement matrix, and proofs —
+lifecycle causal order, same-kind correlation, dismissal-before-quit,
+bounded-timeout failure — plus the AST-level
+`TestNoFixedSleepsInPTYHelpers` forbidding `time.Sleep` outside the
+allow-listed bounded condition polls. `runSteps`/`runVrgWithKeys`/
+`runVrgKillChild`, `runVrgWithQuit(AckBin)`, and the
+search/cancel/replay/runshape PTY tests now handshake every key send
+and transition; `runVrgWithQuitBin` stays the seam-free driver for the
+untagged production probe. New page
+[pty-handshakes](../wiki/pty-handshakes.md); updated
+[test-hook-topology](../wiki/test-hook-topology.md),
+[source-code](../wiki/source-code.md),
+[unit-tests](../wiki/unit-tests.md), and the index. Sources:
+`Notes/issues/048-pty-tests-deterministic-handshakes.md`,
+`Notes/tasks/048-pty-tests-deterministic-handshakes.md`,
+`Notes/PRD-vrg.md` (Testing Decisions), `internal/app/app.go`,
+`internal/app/overlay.go`, `cmd/vrg/seams_testhooks.go`,
+`cmd/vrg/handshake_test.go`, `cmd/vrg/search_test.go`,
+`cmd/vrg/outcome_test.go`, `cmd/vrg/cancel_test.go`,
+`cmd/vrg/replay_test.go`, `cmd/vrg/runshape_test.go`,
+`cmd/vrg/testhooks_test.go`.

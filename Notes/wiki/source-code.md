@@ -18,9 +18,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   half reads the explicit hook manifest (`VRG_TEST_GATE`,
   `VRG_TEST_LOAD_GATE`, `VRG_TEST_COLLECT_ACK`, `VRG_TEST_REAP`,
   `VRG_TEST_FAIL_TRIGGER`/`VRG_TEST_FAIL_DIAGNOSTIC`,
-  `VRG_TEST_DIAGNOSTIC_TRIGGER`/`VRG_TEST_DIAGNOSTIC_TEXT`) into
+  `VRG_TEST_DIAGNOSTIC_TRIGGER`/`VRG_TEST_DIAGNOSTIC_TEXT`, and since
+  Issue #48 `VRG_TEST_EVENT_ACK` — wired through a mutex-guarded
+  sequence counter to `WithEventAck` so `collected`, emitted from the
+  collection goroutine, still interleaves provably) into
   `app.Option`s and owns the `appendLine`/`waitFileGone`/
   `waitFileExists` watchers. See
+  [pty-handshakes.md](pty-handshakes.md),
   [search-collection.md](search-collection.md),
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [browse-tracer.md](browse-tracer.md), and
@@ -256,7 +260,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   program ended without a valid final model`) when `final` asserts to
   no `*model`, then the `Run()` error's `vrg: <escaped>` line exactly
   once — `ErrInterrupted` still maps to 130, while any other error, an
-  unusable final model, or a recorded `failErr` exits 2. See
+  unusable final model, or a recorded `failErr` exits 2. Issue #48 adds
+  `options.event`/`WithEventAck` — the test-only acknowledgement seam —
+  and splits `Update` into a thin wrapper over the renamed `update`
+  dispatch: after each processed message the wrapper emits a per-message
+  record (`key:<keystroke>`, `state:<name>` on `searchDoneMsg`,
+  `stderrline`, `fileloaded`, `layoutready`, `size`, `popup`,
+  `fail`/`fail:nil`, `other`; a `quitting`-discarded message earns
+  none), while `m.ack` call sites inside the dispatch record awaited
+  transitions (`state:searching` in `Init`, `collected`,
+  `load:ok`/`load:fail`/`load:stale`, `layout`/`layout:stale`,
+  `overlay:dismissed`, `diag` in `collectDiags`); `state.name()` is the
+  state spellings' source. A nil seam — every production build — is
+  inert. See
+  [pty-handshakes.md](pty-handshakes.md),
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
@@ -312,7 +329,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   (see [full-scroll-overlay.md](full-scroll-overlay.md)). Issue #15
   adds `openOverlay`
   — the shared open-or-append entry point that also clears any live
-  file-change pop-up, which never returns after the overlay closes.
+  file-change pop-up, which never returns after the overlay closes, and
+  which since Issue #48 emits the `overlay:open`/`overlay:append`
+  acknowledgement records through the event seam.
   Issue #31's refactor makes `m.overlay` and `m.help` the two
   `scrollBox` instances; `overlayRows`, `scrollOverlay`, and
   `clampOverlayScroll` remain as the error-overlay façade over it.

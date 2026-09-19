@@ -72,7 +72,8 @@ func TestRunReturnShapesShutdownReplay(t *testing.T) {
 				"VRG_TEST_DIAGNOSTIC_TRIGGER="+ack,
 				"VRG_TEST_REAP="+reapFile,
 				"VRG_TEST_RUN_FINAL_MODEL="+tc.finalModel,
-				"VRG_TEST_RUN_ERROR="+tc.runErr)
+				"VRG_TEST_RUN_ERROR="+tc.runErr,
+				ackEnv(t))
 
 			s := startVrgTermPTY(t, dir, env, "foo")
 			// Both diagnostics are processed into the session
@@ -81,6 +82,7 @@ func TestRunReturnShapesShutdownReplay(t *testing.T) {
 			// them, not an empty one.
 			waitForAcks(t, ack, 2)
 			s.send("q") // a real quit: Run() returns, then the runner substitutes the tuple
+			s.waitAck(t, keyEvent("q"), 0)
 			code := s.waitExit()
 			out := s.output()
 			if code != tc.wantCode {

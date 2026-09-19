@@ -105,7 +105,8 @@ func wrapCells(s string, w int) []string {
 // rule). Opening it cancels any file-change pop-up, which never
 // returns after the overlay closes.
 func (m *model) openOverlay(text string, dismissExits bool) {
-	if m.overlayOpen {
+	was := m.overlayOpen
+	if was {
 		m.overlay.text += "\n" + text
 	} else {
 		m.overlay.text = text
@@ -114,6 +115,11 @@ func (m *model) openOverlay(text string, dismissExits bool) {
 	m.overlayOpen = true
 	m.overlayExit = dismissExits
 	m.popupID = 0
+	if was {
+		m.ack("overlay:append")
+	} else {
+		m.ack("overlay:open")
+	}
 }
 
 // overlayRows is the error overlay's complete wrapped row set.

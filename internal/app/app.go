@@ -96,6 +96,11 @@ type options struct {
 	// (Issue #46). Run always installs it; it is a shutdown contract,
 	// not a test seam.
 	diagSink *[]string
+	// event, when set, records one acknowledgement per processed
+	// message and per awaited transition — the Issue #48 PTY
+	// handshake seam. It observes production behaviour and timing;
+	// it never changes them.
+	event func(string)
 }
 
 // WithGate holds index preparation until fn returns.
@@ -135,6 +140,13 @@ func WithEscapePath(fn func([]byte) string) Option {
 func WithLoader(fn func([]byte) ([]byte, error)) Option {
 	return func(o *options) { o.loader = fn }
 }
+
+// WithEventAck installs the acknowledgement recorder: fn is called
+// once per Update-processed message and once per awaited transition —
+// a key processed, a state entered, an overlay opened or dismissed, a
+// load settled, a layout installed, a diagnostic collected — the
+// deterministic handshakes the PTY harness waits on (Issue #48).
+func WithEventAck(fn func(string)) Option { return func(o *options) { o.event = fn } }
 
 type state int
 
@@ -330,11 +342,13 @@ func (m *model) Init() tea.Cmd {
 	child := m.child
 	opts := m.opts
 	dir := m.cfg.Dir
+	m.ack("state:searching")
 	collect := func() tea.Msg {
 		res := child.Wait()
 		if opts.collectAck != nil {
 			opts.collectAck()
 		}
+		m.ack("collected")
 		if opts.gate != nil {
 			opts.gate()
 		}
@@ -355,6 +369,39 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// flight so late work cannot revive the UI.
 		return m, nil
 	}
+	res, cmd := m.update(msg)
+	// The Issue #48 acknowledgement seam records one event per
+	// processed message — the key-processing and model-transition
+	// boundaries the PTY harness waits on. A message discarded under
+	// quitting earns no record.
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		m.ack("key:" + msg.Keystroke())
+	case tea.WindowSizeMsg:
+		m.ack("size")
+	case searchDoneMsg:
+		m.ack("state:" + m.state.name())
+	case stderrLineMsg:
+		m.ack("stderrline")
+	case fileLoadedMsg:
+		m.ack("fileloaded")
+	case layoutReadyMsg:
+		m.ack("layoutready")
+	case failMsg:
+		if msg.err != nil {
+			m.ack("fail")
+		} else {
+			m.ack("fail:nil")
+		}
+	case popupExpireMsg:
+		m.ack("popup")
+	default:
+		m.ack("other")
+	}
+	return res, cmd
+}
+
+func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -444,6 +491,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Not a live request's answer — an unrequested, stale, or
 			// already-settled completion: discard it without touching
 			// the cache, the failure record, or the diagnostics.
+			m.ack("load:stale")
 			return m, nil
 		}
 		delete(m.loading, key)
@@ -468,6 +516,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if ck, ok := m.curKey(); ok && ck == key {
 				m.openOverlay(diag, false)
 			}
+			m.ack("load:fail")
 		} else {
 			delete(m.failDiag, key)
 			m.bufs[key] = msg.buf
@@ -517,6 +566,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.pendingReveals[key] = true
 				}
 			}
+			m.ack("load:ok")
 			return m, m.requestLayout(key)
 		}
 	case layoutReadyMsg:
@@ -529,6 +579,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// a completion minted before it went up; recovery
 			// re-requests at the size that lifts it
 			// (Issue #33).
+			m.ack("layout:stale")
 			return m, nil
 		}
 		buf := m.bufs[path]
@@ -537,6 +588,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// for content no longer the revision on record — discard
 			// it without touching the installed layout, the saved
 			// viewports, the anchors, or the pending intents.
+			m.ack("layout:stale")
 			return m, nil
 		}
 		_, had := m.rows[path]
@@ -563,6 +615,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.reveal()
 			}
 		}
+		m.ack("layout")
 		return m, nil
 	case failMsg:
 		if msg.err == nil {
@@ -622,6 +675,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.quitCmd()
 				}
 				m.overlayOpen = false
+				m.ack("overlay:dismissed")
 			}
 		case m.helpOpen:
 			// The help dialog is modal over the base state: up and
@@ -737,6 +791,29 @@ func recordWarnings(ix *searchindex.Index) []string {
 	return nil
 }
 
+// ack emits one acknowledgement record through the test-only event
+// seam; a nil seam — every production build — is inert.
+func (m *model) ack(event string) {
+	if m.opts.event != nil {
+		m.opts.event(event)
+	}
+}
+
+// name is the state's acknowledgement-event spelling: the record the
+// test seam writes when the state is entered.
+func (s state) name() string {
+	switch s {
+	case stateNoResults:
+		return "noresults"
+	case stateBrowse:
+		return "browse"
+	case stateOverlayOnly:
+		return "overlayonly"
+	default:
+		return "searching"
+	}
+}
+
 // tooSmall reports whether the reported terminal size is below the
 // fixed minimum — under 20 columns or under 3 rows — so the gate
 // replaces the ordinary presentation and key map (Issue #33). Before
@@ -805,6 +882,7 @@ func (m *model) collectDiags(lines ...string) {
 		if m.opts.diagAck != nil {
 			m.opts.diagAck()
 		}
+		m.ack("diag")
 	}
 }
 

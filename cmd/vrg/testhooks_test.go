@@ -27,6 +27,7 @@ var hookManifest = []string{
 	"VRG_TEST_DIAGNOSTIC_TEXT",
 	"VRG_TEST_RUN_FINAL_MODEL",
 	"VRG_TEST_RUN_ERROR",
+	"VRG_TEST_EVENT_ACK",
 }
 
 // buildVrg compiles cmd/vrg into a fresh temp dir with the given extra
@@ -76,6 +77,7 @@ func TestProductionBinaryIgnoresHookManifest(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	eventAck := filepath.Join(probe, "events")
 	env := testEnv(fakeRG(t, happyStreamRG),
 		"VRG_TEST_REAP="+filepath.Join(probe, "reap"),
 		"VRG_TEST_GATE="+gate,
@@ -86,7 +88,8 @@ func TestProductionBinaryIgnoresHookManifest(t *testing.T) {
 		"VRG_TEST_DIAGNOSTIC_TRIGGER="+filepath.Join(probe, "diag"),
 		"VRG_TEST_DIAGNOSTIC_TEXT=probe-diag",
 		"VRG_TEST_RUN_FINAL_MODEL=nil",
-		"VRG_TEST_RUN_ERROR=probe-run-error")
+		"VRG_TEST_RUN_ERROR=probe-run-error",
+		"VRG_TEST_EVENT_ACK="+eventAck)
 
 	out, code := runVrgWithQuitBin(t, prodBin, dir, env, "foo")
 	if code != 0 {
@@ -96,6 +99,9 @@ func TestProductionBinaryIgnoresHookManifest(t *testing.T) {
 		if strings.Contains(out, marker) {
 			t.Fatalf("hook value %q reached the output of a production binary: %q", marker, out)
 		}
+	}
+	if _, err := os.Stat(eventAck); !os.IsNotExist(err) {
+		t.Fatalf("the production binary wrote the acknowledgement log: %v", err)
 	}
 	entries, err := os.ReadDir(probe)
 	if err != nil {
@@ -141,10 +147,10 @@ func TestRunnerSeamInjectsRunReturnShapes(t *testing.T) {
 			env := testEnv(fakeRG(t, happyStreamRG),
 				"VRG_TEST_RUN_FINAL_MODEL="+tc.fm,
 				"VRG_TEST_RUN_ERROR="+tc.runErr)
-			// The program still runs for real — the browse view must
-			// appear before q — then the injected tuple replaces the
-			// Run() result at the return site.
-			out, code := runVrgWithQuitBin(t, hookBin, dir, env, "foo")
+			// The program still runs for real — the browse state must
+			// be acknowledged before q — then the injected tuple
+			// replaces the Run() result at the return site.
+			out, code := runVrgWithQuitAckBin(t, hookBin, dir, env, "foo")
 			if code != tc.wantCode {
 				t.Fatalf("exit = %d, want %d; output: %q", code, tc.wantCode, out)
 			}

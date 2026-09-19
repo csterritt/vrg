@@ -14,10 +14,14 @@ import (
 // keyStep is one scripted pty interaction in an outcome test: send key
 // ("" sends nothing), then wait until expect appears in output written
 // since the step began — proving a fresh repaint of whatever the
-// overlay covered rather than matching an old frame's bytes.
+// overlay covered rather than matching an old frame's bytes. ack, when
+// set, is the additional application-side acknowledgement the step
+// waits on after its key is processed — e.g. overlay:open or
+// overlay:dismissed — before the expected repaint.
 type keyStep struct {
 	key    string
 	expect string
+	ack    string
 }
 
 // waitForFrom polls until needle appears in output written at or after
@@ -44,14 +48,31 @@ func (s *ptySession) waitForFrom(off int, needle string) bool {
 }
 
 // runSteps performs the scripted interactions against a started
-// session: each step sends its key and waits for its marker in the
-// output the key provoked.
+// session: each step sends its key, waits on the application-side
+// acknowledgement that the key was processed — and on the step's named
+// acknowledgement when it has one — then waits for its marker in the
+// output the key provoked. Every acknowledgement wait is correlated
+// per occurrence against the baseline snapshotted before the send.
 func runSteps(t *testing.T, s *ptySession, steps []keyStep) {
 	t.Helper()
+	if s.ackPath == "" {
+		t.Fatal("runSteps requires the event-acknowledgement log (VRG_TEST_EVENT_ACK)")
+	}
 	for i, st := range steps {
 		off := len(s.output())
+		keyBase, ackBase := 0, 0
+		if st.key != "" {
+			keyBase = s.ackCount(keyEvent(st.key))
+		}
+		if st.ack != "" {
+			ackBase = s.ackCount(st.ack)
+		}
 		if st.key != "" {
 			s.send(st.key)
+			s.waitAck(t, keyEvent(st.key), keyBase)
+		}
+		if st.ack != "" {
+			s.waitAck(t, st.ack, ackBase)
 		}
 		if st.expect == "" {
 			continue
@@ -65,10 +86,12 @@ func runSteps(t *testing.T, s *ptySession, steps []keyStep) {
 	}
 }
 
-// runVrgWithKeys starts vrg on a pty against the fake rg in env, drives
-// the outcome steps, and returns the captured output and exit code.
+// runVrgWithKeys starts vrg on a pty against the fake rg in env with a
+// fresh event-acknowledgement log, drives the outcome steps, and
+// returns the captured output and exit code.
 func runVrgWithKeys(t *testing.T, dir string, env []string, steps []keyStep, args ...string) (string, int) {
 	t.Helper()
+	env = append(append([]string(nil), env...), ackEnv(t))
 	s := startVrgPTY(t, dir, env, args...)
 	runSteps(t, s, steps)
 	return s.output(), s.waitExit()
@@ -79,6 +102,7 @@ func runVrgWithKeys(t *testing.T, dir string, env []string, steps []keyStep, arg
 // the process dies by signal while its stream stays incomplete.
 func runVrgKillChild(t *testing.T, dir string, env []string, pidFile, ready string, steps []keyStep, args ...string) (string, int) {
 	t.Helper()
+	env = append(append([]string(nil), env...), ackEnv(t))
 	s := startVrgPTY(t, dir, env, args...)
 	waitForFile(t, ready)
 	data, err := os.ReadFile(pidFile)
@@ -162,8 +186,8 @@ func TestFatalExitWithResultsShowsOverlay(t *testing.T) {
 	env := testEnv(fakebin, "VRG_TEST_HANDSHAKE="+handshake)
 
 	out, code := runVrgWithKeys(t, dir, env, []keyStep{
-		{expect: "boom"},                       // overlay opens with the stderr diagnostic
-		{key: "\x1b", expect: "alpha line 11"}, // Esc dismisses; covered content repaints
+		{expect: "boom", ack: "overlay:open"},                            // overlay opens with the stderr diagnostic
+		{key: "\x1b", expect: "alpha line 11", ack: "overlay:dismissed"}, // Esc dismisses; covered content repaints
 		{key: "q"},
 	}, "foo")
 	if code != 2 {
@@ -184,7 +208,7 @@ func TestFatalExitNoOutputNamesExitCode(t *testing.T) {
 	dir := t.TempDir()
 	fakebin := fakeRG(t, `exit 2`)
 	out, code := runVrgWithKeys(t, dir, testEnv(fakebin), []keyStep{
-		{expect: "code 2"},
+		{expect: "code 2", ack: "overlay:open"},
 		{key: "q"},
 	}, "foo")
 	if code != 2 {
@@ -199,7 +223,7 @@ func TestFatalExitNoOutputEscExits2(t *testing.T) {
 	dir := t.TempDir()
 	fakebin := fakeRG(t, `exit 2`)
 	out, code := runVrgWithKeys(t, dir, testEnv(fakebin), []keyStep{
-		{expect: "code 2"},
+		{expect: "code 2", ack: "overlay:open"},
 		{key: "\x1b"},
 	}, "foo")
 	if code != 2 {
@@ -219,8 +243,8 @@ func TestSignalDeathNamesSignal(t *testing.T) {
 	env := testEnv(fakebin, "VRG_TEST_RG_PID="+pidFile, "VRG_TEST_RG_READY="+ready)
 
 	out, code := runVrgKillChild(t, dir, env, pidFile, ready, []keyStep{
-		{expect: "killed"},
-		{key: "\x1b", expect: "alpha line 11"},
+		{expect: "killed", ack: "overlay:open"},
+		{key: "\x1b", expect: "alpha line 11", ack: "overlay:dismissed"},
 		{key: "q"},
 	}, "foo")
 	if code != 2 {
@@ -234,8 +258,8 @@ func TestStderrWarningWithSummaryShowsWarningOverlay(t *testing.T) {
 	dir := t.TempDir()
 	fakebin := fakeRG(t, warnSummaryRG)
 	out, code := runVrgWithKeys(t, dir, testEnv(fakebin), []keyStep{
-		{expect: "warn"},
-		{key: "\x1b", expect: "No results found"},
+		{expect: "warn", ack: "overlay:open"},
+		{key: "\x1b", expect: "No results found", ack: "overlay:dismissed"},
 		{key: "q"},
 	}, "foo")
 	if code != 1 {
@@ -273,9 +297,10 @@ printf '%s\n' '{"type":"summary","data":{"stats":{}}}'
 printf 'STDERR-TAIL\n' >&2
 [ -n "$VRG_TEST_HANDSHAKE" ] && : > "$VRG_TEST_HANDSHAKE"
 `)
-	env := testEnv(fakebin, "VRG_TEST_HANDSHAKE="+handshake)
+	env := testEnv(fakebin, "VRG_TEST_HANDSHAKE="+handshake, ackEnv(t))
 
 	s := startVrgPTY(t, dir, env, "foo")
+	s.waitAck(t, "overlay:open", 0)
 	if !s.waitFor("STDERR-HEAD") {
 		s.cmd.Process.Kill()
 		<-s.done
@@ -283,12 +308,14 @@ printf 'STDERR-TAIL\n' >&2
 	}
 	off := len(s.output())
 	s.send("\x1b") // dismiss the warning overlay to the browse view
+	s.waitAck(t, "overlay:dismissed", 0)
 	if !s.waitForFrom(off, "18  x ") {
 		s.cmd.Process.Kill()
 		<-s.done
 		t.Fatalf("browse frame never repainted after dismissal; output: %q", s.output())
 	}
 	s.send("q")
+	s.waitAck(t, keyEvent("q"), 0)
 	out, code := s.output(), s.waitExit()
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output: %q", code, out)

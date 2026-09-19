@@ -52,6 +52,7 @@ because vrg never reads them; Issue #50 renames them `FAKE_RG_*`):
 | `VRG_TEST_DIAGNOSTIC_TEXT` | overrides the recorded acknowledgement line (default `diag`) |
 | `VRG_TEST_RUN_FINAL_MODEL` | `nil`/`invalid` replace the `program.Run()` final model (`invalid` returns a foreign `tea.Model` so the post-Run type assertion fails); any other value keeps the real model |
 | `VRG_TEST_RUN_ERROR` | non-empty replaces the `program.Run()` error with that message |
+| `VRG_TEST_EVENT_ACK` | file appended with one acknowledgement record per `Update`-processed message — `state:<name>`, `key:<name>`, `overlay:open`/`dismissed`/`appended`, `load:fail:<path>`, `layoutRequested`/`layoutInstalled`, `diag`, `collected`, `fail`, `size:WxH`, `popup` — emitted after the real dispatch returns (`WithEventAck`; Issue #48, see [pty-handshakes.md](pty-handshakes.md)) |
 
 Renames relative to the pre-#45 seams: `VRG_TEST_FAIL` →
 `VRG_TEST_FAIL_TRIGGER` (+`VRG_TEST_FAIL_DIAGNOSTIC` text override) and
@@ -87,7 +88,9 @@ exit-status contract*) has landed on this seam: `cmd/vrg/runshape_test.go`
 injects the full final-model/error matrix through
 `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` at the real
 `program.Run()` boundary and asserts the unified shutdown replay. Issue
-#48 (acknowledgement handshakes, PRD *Testing Decisions*) may still
-extend the same mechanism and manifest rather than adding production
-hooks. `scripts/verify.sh` gates 3–4 keep the
-tagged variant under `go build`/`go vet`.
+#48 (acknowledgement handshakes, PRD *Testing Decisions*) has landed on
+the same mechanism: `VRG_TEST_EVENT_ACK` joins the manifest and the
+untagged-artifact probe, and every PTY key-send helper waits on the
+per-occurrence acknowledgement records — see
+[pty-handshakes.md](pty-handshakes.md). `scripts/verify.sh` gates 3–4
+keep the tagged variant under `go build`/`go vet`.

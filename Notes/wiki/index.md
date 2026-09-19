@@ -358,6 +358,14 @@ Catalog of all wiki pages for the vrg project.
   program-runner), the explicit vrg-consumed hook manifest with the
   `VRG_TEST_FAIL`/`VRG_TEST_DIAG_ACK` renames, the `TestMain` tagged
   build, and the untagged-artifact boundary test
+- [pty-handshakes.md](pty-handshakes.md) — Issue #48: the
+  `VRG_TEST_EVENT_ACK` acknowledgement seam (`WithEventAck`, the
+  `Update`/`update` split, the per-message and transition record
+  vocabulary), the finite
+  helper/action/postcondition/acknowledgement matrix, per-process and
+  per-occurrence correlation with stale-record impossibility, the
+  bounded-timeout failures, the AST-level no-fixed-sleep static check,
+  and every rewritten PTY helper's wait-on-handshake contract
 
 ## Catalogs
 

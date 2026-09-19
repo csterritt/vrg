@@ -1855,9 +1855,35 @@ that drive explicitly chosen binaries:
 - `TestHelpAssignmentSpellingsAreNotHelp` — `--help=`/`-h=` spellings
   (`=false` and `=true`) are exit-2 usage errors.
 
+`handshake_test.go` (Issue #48) adds the deterministic-handshake
+contract every PTY helper obeys: `ackEnv` provisions a fresh
+per-process `VRG_TEST_EVENT_ACK` log, `ackPathFromEnv` resolves it into
+`ptySession.ackPath`, and `ackRecords`/`ackCount`/`awaitAck`/`waitAck`
+implement the per-occurrence correlated wait — baseline the count
+before acting, wait for it to grow, fail on a bounded timeout naming
+the event and occurrence rather than hanging. The file's header comment
+carries the finite helper/action/postcondition/acknowledgement matrix
+(see [pty-handshakes.md](pty-handshakes.md)), and its proofs are
+`TestEventAckSeamRecordsLifecycle` (causal record order with per-process
+monotonic seqs), `TestAckCorrelationSameKindOccurrences` (a stale
+same-kind record can never satisfy a later wait),
+`TestOverlayDismissalAcknowledgedBeforeQuit` (dismissal recorded before
+the following `q`'s key record), `TestAckWaitFailsOnBoundedTimeout`
+(missing ack = bounded useful error, and an early process exit is
+reported the same way), and `TestNoFixedSleepsInPTYHelpers` — the
+AST-level static check forbidding `time.Sleep` outside the allow-listed
+bounded condition polls (`waitFor`/`waitForFrom`/`waitForFile`/
+`waitForAcks`/`awaitAck`/`waitFileGone`/`waitFileExists`), each of which
+must also name its `deadline`/`bound`.
+
 `search_test.go` (Issue #3) adds the PTY harness — `startVrgPTY`,
 `runVrgWithQuit`, `waitForFile`, `fakeRG`, `testEnv` — and the named
-boundary tests. Since Issue #26, `writeHappyFiles` creates the two
+boundary tests. Since Issue #48 `runVrgWithQuit` is the
+acknowledgement-driven driver (`runVrgWithQuitAckBin`: install
+`ackEnv`, wait `state:browse`, send `q`, wait `key:q`) while
+`runVrgWithQuitBin` remains the seam-free generic driver the untagged
+production probe uses, waiting on the rendered browse marker. Since
+Issue #26, `writeHappyFiles` creates the two
 files `happyStreamRG` reports so the quit-driving tests' browse loads
 succeed — a failed current-file load now opens the modal error
 overlay, which a single `q` would only dismiss:
@@ -1870,26 +1896,34 @@ overlay, which a single `q` would only dismiss:
   start-failure diagnostic and exit 2 with empty stdout and no TUI.
 - `TestDualPipeBackpressure` — fake `rg` writes ≈1.1 MiB to stderr
   interleaved with 18 match records; the captured stderr opens the
-  Issue #9 warning overlay, `Esc` dismisses it, the final content frame
+  Issue #9 warning overlay (acknowledged `overlay:open`), `Esc`
+  dismisses it (`overlay:dismissed` acknowledged before the repaint
+  check), the final content frame
   shows all 18 recorded matches as true-inverse spans (the `30;47`
   pair, since Issue #7; the current matched line's span also carries
   `;4`), the `VRG_TEST_HANDSHAKE` file exists (the child finished
   writing both pipes), and `q` exits 0.
 - `TestStderrCapturedWithoutBlocking` — stderr diagnostics with a
   well-formed stream and exit 0 surface as the Issue #9 warning overlay;
-  `Esc` dismisses it (the bare ESC resolves before the next key) and
+  `Esc` dismisses it (the bare ESC resolves before the next key —
+  proven by the `overlay:dismissed` acknowledgement, not timing) and
   `q` exits 0.
 - `TestGateHeldPreparationKeepsSearching` — with `VRG_TEST_GATE` set, the
   `VRG_TEST_COLLECT_ACK` file proves rg exited and the stream was
-  collected while the screen still shows only "Searching…"; removing the
-  gate file produces the browse view and `q` exits 0.
+  collected while the screen still shows only "Searching…" (held at
+  `state:searching`); removing the
+  gate file produces the browse view (`state:browse` acknowledged) and
+  `q` exits 0.
 
 `cancel_test.go` (Issue #4; `//go:build unix`) extends the harness:
 `startVrgTermPTY` opens the pty pair itself, keeps the slave fd, and
 captures `term.GetState` before launch so `assertTermiosRestored` can
 require the PTY input modes after exit to equal those before. The
 `blockedRG` fake rg writes a ready file, records its pid, then `exec
-sleep`s — only vrg's `Terminate` ends it. Assertions combine the exit
+sleep`s — only vrg's `Terminate` ends it. Since Issue #48 each test
+installs `ackEnv` and handshakes its sends: `state:searching`/
+`state:browse` before the key, `key:q`/`key:ctrl+c`/`fail` after.
+Assertions combine the exit
 code, the recorded pid's absence, the `VRG_TEST_REAP` side-channel line
 (vrg's own wait/reap proof), the display-restoration sequences
 (`\x1b[?1049l`, `\x1b[?25h`), and termios equality:
@@ -1910,7 +1944,9 @@ code, the recorded pid's absence, the `VRG_TEST_REAP` side-channel line
 
 `outcome_test.go` (Issue #9) drives the outcome contract against the
 real binary on a pty: `runVrgWithKeys`/`runVrgKillChild` script
-interactions as `keyStep`s — send a key, then wait for its marker in
+interactions as `keyStep`s — send a key, wait for its `key:<name>`
+acknowledgement and the step's named `ack` transition record (Issue
+#48), then wait for its `expect` marker in
 output written since the send, so a dismissal is proven by a fresh
 repaint of what the overlay covered rather than by matching old frame
 bytes:
@@ -1943,7 +1979,10 @@ contract on the real binary: `waitForAcks` polls the
 diagnostic was processed into the session collection, the same
 file-evidence family as `VRG_TEST_REAP` — and `assertReplayedOnce`/
 `assertReplayOrder` require each diagnostic to appear exactly once
-after the display-restoration sequence, in collection order:
+after the display-restoration sequence, in collection order. Since
+Issue #48 each run also installs `ackEnv`, so trigger callbacks wait
+on the `key:*`/`overlay:dismissed`/`fail` records their sends cause
+(the repeated-`q` regression baselines each `key:q` occurrence):
 
 - `TestCancelReplaysProcessedDiagnostic` (`q` and `ctrl+c` subtests) —
   a stderr diagnostic acknowledged while the child still runs replays
@@ -1970,7 +2009,8 @@ after the display-restoration sequence, in collection order:
 `program.Run()` return-shape matrix through the tagged runner seam:
 `warnTwiceThenBlockRG` emits two stderr diagnostics, records its pid,
 and blocks, so `waitForAcks` proves both were collected before the
-injected return; a real `q` quit then lets `Run()` return and the
+injected return; a real `q` quit — acknowledged `key:q` since Issue
+#48 — then lets `Run()` return and the
 `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` controls substitute the
 tuple at the executable's boundary:
 

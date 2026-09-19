@@ -48,7 +48,7 @@ func startVrgTermPTY(t *testing.T, dir string, env []string, args ...string) *te
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	s := &ptySession{t: t, cmd: cmd, pt: pt, done: make(chan int, 1), drained: make(chan struct{})}
+	s := &ptySession{t: t, cmd: cmd, pt: pt, done: make(chan int, 1), drained: make(chan struct{}), ackPath: ackPathFromEnv(env)}
 	s.watch()
 	return &termSession{ptySession: s, tty: tty, before: before}
 }
@@ -140,16 +140,19 @@ func TestCancelWhileSearchingKillsChild(t *testing.T) {
 			env := testEnv(fakebin,
 				"VRG_TEST_RG_READY="+ready,
 				"VRG_TEST_RG_PID="+pidFile,
-				"VRG_TEST_REAP="+reapFile)
+				"VRG_TEST_REAP="+reapFile,
+				ackEnv(t))
 
 			s := startVrgTermPTY(t, dir, env, "foo")
 			waitForFile(t, ready)
+			s.waitAck(t, "state:searching", 0)
 			if !s.waitFor("Searching") {
 				s.cmd.Process.Kill()
 				<-s.done
 				t.Fatalf("searching screen never appeared; output: %q", s.output())
 			}
 			s.send(tc.key)
+			s.waitAck(t, keyEvent(tc.key), 0)
 			code := s.waitExit()
 			out := s.output()
 			if code != 130 {
@@ -183,9 +186,11 @@ func TestQDuringGateHeldPreparationCancels(t *testing.T) {
 	env := testEnv(fakebin,
 		"VRG_TEST_GATE="+gate,
 		"VRG_TEST_COLLECT_ACK="+ack,
-		"VRG_TEST_REAP="+reapFile)
+		"VRG_TEST_REAP="+reapFile,
+		ackEnv(t))
 
 	s := startVrgTermPTY(t, dir, env, "foo")
+	s.waitAck(t, "state:searching", 0)
 	waitForFile(t, ack) // rg exited and its stream is fully collected
 	if !s.waitFor("Searching") {
 		s.cmd.Process.Kill()
@@ -193,6 +198,7 @@ func TestQDuringGateHeldPreparationCancels(t *testing.T) {
 		t.Fatalf("searching screen never appeared; output: %q", s.output())
 	}
 	s.send("q")
+	s.waitAck(t, keyEvent("q"), 0)
 	code := s.waitExit()
 	out := s.output()
 	if code != 130 {
@@ -218,15 +224,18 @@ func TestOrdinaryQuitLeavesNoChild(t *testing.T) {
 	fakebin := fakeRG(t, `echo $$ > "$VRG_TEST_RG_PID"`+happyStreamRG)
 	env := testEnv(fakebin,
 		"VRG_TEST_RG_PID="+pidFile,
-		"VRG_TEST_REAP="+reapFile)
+		"VRG_TEST_REAP="+reapFile,
+		ackEnv(t))
 
 	s := startVrgTermPTY(t, dir, env, "foo")
+	s.waitAck(t, "state:browse", 0)
 	if !s.waitFor("─ ") {
 		s.cmd.Process.Kill()
 		<-s.done
 		t.Fatalf("browse view never appeared; output: %q", s.output())
 	}
 	s.send("q")
+	s.waitAck(t, keyEvent("q"), 0)
 	code := s.waitExit()
 	out := s.output()
 	if code != 0 {
@@ -255,10 +264,12 @@ func TestControlledFailureCleanupExit2(t *testing.T) {
 		"VRG_TEST_RG_READY="+ready,
 		"VRG_TEST_RG_PID="+pidFile,
 		"VRG_TEST_REAP="+reapFile,
-		"VRG_TEST_FAIL_TRIGGER="+trigger)
+		"VRG_TEST_FAIL_TRIGGER="+trigger,
+		ackEnv(t))
 
 	s := startVrgTermPTY(t, dir, env, "foo")
 	waitForFile(t, ready)
+	s.waitAck(t, "state:searching", 0)
 	if !s.waitFor("Searching") {
 		s.cmd.Process.Kill()
 		<-s.done
@@ -267,6 +278,7 @@ func TestControlledFailureCleanupExit2(t *testing.T) {
 	if err := os.WriteFile(trigger, []byte("go"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	s.waitAck(t, "fail", 0) // the injected failure was processed
 	code := s.waitExit()
 	out := s.output()
 	if code != 2 {
