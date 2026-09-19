@@ -301,3 +301,14 @@ Usage
  Input tokens: 147745 tokens
  Output tokens: 80150 tokens
  Cached input tokens: 13959168 tokens
+
+----
+Task 028-load-completion-reveal-latest-target.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 106 messages
+ Input tokens: 150068 tokens
+ Output tokens: 40951 tokens
+ Cached input tokens: 11125248 tokens

@@ -135,11 +135,15 @@ Issue #27 adds a second intent kind to the same seam:
 the anchor, no reveal — minted when a `reload`-marked `fileLoadedMsg`
 completes for the current file, and committed (consumed, since the
 `Restore` above the switch already carried the anchor into the new
-rows) when the new revision's matching layout installs. A pending
-reveal outranks a pending anchor intent, and `reveal` clears a
-recorded `pendingAnchor` whenever it runs or pends — the precedence
-[Issue #28](../issues/028-load-completion-reveal.md) generalizes. See
-[explicit-reload.md](explicit-reload.md).
+rows) when the new revision's matching layout installs. Issue #28
+completes the arbitration: a reload completion mints the anchor
+intent only when no reveal intent is pending — any navigation during
+the load, including an away-and-back ending on the same stop,
+replaces it — and every load completion now records its intent rather
+than running `reveal`, so the whole sequence commits only against a
+matching install. See
+[explicit-reload.md](explicit-reload.md) and
+[load-completion-reveal.md](load-completion-reveal.md).
 
 ## Render-cost guarantees
 

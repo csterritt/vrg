@@ -1039,3 +1039,51 @@ index. Sources:
 `Notes/PRD-vrg.md` (File loading, cache, reload, and selection
 consistency), `internal/app/app.go`, `internal/app/browse.go`,
 `internal/app/reload_test.go`.
+
+## [2026-09-17] ingest | Issue #28 two-stage load-completion reveal
+
+Issue #28 completes the two-stage completion contract for a
+current-file load. Stage one — `fileLoadedMsg`'s current-file branch —
+is now intent-only: it caches the buffer, bumps `revs`, recomputes the
+text width under the new gutter and Issue #24's list visibility,
+mints the keyed layout request, and records the intent — the `reveal`
+call leaves stage one, so no visibility test, placement, clamping, or
+horizontal reveal runs at completion time (`consultedRows` proves zero
+row-model consultations). The model-carried reveal intent on
+`pendingReveals` always resolves the latest selected cursor's final
+display target at commit — the Issue #21 cluster-expanded
+first-submatch start cell or the Issue #23 marker cell — never a
+target captured when the load was requested. Stage two is the
+Issue #17 installation guard: an obsolete `layoutReadyMsg` — wrong
+width, mode, revision, or path — is discarded without consuming or
+mutating the intent, and the matching install commits it against the
+fresh rows: visible-target no-scroll, else `floor(h/3)` with BOF/EOF
+precedence, plus the horizontal reset and minimal reveal. Startup's
+visible target keeps top 0; a hidden one lands at the third. Reload
+arbitration generalizes the Issue #27 seam: a reload completion mints
+`pendingAnchor` only when no reveal intent is pending, so any
+navigation during the load — same-file steps, crossings, or
+away-and-back ending on the identical stop — replaces the anchor
+intent with the entry reveal: navigation intent, never cursor
+equality, decides. `internal/app/loadreveal_test.go` adds the
+separately gated stage contracts (startup hidden/visible, resize and
+list-hide between stages, navigation while pending, gutter growth,
+stale-revision discards, saved-viewport revisits, marker and
+mid-cluster targets, non-current isolation, pop-up independence) plus
+`deliverStageOne` and `consultedRows`;
+`internal/app/reloadintent_test.go` adds the transition cases on the
+`intentFiles` fixture. Created
+[load-completion-reveal](load-completion-reveal.md); updated
+[destination-reveal](destination-reveal.md),
+[explicit-reload](explicit-reload.md),
+[logical-anchor](logical-anchor.md),
+[async-load-isolation](async-load-isolation.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/028-load-completion-reveal-latest-target.md`,
+`Notes/tasks/028-load-completion-reveal-latest-target.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency; Navigation, viewport, and logical anchors),
+`internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/loadreveal_test.go`,
+`internal/app/reloadintent_test.go`.

@@ -80,12 +80,15 @@ Two triggers, the ones this issue owns:
   reveal and leaves even an off-screen viewport alone. When the move
   crosses into an uncached file the reveal finds no rows yet and the
   load completion applies it instead.
-- **After load** — `fileLoadedMsg` runs `reveal` when the completed path
-  is the current file. That covers the startup file's first visit and a
-  navigated-to file whose load lands while current; because the cursor
-  is read at completion time, the revealed target is always the latest
-  selection. Issue #28 owns the deeper contract — a two-stage
-  prepared-layout commit with reveal/reload-intent arbitration — and
+- **After load** — `fileLoadedMsg` no longer runs `reveal` itself:
+  Issue #28 splits the completion into two stages, so the load records
+  the reveal intent on `pendingReveals` and it commits when the
+  matching prepared layout installs — covering the startup file's
+  first visit and a navigated-to file whose load lands while current.
+  Because the cursor is read at commit time, the revealed target is
+  always the latest selection, and no row-based decision runs at
+  load-completion time — see
+  [load-completion-reveal.md](load-completion-reveal.md).
   Issue #19's horizontal reveal rides the same two triggers (see
   [horizontal-reveal.md](horizontal-reveal.md)).
 

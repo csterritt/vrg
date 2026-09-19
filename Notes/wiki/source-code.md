@@ -157,7 +157,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   intent map recorded on reload completion and committed through the
   layout-install switch, and the failed-load eviction of `bufs`/`rows`
   so a failed reload replaces the display with "(unreadable)" rather
-  than stale content. See
+  than stale content. Issue #28 makes `fileLoadedMsg`'s current-file
+  branch intent-only: the completion files the buffer, bumps the
+  revision, and requests the keyed layout — the `reveal` call leaves
+  stage one, `pendingReveals` records the owed reveal, and
+  `pendingAnchor` mints only when a reload completes with no reveal
+  already pending, so navigation during a load replaces the
+  reload-anchor intent outright. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
@@ -165,8 +171,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [record-robustness.md](record-robustness.md),
   [stderr-replay.md](stderr-replay.md),
   [async-load-isolation.md](async-load-isolation.md),
-  [read-failures.md](read-failures.md), and
-  [explicit-reload.md](explicit-reload.md).
+  [read-failures.md](read-failures.md),
+  [explicit-reload.md](explicit-reload.md), and
+  [load-completion-reveal.md](load-completion-reveal.md).
 - `internal/app/outcome.go` — Issue #9's pure outcome decision:
   `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
   `Integrity`, usable-results count, `RecordLoss`, caller `Warnings`)
@@ -304,11 +311,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `startReload` — `r`'s unconditional reread that skips the
   cached-buffer check but keeps the one-in-flight drop — marks
   completions with `fileLoadedMsg.reload`, and makes `currentRows`
-  hide a model whose path has a load in flight. See
+  hide a model whose path has a load in flight. Issue #28 splits
+  load-completion reveal into two stages: `fileLoadedMsg` only
+  records the reveal or anchor intent — a reload minting
+  `pendingAnchor` only when `pendingReveals` is unset — while the
+  `layoutReadyMsg` install switch commits the pending reveal, the
+  pending anchor, or the first-visit fallback against the freshly
+  installed rows. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [read-failures.md](read-failures.md),
   [explicit-reload.md](explicit-reload.md),
+  [load-completion-reveal.md](load-completion-reveal.md),
   [file-change-popup.md](file-change-popup.md),
   [viewport-scrolling.md](viewport-scrolling.md),
   [match-navigation.md](match-navigation.md),

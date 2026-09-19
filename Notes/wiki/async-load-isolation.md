@@ -15,8 +15,9 @@ behavior* in [`Notes/PRD-vrg.md`](../PRD-vrg.md). Builds on the
 [Issue #13 matched-line cursor](match-navigation.md), the
 [Issue #4 `quitting` discard](cancellation-cleanup.md), and the
 [Issue #16 wrap mode](wrap-mode.md) `w` toggle. Load-completion reveal
-semantics are [Issue #28](../issues/028-load-completion-reveal.md)'s
-and failure/retry handling is
+semantics are
+[Issue #28's two-stage contract](load-completion-reveal.md) and
+failure/retry handling is
 [Issue #26's](read-failures.md).
 
 ## Navigation during loads
@@ -55,8 +56,9 @@ the completed path is current **at arrival time** — the A→B→C case:
 A's completion landing while C is current caches A and leaves C's
 panel, cursor, and viewport untouched; even the layout A's completion
 prepares installs invisibly for later. When the path *is* current the
-completion owes the file-change reveal against the latest cursor
-target (Issue #28 owns the semantics) and requests the keyed layout.
+completion records the reveal intent owed to the latest cursor target
+and requests the keyed layout — the intent commits at install under
+[Issue #28's two-stage contract](load-completion-reveal.md).
 
 ## One load in flight per path
 

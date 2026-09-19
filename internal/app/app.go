@@ -410,20 +410,26 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.failDiag, key)
 			m.bufs[key] = msg.buf
 			m.revs[key]++
-			// A load completing for the current file owes the
+			// Stage one of the two-stage completion is limited to
+			// filing the result — no row-based decision runs here:
+			// the intent owed to the latest selection is recorded in
+			// the model and commits when the matching prepared layout
+			// installs (Issue #28). A non-reload completion owes the
 			// file-change reveal sequence against the latest cursor
-			// target — covering the startup file's first visit. With
-			// no layout installed yet the intent pends; it commits
-			// when the prepared row model arrives. A reload owes no
-			// reveal: its intent is anchor preservation, recorded
-			// here and committed when the new revision's matching
-			// layout installs (Issue #27). A reveal already pending —
-			// navigation during the load — takes precedence.
+			// target — covering the startup file's first visit; a
+			// reload owes no reveal — its intent is anchor
+			// preservation (Issue #27). A reveal already pending —
+			// navigation during the load, including away-and-back —
+			// replaces the reload's anchor intent: navigation intent,
+			// never cursor equality, decides the commit (Issue #28).
 			if ck, ok := m.curKey(); ok && ck == key {
 				if msg.reload {
-					m.pendingAnchor[key] = true
+					if !m.pendingReveals[key] {
+						m.pendingAnchor[key] = true
+					}
 				} else {
-					m.reveal()
+					delete(m.pendingAnchor, key)
+					m.pendingReveals[key] = true
 				}
 			}
 			return m, m.requestLayout(key)

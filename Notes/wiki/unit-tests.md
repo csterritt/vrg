@@ -985,6 +985,83 @@ runs through while later workers are held; `reloadCmd` presses `r`,
   without touching the installed model, viewport, anchor, or panel;
   the new revision's layout then installs and the anchor commits.
 
+`loadreveal_test.go` (same package; Issue #28) drives the two-stage
+load-completion contract with the stages separately gated —
+`deliverStageOne` feeds the load completion and returns the layout
+command stage one issued, while `consultedRows` records every
+`rowSource` call as the no-row-decision probe:
+
+- `TestLoadCompletionStageOneDefersToInstall` — stage one caches the
+  buffer, bumps the revision, requests the current key, and records
+  the reveal intent with no viewport state created and "Loading…"
+  still up; the commit lands the hidden target at 192 on install.
+- `TestLoadCompletionMakesNoRowDecision` — a `consultedRows` fake
+  standing in as installed sees zero calls through the fabricated
+  completion: no visibility test, placement, clamping, or horizontal
+  reveal at stage one, and the intent commits on the matching install.
+- `TestStartupHiddenTargetCommitsAfterBothStages` — "Loading…" holds
+  through the held load and again through the held layout; the
+  install's reveal lands row 199 at content row 7 and the first `n`
+  advances to the second stop.
+- `TestStartupVisibleTargetKeepsTopThroughStages` — a first stop
+  visible from top 0 commits without scrolling or recording state.
+- `TestResizeBetweenLoadAndLayoutCommitsAtNewWidth` — the resize
+  mints a replacement request, the old-width completion is discarded
+  without consuming the intent or moving the viewport, and the commit
+  lands at the new width.
+- `TestNavigateWhileLayoutPendingCommitsNewestTarget` — two `n`s
+  during the held layout move the cursor at once; the commit reveals
+  the newest selection's target.
+- `TestListHideBetweenStagesCommitsAtFinalWidth` and
+  `TestGutterGrowthBetweenStagesCommitsAtFinalWidth` — a `left` list
+  hide or a gutter-widening reload between the stages re-keys the
+  request; the installed model carries the final text width.
+- `TestStaleRevisionLayoutDiscardsWithoutConsuming` — a revision-1
+  layout arriving after the revision-2 reload is discarded leaving
+  the installed model and the anchor intent untouched; the revision-2
+  install then commits the anchor.
+- `TestSavedViewportRevisitVisibleStays` /
+  `TestSavedViewportRevisitHiddenMoves` — revisiting a file whose
+  layout went stale pends the reveal; the commit keeps the saved top
+  when the target is visible from it and moves to the BOF-clamped
+  third when hidden.
+- `TestMarkerTargetCommitPaintsMarkerCell` — a terminator-only `$`
+  stop commits to the marker's row in run-off-edge mode with the
+  offset staying 0 and the inverse-underline marker cell painted.
+- `TestClusterTargetCommitPaintsWholeCluster` — a submatch starting
+  mid-cluster commits to the cluster's start cell: the horizontal
+  reveal moves `off` to 260 so the whole two-cell 文 paints at the
+  right edge.
+- `TestNonCurrentCompletionLeavesPanelUntouched` — a fabricated
+  completion for a non-current file records no intent and leaves the
+  panel, viewport, and foreign intents untouched.
+- `TestPopupSurvivesBothStages` — the same pop-up instance survives
+  the load completion and the layout install.
+
+`reloadintent_test.go` (same package; Issue #28) drives the
+reload-versus-reveal arbitration on the `intentFiles` fixture —
+a.txt's two deep stops scroll the match off screen, b.txt is the
+cross-file leg — with `heldNthLoad(2)` holding only the reload:
+
+- `TestReloadWithoutNavigationRecordsAnchorIntent` — an undisturbed
+  reload records the anchor intent and no reveal; the held layout
+  keeps the placeholder and saved viewport until the install restores
+  the anchor's row.
+- `TestReloadNavigationDuringLoadReplacesIntent` — `n` during the
+  held reload leaves the completion recording no anchor intent; the
+  commit reveals the newest stop at 42.
+- `TestReloadAwayBackSameFileEntryReveal` — `n`/`p` during the reload
+  ends on the initial stop, yet the entry reveal — not anchor
+  preservation — commits: navigation intent, never cursor equality,
+  decides.
+- `TestReloadAwayBackCrossFileEntryReveal` — A→B→A during the held
+  reload shows "Loading…" on the return (the re-entry minting nothing
+  new) and the commit applies the entry reveal at 2.
+- `TestReloadOutOfOrderRevisionsCommitReveal` — a revision-1 layout
+  delivered before the revision-2 one is discarded without consuming
+  the reveal intent navigation pended during the load; the revision-2
+  install commits it.
+
 Since Issue #25, `injectLoad` (in `layout_test.go`) fills a
 fabricated completion with the live request's identity before
 feeding `Update` — a message for a path with no request in flight

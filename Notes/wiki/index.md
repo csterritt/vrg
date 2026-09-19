@@ -203,6 +203,17 @@ Catalog of all wiki pages for the vrg project.
   at load completion and committed on the matching install, the
   lossy shrink clamp, the one-stop retry route, and cache stability
   until `r`
+- [load-completion-reveal.md](load-completion-reveal.md) — Issue #28:
+  the two-stage load-completion contract — stage one files the
+  buffer/revision and requests the keyed layout while making no
+  row-based decision, the model-carried reveal intent always
+  resolving the latest selected target (cluster-expanded start cell
+  or marker cell) at install, obsolete layouts discarded without
+  consuming intents, the installation-guarded commit's
+  visible/no-scroll then one-third placement plus horizontal reveal,
+  startup visible/hidden cases, and reload-intent arbitration where
+  navigation during a load — even away-and-back ending on the same
+  stop — replaces the anchor intent
 
 ## Catalogs
 

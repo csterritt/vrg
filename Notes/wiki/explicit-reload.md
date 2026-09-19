@@ -13,10 +13,10 @@ the keyed completion, the one-load-per-path drop, and the injected
 loader — the [Issue #26 read-failure](read-failures.md) overlay and
 placeholder, and the
 [Issue #17 prepared-layout pipeline](logical-anchor.md) whose content
-revisions and pending-intent seam the reload feeds. Reveal-versus-
-reload arbitration beyond the precedence already recorded is
-[Issue #28](../issues/028-load-completion-reveal.md)'s; stale-match
-notes are Issue #29's.
+revisions and pending-intent seam the reload feeds. The
+reveal-versus-reload arbitration this seam introduced is completed by
+[Issue #28's two-stage completion](load-completion-reveal.md);
+stale-match notes are Issue #29's.
 
 ## The `r` route and the dropped duplicate
 
@@ -76,7 +76,7 @@ re-entry sequence uses.
 
 A reload owes no reveal. When a `reload`-marked `fileLoadedMsg`
 completes for the current file, Update records
-`pendingAnchor[path] = true` instead of calling `reveal` — the
+`pendingAnchor[path] = true` instead of a reveal intent — the
 **reload-anchor intent** (preserve the anchor, no reveal), minted at
 load completion and committed only when the new revision's matching
 prepared layout installs through the Issue #17 installation path. The
@@ -84,11 +84,13 @@ prepared layout installs through the Issue #17 installation path. The
 `(line, cell)` anchor onto its row in the new rows — content growth
 keeps the text location, and a shrink hits the intentionally lossy
 EOF clamp that rewrites the anchor to the clamped top — so the commit
-is simply consuming the intent. A pending **reveal** takes
-precedence: navigation during the load (or a first-visit reveal still
-owed) outranks the anchor intent, and `reveal` clears a recorded
-`pendingAnchor` whenever it runs or pends — the seam Issue #28 later
-generalizes into full reveal/reload arbitration.
+is simply consuming the intent. Since Issue #28 landed the two-stage
+contract, the anchor intent is recorded **only when no reveal intent
+is pending**: any navigation during the load — a same-file step, a
+crossing, or an away-and-back ending on the same stop — replaces the
+reload's intent with the entry reveal, so navigation intent, never
+cursor equality, decides the commit. See
+[load-completion-reveal.md](load-completion-reveal.md).
 
 ## Test seams
 
