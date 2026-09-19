@@ -1461,6 +1461,39 @@ and `filelist_test.go`'s `TestAnchorSurvivesGutterGrowth` marks its
 injected completion `reload: true` so it exercises the
 anchor-preserving reload path rather than the destination reveal.
 
+`admission_test.go` (same package; Issue #42) drives the atomic
+load-admission contract — `mintLoad` as the single admission point
+where a duplicate request is dropped before any mutation — through
+the held-load gates and the `admitFiles` fixture (each file's single
+stop at line 50, deep enough that the destination reveal visibly
+moves the viewport where anchor preservation would leave top 0):
+
+- `TestDroppedRDuringStartupLoadPreservesIntent` — `r` during the
+  held startup load mints nothing and mutates nothing: same live
+  request identity, unchanged `loadSeq`, revision 0, no reveal or
+  anchor intent, identical frame. The released load completes
+  **not** marked a reload, bumps the revision exactly once, records
+  the reveal intent, and the install commits the first-match reveal
+  — never anchor preservation.
+- `TestDroppedRDuringNavigationLoadPreservesIntent` — the same drop
+  during a held cross-file load leaves the destination's
+  `pendingReveals` intact with no `pendingAnchor` replacement and no
+  extra worker; the completion commits the destination reveal.
+- `TestAcceptedReloadAppliesFlagsIntentAndOneRevision` — `r` after
+  settlement mints a fresh identity, shows "Loading…" at once, marks
+  the completion `reload`, and bumps the revision exactly once at
+  completion — the request alone adds none — recording the anchor
+  intent for the undisturbed reload.
+- `TestRapidRPressesKeepOneLoadInFlight` — three more `r` presses
+  under a held reload mint nothing and run no extra worker; the
+  placeholder→content transition stays the completion signal, and
+  only the settled load lets the next `r` mint.
+- `TestReentryDuringInFlightLoadUpdatesSelectionAndIntent` — `p`
+  back onto a still-loading path is deliberately ungated: the
+  duplicate load drops while the cursor, the "Loading…"
+  presentation, and the reveal intent all move to the re-entered
+  file, whose completion commits the re-entry's reveal.
+
 ## internal/viewport
 
 `viewport_test.go` (external package `viewport_test`; Issue #12):

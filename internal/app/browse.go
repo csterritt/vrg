@@ -437,11 +437,7 @@ func (m *model) startLoad() tea.Cmd {
 		return nil
 	}
 	f := m.idx.Files[m.curFile()]
-	key := string(f.Path)
-	if _, ok := m.loading[key]; ok {
-		return nil
-	}
-	if _, ok := m.bufs[key]; ok {
+	if _, ok := m.bufs[string(f.Path)]; ok {
 		return nil
 	}
 	return m.mintLoad(f, false)
@@ -450,29 +446,32 @@ func (m *model) startLoad() tea.Cmd {
 // startReload issues the current file's explicit-r reread command, or
 // nil while a load for the path is already in flight — a duplicate r,
 // like a re-entry crossing during the load, is dropped and never
-// queued (Issue #27). Unlike startLoad it mints unconditionally: the
-// cached content is exactly what the reload replaces, and the reread
-// never reruns rg or touches the search-derived stops.
+// queued (Issue #27). Unlike startLoad it skips the cached-buffer
+// check: the cached content is exactly what the reload replaces, and
+// the reread never reruns rg or touches the search-derived stops.
 func (m *model) startReload() tea.Cmd {
 	if m.idx == nil || len(m.idx.Files) == 0 {
 		return nil
 	}
-	f := m.idx.Files[m.curFile()]
-	if _, ok := m.loading[string(f.Path)]; ok {
-		return nil
-	}
-	return m.mintLoad(f, true)
+	return m.mintLoad(m.idx.Files[m.curFile()], true)
 }
 
-// mintLoad marks path's request live under a fresh identity and
-// returns its worker command: the read runs under the test gate and
-// the decode/map phase under its own gate so "Loading…" provably spans
-// both, all off the update path. Minting clears a prior failure record
-// so the panel reads "Loading…" until settlement marks it content or
-// "(unreadable)", and a completion must echo the request identity back
-// to be filed.
+// mintLoad is the single admission point for file loads: a path already
+// loading mints nothing — the request is dropped, never queued — and
+// crucially the drop mutates nothing, so a declined request can never
+// reclassify the in-flight load, its revision, or its reveal intent
+// (Issue #42). Only an accepted request records the live identity,
+// clears the prior failure record so the panel reads "Loading…" until
+// settlement marks it content or "(unreadable)", and returns the worker
+// command: the read runs under the test gate and the decode/map phase
+// under its own gate so "Loading…" provably spans both, all off the
+// update path. A completion must echo the request identity back to be
+// filed.
 func (m *model) mintLoad(f searchindex.File, reload bool) tea.Cmd {
 	key := string(f.Path)
+	if _, ok := m.loading[key]; ok {
+		return nil
+	}
 	delete(m.failed, key)
 	m.loadSeq++
 	m.loading[key] = m.loadSeq

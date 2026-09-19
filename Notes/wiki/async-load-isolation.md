@@ -74,7 +74,13 @@ path retryable: minting the retry clears the failure record — see
 `r`: `startReload` mints through the same `mintLoad` worker, so a
 duplicate `r` — or a re-entry crossing — while the path's reload is
 in flight is dropped the same way; see
-[explicit-reload.md](explicit-reload.md).
+[explicit-reload.md](explicit-reload.md). Issue #42 made `mintLoad`
+itself the **single admission point**: the in-flight check sits inside
+it, ahead of every mutation, so a dropped request touches nothing —
+not even the in-flight load's classification — while the re-entry's
+selection, placeholder, and reveal-intent updates are deliberately
+ungated by it; see
+[reload-admission.md](reload-admission.md).
 
 ## Session-long retention
 

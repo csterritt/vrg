@@ -416,7 +416,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `startReload` — `r`'s unconditional reread that skips the
   cached-buffer check but keeps the one-in-flight drop — marks
   completions with `fileLoadedMsg.reload`, and makes `currentRows`
-  hide a model whose path has a load in flight. Issue #28 splits
+  hide a model whose path has a load in flight. Issue #42 makes
+  `mintLoad` itself the single admission point: the in-flight check
+  sits inside it ahead of every mutation (`failed` clearing,
+  `loadSeq`/`loading` recording), so a dropped request — duplicate
+  `r` or re-entry — mutates nothing and cannot reclassify the load
+  already in flight. Issue #28 splits
   load-completion reveal into two stages: `fileLoadedMsg` only
   records the reveal or anchor intent — a reload minting
   `pendingAnchor` only when `pendingReveals` is unset — while the
@@ -453,6 +458,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [stderr-replay.md](stderr-replay.md),
   [read-failures.md](read-failures.md),
   [explicit-reload.md](explicit-reload.md),
+  [reload-admission.md](reload-admission.md),
   [load-completion-reveal.md](load-completion-reveal.md),
   [file-change-popup.md](file-change-popup.md),
   [viewport-scrolling.md](viewport-scrolling.md),

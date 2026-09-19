@@ -75,8 +75,12 @@ computes (the same number `UsableResults` reports) for the no-op rules.
   zero-value top of the file. While a destination file is uncached the
   panel switches to its "Loading…" placeholder immediately and
   navigation stays live: the cursor keeps moving under an in-flight
-  load, a second request for the same path is dropped by `startLoad`'s
-  dedup, and the reveal lands when the load completes.
+  load, a second request for the same path is dropped at `mintLoad`'s
+  admission check, and the reveal lands when the load completes.
+  Since Issue #42 the drop is explicitly **ungated** — it declines
+  only the duplicate load request; the re-entry's selection,
+  placeholder, and reveal-intent updates still apply
+  ([reload-admission.md](reload-admission.md)).
   [Issue #25](async-load-isolation.md) has since keyed each completion
   by raw path plus request identity, so a late answer updates only its
   own path's cache — never the file the cursor has since moved to.

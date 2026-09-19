@@ -329,6 +329,13 @@ Catalog of all wiki pages for the vrg project.
   tiny sizes kept while model elision is forbidden, the unchanged
   modal key contract (`u`/`d`/page keys ignored), and the superseded
   simultaneous head/tail semantics of the ≥ 1 MiB stderr fixture
+- [reload-admission.md](reload-admission.md) — Issue #42: `mintLoad`
+  as the single admission point where the in-flight check precedes
+  every mutation, so a dropped `r` or re-entry touches nothing — no
+  identity, revision, intent, presentation, or reclassification of
+  the load in flight — while an accepted `r` still mints fresh,
+  shows "Loading…", and bumps the revision exactly once at
+  completion, and navigation re-entry stays deliberately ungated
 
 ## Catalogs
 

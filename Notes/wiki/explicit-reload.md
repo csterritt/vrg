@@ -29,7 +29,12 @@ already-cached check: the cached buffer is exactly what the reread
 replaces. The in-flight check still applies — a second `r`, like a
 re-entry crossing onto a path whose reload is pending, mints nothing:
 **dropped, not queued**, per the
-[one-load-per-path rule](async-load-isolation.md). The placeholder's
+[one-load-per-path rule](async-load-isolation.md). Since Issue #42 the
+check lives **inside** `mintLoad` itself — the single admission point —
+so the drop is atomic with minting: a declined `r` mutates nothing (no
+identity, no cleared failure, no intent, no presentation) and can never
+reclassify the load already in flight; see
+[reload-admission.md](reload-admission.md). The placeholder's
 change is the only completion signal — "Loading…" → content,
 "(unreadable)", or Issue #30's
 ["(unsupported encoding)"](unsupported-encodings.md) — after which

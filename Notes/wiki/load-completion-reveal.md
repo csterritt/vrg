@@ -53,7 +53,13 @@ Two intent kinds live on per-path maps, at most one per path:
   anchor, no reveal; [Issue #27](explicit-reload.md)). Recorded at a
   `reload`-marked completion **only when no reveal intent is
   pending**: navigation during the load replaces the reload's intent,
-  so the anchor intent is minted only for an undisturbed reload.
+  so the anchor intent is minted only for an undisturbed reload. The
+  `reload` marking itself is fixed at request-mint time — since
+  Issue #42 admission sits inside `mintLoad` before any mutation, a
+  dropped `r` mints no request and can never stamp reload
+  classification onto the load already in flight, so an in-flight
+  visit's completion records the reveal intent it always owed; see
+  [reload-admission.md](reload-admission.md).
 
 ## Installation-guarded commit
 

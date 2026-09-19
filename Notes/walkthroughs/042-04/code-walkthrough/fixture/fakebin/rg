@@ -1,0 +1,11 @@
+#!/bin/sh
+cat <<'EOF'
+{"type":"begin","data":{"path":{"text":"./a.txt"}}}
+{"type":"match","data":{"path":{"text":"./a.txt"},"lines":{"text":"alpha line 50\n"},"line_number":50,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./a.txt"},"binary_offset":null,"stats":{}}}
+{"type":"begin","data":{"path":{"text":"./b.txt"}}}
+{"type":"match","data":{"path":{"text":"./b.txt"},"lines":{"text":"alpha line 50\n"},"line_number":50,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./b.txt"},"binary_offset":null,"stats":{}}}
+{"type":"summary","data":{"stats":{}}}
+EOF
+exit 0

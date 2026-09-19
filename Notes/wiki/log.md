@@ -1608,3 +1608,42 @@ index. Sources:
 `internal/app/overlay.go`, `internal/app/overlay_test.go`,
 `internal/app/precedence_test.go`, `cmd/vrg/outcome_test.go`, PRD
 *Colours, overlays, and key precedence* (user stories 80–83).
+## [2026-09-18] ingest | Issue #42 atomic load admission — a dropped request mutates nothing
+
+`mintLoad` is now the single admission point for every file-load
+request: the in-flight check lives inside it, ahead of the `failed`
+clearing and the `loadSeq`/`loading` recording, so a duplicate
+request is dropped whole before it can mutate anything — and because
+`fileLoadedMsg.reload` is captured at mint time inside the accepted
+request, a declined `r` can never reclassify the startup or
+navigation load already in flight, whose completion therefore records
+the destination/first-match reveal it always owed rather than
+reload-anchor preservation. The structural change is small — the
+check moved from `startLoad`/`startReload` into `mintLoad` — since
+the prior per-caller check already ran before minting; the issue
+lands as the single-decision-point invariant plus its missing proofs:
+`internal/app/admission_test.go` adds
+`TestDroppedRDuringStartupLoadPreservesIntent` and
+`TestDroppedRDuringNavigationLoadPreservesIntent` (identity, `loadSeq`,
+revision, intents, and frame all preserved; the released completion
+reveals, never preserves an anchor),
+`TestAcceptedReloadAppliesFlagsIntentAndOneRevision` (fresh identity,
+"Loading…" at once, `reload` marking, exactly one revision bump at
+completion),
+`TestRapidRPressesKeepOneLoadInFlight` (repeated `r` mints nothing
+extra; the placeholder transition stays the completion signal), and
+`TestReentryDuringInFlightLoadUpdatesSelectionAndIntent` (re-entry
+drops only the duplicate load — selection, placeholder, and reveal
+intent update ungated). Created
+[reload-admission](reload-admission.md); updated
+[explicit-reload](explicit-reload.md),
+[async-load-isolation](async-load-isolation.md),
+[load-completion-reveal](load-completion-reveal.md),
+[match-navigation](match-navigation.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/042-dropped-reload-no-intent-mutation.md`,
+`Notes/tasks/042-dropped-reload-no-intent-mutation.md`,
+`internal/app/browse.go`, `internal/app/admission_test.go`, PRD
+*File loading, cache, reload, and selection consistency* and
+*Navigation, viewport, and logical anchors*.
