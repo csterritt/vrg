@@ -11,12 +11,18 @@ import (
 )
 
 // fakeChild is a started-child stand-in whose Wait returns a fixed
-// collected result, as if rg had already exited and been drained.
-type fakeChild struct{ res Result }
+// collected result, as if rg had already exited and been drained; a nil
+// diags channel means the child has no incremental stderr delivery.
+type fakeChild struct {
+	res   Result
+	diags chan string
+}
 
 func (f fakeChild) Wait() Result { return f.res }
 
 func (f fakeChild) Terminate() {}
+
+func (f fakeChild) Diags() <-chan string { return f.diags }
 
 // happyStream is a small valid ripgrep JSON stream: two files, three
 // matched lines.

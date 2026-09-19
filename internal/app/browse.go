@@ -1,7 +1,9 @@
 package app
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 
 	"github.com/rivo/uniseg"
@@ -48,6 +50,19 @@ func (m *model) startLoad() tea.Cmd {
 		buf, err := filebuffer.Load(path, stops)
 		return fileLoadedMsg{path: path, buf: buf, err: err}
 	}
+}
+
+// loadDiag composes the single-line diagnostic for a failed file load:
+// the path single-line-escaped so hostile name bytes can never forge a
+// diagnostic line boundary, and a reason that does not repeat the raw
+// path — a *PathError contributes only its cause.
+func loadDiag(path []byte, err error) string {
+	reason := err.Error()
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		reason = pe.Err.Error()
+	}
+	return "cannot read " + safepresentation.EscapePath(path) + ": " + safepresentation.EscapePath([]byte(reason))
 }
 
 // browseView composes the two-pane browse frame at the current

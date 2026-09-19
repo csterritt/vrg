@@ -310,3 +310,47 @@ Outcome and exit-status contract; Resources and responsiveness),
 `internal/searchindex/disposition_test.go`,
 `internal/searchindex/oversized_test.go`, `internal/app/app.go`,
 `internal/app/outcome.go`, `internal/app/outcome_test.go`.
+
+## [2026-09-16] ingest | Issue #11 stderr replay of collected diagnostics
+
+Implemented the session diagnostic collection and post-restoration
+stderr replay. `internal/app/rg.go` gained incremental stderr delivery:
+`drainStderr` line-splits stderr into a mutex-guarded pending queue so
+drainage never blocks on a consumer, and `feedDiags` (started lazily by
+the new `Child.Diags()`) forwards the queue onto a channel closed at
+EOF; `Run` forwards each line into the model as `stderrLineMsg` via
+`prog.Send`. `internal/app/app.go` gained `model.diags` —
+`collectDiags` appends sanitized lines in the order `Update` processes
+the carrying message (`stderrLineMsg`, `searchDoneMsg` via
+`collectSearchDiags` — which skips captured stderr when the incremental
+route already delivered it — `fileLoadedMsg` failures via the new
+`loadDiag` in `browse.go`, and `failMsg`) — plus `replayDiags`, the
+common post-restoration stderr writer that replaced `writeFailureDiag`:
+after `program.Run` returns and `reapChild` runs, every collected line
+is emitted exactly once, in collection order, on ordinary quit,
+cancellation (130), and controlled failure (2) alike; a `program.Run`
+error appends through the same writer. `outcome.go` split
+`outcomeDiagnostics` into `processDiags`/`tailDiags` so collection and
+display share composition. New option `WithDiagAck` fires once per
+collected line, wired to `VRG_TEST_DIAG_ACK` in `cmd/vrg/main.go`.
+New tests: `internal/app/replay_test.go` (ordered exactly-once
+collection, never-displayed diagnostics, the `ctrl+c`/`q`/gate-held
+shutdown boundaries, incremental-vs-completion deduplication,
+controlled-failure collection, hostile embedded filenames) and
+`cmd/vrg/replay_test.go` (PTY acknowledgement via `waitForAcks`,
+replay-after-restoration ordering and exactly-once on cancel,
+gate-held, normal-quit, and controlled-failure routes, escaped hostile
+filename); `sinksafety_test.go` gained the stderr-replay row (seven
+sinks). Created [stderr-replay](stderr-replay.md); updated
+[cancellation-cleanup](cancellation-cleanup.md),
+[error-overlay-and-outcomes](error-overlay-and-outcomes.md),
+[safe-presentation](safe-presentation.md), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/issues/011-stderr-replay-of-collected-diagnostics.md`,
+`Notes/tasks/011-stderr-replay-of-collected-diagnostics.md`,
+`Notes/PRD-vrg.md` (Outcome and exit-status contract; Colours,
+overlays, and key precedence; Testing Decisions → Subprocess boundary),
+`internal/app/app.go`, `internal/app/rg.go`, `internal/app/browse.go`,
+`internal/app/outcome.go`, `internal/app/replay_test.go`,
+`internal/app/sinksafety_test.go`, `cmd/vrg/main.go`,
+`cmd/vrg/replay_test.go`.

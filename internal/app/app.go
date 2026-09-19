@@ -52,6 +52,10 @@ type options struct {
 	// fail, when set, is the injectable controlled-failure hook: a
 	// non-nil return is a controlled application failure.
 	fail func() error
+	// diagAck, when set, runs once per diagnostic line after Update has
+	// processed it into the session collection — the test-only
+	// acknowledgement that a diagnostic is collected before an exit key.
+	diagAck func()
 	// loadGate, when set, runs inside each file-load command before the
 	// read — the hold proving "Loading…" spans the whole load: disk read
 	// plus decode and byte→cell mapping, all off the update path.
@@ -70,6 +74,10 @@ func WithReapReport(fn func(Result)) Option { return func(o *options) { o.reap =
 // WithFailFunc installs the controlled-failure hook: a non-nil return
 // from fn fails the application under vrg's control.
 func WithFailFunc(fn func() error) Option { return func(o *options) { o.fail = fn } }
+
+// WithDiagAck runs fn once per diagnostic line after Update has
+// processed it into the session collection.
+func WithDiagAck(fn func()) Option { return func(o *options) { o.diagAck = fn } }
 
 // WithLoadGate holds each file load — read and decode/map together —
 // until fn returns.
@@ -103,9 +111,16 @@ type model struct {
 	// arriving after it — including late search and load completions —
 	// are discarded so they cannot revive the UI.
 	quitting bool
-	// failErr is a controlled application failure reported through the
-	// single post-restoration stderr writer in Run.
+	// failErr is a controlled application failure; its diagnostic enters
+	// the session collection before shutdown and is replayed by the
+	// common post-restoration stderr writer in Run.
 	failErr error
+
+	// diags is the session diagnostic collection — sanitized lines
+	// appended in the order Update processed the messages carrying them,
+	// independent of what any overlay displayed. Run replays it to
+	// stderr after terminal restoration on every controlled exit.
+	diags []string
 
 	// Browse state. idx is the prepared search index; cur is the current
 	// file's index into idx.Files (the first stop's file — Issue #13
@@ -158,6 +173,12 @@ type searchDoneMsg struct {
 // failure hook into Update.
 type failMsg struct{ err error }
 
+// stderrLineMsg carries one drained child-stderr line — terminator
+// retained — into the session collection. Incremental delivery is what
+// lets a diagnostic be collected while the child still runs, ahead of
+// any exit decision.
+type stderrLineMsg struct{ text string }
+
 // Init starts collection and, when the failure hook is installed, the
 // hook itself. The collection command blocks on the child, runs the
 // collection acknowledgement and the preparation gate, then builds the
@@ -198,7 +219,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case searchDoneMsg:
 		m.idx = msg.idx
 		var cmd tea.Cmd
-		outcome := DecideOutcome(OutcomeInput{
+		in := OutcomeInput{
 			Result:    msg.res,
 			Integrity: msg.idx.Integrity(),
 			Usable:    msg.idx.UsableResults(),
@@ -208,7 +229,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Paths:     msg.idx.OversizedPaths,
 			},
 			Warnings: recordWarnings(msg.idx),
-		})
+		}
+		outcome := DecideOutcome(in)
+		m.collectSearchDiags(msg.res, in)
 		// The search-derived status is fixed once searching completes;
 		// only ctrl+c overrides it afterwards.
 		m.status = outcome.Status
@@ -227,11 +250,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.overlayText = strings.Join(outcome.Overlay, "\n")
 		}
 		return m, cmd
+	case stderrLineMsg:
+		m.collectDiags(splitDiagnostic([]byte(msg.text))...)
 	case fileLoadedMsg:
 		key := string(msg.path)
 		delete(m.loading, key)
 		if msg.err != nil {
 			m.failed[key] = true
+			// A load failure is a collected diagnostic whether or not
+			// an overlay ever shows it — Issue #26 owns the display
+			// side (current-file overlay, non-current silence).
+			m.collectDiags(loadDiag(msg.path, msg.err))
 		} else {
 			m.bufs[key] = msg.buf
 		}
@@ -240,6 +269,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.failErr = msg.err
+		// The failure diagnostic enters the session collection before
+		// shutdown; the common post-restoration writer replays it
+		// exactly once — there is no separate direct write.
+		m.collectDiags("vrg: " + safepresentation.EscapePath([]byte(msg.err.Error())))
 		m.quitting = true
 		return m, m.quitCmd()
 	case tea.KeyPressMsg:
@@ -328,6 +361,39 @@ func reapChild(c Child, report func(Result)) {
 	}
 }
 
+// collectDiags appends sanitized diagnostic lines to the session
+// collection in the order Update processed the messages carrying them.
+// That order is the shutdown boundary: a diagnostic is collected once
+// its message is processed and is replayed exactly once after terminal
+// restoration; a message still in flight at exit is never waited for.
+// The test-only acknowledgement runs once per collected line.
+func (m *model) collectDiags(lines ...string) {
+	for _, line := range lines {
+		m.diags = append(m.diags, line)
+		if m.opts.diagAck != nil {
+			m.opts.diagAck()
+		}
+	}
+}
+
+// collectSearchDiags collects the search-completion diagnostics in
+// outcome order. Child stderr is normally collected line-by-line as it
+// drains (stderrLineMsg), so completion collects only the generated
+// process line — when a failed child left no stderr — plus the
+// integrity, record-loss, and warning tail. A child without incremental
+// diagnostics owes its whole captured stderr here.
+func (m *model) collectSearchDiags(res Result, in OutcomeInput) {
+	switch {
+	case len(res.Stderr) > 0:
+		if m.child.Diags() == nil {
+			m.collectDiags(splitDiagnostic(res.Stderr)...)
+		}
+	case processFailed(res):
+		m.collectDiags(failedProcessLine(res))
+	}
+	m.collectDiags(tailDiags(in)...)
+}
+
 func (m *model) View() tea.View {
 	s := center("Searching…", m.width, m.height)
 	switch m.state {
@@ -364,9 +430,11 @@ func (m *model) noResultsText() string {
 // cfg.Err and
 // returns exit 2 without entering the TUI. Every controlled exit —
 // ordinary, cancellation, or a controlled application failure —
-// terminates and reaps the child and restores the terminal; a controlled
-// failure additionally writes its sanitized diagnostic exactly once,
-// after restoration, through writeFailureDiag.
+// terminates and reaps the child and restores the terminal; the session
+// diagnostic collection — everything the model processed, whether or
+// not an overlay showed it — is then replayed to stderr exactly once
+// each, in collection order, through replayDiags. No persistent log is
+// written.
 func Run(ctx context.Context, cfg Config, opts ...Option) int {
 	errOut := cfg.Err
 	if errOut == nil {
@@ -393,32 +461,55 @@ func Run(ctx context.Context, cfg Config, opts ...Option) int {
 		o.reap = func(r Result) { once.Do(func() { report(r) }) }
 	}
 	m := newModel(cfg, o, child)
-	final, err := tea.NewProgram(m, tea.WithContext(ctx)).Run()
+	prog := tea.NewProgram(m, tea.WithContext(ctx))
+	if ch := child.Diags(); ch != nil {
+		// Forward each drained stderr line into the model as it
+		// arrives; Send is a no-op once the program has exited, so the
+		// forwarder drains to EOF without stalling the child's
+		// drainage.
+		go func() {
+			for line := range ch {
+				prog.Send(stderrLineMsg{text: line})
+			}
+		}()
+	}
+	final, err := prog.Run()
 	// Exits that bypass the model — interrupt, program error, a caught
 	// panic — still owe the child termination and reaping.
 	reapChild(child, o.reap)
+	fm, _ := final.(*model)
+	var diags []string
+	if fm != nil {
+		diags = fm.diags
+	}
 	if err != nil {
 		if errors.Is(err, tea.ErrInterrupted) {
+			replayDiags(errOut, diags)
 			return 130
 		}
-		writeFailureDiag(errOut, err)
+		// A runtime failure never reached the session collection; it
+		// is appended after the collected diagnostics and emitted by
+		// the same post-restoration writer — exactly once.
+		replayDiags(errOut, append(diags, "vrg: "+safepresentation.EscapePath([]byte(err.Error()))))
 		return 2
 	}
-	if fm, ok := final.(*model); ok {
-		if fm.failErr != nil {
-			writeFailureDiag(errOut, fm.failErr)
-			return 2
-		}
-		return fm.status
+	replayDiags(errOut, diags)
+	if fm == nil || fm.failErr != nil {
+		return 2
 	}
-	return 2
+	return fm.status
 }
 
-// writeFailureDiag is the single post-restoration stderr writer: it
-// emits one sanitized controlled-failure diagnostic, and only runs after
-// the program has returned and the terminal is restored.
-func writeFailureDiag(w io.Writer, err error) {
-	fmt.Fprintf(w, "vrg: %s\n", safepresentation.EscapePath([]byte(err.Error())))
+// replayDiags is the common post-restoration stderr writer: every
+// collected diagnostic line is emitted exactly once, in collection
+// order, and it runs only after the program has returned and the
+// terminal is restored. Collected lines are already sanitized — child
+// stderr through the diagnostic escaper, embedded filenames through the
+// path escaper — so the writer adds only the line framing.
+func replayDiags(w io.Writer, lines []string) {
+	for _, line := range lines {
+		fmt.Fprintln(w, line)
+	}
 }
 
 // center pads s into a w×h field, centered horizontally and vertically.

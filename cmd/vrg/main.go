@@ -50,6 +50,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 // been fully collected, so tests can observe that rg exited while
 // preparation is still held. VRG_TEST_LOAD_GATE=<file> holds each file
 // load — read and decode/map together — while the file exists.
+// VRG_TEST_DIAG_ACK=<file> records a line each time a diagnostic is
+// processed into the session collection — the application-side
+// acknowledgement that a diagnostic is collected before an exit key.
 // VRG_TEST_REAP=<file> records the child's reaped wait status once per
 // process — the side channel proving vrg's wait/reap path ran.
 // VRG_TEST_FAIL=<file> injects a controlled failure once the file exists.
@@ -57,6 +60,9 @@ func testSeamOptions() []app.Option {
 	var opts []app.Option
 	if p := os.Getenv("VRG_TEST_COLLECT_ACK"); p != "" {
 		opts = append(opts, app.WithCollectAck(func() { appendLine(p, "collected\n") }))
+	}
+	if p := os.Getenv("VRG_TEST_DIAG_ACK"); p != "" {
+		opts = append(opts, app.WithDiagAck(func() { appendLine(p, "diag\n") }))
 	}
 	if p := os.Getenv("VRG_TEST_GATE"); p != "" {
 		opts = append(opts, app.WithGate(func() { waitFileGone(p) }))

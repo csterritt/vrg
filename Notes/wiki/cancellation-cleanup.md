@@ -65,13 +65,14 @@ ordinary quit, cancellation, and controlled failure alike.
 `WithFailFunc` installs the injectable hook: when set, `Init` batches the
 hook command with collection; a non-nil return becomes `failMsg`, which
 begins the same cleanup exit and records `failErr`. After the program
-has returned — terminal restored — `app.Run` hands the error to
-`writeFailureDiag`, the single post-restoration stderr writer
-(`vrg: <EscapePath-escaped error text>`), and exits 2. A `program.Run` error
-(TTY/startup failure, caught panic) takes the same writer and status.
-The diagnostic is written exactly once and only after restoration; the
-writer is deliberately not yet a collection/replay mechanism — Issue #11
-generalizes it into session diagnostic replay.
+has returned — terminal restored — `app.Run` emits the sanitized
+diagnostic (`vrg: <EscapePath-escaped error text>`) and exits 2. A
+`program.Run` error (TTY/startup failure, caught panic) takes the same
+post-restoration write and status. As of Issue #11 the writer is
+`replayDiags`, the common stderr-replay sink: the failure diagnostic
+enters the session collection in `Update` before shutdown and replays
+exactly once after restoration — there is no separate direct write. See
+[stderr-replay.md](stderr-replay.md).
 
 ## Test seams and the PTY harness
 
@@ -84,6 +85,10 @@ New `VRG_TEST_*` seams wired in `cmd/vrg/main.go`:
 - `VRG_TEST_FAIL=<file>` — `WithFailFunc` blocks until the file exists,
   then returns an error containing a raw ESC byte (proving diagnostic
   sanitization).
+- `VRG_TEST_DIAG_ACK=<file>` — Issue #11's `WithDiagAck` appends one
+  line per diagnostic processed into the session collection, so a test
+  can wait on collection rather than a child-side write; see
+  [stderr-replay.md](stderr-replay.md).
 
 `cmd/vrg/cancel_test.go` extends the Issue #3 harness with
 `startVrgTermPTY`: it opens the pty pair itself (via `pty.Open`), keeps

@@ -41,6 +41,8 @@ func (k *killChild) Wait() Result {
 	return k.res
 }
 
+func (k *killChild) Diags() <-chan string { return nil }
+
 // runQuittingCmd runs the command a controlled exit returns. It must
 // produce tea.QuitMsg only after terminating and reaping the child; the
 // bound exists solely to fail a cleanup path that forgets to terminate.

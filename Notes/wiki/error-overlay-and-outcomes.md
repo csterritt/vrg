@@ -96,6 +96,9 @@ whole, then caller warnings. Every line is escaped through
 `safepresentation.EscapeDiagnostic` before it is stored, so hostile
 bytes can never execute on the terminal — the sink-safety table drives
 the hostile fixture set through the overlay's real composition path.
+Whether or not an overlay shows them, these diagnostics also enter the
+Issue #11 session collection and replay to stderr after terminal
+restoration — see [stderr-replay.md](stderr-replay.md).
 
 ## The modal error overlay
 

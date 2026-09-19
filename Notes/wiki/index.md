@@ -65,6 +65,15 @@ Catalog of all wiki pages for the vrg project.
   the triple-disposition unterminated oversized tail, missing-`end`
   retention, and the record-loss outcome rows with usable results
   assessed after all filtering
+- [stderr-replay.md](stderr-replay.md) — Issue #11: the session
+  diagnostic collection independent of display (`model.diags` fed by
+  `stderrLineMsg` incremental child-stderr delivery, completion,
+  load-failure, and `failMsg` messages), the message-processing
+  shutdown boundary, `replayDiags`' exactly-once in-order replay after
+  terminal restoration on every controlled exit, the unified
+  controlled-failure path, `EscapePath`-single-lined embedded
+  filenames, and the `VRG_TEST_DIAG_ACK` application-side
+  acknowledgement
 
 ## Catalogs
 

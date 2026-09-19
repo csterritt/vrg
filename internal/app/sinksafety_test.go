@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"io/fs"
 	"strings"
@@ -58,6 +59,10 @@ var sinkSafetySinks = []sinktest.Sink{
 		Name:   "CLI-help stdout",
 		Render: cliHelpStdout,
 	},
+	{
+		Name:   "stderr replay",
+		Render: replayFixtureOutput,
+	},
 }
 
 // TestSinkSafetyTable drives the hostile fixture set through every sink
@@ -71,6 +76,10 @@ func TestSinkSafetyTable(t *testing.T) {
 // missingStat makes every root validation fail with fs.ErrNotExist so
 // the usage-error row is deterministic whatever the fixture bytes form.
 func missingStat(string) (fs.FileInfo, error) { return nil, fs.ErrNotExist }
+
+// errFixtureRead is the fixed read failure behind the stderr-replay
+// sink row.
+var errFixtureRead = errors.New("read failed")
 
 // pathFixtureView renders the browse view for a one-file index whose
 // path carries the fixture bytes, on the given theme. The escaped name
@@ -172,6 +181,23 @@ func cliHelpStdout(t *testing.T, fx sinktest.Fixture) string {
 		t.Fatalf("Parse(%q -h).Kind = %v, want help", fx.Bytes, res.Kind)
 	}
 	return out.String()
+}
+
+// replayFixtureOutput drives the fixture bytes through the
+// stderr-replay sink's real composition path: a diagnostic embedding
+// the fixture as a filename is collected into the session diagnostics
+// and written by the common post-restoration writer.
+func replayFixtureOutput(t *testing.T, fx sinktest.Fixture) string {
+	t.Helper()
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	m.Update(fileLoadedMsg{path: fx.Bytes, err: errFixtureRead})
+	var buf bytes.Buffer
+	replayDiags(&buf, m.diags)
+	out := buf.String()
+	if want := safepresentation.EscapePath(fx.Bytes); !strings.Contains(out, want) {
+		t.Fatalf("replay fixture %q did not reach the sink: %q missing from %q", fx.Bytes, want, out)
+	}
+	return out
 }
 
 // overlayFixtureView drives the fixture bytes through the error

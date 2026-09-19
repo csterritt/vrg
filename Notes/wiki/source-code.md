@@ -11,10 +11,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   protected child argv and the invocation working directory. It also
   wires the `VRG_TEST_*` seam env vars (`VRG_TEST_GATE`,
   `VRG_TEST_COLLECT_ACK`, `VRG_TEST_REAP`, `VRG_TEST_FAIL`,
-  `VRG_TEST_LOAD_GATE`) into `app.Option`s — see
+  `VRG_TEST_LOAD_GATE`, `VRG_TEST_DIAG_ACK`) into `app.Option`s — see
   [search-collection.md](search-collection.md),
-  [cancellation-cleanup.md](cancellation-cleanup.md), and
-  [browse-tracer.md](browse-tracer.md).
+  [cancellation-cleanup.md](cancellation-cleanup.md),
+  [browse-tracer.md](browse-tracer.md), and
+  [stderr-replay.md](stderr-replay.md).
 
 ## internal/cli
 
@@ -74,28 +75,39 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   drains both stdout and stderr concurrently for the child's whole
   lifetime; `Child`/`Result`/`StartFunc` are the boundary types, with
   `Child.Terminate` and an idempotent `Wait` backing the cleanup path.
+  Issue #11 added `Child.Diags`: `drainStderr` line-splits stderr into
+  a mutex-guarded pending queue (drainage never blocks on a consumer)
+  and `feedDiags` forwards it onto the channel in order, closed at EOF.
 - `internal/app/app.go` — the Bubble Tea model and `app.Run`: the
   "Searching…" state covering collection and post-exit index
-  preparation, the `WithGate`/`WithCollectAck` test seams, the
-  `searchDoneMsg` outcome decision — `stateBrowse`, the Issue #8
-  `stateNoResults` alternative with its "(N binary files skipped)"
-  suffix, or Issue #9's `stateOverlayOnly` fatal presentation — the
-  modal-overlay key routing, the sanitized start-failure diagnostic
-  with exit 2 before the TUI, and the Issue #4 surface: `ctrl+c`/`q`
-  cancellation to 130, the `quitCmd`/`reapChild` cleanup boundary,
-  `WithFailFunc`/`WithReapReport`, the `quitting` discard of late
-  completions, alt-screen views, `ErrInterrupted` → 130,
-  `writeFailureDiag` (the single post-restoration stderr writer) →
-  exit 2, and the Issue #7 `c` key toggling `m.theme` between the dark
+  preparation, the `WithGate`/`WithCollectAck`/`WithDiagAck` test
+  seams, the `searchDoneMsg` outcome decision — `stateBrowse`, the
+  Issue #8 `stateNoResults` alternative with its "(N binary files
+  skipped)" suffix, or Issue #9's `stateOverlayOnly` fatal
+  presentation — the modal-overlay key routing, the sanitized
+  start-failure diagnostic with exit 2 before the TUI, and the Issue #4
+  surface: `ctrl+c`/`q` cancellation to 130, the `quitCmd`/`reapChild`
+  cleanup boundary, `WithFailFunc`/`WithReapReport`, the `quitting`
+  discard of late completions, alt-screen views, `ErrInterrupted` →
+  130, and the Issue #7 `c` key toggling `m.theme` between the dark
   and light schemes. The search-derived `status` is fixed at
   completion; only `ctrl+c` overrides it to 130. Issue #10's
   `recordWarnings` composes the "N unrecognised record types skipped"
-  warning from the index's `Unknown` count. See
+  warning from the index's `Unknown` count. Issue #11 adds the session
+  diagnostic collection `model.diags`: `collectDiags` appends sanitized
+  lines as `Update` processes `stderrLineMsg` (forwarded from
+  `Child.Diags()` by a `prog.Send` goroutine in `Run`),
+  `searchDoneMsg`, `fileLoadedMsg` failures, and `failMsg`; after the
+  program returns and the child is reaped, `replayDiags` writes the
+  collection to stderr exactly once, in order — the common
+  post-restoration writer that also replaced the controlled-failure
+  direct write. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
-  [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md), and
-  [record-robustness.md](record-robustness.md).
+  [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md),
+  [record-robustness.md](record-robustness.md), and
+  [stderr-replay.md](stderr-replay.md).
 - `internal/app/outcome.go` — Issue #9's pure outcome decision:
   `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
   `Integrity`, usable-results count, `RecordLoss`, caller `Warnings`)
@@ -109,7 +121,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   code-or-signal line for a silent failed process, then the integrity
   note, then `recordLossLines` (the malformed/oversized counts plus
   "oversized record skipped for \<path\>" lines), then warnings — all
-  through `safepresentation.EscapeDiagnostic`/`EscapePath`.
+  through `safepresentation.EscapeDiagnostic`/`EscapePath`. Issue #11
+  split the composition into `processDiags` (the process component) and
+  `tailDiags` (integrity + record loss + warnings) so the session
+  collection shares it without re-collecting incrementally delivered
+  stderr.
 - `internal/app/overlay.go` — Issue #9's modal error overlay:
   grapheme-boundary `wrapCells` to the interior width (unbroken strings
   split mid-run), the complete wrapped row set scrolled by
@@ -122,8 +138,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   current entry underlined, the right-justified gutter, inverse-video
   match runs, and the "Loading…"/"(unreadable)" placeholders — all
   styled through `internal/theme` since Issue #7 (base-wrapped frame,
-  true-inverse matches, underlined current match and current file). See
-  [browse-tracer.md](browse-tracer.md) and [theme.md](theme.md).
+  true-inverse matches, underlined current match and current file).
+  Issue #11's `loadDiag` composes the single-line `cannot read
+  \<EscapePath(path)\>: \<reason\>` diagnostic a failed load collects
+  (`*fs.PathError` contributes only its cause). See
+  [browse-tracer.md](browse-tracer.md), [theme.md](theme.md), and
+  [stderr-replay.md](stderr-replay.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation

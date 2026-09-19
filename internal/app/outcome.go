@@ -108,13 +108,27 @@ func DecideOutcome(in OutcomeInput) Outcome {
 // oversized paths, then the caller's warnings. It returns nil when
 // there is nothing to report, meaning no overlay opens.
 func outcomeDiagnostics(in OutcomeInput) []string {
-	var lines []string
+	lines := processDiags(in.Result)
+	return append(lines, tailDiags(in)...)
+}
+
+// processDiags composes the process component of the diagnostics:
+// captured stderr lines, or the generated code/signal line when a
+// failed child left none.
+func processDiags(res Result) []string {
 	switch {
-	case len(in.Result.Stderr) > 0:
-		lines = append(lines, splitDiagnostic(in.Result.Stderr)...)
-	case processFailed(in.Result):
-		lines = append(lines, failedProcessLine(in.Result))
+	case len(res.Stderr) > 0:
+		return splitDiagnostic(res.Stderr)
+	case processFailed(res):
+		return []string{failedProcessLine(res)}
 	}
+	return nil
+}
+
+// tailDiags composes the post-process diagnostic components: stream
+// integrity, record loss, and the caller's warnings.
+func tailDiags(in OutcomeInput) []string {
+	var lines []string
 	if !in.Integrity.Complete {
 		lines = append(lines, "ripgrep event stream incomplete")
 	}

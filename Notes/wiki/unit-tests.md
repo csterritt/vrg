@@ -274,9 +274,10 @@ composition, the async load lifecycle, and sink safety:
   path cannot replace the visible panel.
 
 `sinksafety_test.go` (same package; Issue #6) hosts the shared
-sink-safety table `sinkSafetySinks` — six rows over every sink
+sink-safety table `sinkSafetySinks` — seven rows over every sink
 existing at this point (file-list entry, filename rule, panel content,
-the Issue #9 error overlay, usage-error stderr, CLI-help stdout) — and
+the Issue #9 error overlay, usage-error stderr, CLI-help stdout, and
+the Issue #11 stderr replay) — and
 `TestSinkSafetyTable` runs `sinktest.Run` over it: each
 `<sink>/<fixture>` subtest asserts clean raw output on the no-style
 path and, for the styled TUI rows, that no fixture payload follows an
@@ -324,6 +325,32 @@ only after the child is reaped:
 - `TestRunCleansUpOnProgramError` — `app.Run` under a pre-cancelled
   context still terminates/reaps the child, fires the reap report
   exactly once, and writes one sanitized `vrg:` line, exit 2.
+
+`replay_test.go` (same package; Issue #11) covers the session
+diagnostic collection and the common post-restoration replay writer
+`replayDiags` (driven over `m.diags` in tests, the bytes `Run` emits
+once the terminal is restored):
+
+- `TestReplayCollectsEveryDiagInOrder` — one overlay-displayed stderr
+  warning plus two never-displayed load failures all collect in
+  processing order, each replayed exactly once; the `WithDiagAck`
+  acknowledgement fires once per collected line.
+- `TestCtrlCReplayBoundary` — a `stderrLineMsg` processed before
+  `ctrl+c` is replayed; a gated diagnostic still in flight is not
+  waited for and never replayed.
+- `TestQWhileSearchingReplayBoundary` — the same boundary on the `q`
+  route, while searching and while result preparation is gate-held:
+  the acknowledged diagnostic replays, exit 130, no wait on the held
+  work.
+- `TestControlledFailureEntersCollection` — the `failMsg` diagnostic
+  enters the collection before shutdown and replays after the earlier
+  diagnostics, exactly once.
+- `TestCompletionDoesNotRecollectIncrementalStderr` — a child with the
+  incremental `Diags()` channel does not have its captured stderr
+  re-collected at completion.
+- `TestReplayEscapesEmbeddedFilename` — a filename with newline and ESC
+  bytes is `EscapePath`-escaped and single-lined in the collected and
+  replayed diagnostic.
 
 `noresults_test.go` (same package; Issue #8) covers the empty-outcome
 contracts through the real collection command and `Update`:
@@ -507,3 +534,30 @@ bytes:
   inverse-video spans after dismissal), the captured stderr heads the
   scrollable diagnostic, the handshake proves both pipes drained, and
   `q` exits 0.
+
+`replay_test.go` (Issue #11; `//go:build unix`) drives the replay
+contract on the real binary: `waitForAcks` polls the
+`VRG_TEST_DIAG_ACK` file — the application-side acknowledgement that a
+diagnostic was processed into the session collection, the same
+file-evidence family as `VRG_TEST_REAP` — and `assertReplayedOnce`/
+`assertReplayOrder` require each diagnostic to appear exactly once
+after the display-restoration sequence, in collection order:
+
+- `TestCancelReplaysProcessedDiagnostic` (`q` and `ctrl+c` subtests) —
+  a stderr diagnostic acknowledged while the child still runs replays
+  exactly once after restoration, exit 130, termios restored, child
+  gone and reaped.
+- `TestQDuringGateHeldPreparationReplaysDiagnostic` — `q` after the
+  acknowledgement while the preparation gate holds: cancellation exit
+  130, replay exactly once after restoration.
+- `TestNormalQuitReplaysDiagnosticsInOrder` — two warnings shown in the
+  overlay replay exactly once each, in collection order, on the normal
+  browse quit.
+- `TestControlledFailureReplaysViaCollection` — `VRG_TEST_FAIL` after
+  the acknowledgement: the earlier diagnostic replays first, the
+  `vrg:` failure line second, each exactly once across the whole
+  capture, exit 2.
+- `TestReplayEscapesHostileFilename` — a stream path carrying ESC and
+  LF bytes fails its browse load; the replayed `cannot read …`
+  diagnostic is `EscapePath`-single-lined after restoration and the
+  raw bytes never reach the terminal.

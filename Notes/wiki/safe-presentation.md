@@ -86,15 +86,19 @@ bytes, and an embedded filename newline — plus two shared assertions:
 as `<sink>/<fixture>` subtests; each row's `Render` returns the raw
 output of the real composition path and must fail when the fixture
 never reached the sink (a silent drop cannot masquerade as a pass). The
-current table lives in `internal/app/sinksafety_test.go` with five rows
-— file-list entry, filename rule, panel content, usage-error stderr,
-and CLI-help stdout.
+current table lives in `internal/app/sinksafety_test.go` with seven
+rows — file-list entry, filename rule, panel content, the Issue #9
+error overlay, usage-error stderr, CLI-help stdout, and the Issue #11
+stderr replay (a load-failure diagnostic embedding the fixture as a
+filename, collected and written through `replayDiags` — see
+[stderr-replay.md](stderr-replay.md)).
 
 **Later-sink ownership**: each issue that introduces a sink routes it
-through this utility and extends the table — Issue #9 (error overlay),
-Issue #11 (stderr replay), Issue #15 (pop-up), Issue #31 (TUI help
-dialog), Issue #34 (generated documentation text) — reusing
-`sinktest.Fixtures` without duplicating them.
+through this utility and extends the table — Issue #9 (error overlay)
+and Issue #11 (stderr replay) are landed; still to come: Issue #15
+(pop-up), Issue #31 (TUI help dialog), Issue #34 (generated
+documentation text) — reusing `sinktest.Fixtures` without duplicating
+them.
 
 ## Regressions
 
