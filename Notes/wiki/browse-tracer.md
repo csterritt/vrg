@@ -61,10 +61,11 @@ final newline still yields the last line, a trailing newline does not
 invent an empty line, and an empty file has zero lines. Each `Line`
 embeds the safe-presentation `Mapped` (`Text` + `Cells`), keeps the
 original raw bytes including the terminator, and carries `Highlights`:
-each stop's recorded union byte ranges mapped through
-`Mapped.CellsCovering` to display-cell ranges (spans wholly on removed
-terminator bytes cover no cells yet — terminator markers are Issue
-#22–23's). `GutterWidth` is the digit width of the largest line number
+each stop's recorded union byte ranges mapped to display-cell ranges
+(spans wholly on removed terminator bytes now land on the display
+end-of-line position — [Issue #22](line-structure.md) landed the
+coordinate-separated mapping; painting the marker is Issue #23's).
+`GutterWidth` is the digit width of the largest line number
 plus two spaces, minimum one digit slot. Stale-match validation is Issue
 #29's; UTF-16/32 classification is Issue #30's.
 

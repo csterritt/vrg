@@ -26,11 +26,14 @@ blank-cell rule for an unfit cluster),
 ## The single span source — `Line.Highlights`
 
 `makeLine` maps each recorded highlight byte range through
-`Mapped.CellsCovering`, then snaps the result outward with the new
+`Line.CellsCovering`, then snaps the result outward with the new
 `Line.expandToClusters`: a range touching any cell of a cluster covers
 that cluster's whole `[Start, End)` cell range. A span producing no
-cells — a zero-width position or a terminator-only range — still
-contributes nothing, awaiting Issue #23's marker cells.
+cells — a zero-width position or a terminator-only range — now lands
+on the marker position Issue #22's
+[coordinate-separated mapping](line-structure.md) defines (the display
+end-of-line position for terminator bytes), recorded as an empty cell
+span awaiting Issue #23's marker cells.
 
 The recorded `Line.Highlights` cell spans are the only highlight
 source the pipeline consumes:

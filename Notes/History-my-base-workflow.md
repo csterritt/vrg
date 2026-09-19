@@ -235,3 +235,14 @@ Usage
  Input tokens: 81705 tokens
  Output tokens: 40744 tokens
  Cached input tokens: 5131776 tokens
+
+----
+Task 022-line-terminators-final-line-empty-file-utf8-bom.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 103 messages
+ Input tokens: 126066 tokens
+ Output tokens: 66285 tokens
+ Cached input tokens: 10356224 tokens

@@ -148,6 +148,15 @@ Catalog of all wiki pages for the vrg project.
   the Issue #43 `◌` fallback cell for standalone combining clusters,
   wide glyphs and ZWJ sequences never split, and wrap/clip filler
   blanks never styled as match cells
+- [line-structure.md](line-structure.md) — Issue #22: LF/CRLF as
+  undisplayed terminators retained in `Raw`, the standalone-CR `^M`
+  escape, the unterminated final line and no-phantom-line rules, the
+  empty file's zero lines and three-cell gutter, the raw-file /
+  rg-line / display-cell coordinate separation (`SearchBytes`,
+  `searchOff`), terminator-to-EOL mapping for zero-width positions
+  and removed bytes, visible-text-only highlights across
+  terminators, and the leading UTF-8 BOM's three-byte adjustment
+  with non-leading `U+FEFF` as content
 
 ## Catalogs
 

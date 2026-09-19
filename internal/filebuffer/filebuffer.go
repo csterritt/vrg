@@ -8,28 +8,92 @@
 // each line's byte→cell map. Issue #16 makes the buffer the source of
 // the shared grapheme policy: every line's Clusters segment its display
 // cells at grapheme-cluster boundaries (tabs already expanded to their
-// eight-column stops) so Viewport wraps without re-deriving. Stale-match
-// validation is Issue #29's and unsupported encodings are Issue #30's.
+// eight-column stops) so Viewport wraps without re-deriving. Issue #22
+// separates the coordinate views — raw-file bytes, the rg-line view
+// ripgrep's offsets index, and display cells — so a leading UTF-8 BOM
+// stays invisible yet accounted for and removed terminator bytes still
+// map to the display end-of-line position. Stale-match validation is
+// Issue #29's and unsupported encodings are Issue #30's.
 package filebuffer
 
 import (
+	"bytes"
 	"os"
 
 	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
 )
 
+// utf8BOM is the encoding signature a leading UTF-8 BOM occupies at the
+// very start of a file.
+var utf8BOM = []byte{0xef, 0xbb, 0xbf}
+
 // Line is one source line prepared for display: the escaped Text with
 // its byte→cell map and grapheme-cluster segmentation (embedded Mapped),
-// the original Raw bytes — terminator included — retained for identity
-// and later validation, and the matched spans as display-cell ranges in
-// Highlights — each expanded outward to whole grapheme clusters, the
-// single span source Viewport and App consume (Issue #21).
+// the original Raw bytes — leading BOM and terminator included —
+// retained for identity and later validation, and the matched spans as
+// display-cell ranges in Highlights — each expanded outward to whole
+// grapheme clusters, the single span source Viewport and App consume
+// (Issue #21). Cell byte offsets are raw-file coordinates; the rg-line
+// coordinate view ripgrep's offsets index is SearchBytes.
 type Line struct {
 	safepresentation.Mapped
 	Number     int64
 	Raw        []byte
 	Highlights []searchindex.Span
+	// searchOff counts the leading Raw bytes the rg-line coordinate
+	// view omits — three for a leading UTF-8 BOM on line 1, zero
+	// elsewhere — so content occupies Raw[searchOff:contentEnd] and
+	// Raw[contentEnd:] is the undisplayed terminator.
+	searchOff  int
+	contentEnd int
+}
+
+// SearchBytes is the line's bytes in the rg-line coordinate view —
+// exactly the bytes ripgrep reported and indexed its submatch offsets
+// against: a leading UTF-8 BOM is stripped on line 1 while the
+// terminator stays. Raw keeps the raw-file view; the two differ only
+// by the BOM adjustment.
+func (l Line) SearchBytes() []byte { return l.Raw[l.searchOff:] }
+
+// CellsCovering maps a half-open byte range in rg-line coordinates —
+// the offsets ripgrep's reported lines and submatches use — to the
+// half-open display-cell range covering it. The BOM's bytes do not
+// exist in rg space, so a first-line range shifts by the search
+// adjustment into the raw-file coordinates the byte→cell map records.
+// Bytes display removed — the line terminator — and positions past the
+// content end all land on the display end-of-line position one past
+// the last cell, as does a range lying beyond the line; a zero-width
+// position inside content lands on the cell holding its byte. Issue
+// #23 paints the markers these boundary results locate.
+func (l Line) CellsCovering(start, end int) (lo, hi int, ok bool) {
+	s, e := start+l.searchOff, end+l.searchOff
+	if e <= s {
+		switch {
+		case s >= l.contentEnd:
+			return len(l.Cells), len(l.Cells), true
+		case s <= l.searchOff:
+			return 0, 0, true
+		default:
+			lo, _, _ = l.Mapped.CellsCovering(s, s+1)
+			return lo, lo, true
+		}
+	}
+	cs, ce := s, e
+	if cs < l.searchOff {
+		cs = l.searchOff
+	}
+	if ce > l.contentEnd {
+		ce = l.contentEnd
+	}
+	if cs < ce {
+		lo, hi, _ = l.Mapped.CellsCovering(cs, ce)
+		return lo, hi, true
+	}
+	if e <= l.searchOff {
+		return 0, 0, true
+	}
+	return len(l.Cells), len(l.Cells), true
 }
 
 // Buffer is one loaded file's display-ready content.
@@ -103,20 +167,35 @@ func (l Line) MaxStart(width int) int {
 	return max
 }
 
-// makeLine prepares one raw line — terminator included — for display:
-// the content bytes are mapped through the safe-presentation core and
-// the line's recorded highlight byte ranges are mapped onto cells.
+// makeLine prepares one raw line — BOM and terminator included — for
+// display: the line is split into the leading-BOM, content, and
+// terminator regions so the three coordinate views stay separate.
+// Content maps through the safe-presentation core with cell byte
+// offsets kept in raw-file coordinates, and the line's recorded rg
+// highlight ranges map onto cells through CellsCovering.
 func makeLine(raw []byte, number int64, byLine map[int64][]searchindex.Span) Line {
-	content := raw
-	if n := len(content); n > 0 && content[n-1] == '\n' {
-		content = content[:n-1]
-		// A \r immediately before the \n is half of the CRLF terminator;
-		// a standalone CR stays content and escapes as ^M.
-		if n := len(content); n > 0 && content[n-1] == '\r' {
-			content = content[:n-1]
+	// A leading UTF-8 BOM is invisible and never reaches rg's searched
+	// line data: it lives only in the raw-file view. A U+FEFF anywhere
+	// else is ordinary content.
+	off := 0
+	if number == 1 && bytes.HasPrefix(raw, utf8BOM) {
+		off = len(utf8BOM)
+	}
+	end := len(raw)
+	if end > 0 && raw[end-1] == '\n' {
+		end--
+		// A \r immediately before the \n is half of the CRLF
+		// terminator; a standalone CR stays content and escapes as ^M.
+		if end > 0 && raw[end-1] == '\r' {
+			end--
 		}
 	}
-	l := Line{Mapped: safepresentation.MapContent(content), Number: number, Raw: raw}
+	m := safepresentation.MapContent(raw[off:end])
+	for i := range m.Cells {
+		m.Cells[i].Start += off
+		m.Cells[i].End += off
+	}
+	l := Line{Mapped: m, Number: number, Raw: raw, searchOff: off, contentEnd: end}
 	for _, sp := range byLine[number] {
 		if lo, hi, ok := l.CellsCovering(sp.Start, sp.End); ok {
 			lo, hi = l.expandToClusters(lo, hi)

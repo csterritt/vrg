@@ -236,7 +236,30 @@ the table driver.
 
 - `TestLoadCountsLines`, `TestLoadLineEndings`, `TestLoadEmptyFile` —
   LF/CRLF splitting, unterminated final line, no phantom trailing line,
-  empty file.
+  empty file (zero `Lines()` entries, one digit slot, three-cell
+  gutter).
+- `TestTerminatorsRemovedFromDisplayRetainedInRaw` — Issue #22: LF,
+  CRLF, and mixed terminators produce no display cells while `Line.Raw`
+  keeps the original bytes, terminator included.
+- `TestStandaloneCREscapesNotTerminator` — a `\r` with no following
+  `\n` is content: `^M` mid-line and on an unterminated final line.
+- `TestTerminatorBytesMapToEndOfLine` — Issue #22: zero-width
+  positions and spans covering only removed terminator bytes land on
+  the display end-of-line position (byte 4 of `hit\r\n` → column 3),
+  recorded as the empty cell span Issue #23's marker occupies.
+- `TestSpanCrossingTerminatorHighlightsVisibleTextOnly` — a span
+  covering visible text plus the terminator (`.*` over `hit\r`)
+  highlights only the visible cells.
+- `TestLeadingUTF8BOMInvisibleWithAdjustedCoordinates` — a leading
+  `\xef\xbb\xbf` is not displayed, `Raw` retains it, `SearchBytes()`
+  is the BOM-free rg-line view, cell offsets stay raw-file
+  coordinates (rg offset 0 → raw byte 3), and later lines run
+  unadjusted.
+- `TestBOMLineTerminatorMapsToEndOfLine` — the terminator mapping
+  applies in rg coordinates on a BOM line too.
+- `TestNonLeadingFEFFIsOrdinaryContent` — `U+FEFF` mid-line-1 or at a
+  later line's start is ordinary content: the `\ufeff` escape cells,
+  unadjusted offsets.
 - `TestGutterWidth` — digit width of the largest line number plus two.
 - `TestLoadEscapedContent` — control bytes escaped per the
   safepresentation contract; cell count, not byte count; the trailing

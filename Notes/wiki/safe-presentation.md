@@ -32,7 +32,10 @@ Three entry points cover the sink classes:
   eight source-display columns — the structural eight-column-stop rule
   [Issue #16](wrap-mode.md) landed, replacing the provisional `→`.
   `Mapped.CellsCovering` maps source byte ranges onto the cells of
-  escaped forms so highlights cover every cell an escape produced.
+  escaped forms so highlights cover every cell an escape produced;
+  FileBuffer's `Line.CellsCovering` layers the rg-line coordinate
+  translation and terminator-to-EOL rules on top
+  ([Issue #22](line-structure.md)).
   `Mapped.Clusters` (Issue #16) segments the cells into grapheme-cluster
   boundaries — the shared segmentation and cell-width policy:
   each escaped-form character and each invalid-byte replacement is a

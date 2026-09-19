@@ -785,3 +785,42 @@ indicators), `Notes/decisions/043-combining-cluster-fallback-cell.md`,
 `internal/app/grapheme_test.go`,
 `internal/viewport/indicators_test.go`,
 `internal/viewport/viewport_test.go`.
+## [2026-09-17] ingest | Issue #22 line terminators, final line, empty file, UTF-8 BOM
+
+FileBuffer's structural line handling now keeps the three coordinate
+views separate. `makeLine` splits each raw line into leading-BOM,
+content, and terminator regions: LF and CRLF terminate lines without
+displaying while `Line.Raw` retains the original bytes; a `\r` with no
+following `\n` stays content and escapes `^M`; a missing final newline
+yields the last line, a trailing newline invents none, and an empty
+file has zero source lines with the one-digit-slot three-cell gutter.
+`Line` records `searchOff` (three for a leading UTF-8 BOM on line 1,
+zero elsewhere) and `contentEnd`: `Line.SearchBytes()` is the rg-line
+view ripgrep's offsets index, cell byte offsets stay raw-file
+coordinates, and the shadowing `Line.CellsCovering` translates rg
+ranges — removed terminator bytes, positions past the content end, and
+zero-width positions landing on the display end-of-line position (byte
+4 of `hit\r\n` → column 3), a text-plus-terminator span highlighting
+only the visible cells, and an interior zero-width position landing on
+the cell holding its byte. A leading `\xef\xbb\xbf` is invisible (rg
+offset 0 → raw byte 3); `U+FEFF` elsewhere is ordinary content escaped
+`\ufeff`. The end-of-line marker is Issue #23's; stale validation
+consuming the retained bytes is Issue #29's.
+`internal/filebuffer/filebuffer_test.go` gains the Issue #22 tables
+(mixed-terminator `Raw` retention, standalone CR, the EOL mapping
+table, text-plus-terminator spans, the BOM adjustment and
+`SearchBytes`, BOM-line terminator mapping, non-leading `U+FEFF`) and
+`TestLoadEmptyFile` now asserts zero `Lines()` entries. Created
+[line-structure](line-structure.md); updated
+[safe-presentation](safe-presentation.md),
+[browse-tracer](browse-tracer.md),
+[grapheme-highlight-expansion](grapheme-highlight-expansion.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/022-line-terminators-final-line-empty-file-utf8-bom.md`,
+`Notes/tasks/022-line-terminators-final-line-empty-file-utf8-bom.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; Encodings
+and stale-content validation),
+`internal/filebuffer/filebuffer.go`,
+`internal/filebuffer/filebuffer_test.go`,
+`internal/viewport/reveal.go`.

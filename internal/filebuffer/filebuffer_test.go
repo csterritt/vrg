@@ -80,6 +80,9 @@ func TestLoadEmptyFile(t *testing.T) {
 	if b.LineCount() != 0 {
 		t.Fatalf("LineCount = %d, want 0", b.LineCount())
 	}
+	if len(b.Lines()) != 0 {
+		t.Fatalf("Lines() = %d entries, want an empty panel — zero source lines", len(b.Lines()))
+	}
 	if b.GutterWidth() != 3 {
 		t.Fatalf("GutterWidth = %d, want 3 (one digit slot + two spaces)", b.GutterWidth())
 	}
@@ -314,6 +317,171 @@ func TestHighlightEmojiZWJCluster(t *testing.T) {
 	l := b.Lines()[0]
 	if len(l.Highlights) != 1 || l.Highlights[0].Start != 1 || l.Highlights[0].End != 3 {
 		t.Fatalf("ZWJ partial match: highlights = %v, want [{1 3}] — the whole sequence", l.Highlights)
+	}
+}
+
+// LF, CRLF, and a mix of both terminate lines without being
+// displayed, while each line's Raw retains the original bytes —
+// terminator included — for byte-coordinate mapping and Issue #29's
+// stale validation.
+func TestTerminatorsRemovedFromDisplayRetainedInRaw(t *testing.T) {
+	b := load(t, writeFile(t, "a\r\nb\nc\r\n"))
+	want := []struct{ text, raw string }{
+		{"a", "a\r\n"},
+		{"b", "b\n"},
+		{"c", "c\r\n"},
+	}
+	if b.LineCount() != len(want) {
+		t.Fatalf("LineCount = %d, want %d", b.LineCount(), len(want))
+	}
+	for i, w := range want {
+		l := b.Lines()[i]
+		if l.Text != w.text {
+			t.Fatalf("line %d text = %q, want %q — no terminator cells", i, l.Text, w.text)
+		}
+		if string(l.Raw) != w.raw {
+			t.Fatalf("line %d raw = %q, want %q — original bytes retained", i, l.Raw, w.raw)
+		}
+	}
+}
+
+// A standalone CR — one with no following LF — is not a terminator:
+// the safe-presentation core escapes it as ^M, whether it sits
+// mid-line or ends an unterminated final line.
+func TestStandaloneCREscapesNotTerminator(t *testing.T) {
+	b := load(t, writeFile(t, "x\ry\r\nz\r"))
+	if b.LineCount() != 2 {
+		t.Fatalf("LineCount = %d, want 2", b.LineCount())
+	}
+	if l := b.Lines()[0]; l.Text != "x^My" || string(l.Raw) != "x\ry\r\n" {
+		t.Fatalf("line 1 = %q raw %q, want %q raw %q — the mid-line CR is content",
+			l.Text, l.Raw, "x^My", "x\ry\r\n")
+	}
+	if l := b.Lines()[1]; l.Text != "z^M" || string(l.Raw) != "z\r" {
+		t.Fatalf("line 2 = %q raw %q, want %q raw %q — a trailing CR with no LF is content",
+			l.Text, l.Raw, "z^M", "z\r")
+	}
+}
+
+// Bytes the terminator stripped from display still map: a zero-width
+// position inside the terminator (the rg `$` at byte 4 of hit\r\n) and
+// a span covering only terminator bytes both land on the display
+// end-of-line position — one past the last cell — the marker position
+// Issue #23 paints.
+func TestTerminatorBytesMapToEndOfLine(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		span    [2]int
+		want    [2]int
+	}{
+		{"zero-width inside CRLF", "hit\r\n", [2]int{4, 4}, [2]int{3, 3}},
+		{"CR byte only", "hit\r\n", [2]int{3, 4}, [2]int{3, 3}},
+		{"whole CRLF", "hit\r\n", [2]int{3, 5}, [2]int{3, 3}},
+		{"LF terminator byte", "hit\n", [2]int{3, 4}, [2]int{3, 3}},
+		{"zero-width at LF end", "hit\n", [2]int{3, 3}, [2]int{3, 3}},
+		{"zero-width on an empty line", "\n", [2]int{0, 0}, [2]int{0, 0}},
+		{"empty line's terminator", "\n", [2]int{0, 1}, [2]int{0, 0}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := load(t, writeFile(t, tc.content), stop(1, tc.span)).Lines()[0]
+			if len(l.Highlights) != 1 || l.Highlights[0].Start != tc.want[0] || l.Highlights[0].End != tc.want[1] {
+				t.Fatalf("span %v on %q: highlights = %v, want [%d %d] — the end-of-line position",
+					tc.span, tc.content, l.Highlights, tc.want[0], tc.want[1])
+			}
+		})
+	}
+}
+
+// A span covering visible text plus terminator bytes highlights only
+// the visible text — the removed bytes add no cell of their own.
+func TestSpanCrossingTerminatorHighlightsVisibleTextOnly(t *testing.T) {
+	cases := []struct {
+		name string
+		span [2]int
+		want [2]int
+	}{
+		{"rg dot-star covers text and CR", [2]int{0, 4}, [2]int{0, 3}},
+		{"mid-line start through CRLF", [2]int{1, 5}, [2]int{1, 3}},
+		{"whole line including CRLF", [2]int{0, 5}, [2]int{0, 3}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := load(t, writeFile(t, "hit\r\n"), stop(1, tc.span)).Lines()[0]
+			if len(l.Highlights) != 1 || l.Highlights[0].Start != tc.want[0] || l.Highlights[0].End != tc.want[1] {
+				t.Fatalf("span %v: highlights = %v, want [%d %d] — visible text only",
+					tc.span, l.Highlights, tc.want[0], tc.want[1])
+			}
+		})
+	}
+}
+
+// A leading UTF-8 BOM is invisible in display: ripgrep's line offsets
+// for the first line omit its three bytes, so the line keeps separate
+// raw-file and rg-line views — Raw retains the BOM, SearchBytes is
+// what rg saw — and cell byte offsets stay in raw-file coordinates, so
+// an rg offset of 0 maps to raw byte 3.
+func TestLeadingUTF8BOMInvisibleWithAdjustedCoordinates(t *testing.T) {
+	b := load(t, writeFile(t, "\xef\xbb\xbfhit\nsecond\n"),
+		stop(1, [2]int{0, 3}), stop(2, [2]int{0, 6}))
+	l := b.Lines()[0]
+	if l.Text != "hit" {
+		t.Fatalf("BOM line text = %q, want %q — the BOM is not displayed", l.Text, "hit")
+	}
+	if string(l.Raw) != "\xef\xbb\xbfhit\n" {
+		t.Fatalf("raw = %q, want the original BOM bytes retained", l.Raw)
+	}
+	if string(l.SearchBytes()) != "hit\n" {
+		t.Fatalf("SearchBytes = %q, want %q — the rg-line view omits the BOM",
+			l.SearchBytes(), "hit\n")
+	}
+	if l.Cells[0].Start != 3 || l.Cells[0].End != 4 {
+		t.Fatalf("first cell maps bytes [%d,%d), want [3,4) — rg offset 0 is raw byte 3",
+			l.Cells[0].Start, l.Cells[0].End)
+	}
+	if len(l.Highlights) != 1 || l.Highlights[0].Start != 0 || l.Highlights[0].End != 3 {
+		t.Fatalf("rg span [0,3): highlights = %v, want [{0 3}]", l.Highlights)
+	}
+	// Lines after the first share the raw and rg views.
+	l2 := b.Lines()[1]
+	if l2.Cells[0].Start != 0 || string(l2.SearchBytes()) != "second\n" {
+		t.Fatalf("line 2 view = %q cell start %d, want unadjusted",
+			l2.SearchBytes(), l2.Cells[0].Start)
+	}
+}
+
+// On a BOM line the rg view is what the terminator mapping measures
+// against: a first-line span over the terminator still lands on the
+// display end-of-line position.
+func TestBOMLineTerminatorMapsToEndOfLine(t *testing.T) {
+	l := load(t, writeFile(t, "\xef\xbb\xbfhit\n"), stop(1, [2]int{3, 4})).Lines()[0]
+	if len(l.Highlights) != 1 || l.Highlights[0].Start != 3 || l.Highlights[0].End != 3 {
+		t.Fatalf("terminator span on a BOM line: highlights = %v, want [{3 3}]",
+			l.Highlights)
+	}
+}
+
+// A U+FEFF anywhere but the very start of the file is ordinary
+// content, never a BOM: the safe-presentation core escapes the
+// non-printable rune and byte offsets run unadjusted.
+func TestNonLeadingFEFFIsOrdinaryContent(t *testing.T) {
+	b := load(t, writeFile(t, "a\xef\xbb\xbfb\n\xef\xbb\xbfz\n"),
+		stop(2, [2]int{0, 3}))
+	if l := b.Lines()[0]; l.Text != `a\ufeffb` {
+		t.Fatalf("mid-line U+FEFF: text = %q, want %q", l.Text, `a\ufeffb`)
+	}
+	l := b.Lines()[1]
+	if l.Text != `\ufeffz` {
+		t.Fatalf("line-2 U+FEFF: text = %q, want %q — not a BOM", l.Text, `\ufeffz`)
+	}
+	if string(l.Raw) != "\xef\xbb\xbfz\n" || string(l.SearchBytes()) != "\xef\xbb\xbfz\n" {
+		t.Fatalf("line 2 raw/search views = %q/%q, want the U+FEFF bytes unadjusted",
+			l.Raw, l.SearchBytes())
+	}
+	// The U+FEFF match highlights its six escape cells.
+	if len(l.Highlights) != 1 || l.Highlights[0].Start != 0 || l.Highlights[0].End != 6 {
+		t.Fatalf("highlights = %v, want [{0 6}] covering the \\ufeff escape", l.Highlights)
 	}
 }
 

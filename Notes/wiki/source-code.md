@@ -273,11 +273,19 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `CellsCovering`: every nonempty highlight range snaps outward to the
   whole clusters it touches, so `Highlights` is the
   cluster-aligned single span source painting, reveal, and the
-  hidden-content indicators all consume. See
+  hidden-content indicators all consume. Issue #22 separates the
+  coordinate views: `Line.SearchBytes()` is the rg-line view (`Raw`
+  minus a leading UTF-8 BOM's three bytes on line 1), cell byte
+  offsets stay raw-file coordinates, and the shadowing
+  `Line.CellsCovering` maps rg-line ranges onto cells — removed
+  terminator bytes, positions past the content end, and zero-width
+  positions in them landing on the display end-of-line position —
+  while a standalone `\r` stays content as `^M`. See
   [browse-tracer.md](browse-tracer.md),
   [wrap-mode.md](wrap-mode.md),
-  [horizontal-panning.md](horizontal-panning.md), and
-  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md).
+  [horizontal-panning.md](horizontal-panning.md),
+  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md), and
+  [line-structure.md](line-structure.md).
 - `internal/viewport/viewport.go` — `Viewport`, the file panel's
   vertical window (`Top`, `Scroll`, `Clamp`), the scroll-unit helpers
   `HalfPage` and `MaxTop` (the BOF/EOF clamp bound), and `Rows`, the
