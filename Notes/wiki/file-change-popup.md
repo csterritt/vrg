@@ -56,21 +56,23 @@ single-line path).
 
 ## Rendering (`compositePopup`)
 
-- Content is the current file's path through
-  `safepresentation.EscapePath` — a single sanitized line hostile
-  bytes cannot break — shown as the sole interior row of a
-  `theme.Overlay` bordered box, the same border the error overlay
-  uses.
+- Content is the current file's `EscapePath`-sanitized path —
+  prepared once per index in `m.displayPaths` since Issue #40, a
+  single sanitized line hostile bytes cannot break — shown as the
+  sole interior row of a `theme.Overlay` bordered box, the same
+  border the error overlay uses.
 - Centring and truncation are computed from the current terminal size
   at **every render**, with no state mutation in `View`: the path is
-  left-truncated with a leading `…` (`leftTruncate`/`tailCells`, whole
-  grapheme clusters only — [Issue #39](unified-rendering.md)'s shared
-  cluster/cell primitives, with the truncated text and box width
-  measured by `safepresentation.CellWidth`) so the basename end stays
-  visible, and the box centres at `((h − boxRows) / 2, (w − boxW) / 2)`,
-  clamped at the top-left when it exceeds the frame. A resize
-  therefore recentres and re-truncates the same live instance without
-  restarting its timer.
+  left-truncated with a leading `…` (whole grapheme clusters only —
+  [Issue #39](unified-rendering.md)'s shared cluster/cell primitives,
+  read since Issue #40 from the current file's prepared `displayPath`
+  via `displayPath.leftTruncate`, with the truncated text and box
+  width measured by `safepresentation.CellWidth`) so the basename end
+  stays visible, and the box centres at
+  `((h − boxRows) / 2, (w − boxW) / 2)`, clamped at the top-left when
+  it exceeds the frame. A resize therefore recentres and re-truncates
+  the same live instance without restarting its timer — see
+  [bounded-browse-render.md](bounded-browse-render.md).
 - **Precedence**: `View` composites the pop-up over the base frame and
   the error overlay over both — the modal overlay always wins while
   open.

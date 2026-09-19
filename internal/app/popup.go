@@ -4,8 +4,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rivo/uniseg"
-
 	tea "charm.land/bubbletea/v2"
 
 	"vrg/internal/safepresentation"
@@ -62,14 +60,13 @@ func (m *model) compositePopup(base string) string {
 
 	text := ""
 	if m.idx != nil && len(m.idx.Files) > 0 {
-		text = safepresentation.EscapePath(m.idx.Files[m.curFile()].Path)
+		// The path fits the box interior — the frame minus the
+		// border's four cells — left-truncated with a leading … so
+		// the basename end stays visible. Widths are measured on the
+		// unstyled text: the styled box rows carry SGR bytes a cell
+		// count would mistake for content.
+		text = m.entry(m.curFile()).leftTruncate(w - 4)
 	}
-	// The path fits the box interior — the frame minus the border's
-	// four cells — left-truncated with a leading … so the basename end
-	// stays visible. Widths are measured on the unstyled text: the
-	// styled box rows carry SGR bytes a cell count would mistake for
-	// content.
-	text = leftTruncate(text, w-4)
 	box := m.theme.Overlay([]string{text})
 	boxW := safepresentation.CellWidth(text) + 4
 	top := 0
@@ -98,36 +95,5 @@ func (m *model) compositePopup(base string) string {
 // a leading …, keeping the tail — the basename end of a path —
 // visible. Grapheme clusters are never split.
 func leftTruncate(s string, w int) string {
-	if w <= 0 || s == "" {
-		return ""
-	}
-	if safepresentation.CellWidth(s) <= w {
-		return s
-	}
-	return "…" + tailCells(s, w-1)
-}
-
-// tailCells returns the longest suffix of s — whole grapheme clusters —
-// occupying at most w cells.
-func tailCells(s string, w int) string {
-	if w <= 0 {
-		return ""
-	}
-	var cls []string
-	var ws []int
-	rest := s
-	state := -1
-	for len(rest) > 0 {
-		var cl string
-		var cw int
-		cl, rest, cw, state = uniseg.FirstGraphemeClusterInString(rest, state)
-		cls = append(cls, cl)
-		ws = append(ws, cw)
-	}
-	col, i := 0, len(cls)
-	for i > 0 && col+ws[i-1] <= w {
-		i--
-		col += ws[i]
-	}
-	return strings.Join(cls[i:], "")
+	return newDisplayPath(s).leftTruncate(w)
 }

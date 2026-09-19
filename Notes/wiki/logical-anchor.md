@@ -158,11 +158,15 @@ PRD *Resources and responsiveness* bounds both panes' per-frame work:
   and it runs on the write paths — pans and visible-set changes —
   never inside `View()`.
 - The file list is equally bounded: `listWBase` — the longest escaped
-  path width plus one — is computed **once** at `searchDoneMsg`, and
-  `listCell` escapes only the visible window's entries through
-  `m.escapePath` (the `options.escapePath`/`WithEscapePath` seam counts
-  provider queries in tests). `filenameRule` escapes only the current
-  path.
+  path width plus one — is computed **once** at `searchDoneMsg`.
+  Issue #40 tightens the bound further: the same pass fills
+  `m.displayPaths` (escaped text, cell width, grapheme boundaries per
+  file), so `listCell`/`filenameRule`/`compositePopup` perform **no**
+  escaping or segmentation per frame — only the current-width clip of
+  the visible entries and current path. The counting
+  `options.escapePath`/`WithEscapePath` seam now proves a navigation
+  `Update()` plus its `View()` escapes zero paths. See
+  [bounded-browse-render.md](bounded-browse-render.md).
 
 ## Tests
 

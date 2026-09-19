@@ -518,8 +518,10 @@ func TestAnchorSurvivesGutterGrowth(t *testing.T) {
 	}
 }
 
-// A hidden list formats nothing: with the list preference off, a frame
-// escapes only the filename rule's path — never a list entry.
+// A hidden list formats nothing — and neither does a shown one:
+// display metadata is prepared once at search completion (Issue #40),
+// so a frame queries the escaper for no paths at all, not even the
+// filename rule's.
 func TestHiddenListEscapesNoEntries(t *testing.T) {
 	var escapes int
 	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{
@@ -534,7 +536,7 @@ func TestHiddenListEscapesNoEntries(t *testing.T) {
 	m.Update(keyTab)
 	escapes = 0
 	viewText(m)
-	if escapes != 1 {
-		t.Fatalf("hidden list frame escaped %d paths, want 1 — the filename rule only", escapes)
+	if escapes != 0 {
+		t.Fatalf("hidden list frame escaped %d paths, want 0 — path metadata is prepared at search completion", escapes)
 	}
 }

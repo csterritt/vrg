@@ -22,7 +22,10 @@ pipeline every text-width change routes through),
 formula subtracts), [browse-tracer.md](browse-tracer.md) (the
 two-pane frame and filename rule), and
 [file-change-popup.md](file-change-popup.md) (the shared
-`leftTruncate`/`tailCells` helpers).
+`leftTruncate` helper). Issue #40 moves the escaping and grapheme
+segmentation this page describes into a once-per-index preparation —
+see [bounded-browse-render.md](bounded-browse-render.md); the layout
+contracts here are unchanged.
 
 ## The width formula
 
@@ -52,8 +55,10 @@ widths from the terminal width and clamps to zero, so no dimension
 ever goes negative.
 
 `m.listWBase` holds the longest sanitized path width, computed once
-at `searchDoneMsg` from `escapePath` output — frame rendering never
-rescans the file list.
+at `searchDoneMsg` — since Issue #40 from `displayPaths[i].width`,
+the same pass that escapes every path and pre-segments its grapheme
+boundaries. Frame rendering never rescans the file list; see
+[bounded-browse-render.md](bounded-browse-render.md).
 
 None of this runs below the 20×3 terminal minimum: the Issue #33
 gate replaces the frame and skips layout work entirely — see
@@ -100,11 +105,15 @@ hide or show key that is already in effect is a no-op.
 
 ## Path truncation
 
-`listCell` escapes only the requested visible entry, left-truncates
-it with `leftTruncate` — a leading `…` plus the longest whole-
-grapheme tail that fits, so the basename end stays visible — applies
-the file-list or current-file (underlined) style, and pads to the
-allotted cells. Clusters are never split.
+`listCell` reads the requested visible entry's prepared
+`displayPath` via `m.entry(i)` — escaped text, cell width, and
+grapheme boundaries all fixed at `searchDoneMsg` — and left-
+truncates it with `displayPath.leftTruncate`: a leading `…` plus the
+longest whole-grapheme tail that fits the current list width, so the
+basename end stays visible. It then applies the file-list or
+current-file (underlined) style and pads to the allotted cells.
+Clusters are never split, and nothing re-escapes or re-segments per
+frame.
 
 ## Auto-scroll
 
@@ -118,11 +127,12 @@ follows the matched-line cursor, never the other way.
 ## The filename-row status-note slot
 
 `filenameRule` composes `─ path note ────` across the full frame:
-the buffer-status note sits in a slot after the path, and the path
-left-truncates with a leading `…` to make room for the note where
-possible. When the note itself would overflow, the path yields its
-cells first and the note clips to whatever the slot leaves —
-nothing overflows the frame width.
+the buffer-status note sits in a slot after the path — the current
+file's prepared `displayPath` — and the path left-truncates with a
+leading `…` to make room for the note where possible. When the note
+itself would overflow, the path yields its cells first and the note
+clips to whatever the slot leaves — nothing overflows the frame
+width.
 
 The slot is real and Issue #29 is its only supplier so far:
 `m.notes[path]` carries the stale/file-changed note while the
@@ -161,8 +171,9 @@ contract:
   top of the panel after a hide/show round trip and after a gutter-
   widening file load.
 - `TestHiddenListEscapesNoEntries` — the render-cost guard: a
-  hidden list escapes zero entries, and a visible one escapes only
-  the visible window's.
+  hidden list renders no entries at all, and since Issue #40 even a
+  visible one escapes zero — all path metadata is prepared at
+  `searchDoneMsg`.
 
 The `dropCells` cell-aware slicing helper joins `clipCells` for
 tests, since `…`'s three bytes occupy one cell. Existing

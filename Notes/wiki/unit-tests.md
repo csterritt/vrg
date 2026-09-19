@@ -834,9 +834,20 @@ the `crossFiles` single-stop fixture:
 - `TestCachedFileFreshLayoutFastPath` — navigating to a cached file
   whose installed layout still matches applies the reveal at once and
   issues no request.
-- `TestRenderEscapesOnlyVisibleListEntries` — the `escapePath` seam
-  counts provider queries: one frame over a 50-file index escapes only
-  the visible list window plus the filename-rule path.
+- Issue #40's bounded-render cost guards — the `escapePath` seam now
+  counts calls across a navigation `Update()` **and** the resulting
+  `View()` with no reset between them:
+  `TestRenderEscapesNoPaths` (a bare frame over a 50-file index
+  escapes zero paths — renamed and strengthened from
+  `TestRenderEscapesOnlyVisibleListEntries`),
+  `TestNavigateAndRenderEscapeNoPaths` (a post-search `n` plus its
+  frame escapes zero paths),
+  `TestResizeRetruncatesFromPreparedPaths` (resize → hidden-list →
+  resize re-truncates the visible window correctly while escaping
+  zero paths), and `TestNavigationKeepsPreparedGroups` (both
+  `&m.idx.Files[0]` and `&m.displayPaths[0]` stay pointer-stable
+  across `n`/`p` over a 1000-file index — navigation regroups or
+  reallocates nothing).
 
 `pan_test.go` (same package; Issue #18) drives the horizontal pan keys
 through `Update`/`View` under `theme.Plain()`, with `widenFrame`
@@ -1011,8 +1022,10 @@ layout contracts, with the `dropCells` cell-aware slicing helper
   top of the panel after a hide/show round trip and after a
   gutter-widening file load.
 - `TestHiddenListEscapesNoEntries` — the render-cost guard: a
-  hidden list escapes zero entries; a visible one escapes only the
-  visible window's.
+  hidden list escapes zero entries, and since Issue #40 a visible
+  one escapes zero too — escaping moved to `searchDoneMsg`'s
+  `displayPaths` preparation; the seam now counts zero across the
+  whole frame.
 - Issue #39's cell-measurement additions —
   `TestListEntryWidePathPadsInCells` (a path of two-cell glyphs pads
   the entry to the list width in cells, not runes) and

@@ -1536,3 +1536,42 @@ the index. Sources:
 `internal/app/app.go`, `internal/app/grapheme_test.go`,
 `internal/app/indicators_test.go`, `internal/app/filelist_test.go`,
 `internal/app/popup_test.go`.
+
+## [2026-09-18] ingest | Issue #40 bounded browse render — path metadata prepared once
+
+The last per-frame index work is gone. `searchDoneMsg` now fills
+`m.displayPaths []displayPath` in one pass over `m.idx.Files`:
+`escapePath` once per path into `newDisplayPath`, which records the
+escaped `text`, `safepresentation.CellWidth`, and `pathCluster`
+grapheme boundaries — `listWBase` comes from the prepared widths in
+the same loop. `listCell`, `filenameRule`, and `compositePopup` read
+`m.entry(i)` and clip via `displayPath.leftTruncate` (walking stored
+cluster offsets, never re-segmenting, never splitting a grapheme);
+resize, gutter growth, wrap toggles, and list hide/show re-truncate
+the visible window against the same prepared metadata. The generic
+`leftTruncate` survives for non-path callers via `newDisplayPath`;
+`tailCells` is gone. Navigation mutates cursor state alone —
+`TestNavigationKeepsPreparedGroups` pins `&m.idx.Files[0]` and
+`&m.displayPaths[0]` pointer-stable across `n`/`p` over a 1000-file
+index. The counting `escapePath` seam now spans `Update()`+`View()`
+with no reset: `TestNavigateAndRenderEscapeNoPaths`,
+`TestRenderEscapesNoPaths` (renamed from #24's
+`TestRenderEscapesOnlyVisibleListEntries`), and
+`TestResizeRetruncatesFromPreparedPaths` all demand zero escapes;
+`TestHiddenListEscapesNoEntries`' visible expectation tightened to
+zero. Per-keypress/per-frame cost is bounded by the visible window at
+~100,000 matched-line scale; the O(index) preparation is amortised
+across every frame the index serves. Created
+[bounded-browse-render](bounded-browse-render.md); updated
+[file-list-layout](file-list-layout.md),
+[unified-rendering](unified-rendering.md),
+[logical-anchor](logical-anchor.md),
+[file-change-popup](file-change-popup.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/040-browse-render-no-whole-index-scan.md`,
+`Notes/tasks/040-browse-render-no-whole-index-scan.md`,
+`internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/popup.go`, `internal/app/layout_test.go`,
+`internal/app/filelist_test.go`, PRD *Resources and responsiveness*
+and *File list and layout*.

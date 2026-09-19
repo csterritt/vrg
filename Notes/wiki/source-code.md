@@ -220,7 +220,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `tooSmallKey` is the whole gated key map, `q` exiting the
   state-applicable status and `ctrl+c` 130 with everything else a
   strict no-op — and `View` short-circuiting to the centred, clipped
-  note with no state, modal, or pop-up compositing. See
+  note with no state, modal, or pop-up compositing. Issue #40 adds
+  the `displayPaths` field: `searchDoneMsg` escapes each
+  `m.idx.Files[i].Path` once through the `escapePath` seam and fills
+  `displayPaths[i]` via `newDisplayPath`, computing `listWBase` from
+  the prepared widths in the same pass — so no `Update`/`View` path
+  escapes or re-segments a path again. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
@@ -233,8 +238,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [load-completion-reveal.md](load-completion-reveal.md),
   [unsupported-encodings.md](unsupported-encodings.md),
   [help-overlay.md](help-overlay.md),
-  [overlay-precedence.md](overlay-precedence.md), and
-  [terminal-too-small.md](terminal-too-small.md).
+  [overlay-precedence.md](overlay-precedence.md),
+  [terminal-too-small.md](terminal-too-small.md), and
+  [bounded-browse-render.md](bounded-browse-render.md).
 - `internal/app/outcome.go` — Issue #9's pure outcome decision:
   `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
   `Integrity`, usable-results count, `RecordLoss`, caller `Warnings`)
@@ -294,12 +300,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `options.popupTimer` test seam), and `compositePopup` — the
   `theme.Overlay`-bordered box centred over the base frame carrying the
   current file's `EscapePath`-sanitized path, left-truncated with a
-  leading `…` by `leftTruncate`/`tailCells` on whole grapheme clusters —
-  the Issue #39 replacement for the rune-boundary `truncateLeftCells`,
-  with box width and centring measured in cells by
-  `safepresentation.CellWidth` — all recomputed from the live terminal
-  size at every render. See
-  [file-change-popup.md](file-change-popup.md).
+  leading `…` on whole grapheme clusters — since Issue #40 read from
+  the prepared `m.displayPaths` entry via
+  `displayPath.leftTruncate` (the successor to `leftTruncate`/
+  `tailCells`, Issue #39's replacement for the rune-boundary
+  `truncateLeftCells`), with box width and centring measured in cells
+  by `safepresentation.CellWidth` — all recomputed from the live
+  terminal size at every render with no escaping or re-segmentation.
+  See [file-change-popup.md](file-change-popup.md) and
+  [bounded-browse-render.md](bounded-browse-render.md).
 - `internal/app/browse.go` — the Issue #5 browse view: async
   `filebuffer` load commands gated by `WithLoadGate`, the
   `loading`/`bufs`/`failed` caches keyed by raw path, `fileLoadedMsg`,
@@ -429,7 +438,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   hidden), and `textWidth` subtracts the separator along with the
   list, gutter, and reserved indicator so the layout key's
   `TextWidth` — the width every wrap, clip, pan, and reveal measures
-  against — matches the painted panel. See
+  against — matches the painted panel. Issue #40 adds `displayPath`
+  (escaped `text`, cell `width`, `pathCluster` boundaries),
+  `newDisplayPath`, the `entry(i)` accessor, and
+  `displayPath.leftTruncate`: `listCell` and `filenameRule` now clip
+  prepared per-file path metadata at the current width instead of
+  escaping and re-segmenting per frame — `listWBase` comes from the
+  prepared widths. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [read-failures.md](read-failures.md),
@@ -449,8 +464,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [file-list-layout.md](file-list-layout.md),
   [async-load-isolation.md](async-load-isolation.md),
   [unsupported-encodings.md](unsupported-encodings.md),
-  [terminal-too-small.md](terminal-too-small.md), and
-  [panel-text-width.md](panel-text-width.md).
+  [terminal-too-small.md](terminal-too-small.md),
+  [panel-text-width.md](panel-text-width.md), and
+  [bounded-browse-render.md](bounded-browse-render.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation

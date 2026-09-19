@@ -10,6 +10,7 @@ import (
 
 	"vrg/internal/filebuffer"
 	"vrg/internal/safepresentation"
+	"vrg/internal/theme"
 	"vrg/internal/viewport"
 )
 
@@ -553,9 +554,12 @@ func TestCachedFileFreshLayoutFastPath(t *testing.T) {
 	}
 }
 
-// The frame render queries the file list's path provider only for the
-// visible list window — never the whole index.
-func TestRenderEscapesOnlyVisibleListEntries(t *testing.T) {
+// The frame render materializes no paths at all: every file's display
+// metadata — the escaped text, its grapheme-cluster boundaries, and
+// its full cell width — is prepared once when the search completes
+// (Issue #40), so View queries the escaper for nothing, not even the
+// visible entries.
+func TestRenderEscapesNoPaths(t *testing.T) {
 	var escapes atomic.Int32
 	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{
 		escapePath: func(p []byte) string {
@@ -572,8 +576,115 @@ func TestRenderEscapesOnlyVisibleListEntries(t *testing.T) {
 
 	escapes.Store(0)
 	viewText(m)
-	if got := escapes.Load(); got > contentRows24+1 {
-		t.Fatalf("one frame escaped %d paths of 50, want only the %d visible list entries plus the rule",
-			got, contentRows24)
+	if got := escapes.Load(); got != 0 {
+		t.Fatalf("one frame escaped %d paths of 50, want 0 — path display metadata is prepared once at search completion",
+			got)
+	}
+}
+
+// A navigation Update plus the frame it produces performs no per-path
+// work either: the counter spans both halves of the model transition
+// and is never reset between Update and View, so a whole-index scan,
+// copy, regroup, or whole-group reallocation fails whether it happens
+// in the render or is merely moved into navigation handling.
+func TestNavigateAndRenderEscapeNoPaths(t *testing.T) {
+	var escapes atomic.Int32
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{
+		escapePath: func(p []byte) string {
+			escapes.Add(1)
+			return safepresentation.EscapePath(p)
+		},
+		popupTimer: popupStubTicks.popupTimer,
+	})
+	files := make([]navFile, 50)
+	for i := range files {
+		files[i] = navFile{
+			name:    fmt.Sprintf("f%02d.txt", i),
+			content: "hit\n",
+			stops:   []navStop{{line: 1, start: 0, end: 3}},
+		}
+	}
+	idx := navIndex(t, files)
+	finishLoad(t, m, startBrowse(t, m, idx))
+
+	escapes.Store(0)
+	for _, k := range []tea.KeyPressMsg{keyN, keyP, keyN} {
+		m.Update(k)
+		viewText(m)
+	}
+	if got := escapes.Load(); got != 0 {
+		t.Fatalf("navigation plus render escaped %d paths, want 0 across the combined Update/View path", got)
+	}
+}
+
+// Navigation moves only the current-file pointer: the per-file
+// grouping is prepared once at search completion and shared by every
+// step — n/p never regroups or reallocates it (Issue #40).
+func TestNavigationKeepsPreparedGroups(t *testing.T) {
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, popupStubTicks)
+	idx := navIndex(t, navFiles)
+	finishLoad(t, m, startBrowse(t, m, idx))
+
+	base := &m.idx.Files[0]
+	paths := &m.displayPaths[0]
+	for i := 0; i < 4; i++ {
+		m.Update(keyN)
+		m.Update(keyP)
+	}
+	if got := &m.idx.Files[0]; got != base {
+		t.Fatal("navigation reallocated the per-file grouping")
+	}
+	if got := &m.displayPaths[0]; got != paths {
+		t.Fatal("navigation reallocated the prepared path metadata")
+	}
+}
+
+// A resize that narrows the allotted list width re-truncates the
+// visible entries against the new width at grapheme boundaries, and a
+// gutter growth re-truncates them again — both with zero escaper
+// queries across the Update plus the frame, because truncation
+// consumes the prepared cluster boundaries (Issue #40).
+func TestResizeRetruncatesFromPreparedPaths(t *testing.T) {
+	var escapes atomic.Int32
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{
+		escapePath: func(p []byte) string {
+			escapes.Add(1)
+			return safepresentation.EscapePath(p)
+		},
+	})
+	m.theme = theme.Plain()
+	idx := navIndex(t, []navFile{
+		{name: "文文文文-deep-leaf.txt", content: "hit\n", stops: []navStop{{line: 1, start: 0, end: 3}}},
+		{name: "b.txt", content: "hit\n", stops: []navStop{{line: 1, start: 0, end: 3}}},
+	})
+	finishLoad(t, m, startBrowse(t, m, idx))
+	key := string(idx.Files[0].Path)
+	wantEntry := func() string {
+		got := leftTruncate(escapedPath(idx.Files[0]), m.listWidth())
+		if !strings.HasPrefix(got, "…") {
+			t.Fatalf("entry %q fits the %d-cell list — the fixture must exercise truncation", got, m.listWidth())
+		}
+		return got
+	}
+
+	// Narrow the frame so the 40% cap shrinks the list; the resulting
+	// layout request stays in flight — re-truncation cannot wait on it.
+	escapes.Store(0)
+	m.Update(tea.WindowSizeMsg{Width: 40, Height: 24})
+	if got, want := viewText(m), wantEntry(); !strings.Contains(got, want) {
+		t.Fatalf("view = %q, want the current entry re-truncated to %d cells as %q",
+			got, m.listWidth(), want)
+	}
+
+	// Gutter growth shrinks the third term of the width formula: the
+	// same frame re-truncates again, still querying nothing.
+	m.rows[key] = &synthRows{countingRows: countingRows{n: 5}, gutter: 20}
+	listW := m.listWidth()
+	if got, want := viewText(m), wantEntry(); !strings.Contains(got, want) {
+		t.Fatalf("view = %q after gutter growth, want the entry re-truncated to %d cells as %q",
+			got, listW, want)
+	}
+	if got := escapes.Load(); got != 0 {
+		t.Fatalf("resize and gutter growth plus renders escaped %d paths, want 0", got)
 	}
 }

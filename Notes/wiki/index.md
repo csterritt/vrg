@@ -312,6 +312,14 @@ Catalog of all wiki pages for the vrg project.
   replacement by shared cluster/cell primitives, and the mechanical
   `utf8.DecodeRuneInString` allow-list scanning `internal/` and
   `cmd/`
+- [bounded-browse-render.md](bounded-browse-render.md) — Issue #40:
+  `displayPaths` prepared once at `searchDoneMsg` (escaped text, cell
+  width, grapheme boundaries per file, `listWBase` from the prepared
+  widths), `entry`/`displayPath.leftTruncate` clipping only the
+  visible window and current path at the live width, navigation
+  touching cursor state alone, and the counting `escapePath` guard
+  spanning `Update()`+`View()` proving zero per-frame escapes or
+  regrouping
 
 ## Catalogs
 

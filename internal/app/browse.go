@@ -587,17 +587,94 @@ func (m *model) browseView() string {
 	return sb.String()
 }
 
+// displayPath is one file's prepared path presentation: the escaped
+// text, its full cell width, and every grapheme cluster's byte offset
+// and cell width — the width-independent metadata Issue #40 prepares
+// once when the search completes. A frame render left-truncates the
+// visible entries against the current list width from these
+// boundaries alone; the truncated form cannot be prepared ahead
+// because the allotted width changes with the terminal size, the
+// gutter, the wrap-mode indicator, and list visibility.
+type displayPath struct {
+	text     string
+	width    int
+	clusters []pathCluster
+}
+
+// pathCluster records one grapheme cluster's byte offset into its
+// display text and its cell width, so left-truncation cuts only on
+// cluster boundaries.
+type pathCluster struct {
+	off, w int
+}
+
+// newDisplayPath prepares text's width-independent display data under
+// the shared uniseg grapheme policy — the same segmentation
+// safepresentation.CellWidth measures; the escaped text carries no
+// ANSI bytes, so nothing is skipped. The full width is the clusters'
+// summed cell widths.
+func newDisplayPath(text string) displayPath {
+	d := displayPath{text: text}
+	rest := text
+	state := -1
+	for len(rest) > 0 {
+		off := len(text) - len(rest)
+		var cw int
+		_, rest, cw, state = uniseg.FirstGraphemeClusterInString(rest, state)
+		d.clusters = append(d.clusters, pathCluster{off: off, w: cw})
+		d.width += cw
+	}
+	return d
+}
+
+// leftTruncate clips the prepared path to at most w cells from the
+// left with a leading …, keeping the basename tail visible — the
+// leftTruncate contract resolved against the prepared cluster
+// boundaries rather than re-segmenting the text.
+func (d displayPath) leftTruncate(w int) string {
+	if w <= 0 || d.text == "" {
+		return ""
+	}
+	if d.width <= w {
+		return d.text
+	}
+	i := len(d.clusters)
+	col := 0
+	for i > 0 && col+d.clusters[i-1].w <= w-1 {
+		i--
+		col += d.clusters[i].w
+	}
+	if i == len(d.clusters) {
+		return "…"
+	}
+	return "…" + d.text[d.clusters[i].off:]
+}
+
+// entry is file index i's prepared display path. The displayPaths
+// slice is built alongside the index at search completion and shares
+// its order; the fallback re-derives the entry only when that
+// invariant is broken — never on the ordinary render path.
+func (m *model) entry(i int) displayPath {
+	if i < len(m.displayPaths) {
+		return m.displayPaths[i]
+	}
+	if m.idx != nil && i < len(m.idx.Files) {
+		return newDisplayPath(m.escapePath(m.idx.Files[i].Path))
+	}
+	return displayPath{}
+}
+
 // listCell renders the file-list entry at index i padded to width
 // cells; the current entry is underlined. A path wider than its
 // cells left-truncates with a leading … so the basename end stays
 // visible (Issue #24). Only the visible window's entries are
-// escaped — the frame render never queries the provider for
-// off-window paths.
+// rendered — the frame reads each one's prepared display path
+// instead of escaping or re-segmenting (Issue #40).
 func (m *model) listCell(i, width int) string {
 	if i >= len(m.idx.Files) {
 		return strings.Repeat(" ", width)
 	}
-	clipped := leftTruncate(m.escapePath(m.idx.Files[i].Path), width)
+	clipped := m.entry(i).leftTruncate(width)
 	entry := m.theme.FileList(clipped)
 	if i == m.curFile() {
 		entry = m.theme.CurrentFile(clipped)
@@ -694,13 +771,14 @@ const staleNote = "file changed since search"
 // with a leading … to make room for the note where possible
 // (Issue #24 provides the slot; Issue #29 supplies the note).
 func (m *model) filenameRule(width int) string {
-	name, note := "", ""
+	var name displayPath
+	note := ""
 	if m.idx != nil && len(m.idx.Files) > 0 {
-		name = m.escapePath(m.idx.Files[m.curFile()].Path)
+		name = m.entry(m.curFile())
 		note = m.notes[string(m.idx.Files[m.curFile()].Path)]
 	}
 	if width <= 4 {
-		return padTo(leftTruncate(name, width), width)
+		return padTo(name.leftTruncate(width), width)
 	}
 	noteW := safepresentation.CellWidth(note)
 	if note != "" {
@@ -712,7 +790,7 @@ func (m *model) filenameRule(width int) string {
 		note = clipCells(note, width-4)
 		noteW = safepresentation.CellWidth(note) + 1
 	}
-	clipped := leftTruncate(name, width-3-noteW)
+	clipped := name.leftTruncate(width - 3 - noteW)
 	rule := "─ " + clipped + " "
 	if note != "" {
 		rule += note + " "

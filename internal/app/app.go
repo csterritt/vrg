@@ -74,8 +74,9 @@ type options struct {
 	// off the update path and input stays actionable while it pends.
 	layoutGate func()
 	// escapePath, when set, replaces the safe-presentation path
-	// escaper — the render-cost seam proving a frame queries the
-	// file-list provider only for the visible window.
+	// escaper — the render-cost seam proving path display metadata
+	// is prepared once at search completion and a frame never
+	// re-escapes paths (Issue #40).
 	escapePath func([]byte) string
 	// loader, when set, replaces filebuffer.Read inside each file-load
 	// command — the injected-loader seam making read failures
@@ -204,9 +205,14 @@ type model struct {
 	// reload-anchor intents — preserve the anchor, no reveal —
 	// minted when a reload's load completes and committed through the
 	// same installation path (Issue #27, generalized by Issue #28).
-	// listWBase is the index's
-	// longest escaped path width, prepared at search-done so the
-	// Issue #24 width formula never rescans the file list per frame.
+	// displayPaths is the per-file display metadata prepared once at
+	// search completion (Issue #40) — each file's escaped path text,
+	// grapheme-cluster boundaries, and full cell width in index
+	// order — so the frame render truncates only the visible entries
+	// against the current list width instead of re-escaping or
+	// re-segmenting paths per frame. listWBase is the largest
+	// prepared path width, kept for the Issue #24 width formula so
+	// it never rescans the file list per frame.
 	// listVisible is the user's file-list visibility preference
 	// (Issue #24): shown at startup, hidden by left/tab, shown by
 	// right/shift+tab — a computed zero width never changes it.
@@ -227,6 +233,7 @@ type model struct {
 	layoutReqs     map[string]viewport.Key
 	pendingReveals map[string]bool
 	pendingAnchor  map[string]bool
+	displayPaths   []displayPath
 	listWBase      int
 	listVisible    bool
 	notes          map[string]string
@@ -369,10 +376,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case searchDoneMsg:
 		m.idx = msg.idx
+		// Every file's width-independent display metadata — the
+		// escaped path text, its grapheme-cluster boundaries, and
+		// its full cell width — is prepared once here, where the
+		// index is finalized: navigation and frame rendering read
+		// the shared entries and never re-escape, re-segment, or
+		// rescan the file list (Issue #40). The list width's
+		// longest-path term is the largest prepared width.
+		m.displayPaths = make([]displayPath, len(msg.idx.Files))
 		m.listWBase = 0
-		for _, f := range msg.idx.Files {
-			if w := safepresentation.CellWidth(m.escapePath(f.Path)); w > m.listWBase {
-				m.listWBase = w
+		for i, f := range msg.idx.Files {
+			m.displayPaths[i] = newDisplayPath(m.escapePath(f.Path))
+			if m.displayPaths[i].width > m.listWBase {
+				m.listWBase = m.displayPaths[i].width
 			}
 		}
 		var cmd tea.Cmd
@@ -685,7 +701,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // escapePath is the file-list path escaper — the safe-presentation
-// core, or the test seam counting provider queries.
+// core, or the test seam counting escaper queries. Search completion
+// runs it once per file to build the display metadata every later
+// consumer shares; the Issue #40 cost guards fail if it is queried
+// again on the navigation or render path.
 func (m *model) escapePath(p []byte) string {
 	if m.opts.escapePath != nil {
 		return m.opts.escapePath(p)

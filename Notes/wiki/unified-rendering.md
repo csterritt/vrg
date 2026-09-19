@@ -82,9 +82,10 @@ model's own.
 - **Filename-row fitting** — `filenameRule` measures the note, the
   clipped path, and the rule fill in cells via `CellWidth`.
 - **Pop-up truncation/width/centering** — `compositePopup` measures
-  the truncated text and the box width in cells;
-  `leftTruncate`/`tailCells` — the replacement for the retired
-  rune-boundary `truncateLeftCells` — clip on whole grapheme
+  the truncated text and the box width in cells; Issue #40 routes the
+  clip through `displayPath.leftTruncate` — the successor to
+  `leftTruncate`/`tailCells`, which had replaced the retired
+  rune-boundary `truncateLeftCells` — clipping on whole grapheme
   clusters with no assumption that `EscapePath`'s output lacks
   combining marks, so wide and combining paths are never split or
   miscentered.
@@ -98,12 +99,13 @@ model's own.
 
 `truncateLeftCells`'s rune-boundary implementation and its false
 no-combining-marks assumption are gone: the pop-up routes through
-`leftTruncate`/`tailCells`, the same shared cluster/cell primitive
-the file list and filename row use.
+the same shared cluster/cell primitive the file list and filename
+row use — `displayPath.leftTruncate` since Issue #40.
 
-Issue #40 consumes this as the handoff: the shared helper and the
-width-independent escaped-path/cluster geometry stay intact while
-per-file grouping work moves out of `View()`.
+Issue #40 consumed this page's model as the handoff: the shared
+helper and the width-independent escaped-path/cluster geometry now
+live in `displayPaths`, prepared once at `searchDoneMsg` — see
+[bounded-browse-render.md](bounded-browse-render.md).
 
 ## Tests
 

@@ -35,3 +35,7 @@ Notes/walkthroughs/028-06/code-walkthrough/__pycache__/
 # Built at run time by the Issue #29 walkthrough.
 Notes/walkthroughs/029-06/code-walkthrough/vrg
 Notes/walkthroughs/029-06/code-walkthrough/__pycache__/
+# Generated at run time by smoke.py; the ~2000-file fixture and the
+# built binary are regenerated on every walkthrough run.
+Notes/walkthroughs/040-04/code-walkthrough/fixture/
+Notes/walkthroughs/040-04/code-walkthrough/vrg
