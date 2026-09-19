@@ -159,8 +159,9 @@ func (m *model) listWidth() int {
 
 // textWidth is a buffer's file-panel text width: the panel width minus
 // the line-number gutter and the reserved right-indicator column —
-// zero while wrapping, one in run-off-edge mode (Issue #20 populates
-// it). All wrapping, clipping, and reveal math uses this width.
+// zero while wrapping, one in run-off-edge mode where Issue #20's
+// right-edge star draws. All wrapping, clipping, and reveal math uses
+// this width.
 func (m *model) textWidth(gutter int) int {
 	w := m.width - m.listWidth() - gutter - viewport.ReservedIndicator(m.wrap)
 	if w < 0 {
@@ -466,8 +467,12 @@ func (m *model) listCell(i, width int) string {
 // gutter plus text for the prepared row at index top+cr — a wrapped
 // continuation row carries a blank gutter — or the placeholder while
 // no row model is available. In run-off-edge mode the text window
-// starts off cells into the line and the rightmost cell is the
-// reserved indicator column, left blank until Issue #20.
+// starts off cells into the line and Issue #20's indicators draw:
+// the gutter's first trailing space marks text hidden left ('_'),
+// upgraded to '*' when a match or marker is entirely hidden there,
+// and the reserved rightmost cell shows '*' on the current matched
+// line's row when a match is entirely hidden right — never
+// overwriting text. Wrap mode draws neither.
 func (m *model) contentCell(cr, width, top, off int, rows rowSource, failed bool, curLine int64) string {
 	if rows == nil {
 		placeholder := "Loading…"
@@ -496,9 +501,26 @@ func (m *model) contentCell(cr, width, top, off int, rows rowSource, failed bool
 	if n := width - gw; reserved > n {
 		reserved = n
 	}
-	return m.theme.Gutter(gutter) +
-		m.contentText(row, off, width-gw-reserved, row.Line.Number == curLine) +
-		strings.Repeat(" ", reserved)
+	textW := width - gw - reserved
+	cur := row.Line.Number == curLine
+	left, right := byte(' '), byte(' ')
+	if !m.wrap {
+		left = viewport.LeftMark(row, off)
+		if cur && reserved > 0 {
+			right = viewport.RightMark(row, off, textW)
+		}
+	}
+	head := m.theme.Gutter(gutter)
+	if left != ' ' {
+		head = m.theme.Gutter(gutter[:gw-2]) +
+			m.theme.Indicator(string(left)) +
+			m.theme.Gutter(gutter[gw-1:])
+	}
+	tail := strings.Repeat(" ", reserved)
+	if right == '*' {
+		tail = m.theme.Indicator("*")
+	}
+	return head + m.contentText(row, off, textW, cur) + tail
 }
 
 // filenameRule renders the current file's escaped path embedded in a

@@ -19,7 +19,9 @@
 // Issue #19 lands the minimal horizontal reveal: painted-cell
 // visibility, the cluster-width reveal arithmetic, and the unpaintable
 // cluster's geometric fallback — RevealOff and CellVisible in
-// reveal.go.
+// reveal.go. Issue #20 lands the hidden-content indicators — the
+// per-line left-gutter mark and the current-line right-column star —
+// derived from the same painted-cell visibility in indicators.go.
 package viewport
 
 import "vrg/internal/filebuffer"
@@ -210,8 +212,8 @@ type Key struct {
 
 // ReservedIndicator is the width the file panel's right edge reserves
 // for the hidden-content indicator column under a wrap mode: zero while
-// wrapping, one in run-off-edge mode. The column is reserved now and
-// populated by Issue #20.
+// wrapping, one in run-off-edge mode. Issue #20's right-edge star is
+// what the column holds.
 func ReservedIndicator(wrap bool) int {
 	if wrap {
 		return 0

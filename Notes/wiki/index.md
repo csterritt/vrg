@@ -132,6 +132,14 @@ Catalog of all wiki pages for the vrg project.
   arithmetic with cluster widths, the oversized-match start-cell
   rule, and the unpaintable-cluster geometric fallback with its
   no-loop guarantee and indicator interplay
+- [hidden-content-indicators.md](hidden-content-indicators.md) —
+  Issue #20: the per-line gutter `_`/`*` for text and matches hidden
+  left, the current-matched-line-only reserved right `*` for matches
+  hidden right (absent when that line is off-screen, never
+  overwriting text), painted-cell visibility after grapheme clipping
+  excluding the reserved column, split-glyph blanks counted hidden,
+  partial visibility counting visible, and wrap mode drawing neither
+  indicators nor the column
 
 ## Catalogs
 

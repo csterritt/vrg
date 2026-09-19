@@ -65,8 +65,14 @@ func TestPanKeysShiftText(t *testing.T) {
 
 	listW := m.listWidth()
 	textW := flatTextW(t, m, 3)
+	// Issue #20's gutter mark rides the first trailing space: '*' once
+	// the cell-0 match is entirely hidden left, blank at the edge.
 	want := func(off int) string {
-		return "1  " + line[off:off+textW] + " "
+		mark := "*"
+		if off == 0 {
+			mark = " "
+		}
+		return "1" + mark + " " + line[off:off+textW] + " "
 	}
 	half := viewport.HalfText(textW)
 	for _, step := range []struct {
@@ -172,7 +178,7 @@ func TestPanOffsetSurvivesWrapToggle(t *testing.T) {
 	}
 	listW := m.listWidth()
 	textW := flatTextW(t, m, 3)
-	if row := frameRow(t, m, 1)[listW:]; row != "1  "+line[20:20+textW]+" " {
+	if row := frameRow(t, m, 1)[listW:]; row != "1* "+line[20:20+textW]+" " {
 		t.Fatalf("row after w w = %q, want the text from cell 20", row)
 	}
 }
@@ -248,7 +254,7 @@ func TestPanClippedClusterRendersBlank(t *testing.T) {
 	if got := m.vps[key].Off(); got != 3 {
 		t.Fatalf("off = %d, want 3", got)
 	}
-	want := "1   " + strings.Repeat("c", textW-1) + " "
+	want := "1*  " + strings.Repeat("c", textW-1) + " "
 	if row := frameRow(t, m, 1)[m.listWidth():]; row != want {
 		t.Fatalf("row = %q, want a blank cell where 文's second half was clipped, then c's: %q", row, want)
 	}
@@ -283,7 +289,7 @@ func TestPanMaximumPaintsFinalCluster(t *testing.T) {
 	}
 	// The final cluster paints both its cells: the row starts with the
 	// whole 文, then blanks — no split glyph, no blank-only text area.
-	want := "1  " + "文" + strings.Repeat(" ", textW-2) + " "
+	want := "1* " + "文" + strings.Repeat(" ", textW-2) + " "
 	if row := frameRow(t, m, 1)[m.listWidth():]; row != want {
 		t.Fatalf("row at the maximum = %q, want the fully painted 文 then blanks: %q", row, want)
 	}
@@ -332,7 +338,7 @@ func TestScrollReclampsOffsetLeftwards(t *testing.T) {
 	if got := m.vps[key].Off(); got != 2 {
 		t.Fatalf("off after scrolling back = %d, want the clamped 2", got)
 	}
-	if row := frameRow(t, m, 1)[m.listWidth():]; row != " 1  "+line[2:2+textW]+" " {
+	if row := frameRow(t, m, 1)[m.listWidth():]; row != " 1* "+line[2:2+textW]+" " {
 		t.Fatalf("row after returning = %q, want the long line from cell 2", row)
 	}
 }

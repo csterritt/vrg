@@ -232,7 +232,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `StopTarget` and makes `reveal` run `Viewport.RevealOff` after the
   vertical `Reveal` — the minimal horizontal reveal on startup and
   every `n`/`p` transition, writing the viewport back when either
-  half moved. See
+  half moved. Issue #20 makes `contentCell` populate the
+  hidden-content indicators in run-off-edge mode: the gutter's first
+  trailing space takes `LeftMark`'s `_`/`*` (composed
+  `Gutter`/`Indicator`/`Gutter`), and the reserved rightmost cell
+  takes `RightMark`'s `*` on the current matched line's row when a
+  match is entirely hidden right — wrap mode draws neither. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [file-change-popup.md](file-change-popup.md),
@@ -241,8 +246,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [destination-reveal.md](destination-reveal.md),
   [wrap-mode.md](wrap-mode.md),
   [logical-anchor.md](logical-anchor.md),
-  [horizontal-panning.md](horizontal-panning.md), and
-  [horizontal-reveal.md](horizontal-reveal.md).
+  [horizontal-panning.md](horizontal-panning.md),
+  [horizontal-reveal.md](horizontal-reveal.md), and
+  [hidden-content-indicators.md](hidden-content-indicators.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
@@ -280,8 +286,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   runs against `MaxOff`. See
   [viewport-scrolling.md](viewport-scrolling.md),
   [wrap-mode.md](wrap-mode.md),
-  [logical-anchor.md](logical-anchor.md), and
-  [horizontal-panning.md](horizontal-panning.md).
+  [logical-anchor.md](logical-anchor.md),
+  [horizontal-panning.md](horizontal-panning.md), and
+  [hidden-content-indicators.md](hidden-content-indicators.md) (what
+  `ReservedIndicator`'s column holds).
 - `internal/viewport/pan.go` — Issue #18's horizontal panning:
   `Viewport.Off`/`ResetOff`/`Pan` (the offset reader, the
   file-change reset, and the per-keypress move-and-clamp that is a
@@ -313,8 +321,21 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   cell→(start, width) lookup. See
   [destination-reveal.md](destination-reveal.md),
   [logical-anchor.md](logical-anchor.md),
-  [horizontal-panning.md](horizontal-panning.md), and
-  [horizontal-reveal.md](horizontal-reveal.md).
+  [horizontal-panning.md](horizontal-panning.md),
+  [horizontal-reveal.md](horizontal-reveal.md), and
+  [hidden-content-indicators.md](hidden-content-indicators.md).
+- `internal/viewport/indicators.go` — Issue #20's hidden-content
+  indicators over the prepared row model: `LeftMark` (the row's
+  gutter mark — `*` when a match or marker span is entirely hidden
+  left, `_` when text is hidden left but no match is entirely hidden
+  there, blank otherwise) and `RightMark` (`*` when a match or marker
+  span is entirely hidden right — the reserved-column mark the
+  renderer scopes to the current matched line's row), both built on
+  the same `targetCluster`-backed painted-cell visibility as
+  `CellVisible`: a clipped cluster's blanked in-window cells count as
+  hidden, an empty span judges its one-cell marker position, and a
+  partially painted span is not entirely hidden. See
+  [hidden-content-indicators.md](hidden-content-indicators.md).
 - `internal/theme/theme.go` — the active scheme's style set: `Dark()`
   (white on black, initially active), `Light()` (black on white), the
   pure `Toggled` flip behind the `c` key, `Plain()` (the no-style

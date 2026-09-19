@@ -704,3 +704,42 @@ and indicators), `internal/viewport/reveal.go`,
 `internal/viewport/viewport.go`, `internal/app/browse.go`,
 `internal/viewport/reveal_test.go`, `internal/app/hreveal_test.go`,
 `internal/app/pan_test.go`.
+
+## [2026-09-17] ingest | Issue #20 hidden-content indicators
+
+Ingested the completed Issue #20 implementation: in run-off-edge mode
+the file panel signposts hidden content — a per-line gutter mark and
+a reserved right-column star, both in `Theme.Indicator`'s inverse
+style and absent entirely in wrap mode. `internal/viewport/
+indicators.go` (new) derives every judgment from Issue #19's
+painted-cell visibility: `LeftMark` returns `*` when a match or
+marker span is entirely hidden left (every cell's grapheme cluster
+starts before `off`), `_` when text is hidden left but no match is
+entirely hidden there, and blank otherwise (empty lines included);
+`RightMark` returns `*` when a match or marker span is entirely
+hidden right (every cell's cluster ends beyond `off + textW`), the
+mark the renderer scopes to the current matched line's row alone —
+following `n`/`p`, absent when that line scrolls off-screen, and
+never overwriting text since the column is carved out of the text
+width. A clipped grapheme's blanked in-window cells count as hidden
+(split-wide-glyph blanks are not partial visibility), an empty
+highlight span judges its one-cell marker position, and a partially
+visible match earns no star for that side — but both stars may appear
+together. `contentCell` composes the marks: the left mark substitutes
+the gutter's first trailing space inside a `Gutter`/`Indicator`/
+`Gutter` split; the right `*` populates the already-reserved column.
+`internal/app/indicators_test.go` covers the rendered marks and
+`internal/viewport/indicators_test.go` the mark predicates;
+`pan_test.go`/`hreveal_test.go` expectations gained the marks at
+nonzero offsets (the unpaintable-tab row now shows `_` + `*`).
+Created [hidden-content-indicators](hidden-content-indicators.md);
+updated [source-code](source-code.md), [unit-tests](unit-tests.md),
+and the index. Sources:
+`Notes/issues/020-hidden-content-indicators.md`,
+`Notes/tasks/020-hidden-content-indicators.md`,
+`Notes/PRD-vrg.md` (Layout and indicators; Navigation, viewport, and
+logical anchors), `internal/viewport/indicators.go`,
+`internal/viewport/viewport.go`, `internal/app/browse.go`,
+`internal/viewport/indicators_test.go`,
+`internal/app/indicators_test.go`, `internal/app/pan_test.go`,
+`internal/app/hreveal_test.go`.

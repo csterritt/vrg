@@ -701,6 +701,45 @@ run-off-edge mode:
 - `TestHorizontalRevealInertInWrapMode` — startup on a wrapped layout
   records no horizontal offset even with a far-off match.
 
+`indicators_test.go` (same package; Issue #20) drives the
+hidden-content indicators through `Update`/`View` under
+`theme.Plain()` (and the dark scheme for the styling check), with
+`flatIndicatorModel` sizing a 40-cell flat text width and `panTo`
+landing exact offsets:
+
+- `TestGutterMarkPerVisibleLine` — the first trailing gutter space
+  per visible line: `*` for a match entirely hidden left, `_` for
+  text hidden left (matched or not, even the whole line hidden),
+  blank on the empty line.
+- `TestRightStarFollowsCurrentLine` — the reserved right `*` belongs
+  to the current matched line alone: it moves to line 2 on `n` while
+  non-current lines with hidden-right matches stay blank.
+- `TestRightStarAbsentWhenCurrentLineOffScreen` — paging the current
+  line out of the window blanks every row's reserved column.
+- `TestBothStarsAppearTogether` — one match entirely hidden left and
+  another entirely hidden right show both marks at once.
+- `TestPartiallyVisibleMatchShowsNoStar` — a match straddling an edge
+  keeps that side's indicator off: blank reserved column on the
+  right, `_` never `*` on the left.
+- `TestLastCellMatchWithFartherMatchHidden` — a match filling the
+  last text cell is painted (never overwritten); the star reports
+  only the farther match, and pans away once that match paints.
+- `TestSplitGlyphBlanksCountHidden` — a `文` clipped to blanks at
+  either edge counts hidden: the left gutter upgrades to `*` and the
+  current line earns the right `*`.
+- `TestUniformLinesMarkEveryVisibleRow` — every visible row of a
+  uniform-lines window shows `_` at a nonzero offset.
+- `TestWrapModeDrawsNoIndicators` — wrap mode keeps both trailing
+  gutter spaces and lets text claim the cell the flat layout
+  reserves; the marks return on toggling back.
+- `TestIndicatorsRenderInverseStyled` — under the dark scheme both
+  marks render inside the `30;47` inverse SGR, not as plain text.
+
+`pan_test.go` and `hreveal_test.go` row expectations gain the marks
+at nonzero offsets — hidden-left text and matches mark gutters, and
+the unpaintable-tab row shows the gutter `_` beside the reserved `*`
+for its entirely-hidden-right match.
+
 ## internal/viewport
 
 `viewport_test.go` (external package `viewport_test`; Issue #12):
@@ -868,6 +907,23 @@ offset and extent contracts over real prepared buffers:
 - `TestExtentEvaluationTouchesOnlyVisibleRows` — the `countingExtent`
   fake records exactly `[top, top + n)` queries for a pan, a scroll's
   re-clamp, and a `MaxOff` call — the render-cost guard.
+
+`indicators_test.go` (external package; Issue #20) covers the
+hidden-content mark predicates over real prepared lines:
+
+- `TestLeftMark` — the gutter mark table: blank when nothing is
+  hidden (including an empty row), `_` for text hidden left, `*` when
+  a match or marker span is entirely hidden left, `_` when the match
+  is only partially hidden or hidden right instead, a clipped `文`
+  cluster's blanked cells counting hidden, and zero-width marker
+  positions judged as one-cell targets.
+- `TestRightMark` — the reserved-column table: `*` only when a match
+  or marker span is entirely hidden right, never for a partially
+  visible or hidden-left match, a clipped `文` at the right edge
+  counting hidden, the last-cell match painted while a farther match
+  stars, and zero-width marker positions.
+- `TestLeftMarkOnEveryFlatRow` — the uniform-lines layout: every
+  prepared row reports `_` at a nonzero offset.
 
 ## internal/theme
 
