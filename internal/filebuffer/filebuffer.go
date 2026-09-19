@@ -5,8 +5,11 @@
 // Issue #5 lands the first path: byte loading, line splitting on LF/CRLF
 // with the unterminated-final-line and empty-file rules, display mapping
 // through the safe-presentation core, and highlight spans mapped through
-// each line's byte→cell map. Stale-match validation is Issue #29's and
-// unsupported encodings are Issue #30's.
+// each line's byte→cell map. Issue #16 makes the buffer the source of
+// the shared grapheme policy: every line's Clusters segment its display
+// cells at grapheme-cluster boundaries (tabs already expanded to their
+// eight-column stops) so Viewport wraps without re-deriving. Stale-match
+// validation is Issue #29's and unsupported encodings are Issue #30's.
 package filebuffer
 
 import (
@@ -17,9 +20,10 @@ import (
 )
 
 // Line is one source line prepared for display: the escaped Text with
-// its byte→cell map (embedded Mapped), the original Raw bytes —
-// terminator included — retained for identity and later validation, and
-// the matched spans as display-cell ranges in Highlights.
+// its byte→cell map and grapheme-cluster segmentation (embedded Mapped),
+// the original Raw bytes — terminator included — retained for identity
+// and later validation, and the matched spans as display-cell ranges in
+// Highlights.
 type Line struct {
 	safepresentation.Mapped
 	Number     int64

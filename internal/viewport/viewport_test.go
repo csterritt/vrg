@@ -134,26 +134,28 @@ func TestClampPullsTopUp(t *testing.T) {
 	}
 }
 
-// Prepare builds the rendered-row model a frame render slices: in the
-// unwrapped panel each source line is exactly one rendered row, in file
-// order, with the buffer's gutter width. A nil buffer prepares an empty
-// model whose queries are safe.
+// Prepare builds the rendered-row model a frame render slices: every
+// source line yields at least one rendered row, in file order, and the
+// model carries the buffer's gutter width. A nil buffer prepares an
+// empty model whose queries stay safe.
 func TestPrepareRows(t *testing.T) {
 	buf := loadBuffer(t, "one\ntwo\nthree\n")
-	rows := viewport.Prepare(buf)
+	rows := viewport.Prepare(buf, viewport.Key{TextWidth: 40, Wrap: true})
 	if rows.Len() != 3 {
 		t.Fatalf("Len = %d, want 3", rows.Len())
 	}
 	for i := 0; i < rows.Len(); i++ {
-		if got := rows.At(i).Number; got != int64(i+1) {
-			t.Fatalf("At(%d).Number = %d, want %d", i, got, i+1)
+		r := rows.At(i)
+		if r.Line.Number != int64(i+1) || r.Start != 0 || r.Continuation() {
+			t.Fatalf("At(%d) = {line %d, start %d, cont %v}, want line %d's first row",
+				i, r.Line.Number, r.Start, r.Continuation(), i+1)
 		}
 	}
 	if rows.GutterWidth() != buf.GutterWidth() {
 		t.Fatalf("GutterWidth = %d, want the buffer's %d", rows.GutterWidth(), buf.GutterWidth())
 	}
 
-	empty := viewport.Prepare(nil)
+	empty := viewport.Prepare(nil, viewport.Key{TextWidth: 40, Wrap: true})
 	if empty.Len() != 0 {
 		t.Fatalf("empty model Len = %d, want 0", empty.Len())
 	}

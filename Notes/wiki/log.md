@@ -521,3 +521,51 @@ bullet; File loading — selection-time-start bullet; user stories
 `internal/app/overlay.go`, `internal/app/sinksafety_test.go`,
 `internal/app/browse_test.go`, `internal/app/nav_test.go`,
 `internal/app/reveal_test.go`.
+
+## [2026-09-17] ingest | Issue #16 wrap mode and w toggle
+
+Wrapping on by default with the `w` toggle between grapheme-aware
+wrapped rows and run-off-edge clipping. `internal/safepresentation`
+gains `Cluster`/`Mapped.Clusters` — the shared grapheme segmentation
+and cell-width policy: `MapContent` now expands tabs structurally to
+the next multiple of eight source-display columns (blank cells mapped
+to the tab byte, one unbreakable cluster), replacing the Issue #5
+provisional `→`, and records wide glyphs and escaped forms as
+clusters. `filebuffer.Line` embeds the mapped segmentation so Viewport
+wraps from `Line.Clusters` without re-deriving. `internal/viewport`
+adds `Key{Path, Revision, TextWidth, Wrap}`, `Row{Line, Start, End}`
+with `Continuation()`, `ReservedIndicator` (0 wrapping / 1
+run-off-edge, reserved for Issue #20), and `Prepare(buf, key)`
+building the keyed swappable row model: wrap mode partitions cells at
+cluster boundaries with the never-split blank-cell rule, run-off-edge
+keeps one row per line, and `firstRow` indexes each line's rows.
+`TargetRow` scans the destination line's rows for the span holding
+the match start cell, so a match deep in a wrapped line reveals its
+own row under the unchanged Issue #14 placement. `internal/app` adds
+`m.wrap`/`m.revs`, the `w` route, `listWidth`/`textWidth` (panel −
+list − gutter − reserved indicator), `prepareRows`/`rebuildRows`
+keyed-model swaps on load/toggle/resize, blank continuation gutters,
+and row-range `contentText` — `View()` still queries only visible
+rows. New tests: `internal/viewport/wrap_test.go` (ASCII counts, wide
+cluster and blank cells, flag-pair cluster, tab cluster,
+boundary alignment, run-off-edge, the carried key, wrapped
+`TargetRow`, deep-line reveal) and `internal/app/wrap_test.go`
+(default wrap + blank continuation gutters, the `w` toggle's model
+swap and reserved column, wrapped-line reveal, resize rebuild);
+`safepresentation_test.go` gained `TestMapContentTabStops`,
+`filebuffer_test.go` gained `TestTabExpandsToEightColumnStops`,
+`TestLineClustersExposeBoundaries`, and
+`TestHighlightCoversTabExpansion`; `scroll_test.go`'s `countingRows`
+returns `viewport.Row`. Created [wrap-mode](wrap-mode.md); updated
+[browse-tracer](browse-tracer.md),
+[safe-presentation](safe-presentation.md),
+[viewport-scrolling](viewport-scrolling.md),
+[destination-reveal](destination-reveal.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources: `Notes/issues/016-wrap-mode-and-toggle.md`,
+`Notes/tasks/016-wrap-mode-and-toggle.md`, `Notes/PRD-vrg.md` (Text,
+graphemes, and safe presentation; Layout and indicators),
+`internal/safepresentation/safepresentation.go`,
+`internal/filebuffer/filebuffer.go`, `internal/viewport/viewport.go`,
+`internal/viewport/reveal.go`, `internal/app/app.go`,
+`internal/app/browse.go`, and the new/updated test files.

@@ -28,10 +28,11 @@ the reveal starts from).
   cell one past the line's last cell. Submatches arrive sorted by
   `(Start, End)`, so `Submatches[0]` is the first submatch.
 - `Rows.TargetRow` maps the target to the **rendered row** a reveal must
-  show. In the still-unwrapped panel each source line is exactly one
-  row, so the cell selects nothing yet — Issue #16's wrap-aware rows
-  will map it into a wrapped line's several rows, which is why the
-  contract was defined on the start cell from the outset. A line number
+  show. Since [Issue #16](wrap-mode.md) made the row model wrap-aware,
+  it scans the destination line's wrapped rows for the span containing
+  the target's start cell — a match deep in a wrapped line reveals its
+  own row — and a target cell past the line's cells lands on the line's
+  last row, the end-of-line marker position (Issue #23). A line number
   outside the prepared rows clamps to the nearest real row.
 
 ## Placement rules — `Viewport.Reveal(row, rows, height)`

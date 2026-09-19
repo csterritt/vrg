@@ -21,7 +21,7 @@ import (
 // fake to prove a frame queries only the visible row range.
 type rowSource interface {
 	Len() int
-	At(i int) filebuffer.Line
+	At(i int) viewport.Row
 	GutterWidth() int
 	// TargetRow is the rendered row holding the navigation stop's
 	// display target — the row a destination reveal must show.
@@ -114,6 +114,78 @@ func (m *model) reveal() {
 // contentRows is the file panel's content height: the frame height
 // minus the filename-rule row it shares with the file list.
 func (m *model) contentRows() int { return m.height - 1 }
+
+// listWidth is the file list's rendered width under the Issue #5
+// heuristic: the longest displayed path plus one padding cell, capped
+// at the terminal width. Issue #24 owns the real formula (40% cap,
+// minimum text width, left truncation).
+func (m *model) listWidth() int {
+	longest := 0
+	if m.idx != nil {
+		for _, f := range m.idx.Files {
+			if cw := safepresentation.CellWidth(safepresentation.EscapePath(f.Path)); cw > longest {
+				longest = cw
+			}
+		}
+	}
+	if w := longest + 1; w < m.width {
+		return w
+	}
+	return m.width
+}
+
+// textWidth is a buffer's file-panel text width: the panel width minus
+// the line-number gutter and the reserved right-indicator column —
+// zero while wrapping, one in run-off-edge mode (Issue #20 populates
+// it). All wrapping, clipping, and reveal math uses this width.
+func (m *model) textWidth(gutter int) int {
+	w := m.width - m.listWidth() - gutter - viewport.ReservedIndicator(m.wrap)
+	if w < 0 {
+		return 0
+	}
+	return w
+}
+
+// prepareRows builds one buffer's rendered-row model under the current
+// layout, keyed by (path, content revision, text width, wrap mode) so a
+// later layout change cannot mistake it for current.
+func (m *model) prepareRows(key string, buf *filebuffer.Buffer) *viewport.Rows {
+	return viewport.Prepare(buf, viewport.Key{
+		Path:      key,
+		Revision:  m.revs[key],
+		TextWidth: m.textWidth(buf.GutterWidth()),
+		Wrap:      m.wrap,
+	})
+}
+
+// rebuildRows swaps in a freshly prepared row model for every cached
+// buffer whose layout key changed — after a wrap toggle or a resize —
+// then re-clamps each saved viewport to the new row count so no
+// position can strand past EOF. A non-*Rows provider (a test fake) is
+// left alone.
+func (m *model) rebuildRows() {
+	for key, buf := range m.bufs {
+		k := viewport.Key{
+			Path:      key,
+			Revision:  m.revs[key],
+			TextWidth: m.textWidth(buf.GutterWidth()),
+			Wrap:      m.wrap,
+		}
+		cur, ok := m.rows[key].(*viewport.Rows)
+		if !ok {
+			continue
+		}
+		if cur.Key() != k {
+			m.rows[key] = viewport.Prepare(buf, k)
+		}
+	}
+	for key, vp := range m.vps {
+		if rows := m.rows[key]; rows != nil {
+			vp.Clamp(rows.Len(), m.contentRows())
+			m.vps[key] = vp
+		}
+	}
+}
 
 // isScrollKey reports whether key is a browse-state vertical scroll key.
 func isScrollKey(key string) bool {
@@ -223,21 +295,10 @@ func (m *model) browseView() string {
 	}
 	files := m.idx.Files
 	escaped := make([]string, len(files))
-	longest := 0
 	for i, f := range files {
 		escaped[i] = safepresentation.EscapePath(f.Path)
-		if cw := safepresentation.CellWidth(escaped[i]); cw > longest {
-			longest = cw
-		}
 	}
-	// Issue #5 uses the simple heuristic width: the longest displayed
-	// path plus one padding cell, never wider than the terminal.
-	// Issue #24 owns the real formula (40% cap, minimum text width,
-	// left truncation).
-	listW := longest + 1
-	if listW > w {
-		listW = w
-	}
+	listW := m.listWidth()
 	panelW := w - listW
 
 	// The list scrolls to keep the current entry visible; it shares the
@@ -298,8 +359,10 @@ func (m *model) listCell(escaped []string, i, width int) string {
 }
 
 // contentCell renders file-panel content row cr padded to width cells:
-// gutter plus text for the prepared row at index top+cr, or the
-// placeholder while no row model is available.
+// gutter plus text for the prepared row at index top+cr — a wrapped
+// continuation row carries a blank gutter — or the placeholder while
+// no row model is available. In run-off-edge mode the rightmost cell
+// is the reserved indicator column, left blank until Issue #20.
 func (m *model) contentCell(cr, width, top int, rows rowSource, failed bool, curLine int64) string {
 	if rows == nil {
 		placeholder := "Loading…"
@@ -315,12 +378,22 @@ func (m *model) contentCell(cr, width, top int, rows rowSource, failed bool, cur
 	if ri >= rows.Len() {
 		return strings.Repeat(" ", width)
 	}
-	l := rows.At(ri)
-	gutter := fmt.Sprintf("%*d  ", rows.GutterWidth()-2, l.Number)
+	row := rows.At(ri)
+	gw := rows.GutterWidth()
+	gutter := fmt.Sprintf("%*d  ", gw-2, row.Line.Number)
+	if row.Continuation() {
+		gutter = strings.Repeat(" ", gw)
+	}
 	if len(gutter) > width {
 		return m.theme.Gutter(gutter[:width])
 	}
-	return m.theme.Gutter(gutter) + m.contentText(l, width-len(gutter), l.Number == curLine)
+	reserved := viewport.ReservedIndicator(m.wrap)
+	if n := width - gw; reserved > n {
+		reserved = n
+	}
+	return m.theme.Gutter(gutter) +
+		m.contentText(row, width-gw-reserved, row.Line.Number == curLine) +
+		strings.Repeat(" ", reserved)
 }
 
 // filenameRule renders the current file's escaped path embedded in a
@@ -339,13 +412,13 @@ func (m *model) filenameRule(width int) string {
 	return m.theme.FilenameRule(rule + strings.Repeat("─", width-3-safepresentation.CellWidth(clipped)))
 }
 
-// contentText renders one line's escaped cells into at most textW
-// terminal cells, wrapping each maximal run of highlighted cells in the
-// match style — the true inverse, additionally underlined when the line
-// is the current matched line — and padding the rest with blanks.
-// Clipping never splits a grapheme's cells: a cell that would cross the
-// boundary ends the row.
-func (m *model) contentText(l filebuffer.Line, textW int, cur bool) string {
+// contentText renders one rendered row's escaped cells into at most
+// textW terminal cells, wrapping each maximal run of highlighted cells
+// in the match style — the true inverse, additionally underlined when
+// the line is the current matched line — and padding the rest with
+// blanks. Clipping never splits a grapheme's cells: a cell that would
+// cross the boundary ends the row.
+func (m *model) contentText(row viewport.Row, textW int, cur bool) string {
 	var sb strings.Builder
 	var run strings.Builder
 	runHL := false
@@ -365,18 +438,20 @@ func (m *model) contentText(l filebuffer.Line, textW int, cur bool) string {
 		run.Reset()
 	}
 	highlighted := func(c int) bool {
-		for _, s := range l.Highlights {
+		for _, s := range row.Line.Highlights {
 			if c >= s.Start && c < s.End {
 				return true
 			}
 		}
 		return false
 	}
+	cells := row.Line.Cells
 	col := 0
-	for i, c := range l.Cells {
+	for i := row.Start; i < row.End; i++ {
+		c := cells[i]
 		text := c.Text
 		if text == "" {
-			if i > 0 && l.Cells[i-1].Start == c.Start && l.Cells[i-1].End == c.End {
+			if i > row.Start && cells[i-1].Start == c.Start && cells[i-1].End == c.End {
 				continue // continuation cell of a wide glyph
 			}
 			text = string(rune(0xfffd)) // an invalid byte's replacement char

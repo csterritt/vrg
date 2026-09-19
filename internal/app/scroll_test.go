@@ -11,6 +11,7 @@ import (
 	"vrg/internal/filebuffer"
 	"vrg/internal/searchindex"
 	"vrg/internal/theme"
+	"vrg/internal/viewport"
 )
 
 var (
@@ -233,9 +234,9 @@ type countingRows struct {
 func (c *countingRows) Len() int         { return c.n }
 func (c *countingRows) GutterWidth() int { return 3 }
 
-func (c *countingRows) At(i int) filebuffer.Line {
+func (c *countingRows) At(i int) viewport.Row {
 	c.queries = append(c.queries, i)
-	return filebuffer.Line{Number: int64(i + 1)}
+	return viewport.Row{Line: filebuffer.Line{Number: int64(i + 1)}}
 }
 
 func (c *countingRows) TargetRow(st searchindex.Stop) int {

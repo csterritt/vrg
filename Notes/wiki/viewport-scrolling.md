@@ -62,13 +62,15 @@ height changes, and `MaxTop(rows, height)` is the largest valid top:
   "(unreadable)" there is no row model for the file and `scrollBy`
   returns without creating viewport state.
 - **Prepared-row rendering** — `fileLoadedMsg` builds
-  `viewport.Prepare(buf)` into `model.rows`, the rendered-row model for
-  the loaded buffer at the current layout. In the still-unwrapped panel
-  each source line is one rendered row, so the model is the buffer's
-  lines plus its gutter width and width changes do not rebuild it;
-  Issues #16/#17 own wrap-aware row models keyed by
-  (path, revision, text width, wrap mode) and preparation off the update
-  path. `contentCell` renders the row at `top + content row` via the
+  `viewport.Prepare(buf, key)` into `model.rows`, the rendered-row
+  model for the loaded buffer at the current layout.
+  [Issue #16](wrap-mode.md) has since made the model wrap-aware and
+  keyed by (path, content revision, text width, wrap mode): wrap mode
+  partitions each line's cells into text-width rows at grapheme-cluster
+  boundaries while run-off-edge mode keeps one row per line, and a
+  `w` toggle or resize rebuilds the model under its new key. Issue #17
+  owns moving that preparation off the update path. `contentCell`
+  renders the row at `top + content row` via the
   `rowSource` seam, so a frame queries only the visible range
   `[top, top + content height)` — never an O(N) scan of the buffer
   (PRD *Resources and responsiveness*).

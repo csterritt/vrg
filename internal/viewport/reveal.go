@@ -45,21 +45,30 @@ func (r *Rows) StopTarget(st searchindex.Stop) Target {
 }
 
 // TargetRow is the rendered row containing the stop's display target —
-// the row a reveal must show. In the still-unwrapped panel a source
-// line is exactly one row, so the target's cell selects nothing yet;
-// Issue #16's wrap-aware rows map it into the line's wrapped rows. A
-// line number outside the prepared rows clamps to the nearest real
-// row.
+// the row a reveal must show. In wrap mode that is the wrapped row
+// whose cell range holds the match's start cell, so a match deep in a
+// wrapped line reveals its own row, not the line's first. A target cell
+// past the line's cells lands on the line's last row — the end-of-line
+// marker position (Issue #23). A line number outside the prepared rows
+// clamps to the nearest real row.
 func (r *Rows) TargetRow(st searchindex.Stop) int {
-	if len(r.lines) == 0 {
+	if len(r.spans) == 0 {
 		return 0
 	}
-	row := int(r.StopTarget(st).Line) - 1
-	if row < 0 {
-		row = 0
+	t := r.StopTarget(st)
+	li := int(t.Line) - 1
+	if li < 0 {
+		li = 0
 	}
-	if row >= len(r.lines) {
-		row = len(r.lines) - 1
+	if li >= len(r.lines) {
+		li = len(r.lines) - 1
+	}
+	row := r.firstRow[li]
+	for i := row; i < r.firstRow[li+1]; i++ {
+		row = i
+		if t.Cell < r.spans[i].end {
+			break
+		}
 	}
 	return row
 }

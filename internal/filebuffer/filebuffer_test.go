@@ -101,18 +101,109 @@ func TestGutterWidth(t *testing.T) {
 }
 
 // Content escapes land per the safe-presentation core: caret notation
-// for C0/DEL, U+FFFD for invalid UTF-8, ^M for a standalone CR, → for a
-// tab.
+// for C0/DEL, U+FFFD for invalid UTF-8, ^M for a standalone CR, and a
+// tab expanded with blank cells to the next eight-column stop.
 func TestLoadEscapedContent(t *testing.T) {
 	b := load(t, writeFile(t, "a\x1bb\xffc\rd\te\n"))
 	l := b.Lines()[0]
-	if l.Text != "a^[bc^Md→e" {
-		t.Fatalf("escaped text = %q, want %q", l.Text, "a^[bc^Md→e")
+	// Cells: a, ^[, b, U+FFFD, c, ^M, d occupy columns 0-8; the tab at
+	// column 9 expands seven blank cells to column 16, then e.
+	if l.Text != "a^[bc^Md       e" {
+		t.Fatalf("escaped text = %q, want %q", l.Text, "a^[bc^Md       e")
 	}
-	// One cell per display cell: the text's ten printable cells plus the
-	// invalid byte's U+FFFD cell, whose Text is empty.
-	if len(l.Cells) != 11 {
-		t.Fatalf("cells = %d, want 11 (one per display cell)", len(l.Cells))
+	if len(l.Cells) != 17 {
+		t.Fatalf("cells = %d, want 17 (one per display cell)", len(l.Cells))
+	}
+}
+
+// Tabs expand to the next multiple of 8 source-display columns: every
+// expansion cell is a blank mapped to the tab byte, and the following
+// character lands on the stop. The columns are the line's own display
+// cells — gutter width and horizontal pan can never shift them — and
+// the whole expansion is a single cluster so wrapping cannot split it.
+func TestTabExpandsToEightColumnStops(t *testing.T) {
+	cases := []struct {
+		name     string
+		content  string
+		cells    int    // total display cells on the line
+		tab      [2]int // cell range of the first tab's expansion
+		tabByte  [2]int // the tab's source byte range
+		after    int    // cell of the rune after the tab
+		afterTxt string
+	}{
+		{"leading tab", "\tx", 9, [2]int{0, 8}, [2]int{0, 1}, 8, "x"},
+		{"tab after one column", "a\tb", 9, [2]int{1, 8}, [2]int{1, 2}, 8, "b"},
+		{"tab after seven columns", "abcdefg\th", 9, [2]int{7, 8}, [2]int{7, 8}, 8, "h"},
+		{"tab on a stop takes a full eight", "abcdefgh\ti", 17, [2]int{8, 16}, [2]int{8, 9}, 16, "i"},
+		{"wide glyph counts cells not bytes", "世\tb", 9, [2]int{2, 8}, [2]int{3, 4}, 8, "b"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := load(t, writeFile(t, tc.content+"\n")).Lines()[0]
+			if len(l.Cells) != tc.cells {
+				t.Fatalf("cells = %d, want %d", len(l.Cells), tc.cells)
+			}
+			for i := tc.tab[0]; i < tc.tab[1]; i++ {
+				if c := l.Cells[i]; c.Text != " " || c.Start != tc.tabByte[0] || c.End != tc.tabByte[1] {
+					t.Fatalf("tab cell %d = %+v, want a blank over bytes [%d,%d)",
+						i, c, tc.tabByte[0], tc.tabByte[1])
+				}
+			}
+			if c := l.Cells[tc.after]; c.Text != tc.afterTxt {
+				t.Fatalf("after-tab cell %d = %q, want %q on the stop", tc.after, c.Text, tc.afterTxt)
+			}
+			// The expansion is one cluster — an unbreakable wrap unit.
+			found := false
+			for _, cl := range l.Clusters {
+				if cl.Start == tc.tab[0] && cl.End == tc.tab[1] {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("clusters = %v, want one cluster covering the tab's cells [%d,%d)",
+					l.Clusters, tc.tab[0], tc.tab[1])
+			}
+		})
+	}
+}
+
+// Line.Clusters exposes the shared grapheme segmentation as cell
+// ranges — FileBuffer's contract to Viewport: clusters tile the line's
+// cells contiguously, each cluster's width is End-Start, a multi-cell
+// unit (wide glyph, tab expansion) is one cluster, and each character
+// of an escaped form is its own single-cell cluster.
+func TestLineClustersExposeBoundaries(t *testing.T) {
+	// Cells: a(0) 文(1-2) tab(3-7, to column 8) e+́(8) ^[(9-10).
+	b := load(t, writeFile(t, "a文\te\u0301\x1b\n"))
+	l := b.Lines()[0]
+	want := []struct{ lo, hi int }{
+		{0, 1}, {1, 3}, {3, 8}, {8, 9}, {9, 10}, {10, 11},
+	}
+	if len(l.Clusters) != len(want) {
+		t.Fatalf("Clusters = %v, want %d entries", l.Clusters, len(want))
+	}
+	pos := 0
+	for i, cl := range l.Clusters {
+		if cl.Start != want[i].lo || cl.End != want[i].hi {
+			t.Fatalf("cluster %d = [%d,%d), want [%d,%d)", i, cl.Start, cl.End, want[i].lo, want[i].hi)
+		}
+		if cl.Start != pos || cl.End <= cl.Start {
+			t.Fatalf("cluster %d = [%d,%d) breaks the contiguous tiling at cell %d",
+				i, cl.Start, cl.End, pos)
+		}
+		pos = cl.End
+	}
+	if pos != len(l.Cells) {
+		t.Fatalf("clusters end at cell %d, want them tiling all %d cells", pos, len(l.Cells))
+	}
+}
+
+// A match covering a tab byte highlights every cell of its expansion.
+func TestHighlightCoversTabExpansion(t *testing.T) {
+	b := load(t, writeFile(t, "a\tb\n"), stop(1, [2]int{1, 2}))
+	got := b.Lines()[0].Highlights
+	if len(got) != 1 || got[0].Start != 1 || got[0].End != 8 {
+		t.Fatalf("highlights = %v, want [{1 8}] covering the whole tab stop", got)
 	}
 }
 

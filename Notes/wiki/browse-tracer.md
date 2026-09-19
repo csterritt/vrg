@@ -34,9 +34,9 @@ keys.
   renders as `^M`; other C0 controls and DEL use caret notation; C1
   controls and non-printable single runes use `\uXXXX` escapes; invalid
   UTF-8 bytes each render as a U+FFFD cell (empty `Text`, retained
-  byte mapping); a tab renders as a single provisional `→` cell —
-  the structural eight-column-stop rule is Issue #16's, and no test
-  asserts cell positions on tab-containing lines.
+  byte mapping); a tab rendered as a single provisional `→` cell at
+  this stage — [Issue #16](wrap-mode.md) has since landed the
+  structural eight-column-stop blank-cell expansion.
 - **Byte→cell maps** — `Mapped{Text, Cells}` pairs the display text
   with one `Cell{Text, Start, End}` per terminal cell recording the
   half-open source-byte range that produced it. `CellsCovering(start,

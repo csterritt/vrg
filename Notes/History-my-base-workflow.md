@@ -169,3 +169,14 @@ Usage
  Input tokens: 155919 tokens
  Output tokens: 69377 tokens
  Cached input tokens: 14224875 tokens
+
+----
+Task 016-wrap-mode-and-toggle.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 85 messages
+ Input tokens: 843144 tokens
+ Output tokens: 51783 tokens
+ Cached input tokens: 6776361 tokens

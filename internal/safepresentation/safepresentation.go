@@ -74,11 +74,23 @@ type Cell struct {
 	Start, End int
 }
 
+// Cluster is one grapheme cluster's half-open cell range within Cells;
+// End-Start is its terminal cell width. Each character of an escaped
+// form and each invalid-byte U+FFFD replacement is its own single-cell
+// cluster, while a wide glyph or a tab expansion is one multi-cell
+// cluster, so wrapping and clipping never split a cluster's cells.
+type Cluster struct {
+	Start, End int
+}
+
 // Mapped is escaped display text plus its byte→cell map: Text is what a
-// sink renders and Cells[i] records which source bytes produced cell i.
+// sink renders, Cells[i] records which source bytes produced cell i,
+// and Clusters segments the cells into grapheme-cluster boundaries —
+// the single segmentation and cell-width policy every consumer shares.
 type Mapped struct {
-	Text  string
-	Cells []Cell
+	Text     string
+	Cells    []Cell
+	Clusters []Cluster
 }
 
 // CellsCovering maps a half-open source byte range to the half-open
@@ -100,38 +112,46 @@ func (m Mapped) CellsCovering(start, end int) (lo, hi int, ok bool) {
 }
 
 // MapContent escapes one content line's raw bytes — without its line
-// terminator — into display text plus the per-cell byte map. C0
-// controls and DEL render in caret notation (ESC is ^[), a standalone
-// CR renders as ^M, a tab renders as a single provisional → cell
-// (Issue #16 owns the structural eight-column-stop rule), C1 controls
-// and non-printable single runes use \u escapes, and invalid UTF-8
-// bytes render as U+FFFD. LF and CRLF never reach this function: line
-// splitting owns terminators.
+// terminator — into display text plus the per-cell byte map and the
+// grapheme-cluster segmentation. C0 controls and DEL render in caret
+// notation (ESC is ^[), a standalone CR renders as ^M, a tab expands
+// with blank cells to the next multiple of eight source-display columns
+// (the structural tab-stop rule), C1 controls and non-printable single
+// runes use \u escapes, and invalid UTF-8 bytes render as U+FFFD. LF
+// and CRLF never reach this function: line splitting owns terminators.
 func MapContent(raw []byte) Mapped {
 	var m Mapped
 	var b strings.Builder
 	b.Grow(len(raw))
-	// cell appends one display cell holding disp, produced by raw[s:e).
-	cell := func(disp string, s, e int) {
+	// put appends one display cell holding disp, produced by raw[s:e).
+	put := func(disp string, s, e int) {
 		b.WriteString(disp)
 		m.Cells = append(m.Cells, Cell{Text: disp, Start: s, End: e})
 	}
-	// escape emits an ASCII escape form, one cell per character.
+	// cell emits a single-cell cluster holding disp.
+	cell := func(disp string, s, e int) {
+		put(disp, s, e)
+		m.Clusters = append(m.Clusters, Cluster{Start: len(m.Cells) - 1, End: len(m.Cells)})
+	}
+	// escape emits an ASCII escape form, one single-cell cluster per
+	// character.
 	escape := func(esc string, s, e int) {
 		for i := 0; i < len(esc); i++ {
 			cell(esc[i:i+1], s, e)
 		}
 	}
-	// unit emits a w-cell display unit: the text sits on the first cell
+	// unit emits one w-cell cluster: the text sits on the first cell
 	// and continuation cells are blank, all mapping to raw[s:e).
 	unit := func(disp string, w, s, e int) {
 		if w < 1 {
 			w = 1
 		}
-		cell(disp, s, e)
+		start := len(m.Cells)
+		put(disp, s, e)
 		for i := 1; i < w; i++ {
-			m.Cells = append(m.Cells, Cell{Start: s, End: e})
+			put("", s, e)
 		}
+		m.Clusters = append(m.Clusters, Cluster{Start: start, End: start + w})
 	}
 
 	rest := raw
@@ -146,7 +166,17 @@ func MapContent(raw []byte) Mapped {
 			c := cl[0]
 			switch {
 			case c == '\t':
-				cell("→", s, e)
+				// Tabs expand to the next multiple of eight
+				// source-display columns — the line's own cell
+				// position, so stops never shift with gutter width
+				// or horizontal pan. The expansion is one cluster:
+				// an unbreakable wrap unit of blank cells.
+				tab := 8 - len(m.Cells)%8
+				start := len(m.Cells)
+				for i := 0; i < tab; i++ {
+					put(" ", s, e)
+				}
+				m.Clusters = append(m.Clusters, Cluster{Start: start, End: start + tab})
 			case c < 0x20 || c == 0x7f:
 				escape(caret(c), s, e)
 			default:

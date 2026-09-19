@@ -113,7 +113,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   adds the `popupID`/`popupSeq` pop-up state, the `popupExpireMsg`
   stale-instance-rejecting expiry case, any-key dismissal before the
   key switch, `View` compositing the pop-up over the base frame and the
-  overlay over both, and the `options.popupTimer` test seam. Issue #11 adds the session
+  overlay over both, and the `options.popupTimer` test seam. Issue
+  #16 adds `m.wrap` (on initially; the `w` browse key toggles it) and
+  `m.revs` (the per-path content revision bumped on every successful
+  load), and `WindowSizeMsg` now rebuilds the keyed row models through
+  `rebuildRows` rather than only re-clamping. Issue #11 adds the session
   diagnostic collection `model.diags`: `collectDiags` appends sanitized
   lines as `Update` processes `stderrLineMsg` (forwarded from
   `Child.Diags()` by a `prog.Send` goroutine in `Run`),
@@ -192,13 +196,21 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   current-file `fileLoadedMsg` path in app.go. Issue #15 makes
   `navigate` return `tea.Batch(m.startLoad(), m.startPopup())` on a
   file change — the pop-up starts at selection while the destination
-  may still be loading, and load completion never restarts it. See
+  may still be loading, and load completion never restarts it. Issue
+  #16 makes the file panel wrap-aware: `listWidth`/`textWidth` compute
+  the text band (panel − list − gutter − `ReservedIndicator`),
+  `prepareRows`/`rebuildRows` build and swap the keyed
+  `viewport.Rows` models, `rowSource.At` now returns a `viewport.Row`,
+  `contentCell` blanks continuation gutters and pads the reserved
+  indicator column, and `contentText` renders a row's `[Start, End)`
+  cell span. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [file-change-popup.md](file-change-popup.md),
   [viewport-scrolling.md](viewport-scrolling.md),
-  [match-navigation.md](match-navigation.md), and
-  [destination-reveal.md](destination-reveal.md).
+  [match-navigation.md](match-navigation.md),
+  [destination-reveal.md](destination-reveal.md), and
+  [wrap-mode.md](wrap-mode.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
@@ -206,19 +218,28 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 - `internal/filebuffer/filebuffer.go` — `Load` reads the file by raw
   path bytes, splits LF/CRLF, maps each line through
   `safepresentation.MapContent`, and produces `Buffer`/`Line` records
-  with `GutterWidth`, source `Raw` bytes, and `Highlights` mapped to
-  display cells. See [browse-tracer.md](browse-tracer.md).
+  with `GutterWidth`, source `Raw` bytes, `Highlights` mapped to
+  display cells, and (Issue #16) `Clusters` — the shared
+  grapheme-cluster segmentation Viewport wraps from. See
+  [browse-tracer.md](browse-tracer.md) and
+  [wrap-mode.md](wrap-mode.md).
 - `internal/viewport/viewport.go` — `Viewport`, the file panel's
   vertical window (`Top`, `Scroll`, `Clamp`), the scroll-unit helpers
   `HalfPage` and `MaxTop` (the BOF/EOF clamp bound), and `Rows`, the
-  prepared rendered-row model built by `Prepare` that the frame render
-  slices. Wrap, logical anchors, and horizontal state are later issues.
-  See [viewport-scrolling.md](viewport-scrolling.md).
+  prepared rendered-row model built by `Prepare(buf, Key)` that the
+  frame render slices. Issue #16 adds `Key` (path, content revision,
+  text width, wrap mode), `Row`/`span` cell-range rows, `Row.Continuation`,
+  `ReservedIndicator` (0 wrapping, 1 run-off-edge), and `wrapLine`'s
+  cluster-boundary partitioning with the never-split blank-cell rule.
+  See [viewport-scrolling.md](viewport-scrolling.md) and
+  [wrap-mode.md](wrap-mode.md).
 - `internal/viewport/reveal.go` — Issue #14's vertical destination
   reveal: `Target{Line, Cell}` (the display target — the first
   submatch's start cell), `Rows.StopTarget` (stop → target through the
   byte→cell map, with the zero-width marker-cell fallback),
-  `Rows.TargetRow` (target → rendered row), and `Viewport.Reveal`
+  `Rows.TargetRow` (target → rendered row; since Issue #16 the wrapped
+  row whose span holds the target cell, falling back to the line's
+  last row), and `Viewport.Reveal`
   (visible-target no-scroll, else top = `row − floor(h/3)` clamped to
   `[0, MaxTop]`, reporting whether the viewport moved). See
   [destination-reveal.md](destination-reveal.md).
@@ -231,7 +252,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   (base + underline), and `Overlay` (base colours inside a plain
   single-line border). See [theme.md](theme.md).
 - `internal/safepresentation/safepresentation.go` — `EscapePath`,
-  `MapContent`, `Mapped`/`Cell`/`CellsCovering` byte→cell maps.
+  `MapContent`, `Mapped`/`Cell`/`CellsCovering` byte→cell maps, and
+  (Issue #16) `Cluster`/`Mapped.Clusters` — the shared grapheme
+  segmentation — plus the structural eight-column tab expansion.
 - `internal/safepresentation/diagnostic.go` — `EscapeDiagnostic`:
   real line boundaries preserved (CRLF normalizes to LF), tabs expand
   to eight-column stops, other controls escaped; embedded external

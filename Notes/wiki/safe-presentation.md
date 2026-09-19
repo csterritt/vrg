@@ -24,14 +24,20 @@ Three entry points cover the sink classes:
   and DEL use caret notation (ESC is `^[`, DEL is `^?`); C1 controls and
   non-printable runes use `\uXXXX`; invalid UTF-8 bytes use `\xNN`;
   valid printable Unicode is preserved.
-- **File content** — `MapContent(raw []byte) Mapped` (unchanged from
-  Issue #5): line splitting owns LF/CRLF terminators; a standalone CR
-  renders `^M`; other C0 controls and DEL use caret notation; C1 and
-  non-printable runes use `\uXXXX`; invalid UTF-8 bytes render U+FFFD
-  with retained byte mappings; a tab is the provisional single-cell `→`
-  (Issue #16 owns the eight-column-stop rule). `Mapped.CellsCovering`
-  maps source byte ranges onto the cells of escaped forms so highlights
-  cover every cell an escape produced.
+- **File content** — `MapContent(raw []byte) Mapped`: line splitting
+  owns LF/CRLF terminators; a standalone CR renders `^M`; other C0
+  controls and DEL use caret notation; C1 and non-printable runes use
+  `\uXXXX`; invalid UTF-8 bytes render U+FFFD with retained byte
+  mappings; a tab expands with blank cells to the next multiple of
+  eight source-display columns — the structural eight-column-stop rule
+  [Issue #16](wrap-mode.md) landed, replacing the provisional `→`.
+  `Mapped.CellsCovering` maps source byte ranges onto the cells of
+  escaped forms so highlights cover every cell an escape produced.
+  `Mapped.Clusters` (Issue #16) segments the cells into grapheme-cluster
+  boundaries — the shared segmentation and cell-width policy:
+  each escaped-form character and each invalid-byte replacement is a
+  single-cell cluster, while a wide glyph or a tab expansion is one
+  unbreakable multi-cell cluster, so wrapping never splits a cluster.
 - **Diagnostics** — `EscapeDiagnostic(string) string` (new): real
   diagnostic line boundaries are preserved — LF stays, CRLF normalizes
   to LF — tabs expand to the next multiple of eight display columns,

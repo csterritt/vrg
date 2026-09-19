@@ -86,8 +86,8 @@ func TestMapContentPlainText(t *testing.T) {
 }
 
 // Content escaping rules: C0 controls and DEL render in caret notation,
-// a standalone CR is ^M, a tab renders as a single provisional → cell,
-// C1 controls use \u escapes, and invalid UTF-8 bytes render as U+FFFD.
+// a standalone CR is ^M, a tab expands to its eight-column stop, C1
+// controls use \u escapes, and invalid UTF-8 bytes render as U+FFFD.
 func TestMapContentEscapes(t *testing.T) {
 	cases := []struct {
 		name string
@@ -100,13 +100,13 @@ func TestMapContentEscapes(t *testing.T) {
 		{"nul", []byte{0}, "^@"},
 		{"del", []byte("\x7f"), "^?"},
 		{"standalone cr", []byte("\r"), "^M"},
-		{"tab", []byte("\t"), "→"},
+		{"tab", []byte("\t"), "        "},
 		{"invalid byte", []byte{0xff}, ""},
 		{"invalid run", []byte{0xff, 0xfe}, ""},
 		{"c1 nel", []byte("\xc2\x85"), `\u0085`},
 		{"osc line", []byte("\x1b]0;pwned\x07"), "^[]0;pwned^G"},
 		{"csi line", []byte("\x1b[2J"), "^[[2J"},
-		{"mixed", []byte("a\x1bb\rc\td"), "a^[b^Mc→d"},
+		{"mixed", []byte("a\x1bb\rc\td"), "a^[b^Mc d"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -145,19 +145,37 @@ func TestMapContentStandaloneCR(t *testing.T) {
 	}
 }
 
-// The provisional tab form: a single → placeholder occupying exactly
-// one cell. Issue #5 does not assert cell positions on tab lines beyond
-// this contract; Issue #16 owns the structural eight-column-stop rule.
-func TestMapContentTabPlaceholder(t *testing.T) {
-	m := safepresentation.MapContent([]byte("\t"))
-	if m.Text != "→" {
-		t.Fatalf("Text = %q, want %q", m.Text, "→")
+// The structural tab rule (Issue #16): a tab expands with blank cells
+// to the next multiple of eight source-display columns — the line's own
+// cell position, so stops never shift with gutter width or horizontal
+// pan — and the whole expansion is one grapheme cluster.
+func TestMapContentTabStops(t *testing.T) {
+	cases := []struct {
+		name  string
+		in    []byte
+		cells int // total display cells
+		tab   int // first cell of the tab's expansion
+		after int // cell of the rune after the tab
+	}{
+		{"lone tab", []byte("\t"), 8, 0, 8},
+		{"tab after one column", []byte("a\tb"), 9, 1, 8},
+		{"tab on a stop", []byte("abcdefgh\ti"), 17, 8, 16},
 	}
-	if len(m.Cells) != 1 {
-		t.Fatalf("Cells = %d, want a single placeholder cell", len(m.Cells))
-	}
-	if m.Cells[0].Text != "→" || m.Cells[0].Start != 0 || m.Cells[0].End != 1 {
-		t.Fatalf("tab cell = %+v, want → over bytes [0,1)", m.Cells[0])
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := safepresentation.MapContent(tc.in)
+			if len(m.Cells) != tc.cells {
+				t.Fatalf("Cells = %d, want %d", len(m.Cells), tc.cells)
+			}
+			for i := tc.tab; i < tc.after; i++ {
+				if c := m.Cells[i]; c.Text != " " || c.Start != tc.tab || c.End != tc.tab+1 {
+					t.Fatalf("tab cell %d = %+v, want a blank over the tab's byte range", i, c)
+				}
+			}
+			if len(m.Clusters) == 0 {
+				t.Fatal("no clusters recorded")
+			}
+		})
 	}
 }
 

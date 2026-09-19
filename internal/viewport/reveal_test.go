@@ -17,7 +17,7 @@ func TestStopTargetIsFirstSubmatchStartCell(t *testing.T) {
 	// cells '^' '[', so byte 5 — the 't' of "target" — is display
 	// cell 6, and a naive byte offset would be wrong.
 	buf := loadBuffer(t, "first\na\x1bzz target\n")
-	rows := viewport.Prepare(buf)
+	rows := viewport.Prepare(buf, viewport.Key{TextWidth: 80, Wrap: true})
 
 	st := searchindex.Stop{Number: 2, Submatches: []searchindex.Submatch{
 		{Start: 5, End: 11},
@@ -43,7 +43,7 @@ func TestStopTargetIsFirstSubmatchStartCell(t *testing.T) {
 // line's last cell, the Issue #23 marker position.
 func TestStopTargetZeroWidthLandsPastLastCell(t *testing.T) {
 	buf := loadBuffer(t, "hit\n")
-	rows := viewport.Prepare(buf)
+	rows := viewport.Prepare(buf, viewport.Key{TextWidth: 80, Wrap: true})
 	tg := rows.StopTarget(searchindex.Stop{Number: 1, Submatches: []searchindex.Submatch{
 		{Start: 3, End: 3},
 	}})
@@ -52,12 +52,12 @@ func TestStopTargetZeroWidthLandsPastLastCell(t *testing.T) {
 	}
 }
 
-// The target row is the rendered row containing the display target; in
-// the unwrapped panel that is the destination line's own row. A line
-// number outside the prepared rows clamps to the nearest real row.
+// The target row is the rendered row containing the display target:
+// with the match at cell 0 it is the destination line's first row. A
+// line number outside the prepared rows clamps to the nearest real row.
 func TestTargetRow(t *testing.T) {
 	buf := loadBuffer(t, "one\ntwo\nthree\n")
-	rows := viewport.Prepare(buf)
+	rows := viewport.Prepare(buf, viewport.Key{TextWidth: 80, Wrap: true})
 	stop := func(n int64) searchindex.Stop {
 		return searchindex.Stop{Number: n, Submatches: []searchindex.Submatch{{Start: 0, End: 1}}}
 	}
@@ -77,7 +77,7 @@ func TestTargetRow(t *testing.T) {
 			t.Fatalf("%s: TargetRow = %d, want %d", c.name, got, c.want)
 		}
 	}
-	if got := viewport.Prepare(nil).TargetRow(stop(7)); got != 0 {
+	if got := viewport.Prepare(nil, viewport.Key{Wrap: true}).TargetRow(stop(7)); got != 0 {
 		t.Fatalf("empty model TargetRow = %d, want 0", got)
 	}
 }

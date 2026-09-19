@@ -98,6 +98,14 @@ Catalog of all wiki pages for the vrg project.
   dismiss-plus-normal-action key routing, render-time centring and
   left-truncation on resize without timer restart, error-overlay
   cancellation with no return, and the sanitized single-line path sink
+- [wrap-mode.md](wrap-mode.md) — Issue #16: wrapping on by default at
+  grapheme-cluster boundaries, the `w` toggle between wrapped rows and
+  run-off-edge clipping, structural eight-column tab stops, the
+  FileBuffer-owned `Clusters` segmentation shared by Viewport, the
+  blank-cell rule for an unfit cluster, blank continuation gutters,
+  the reserved 0/1 indicator width, the swappable row model keyed by
+  (path, content revision, text width, wrap mode), and wrapped
+  `TargetRow` reveal
 
 ## Catalogs
 

@@ -138,15 +138,22 @@ type model struct {
 	// scrolling writes through to it, and a destination reveal that
 	// moves the viewport replaces it (Issue #14), so a file revisited
 	// later starts from its last position. rows caches each loaded
-	// file's prepared
-	// rendered-row model — built when its load completes — which the
-	// frame render slices instead of rescanning the buffer.
+	// file's prepared rendered-row model — built when its load
+	// completes and rebuilt on wrap toggles and resizes — which the
+	// frame render slices instead of rescanning the buffer. revs is the
+	// per-path content revision feeding the row model's key: it bumps
+	// on every successful load, so a reload's model never aliases the
+	// old content's.
+	// wrap is the session's wrap mode (Issue #16): on initially,
+	// toggled by w between wrapped rows and run-off-edge clipping.
 	idx     *searchindex.Index
 	loading map[string]bool
 	bufs    map[string]*filebuffer.Buffer
 	failed  map[string]bool
 	vps     map[string]viewport.Viewport
 	rows    map[string]rowSource
+	revs    map[string]int
+	wrap    bool
 	theme   theme.Theme
 
 	// Modal error overlay. overlayOpen marks it up — key input routes
@@ -182,6 +189,8 @@ func newModel(cfg Config, opts options, child Child) *model {
 		failed:  map[string]bool{},
 		vps:     map[string]viewport.Viewport{},
 		rows:    map[string]rowSource{},
+		revs:    map[string]int{},
+		wrap:    true,
 		theme:   theme.Dark(),
 	}
 }
@@ -240,15 +249,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.clampOverlayScroll()
-		// The new content height can strand a saved top past the last
-		// valid position; re-clamp every prepared file's viewport so no
-		// revisit can leave avoidable blank rows below EOF.
-		for key, vp := range m.vps {
-			if rows := m.rows[key]; rows != nil {
-				vp.Clamp(rows.Len(), m.contentRows())
-				m.vps[key] = vp
-			}
-		}
+		// The new text width rebuilds every prepared row model, and
+		// the new content height can strand a saved top past the last
+		// valid position — re-clamp so no revisit can leave avoidable
+		// blank rows below EOF.
+		m.rebuildRows()
 	case searchDoneMsg:
 		m.idx = msg.idx
 		var cmd tea.Cmd
@@ -294,10 +299,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.collectDiags(loadDiag(msg.path, msg.err))
 		} else {
 			m.bufs[key] = msg.buf
+			m.revs[key]++
 			// The prepared row model is what the frame render slices;
 			// a saved viewport from an earlier visit re-clamps to the
 			// new content.
-			m.rows[key] = viewport.Prepare(msg.buf)
+			m.rows[key] = m.prepareRows(key, msg.buf)
 			if vp, ok := m.vps[key]; ok {
 				vp.Clamp(m.rows[key].Len(), m.contentRows())
 				m.vps[key] = vp
@@ -367,6 +373,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// c toggles the colour scheme between dark and light for
 			// the session; nothing persists.
 			m.theme = m.theme.Toggled()
+		case key == "w" && m.state == stateBrowse:
+			// w toggles wrap mode: wrapped rows versus run-off-edge
+			// clipping. Every prepared row model rebuilds under the
+			// new key — the text width changes with the reserved
+			// indicator column — and each saved viewport re-clamps.
+			m.wrap = !m.wrap
+			m.rebuildRows()
 		case m.state == stateBrowse && (key == "n" || key == "p"):
 			// n advances and p retreats the circular matched-line
 			// cursor; crossing into another file's stop switches the

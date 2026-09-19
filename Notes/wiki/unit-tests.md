@@ -198,8 +198,11 @@ Issue #5) covers the escaping core and the byte→cell maps:
 - `TestMapContentEscapes` — C0/DEL caret forms, C1 `\uXXXX` escapes,
   invalid bytes as U+FFFD cells with retained byte mappings.
 - `TestMapContentStandaloneCR` — a bare CR renders `^M`.
-- `TestMapContentTabPlaceholder` — the provisional single-cell `→`
-  placeholder for tab.
+- `TestMapContentTabStops` — Issue #16's structural tab rule: a tab
+  expands with blank cells to the next multiple of eight source-display
+  columns (a tab already on a stop takes a full eight), every expansion
+  cell blank and mapped to the tab byte, and the whole expansion one
+  unbreakable `Cluster`.
 - `TestMapContentByteCellMaps` — escaped forms map every displayed cell
   back to the producing byte range.
 - `TestMapContentWideGlyph` — wide graphemes occupy multiple cells all
@@ -236,7 +239,17 @@ the table driver.
   empty file.
 - `TestGutterWidth` — digit width of the largest line number plus two.
 - `TestLoadEscapedContent` — control bytes escaped per the
-  safepresentation contract; cell count, not byte count.
+  safepresentation contract; cell count, not byte count; the trailing
+  tab's blank expansion cells included (Issue #16).
+- `TestTabExpandsToEightColumnStops` — Issue #16: leading, mid-line,
+  and on-a-stop tab positions land text on the next multiple of eight,
+  every expansion cell a blank mapped to the tab's byte range, and the
+  expansion one `Cluster`.
+- `TestLineClustersExposeBoundaries` — `Line.Clusters` exposes the
+  shared grapheme segmentation: single-cell clusters for plain text,
+  one multi-cell cluster per wide glyph or tab expansion.
+- `TestHighlightCoversTabExpansion` — a stop over a tab's byte range
+  highlights its whole expansion.
 - `TestHighlightSpans`, `TestHighlightCoversEscapedCells` — stop byte
   ranges become display-cell ranges; a match over an escaped byte
   covers the whole escape form.
@@ -444,6 +457,22 @@ scrolling and the per-file viewport:
 - `TestResizeReclampsViewport` — growing the frame past the saved top's
   last valid position clamps it to the new `MaxTop`.
 
+`wrap_test.go` (same package; Issue #16) covers wrap mode end to end:
+
+- `TestWrapOnByDefaultBlankContinuationGutters` — wrap is on at
+  startup: the long line's first rendered row carries the numbered
+  gutter and a full text-width band, and its continuation rows carry a
+  blank gutter with text aligned to the first row's column.
+- `TestWTogglesWrapMode` — `w` swaps the keyed row model for
+  run-off-edge (the long line becomes one clipped row with the
+  reserved rightmost cell left blank) and back to wrapped.
+- `TestRevealMatchDeepInWrappedLine` — a match near the end of a
+  many-screen wrapped line is revealed on its own continuation row at
+  `floor(content height / 3)`, behind a blank gutter.
+- `TestResizeRebuildsRowModel` — a narrower frame rebuilds the row
+  model at the smaller text width (more wrapped rows) and re-clamps
+  the saved viewport.
+
 `nav_test.go` (same package; Issue #13) drives `n`/`p` through `Update`
 over multi-stop fixtures (`navIndex`, `navFile`/`navStop`):
 
@@ -568,9 +597,40 @@ only the load leaf:
 - `TestScrollClampBOF` — scrolling up never takes the top below 0.
 - `TestClampPullsTopUp` — `Clamp` pulls a stranded top up when the
   height grows or the content shrinks — the lossy EOF clamp.
-- `TestPrepareRows` — `Prepare` maps each source line to one rendered
-  row in file order with the buffer's gutter width; a nil buffer gives
-  an empty model.
+- `TestPrepareRows` — `Prepare(buf, Key)` builds the keyed row model;
+  in run-off-edge mode each source line is one rendered row in file
+  order with the buffer's gutter width; a nil buffer gives an empty
+  model.
+
+`wrap_test.go` (external package; Issue #16) covers the wrap and
+run-off-edge row models:
+
+- `TestWrapRowCountsASCII` — a 13-cell line at text width 5 wraps into
+  three rows partitioning its cells in order with `Continuation()`
+  true after the first; a short line and an empty line each yield one
+  row.
+- `TestWrapMovesWideClusterToNextRow` — a two-cell cluster that does
+  not fit in the row's remaining cells starts the next row, leaving
+  blank cells at the previous row's end; a cluster is never split.
+- `TestWrapKeepsClustersTogether` — a regional-indicator flag pair
+  stays within one row's span rather than splitting across the
+  boundary.
+- `TestWrapTabIsOneCluster` — a tab expansion wraps as a single
+  unbreakable cluster.
+- `TestWrapRowsAlignToClusterBoundaries` — over a mixed wide/combining/
+  tab line at many widths, every wrapped row's `[Start, End)` lands on
+  the `Line.Clusters` boundaries the buffer exposed.
+- `TestRunOffEdgeOneRowPerLine` — run-off-edge mode maps each source
+  line to exactly one row spanning all its cells, at any text width
+  including zero.
+- `TestRowsCarryTheirKey` — the model reports the exact
+  (path, revision, text width, wrap mode) key it was prepared for, so
+  a layout change makes it stale.
+- `TestWrappedTargetRow` — `TargetRow` resolves a match's start cell
+  to the wrapped row containing it, and a past-end target lands on the
+  line's last row.
+- `TestRevealDeepInWrappedLine` — a stop deep inside a line taller
+  than several screens reveals its own row at `floor(h / 3)`.
 
 `reveal_test.go` (external package; Issue #14) covers destination
 reveal over real prepared buffers:
@@ -582,8 +642,9 @@ reveal over real prepared buffers:
 - `TestStopTargetZeroWidthLandsPastLastCell` — a zero-width position at
   end of line targets the marker cell one past the last cell.
 - `TestTargetRow` — the rendered row containing the target is the
-  destination line's own row in the unwrapped panel, clamped to the
-  prepared rows (line 0, past EOF, empty model).
+  destination line's own row (lines shorter than the width stay one
+  row each), clamped to the prepared rows (line 0, past EOF, empty
+  model).
 - `TestRevealVisibleTargetNoScroll` — a target row anywhere in
   `[top, top + height)` — edges included — leaves the top and reports
   no move.
