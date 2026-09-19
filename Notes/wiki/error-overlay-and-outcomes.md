@@ -22,7 +22,7 @@ interleaved files pair independently:
 | `begin(P)` | P not open → P opens | P already open, or P is binary-excluded (exclusion is terminal) |
 | `match(P)` | P open → indexes under P | P not open → **retained** under P with `File.Incomplete` set; P excluded → dropped, file stays excluded |
 | `end(P)` | P open → P closes; non-null `binary_offset` excludes P | P not open → orphaned/duplicate end |
-| `context(P)` | ignored before `summary` | after `summary` → record after summary (Issue #36 removed the exemption; Issue #44 adds dedicated coverage) |
+| `context(P)` | ignored before `summary` | after `summary` → record after summary (Issue #36 removed the exemption; [Issue #44](../issues/044-post-summary-context-integrity-failure.md) supplies the dedicated coverage) |
 | `summary` | exactly one, as the final record | a second `summary`, or any other record after it, fails the stream |
 
 Plus the stream-shape rules: a file still open at stream end fails
@@ -168,7 +168,8 @@ structured cause list; `internal/app/outcome_test.go`
 is the single table-driven outcome matrix asserting initial
 presentation, dismissal key, post-dismissal state, and final status,
 plus `TestIntegrityDiagnostics`' complete ordered overlay/replay line
-lists;
+lists and Issue #44's `TestContextAfterSummaryOutcome` with its
+outcome-matrix row pinning the post-`summary` `context` fatal path;
 `internal/app/overlay_test.go` covers key routing, scroll clamping,
 unbroken-string wrapping within the border, the complete-diagnostic
 contract with its bounded-traversal and render-path-clamp proofs

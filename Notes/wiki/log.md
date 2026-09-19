@@ -1691,3 +1691,37 @@ index. Sources:
 `internal/safepresentation/safepresentation.go`,
 `internal/filebuffer/filebuffer_test.go`,
 `internal/viewport/wrap_test.go`, `internal/app/grapheme_test.go`.
+## [2026-09-18] ingest | Issue #44 post-summary `context` is an integrity failure — dedicated regression coverage
+
+Ingested Issue #44
+([issue](../issues/044-post-summary-context-integrity-failure.md),
+[task](../tasks/044-post-summary-context-integrity-failure.md)). The
+summary-is-final contract from PRD *Result index, records, and stream
+integrity* is now pinned for `context` specifically: **any** record
+after `summary` — `context` included — is a stream-integrity failure
+yielding exactly the `CauseAfterSummary` cause, while Issue #9's
+former "`context` in any position" exemption survives only
+pre-`summary` (`context` before `begin`, inside a file block, or
+between `end` and `summary` stays ignored for match/lifecycle
+purposes, contributing no cause and no retained file). Ownership stays
+split as designed: Issue #36 removed the `Builder`-side exemption in
+`Index.Feed` and corrected the contradictory lifecycle row; Issue #44
+adds the focused coverage only — no second parser change. New rows in
+`internal/searchindex/lifecycle_test.go`'s `TestLifecycleMatrix`: the
+dedicated `summary`-then-`context` stream asserting exactly
+`[{CauseAfterSummary}]`, plus `context` before `begin` and between
+`end` and `summary` remaining complete. In `internal/app/outcome_test.go`:
+a `TestOutcomeMatrix` row proving the `contextAfterSummaryStream`
+fixture takes the fatal path (browse under the error overlay, `q` →
+exit 2), and `TestContextAfterSummaryOutcome` asserting the fatal
+presentation, the complete composed diagnostic being exactly
+`record after summary`, and the identical line list retained in the
+session collection for post-restoration stderr replay. Updated
+[integrity-diagnostics](integrity-diagnostics.md),
+[error-overlay-and-outcomes](error-overlay-and-outcomes.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/issues/044-post-summary-context-integrity-failure.md`,
+`Notes/tasks/044-post-summary-context-integrity-failure.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity),
+`internal/searchindex/lifecycle_test.go`,
+`internal/app/outcome_test.go`.

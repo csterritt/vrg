@@ -205,6 +205,35 @@ func TestLifecycleMatrix(t *testing.T) {
 			files:    []wantFile{{"/wd/a.txt", false, []int64{7}}},
 		},
 		{
+			// Issue #44: the exemption survives only pre-summary. A
+			// context ahead of every file event — its payload naming
+			// a path that never opens — leaves no cause and no file.
+			name: "context before begin is ignored",
+			recs: []string{
+				contextRec(),
+				beginRec(text("a.txt")),
+				matchA(7),
+				endRec(text("a.txt")),
+				summaryRec(),
+			},
+			complete: true,
+			files:    []wantFile{{"/wd/a.txt", false, []int64{7}}},
+		},
+		{
+			// A context in the last pre-summary position — after the
+			// final end — is likewise ignored for lifecycle purposes.
+			name: "context between end and summary is ignored",
+			recs: []string{
+				beginRec(text("a.txt")),
+				matchA(7),
+				endRec(text("a.txt")),
+				contextRec(),
+				summaryRec(),
+			},
+			complete: true,
+			files:    []wantFile{{"/wd/a.txt", false, []int64{7}}},
+		},
+		{
 			// Issue #36 removed the post-summary context exemption:
 			// the summary is final, so a context after it is an
 			// after-summary integrity failure like any other record
@@ -220,6 +249,19 @@ func TestLifecycleMatrix(t *testing.T) {
 			complete: false,
 			causes:   []wantCause{{searchindex.CauseAfterSummary, ""}},
 			files:    []wantFile{{"/wd/a.txt", false, []int64{7}}},
+		},
+		{
+			// Issue #44's dedicated row: summary then context alone
+			// yields exactly the single after-summary cause — the
+			// summary-is-final contract applies to context like any
+			// other record.
+			name: "summary then context yields only the after-summary cause",
+			recs: []string{
+				summaryRec(),
+				contextRec(),
+			},
+			complete: false,
+			causes:   []wantCause{{searchindex.CauseAfterSummary, ""}},
 		},
 		{
 			name: "file still open at stream end fails and retains",

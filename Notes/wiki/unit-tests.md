@@ -155,7 +155,11 @@ through the real stream entry point:
   dual representation, uncapped one-cause-per-violation multiplicity,
   missing-`end` ordering by unsigned raw-path bytes, mid-stream
   detection order ahead of the end-of-stream causes, and the empty
-  stream.
+  stream. Issue #44's rows pin the `context` boundary positions: the
+  dedicated `summary`-then-`context` row yields exactly the single
+  `CauseAfterSummary`, while `context` before `begin` and between
+  `end` and `summary` stays ignored — the former exemption narrowed to
+  pre-`summary` positions only.
 - `TestTrailingUnterminatedRecordDisposition` — `FeedTail` returns
   `KindMalformed` and marks the stream incomplete without indexing the
   fragment.
@@ -641,7 +645,12 @@ per-raw-path deduplication, first-occurrence ordering); and
 through the collection command, asserting the complete ordered overlay
 and collected-replay line lists for the named, anonymous, plural,
 duplicate-path, mixed-recoverability, and aggregates-before-details
-cases.
+cases. Issue #44 adds the `context`-after-`summary` outcome-matrix row
+— retained results browse under the error overlay at exit 2 — and
+`TestContextAfterSummaryOutcome`: the same stream's fatal
+presentation, its complete composed diagnostic being exactly
+`record after summary`, and the identical line list collected for the
+post-restoration stderr replay.
 
 `scroll_test.go` (same package; Issue #12) covers manual vertical
 scrolling and the per-file viewport:

@@ -285,7 +285,10 @@ Catalog of all wiki pages for the vrg project.
   deterministic multiplicity, `EscapePath` escaping, dual
   representation of post-summary record loss, and the universal
   process → integrity → record-loss → warning composition shared by
-  overlay and replay with no status line for 0/1 exits
+  overlay and replay with no status line for 0/1 exits; plus Issue
+  #44's summary-is-final `context` coverage — the dedicated
+  `summary`-then-`context` cause row, the surviving pre-`summary`
+  exemption rows, and the focused fatal-outcome/replay assertion
 - [oversized-diagnostics.md](oversized-diagnostics.md) — Issue #37:
   the always-emitted pluralized oversized aggregate (`1 oversized
   record skipped` / `N oversized records skipped`) regardless of path

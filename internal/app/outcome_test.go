@@ -654,6 +654,18 @@ func TestOutcomeMatrix(t *testing.T) {
 			dismiss: "q", after: stateGone, status: 2,
 		},
 		{
+			// Issue #44: the summary-is-final contract — a context
+			// record after the summary is a stream-integrity failure
+			// taking the fatal path, not a silently accepted record.
+			name:   "context after summary is a fatal integrity failure",
+			stream: contextAfterSummaryStream, code: 0,
+			state: stateBrowse, overlay: true,
+			shows:   []string{"record after summary", "a.go"},
+			dismiss: "esc", after: stateBrowse,
+			showsAfter: []string{"a.go"},
+			close:      "q", status: 2,
+		},
+		{
 			name:   "ctrl+c after completion in browse exits 130",
 			stream: happyStream, code: 0,
 			state: stateBrowse,
@@ -1338,6 +1350,35 @@ func TestIntegrityDiagnosticsDeterministic(t *testing.T) {
 			continue
 		}
 		assertReplayLines(t, m.diags, first)
+	}
+}
+
+// TestContextAfterSummaryOutcome is Issue #44's focused outcome
+// assertion: the stream that ends in a context record after its
+// summary takes the fatal integrity path — retained results browse
+// under the error overlay at status 2 — and its complete composed
+// diagnostic is exactly the after-summary cause, collected for the
+// post-restoration stderr replay.
+func TestContextAfterSummaryOutcome(t *testing.T) {
+	res := Result{Stdout: []byte(contextAfterSummaryStream), Code: 0}
+	m := newTestModel(fakeChild{res: res}, options{})
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m.Update(runCollectCmd(t, m))
+
+	assertOutcomeFrame(t, m, stateBrowse, true, []string{"record after summary", "a.go"}, nil)
+	if got := m.overlay.text; got != "record after summary" {
+		t.Fatalf("overlay text = %q, want exactly the after-summary cause", got)
+	}
+	assertReplayLines(t, m.diags, []string{"record after summary"})
+
+	if _, cmd := m.Update(keyEsc); cmd != nil {
+		t.Fatal("esc dismissal returned a command; want none")
+	}
+	assertOutcomeFrame(t, m, stateBrowse, false, []string{"a.go"}, nil)
+	_, cmd := m.Update(keyQ)
+	runQuittingCmd(t, cmd)
+	if m.status != 2 {
+		t.Fatalf("status = %d, want the fatal integrity 2", m.status)
 	}
 }
 

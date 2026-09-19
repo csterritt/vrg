@@ -49,3 +49,7 @@ Notes/walkthroughs/041-04/code-walkthrough/vrg
 # are regenerated on every walkthrough run.
 Notes/walkthroughs/043-05/code-walkthrough/fixture/
 Notes/walkthroughs/043-05/code-walkthrough/vrg
+
+# Built at run time by the Issue #44 walkthrough.
+Notes/walkthroughs/044-03/code-walkthrough/vrg
+Notes/walkthroughs/044-03/code-walkthrough/__pycache__/

@@ -51,8 +51,10 @@ most-specific applicable rule:
   Issue #36 removed Issue #9's `context` exemption — a post-summary
   `context` fails integrity like any other post-summary record — and
   owns the corrected lifecycle-matrix row; [Issue
-  #44](../issues/044-post-summary-context-integrity-failure.md) layers
-  dedicated `context` coverage on top.
+  #44](../issues/044-post-summary-context-integrity-failure.md)
+  ([task](../tasks/044-post-summary-context-integrity-failure.md))
+  supplies the dedicated `context` regression coverage described
+  below.
 - The trailing unterminated fragment's cause is resolved at
   `Integrity()` time: `CauseAfterSummary` when a valid summary
   preceded it, else `CauseUnterminated` — never both.
@@ -108,6 +110,37 @@ cause plus the unknown-type warning. Validation runs before the
 post-summary check, so position never suppresses the record's own
 accounting.
 
+## Summary-is-final and `context` (Issue #44)
+
+The PRD's *Result index, records, and stream integrity* section makes
+the `summary` final: **any** record after it — `context` included — is
+a stream-integrity failure, never an exemption. Issue #9's former
+"`context` in any position" matrix row is therefore amended to cover
+only pre-`summary` positions: before `begin`, inside a file block, or
+between `end` and `summary`, a `context` payload stays ignored for
+matching and lifecycle purposes — no cause, no retained file, even
+when its path never opens.
+
+Ownership is split at the parser boundary: [Issue
+#36](../issues/036-stream-integrity-fatal-diagnostics.md) removed the
+`context` exemption in `Index.Feed`'s post-summary branch and
+corrected the contradictory "context after summary has no lifecycle
+effect" lifecycle row; [Issue
+#44](../issues/044-post-summary-context-integrity-failure.md) begins
+from that green behavior and adds the focused coverage — no second
+parser change:
+
+- `lifecycle_test.go` gains the dedicated `summary` → `context` row
+  asserting exactly the single `CauseAfterSummary`, plus the
+  neighbouring pre-`summary` rows (context before `begin`, context
+  between `end` and `summary`) proving the exemption's surviving half.
+- `internal/app` gains the `context`-after-`summary` outcome-matrix
+  row — retained results browse under the error overlay at exit 2 —
+  and `TestContextAfterSummaryOutcome`, asserting the fatal
+  presentation, that the complete composed diagnostic is exactly
+  `record after summary`, and that the same line list is collected
+  for the post-restoration stderr replay.
+
 ## Tests
 
 See [unit-tests.md](unit-tests.md):
@@ -118,6 +151,8 @@ post-summary `context` row — plus the independent counters;
 `internal/app/outcome_test.go`'s `TestIntegrityDiagnostics` asserts
 the complete ordered overlay **and** collected-replay line list per
 fixture — every cause's text, escaping, multiplicity, dual
-representation, and the universal component order — and
+representation, and the universal component order —
 `TestIntegrityDiagnosticsDeterministic` pins the unsigned-raw-path
-missing-`end` ordering across rebuilds.
+missing-`end` ordering across rebuilds, and Issue #44's
+`TestContextAfterSummaryOutcome` plus its outcome-matrix row pin the
+post-`summary` `context` stream's fatal path and exact diagnostic.
