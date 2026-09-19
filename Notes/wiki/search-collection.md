@@ -109,9 +109,11 @@ Binary exclusion landed with Issue #8: an `end` record carrying a
 non-null `binary_offset` drops that file's collected stops and counts it
 once in `Index.BinaryExcluded`, and `Index.UsableResults()` reports
 retained stops after filtering — see
-[no-results-screen.md](no-results-screen.md). The remaining
-lifecycle/integrity accounting (begin/end pairing, summary
-completeness) is Issue #9's and skip/oversize counting is Issue #10's.
+[no-results-screen.md](no-results-screen.md). Issue #9 landed the
+lifecycle/integrity accounting — begin/end pairing, summary
+completeness, and `Index.Integrity()` — see
+[error-overlay-and-outcomes.md](error-overlay-and-outcomes.md);
+skip/oversize counting is Issue #10's.
 
 ## Tests
 

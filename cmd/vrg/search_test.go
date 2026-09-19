@@ -285,10 +285,20 @@ printf '%s\n' '{"type":"summary","data":{"stats":{}}}'
 	env := testEnv(fakebin, "VRG_TEST_HANDSHAKE="+handshake)
 
 	s := startVrgPTY(t, dir, env, "foo")
-	if !s.waitFor("18  x ") {
+	// The captured stderr opens the warning overlay over the browse
+	// frame once collection completes; Esc dismisses to the repainted
+	// content.
+	if !s.waitFor("eeee") {
 		s.cmd.Process.Kill()
 		<-s.done
-		t.Fatalf("loaded content never appeared; output: %q", s.output())
+		t.Fatalf("captured stderr never reached the warning overlay; output: %q", s.output())
+	}
+	off := len(s.output())
+	s.send("\x1b")
+	if !s.waitForFrom(off, "18  x ") {
+		s.cmd.Process.Kill()
+		<-s.done
+		t.Fatalf("loaded content never appeared after dismissal; output: %q", s.output())
 	}
 	s.send("q")
 	out, code := s.output(), s.waitExit()
@@ -313,14 +323,31 @@ printf '%s\n' '{"type":"summary","data":{"stats":{}}}'
 }
 
 // Diagnostics on stderr while rg still exits 0 with a well-formed stream
-// are captured without blocking the child.
+// are captured without blocking the child — and surface as the warning
+// overlay over the browse view, which Esc dismisses before q exits 0.
 func TestStderrCapturedWithoutBlocking(t *testing.T) {
 	dir := t.TempDir()
 	fakebin := fakeRG(t, `
 printf '%s\n' 'rg: warning: a made-up diagnostic' >&2
 printf '%s\n' 'rg: another warning line' >&2
 `+happyStreamRG)
-	out, code := runVrgWithQuit(t, dir, testEnv(fakebin), "foo")
+	s := startVrgPTY(t, dir, testEnv(fakebin), "foo")
+	if !s.waitFor("a made-up diagnostic") {
+		s.cmd.Process.Kill()
+		<-s.done
+		t.Fatalf("captured stderr never reached the warning overlay; output: %q", s.output())
+	}
+	// Esc dismisses the overlay to browse; the bare ESC must resolve
+	// before q is sent, so wait for the dismissal repaint first.
+	off := len(s.output())
+	s.send("\x1b")
+	if !s.waitForFrom(off, "\x1b[") {
+		s.cmd.Process.Kill()
+		<-s.done
+		t.Fatalf("Esc did not dismiss the overlay; output: %q", s.output())
+	}
+	s.send("q")
+	out, code := s.output(), s.waitExit()
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output: %q", code, out)
 	}

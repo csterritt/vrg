@@ -106,6 +106,25 @@ Issue #8 binary-exclusion and usable-results cases:
   stops after filtering: a summary-only stream and an all-excluded
   stream report 0; merged surviving matches count once.
 
+`lifecycle_test.go` (external package `searchindex_test`; Issue #9) is
+the lifecycle transition matrix — one `lifecycleCase` row per
+disposition, fed through `Build` so the unterminated tail is exercised
+through the real stream entry point:
+
+- `TestLifecycleMatrix` — every matrix row: opens, duplicate and
+  excluded-path begins, valid and orphaned matches (retained with
+  `File.Incomplete`), the binary-exclusion precedence over orphan
+  retention, valid/orphaned/duplicate/binary ends, lifecycle-neutral
+  `context` in both positions, files still open at stream end, the
+  summary-only zero-result stream, missing/second/post-summary records,
+  the unterminated tail, `text`/`bytes` path-identity agreement, and
+  independently tracked interleaved open files. Each row asserts
+  `Integrity().Complete`, the retained files with their incomplete
+  flags and stop lines, `BinaryExcluded`, and `UsableResults()`.
+- `TestTrailingUnterminatedRecordDisposition` — `FeedTail` returns
+  `KindMalformed` and marks the stream incomplete without indexing the
+  fragment.
+
 ## internal/safepresentation
 
 `safepresentation_test.go` (external package `safepresentation_test`;
@@ -216,16 +235,17 @@ composition, the async load lifecycle, and sink safety:
   path cannot replace the visible panel.
 
 `sinksafety_test.go` (same package; Issue #6) hosts the shared
-sink-safety table `sinkSafetySinks` — five rows over every sink
+sink-safety table `sinkSafetySinks` — six rows over every sink
 existing at this point (file-list entry, filename rule, panel content,
-usage-error stderr, CLI-help stdout) — and `TestSinkSafetyTable` runs
-`sinktest.Run` over it: each `<sink>/<fixture>` subtest asserts clean
-raw output on the no-style path and, for the styled TUI rows, that no
-fixture payload follows an unescaped ESC. Each row also proves the
-fixture reached the sink (escaped name in the list/rule region, mapped
-content forms in the panel, `EscapePath` operand in the stderr block);
-the help row injects the hostile operand into argv while rendering
-help, which has no substitution points.
+the Issue #9 error overlay, usage-error stderr, CLI-help stdout) — and
+`TestSinkSafetyTable` runs `sinktest.Run` over it: each
+`<sink>/<fixture>` subtest asserts clean raw output on the no-style
+path and, for the styled TUI rows, that no fixture payload follows an
+unescaped ESC. Each row also proves the fixture reached the sink
+(escaped name in the list/rule region, mapped content forms in the
+panel, escaped diagnostic pieces in the overlay frame, `EscapePath`
+operand in the stderr block); the help row injects the hostile operand
+into argv while rendering help, which has no substitution points.
 
 `rg_test.go` (same package) exercises the real `spawn` against fake `rg`
 scripts on `PATH`:
@@ -283,6 +303,40 @@ contracts through the real collection command and `Update`:
   screen up.
 - `TestCtrlCOnNoResultsExits130` — `ctrl+c` overrides the fixed exit-1
   outcome with 130.
+
+`outcome_test.go` (same package; Issue #9) is the single table-driven
+outcome matrix — the PRD's outcome and exit-status contract as one
+`outcomeCase` row per combination, so later issues extend the table
+rather than duplicate the decision. Each row feeds a process result and
+stream through the real collection command, then asserts the initial
+presentation (base state, overlay open or not, frame contents), the
+dismissal key's effect (which state it reveals — or that dismissal
+itself exits the overlay-only fatal outcome), and the fixed exit
+status. Rows cover rg 0 clean, the anomalous rg 1 with retained
+results, empty complete streams, fatal codes and signal death with and
+without usable results (both `q` and `Esc` dismissal keys), missing
+summary and orphaned end integrity failures, warning stderr over browse
+and over no-results, the all-binary warning with its skip count,
+`Esc` never exiting a base state, and `ctrl+c` → 130 from browse,
+no-results, and the open overlay.
+
+`overlay_test.go` (same package; Issue #9) covers the modal overlay's
+mechanics:
+
+- `TestOverlayKeyRoutingAndScrolling` — `up`/`down` scroll the complete
+  wrapped row set clamped to `[0, rows − visible]`; `pgup`, `pgdown`,
+  and every other key — including `c` — are ignored while open.
+- `TestOverlayDismissKeys` — `q` and `Esc` dismiss back to the base
+  browse state with no command and no exit.
+- `TestOverlayCtrlCExits130` — the global override outranks the modal.
+- `TestOverlayWrapsUnbrokenDiagnostic` — a 200-cell unbroken diagnostic
+  wraps within the single-line border; no rendered row exceeds the
+  frame width and the whole text survives across rows.
+- `TestOverlayKeepsCompleteDiagnostic` — a >1 MiB stderr diagnostic's
+  head and tail are both in the scrollable row set (Issue #41's
+  contract: one frame needn't show both ends).
+- `TestGeneratedProcessDiagnostics` — a failed process without stderr
+  gets the generated line naming the exit code or the signal.
 
 ## internal/theme
 
@@ -343,13 +397,16 @@ boundary tests:
 - `TestStartFailureExit2` — rg-free `PATH` gives the sanitized
   start-failure diagnostic and exit 2 with empty stdout and no TUI.
 - `TestDualPipeBackpressure` — fake `rg` writes ≈1.1 MiB to stderr
-  interleaved with 18 match records; the final content frame shows all
-  18 recorded matches as true-inverse spans (the `30;47` pair, since
-  Issue #7; the current matched line's span also carries `;4`), the
-  `VRG_TEST_HANDSHAKE` file exists (the child finished writing both
-  pipes), and `q` exits 0.
+  interleaved with 18 match records; the captured stderr opens the
+  Issue #9 warning overlay, `Esc` dismisses it, the final content frame
+  shows all 18 recorded matches as true-inverse spans (the `30;47`
+  pair, since Issue #7; the current matched line's span also carries
+  `;4`), the `VRG_TEST_HANDSHAKE` file exists (the child finished
+  writing both pipes), and `q` exits 0.
 - `TestStderrCapturedWithoutBlocking` — stderr diagnostics with a
-  well-formed stream and exit 0 still reach the browse file list.
+  well-formed stream and exit 0 surface as the Issue #9 warning overlay;
+  `Esc` dismisses it (the bare ESC resolves before the next key) and
+  `q` exits 0.
 - `TestGateHeldPreparationKeepsSearching` — with `VRG_TEST_GATE` set, the
   `VRG_TEST_COLLECT_ACK` file proves rg exited and the stream was
   collected while the screen still shows only "Searching…"; removing the
@@ -378,3 +435,30 @@ code, the recorded pid's absence, the `VRG_TEST_REAP` side-channel line
   `vrg: injected test failure ^[[7m` diagnostic appears exactly once and
   after the restoration sequence, child gone and reaped, termios
   restored.
+
+`outcome_test.go` (Issue #9) drives the outcome contract against the
+real binary on a pty: `runVrgWithKeys`/`runVrgKillChild` script
+interactions as `keyStep`s — send a key, then wait for its marker in
+output written since the send, so a dismissal is proven by a fresh
+repaint of what the overlay covered rather than by matching old frame
+bytes:
+
+- `TestFatalExitWithResultsShowsOverlay` — a fake rg exiting 3 after
+  its handshake with two valid matches and stderr "boom": the error
+  overlay shows the stderr, `Esc` reveals the covered browse content,
+  `q` exits 2.
+- `TestFatalExitNoOutputNamesExitCode`,
+  `TestFatalExitNoOutputEscExits2` — a bare `exit 2` produces the
+  generated code-naming diagnostic in the overlay-only presentation;
+  `q` and `Esc` alike exit 2.
+- `TestSignalDeathNamesSignal` — the fake rg records its pid and blocks
+  mid-stream; the test SIGKILLs it and the overlay names the signal,
+  `Esc` reveals the retained match's browse frame, `q` exits 2.
+- `TestStderrWarningWithSummaryShowsWarningOverlay` — stderr "warn"
+  beside a summary-only rg-1 stream opens the warning overlay over
+  no-results; `Esc` reveals "No results found", `q` exits 1.
+- `TestStderrContentFixture` — >1 MiB of stderr interleaved with a
+  valid stdout stream: the stream completes (all 18 matches as
+  inverse-video spans after dismissal), the captured stderr heads the
+  scrollable diagnostic, the handshake proves both pipes drained, and
+  `q` exits 0.

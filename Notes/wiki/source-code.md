@@ -39,14 +39,21 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `summary`/`context`/`KindUnknown`/`KindMalformed`), `text`/base64
   `bytes` decoding, required-field and range validation.
 - `internal/searchindex/index.go` — the navigation index: `Index.Feed` /
-  `Prepare` / `Build`, same-path/same-line `Stop` merging, submatch
-  `(start, end)` ordering, union `Highlights`, unsigned raw-path ordering,
-  and working-directory path resolution without canonicalization.
-  Issue #8 added binary exclusion — an `end` with non-null
-  `binary_offset` drops the file's stops and counts it once in
-  `Index.BinaryExcluded` — and `UsableResults()`, the retained-stop count
-  the outcome logic consumes. See
-  [no-results-screen.md](no-results-screen.md).
+  `FeedTail` / `Prepare` / `Build`, same-path/same-line `Stop` merging,
+  submatch `(start, end)` ordering, union `Highlights`, unsigned
+  raw-path ordering, and working-directory path resolution without
+  canonicalization. Issue #8 added binary exclusion — an `end` with
+  non-null `binary_offset` drops the file's stops and counts it once in
+  `Index.BinaryExcluded` — and `UsableResults()`, the retained-stop
+  count the outcome logic consumes. Issue #9 added lifecycle
+  validation: per-path open tracking on decoded raw bytes, the
+  transition matrix (duplicate/orphaned begin/end, retained incomplete
+  matches, post-summary records, the unterminated tail), binary-
+  exclusion precedence over orphan retention, `File.Incomplete` for
+  partially-lifecycled files, and `Integrity().Complete` — stream
+  integrity assessed separately from process success. See
+  [no-results-screen.md](no-results-screen.md) and
+  [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md).
 - `internal/searchindex/doc.go` — package comment.
 
 ## internal/app
@@ -59,20 +66,36 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 - `internal/app/app.go` — the Bubble Tea model and `app.Run`: the
   "Searching…" state covering collection and post-exit index
   preparation, the `WithGate`/`WithCollectAck` test seams, the
-  `stateBrowse` transition on completion with `q` → exit 0 and the
-  Issue #8 `stateNoResults` alternative — the centred "No results found"
-  screen with its "(N binary files skipped)" suffix, `q` → exit 1,
-  `Esc` a no-op, `ctrl+c` → 130 — the
-  sanitized start-failure diagnostic with exit 2 before the TUI, and the
-  Issue #4 surface: `ctrl+c`/`q` cancellation to 130, the
-  `quitCmd`/`reapChild` cleanup boundary, `WithFailFunc`/
-  `WithReapReport`, the `quitting` discard of late completions,
-  alt-screen views, `ErrInterrupted` → 130, `writeFailureDiag` (the
-  single post-restoration stderr writer) → exit 2, and the Issue #7
-  `c` key toggling `m.theme` between the dark and light schemes. See
+  `searchDoneMsg` outcome decision — `stateBrowse`, the Issue #8
+  `stateNoResults` alternative with its "(N binary files skipped)"
+  suffix, or Issue #9's `stateOverlayOnly` fatal presentation — the
+  modal-overlay key routing, the sanitized start-failure diagnostic
+  with exit 2 before the TUI, and the Issue #4 surface: `ctrl+c`/`q`
+  cancellation to 130, the `quitCmd`/`reapChild` cleanup boundary,
+  `WithFailFunc`/`WithReapReport`, the `quitting` discard of late
+  completions, alt-screen views, `ErrInterrupted` → 130,
+  `writeFailureDiag` (the single post-restoration stderr writer) →
+  exit 2, and the Issue #7 `c` key toggling `m.theme` between the dark
+  and light schemes. The search-derived `status` is fixed at
+  completion; only `ctrl+c` overrides it to 130. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
-  [theme.md](theme.md), and
-  [no-results-screen.md](no-results-screen.md).
+  [theme.md](theme.md),
+  [no-results-screen.md](no-results-screen.md), and
+  [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md).
+- `internal/app/outcome.go` — Issue #9's pure outcome decision:
+  `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
+  `Integrity`, usable-results count, reserved `RecordLoss`, caller
+  `Warnings`) to the presentation, the escaped overlay lines, the
+  dismiss-exits flag, and the fixed status — the whole PRD outcome
+  table. `outcomeDiagnostics` composes the overlay lines in the
+  universal order — captured stderr or a generated code-or-signal line
+  for a silent failed process, then the integrity note, then warnings —
+  all through `safepresentation.EscapeDiagnostic`.
+- `internal/app/overlay.go` — Issue #9's modal error overlay:
+  grapheme-boundary `wrapCells` to the interior width (unbroken strings
+  split mid-run), the complete wrapped row set scrolled by
+  `up`/`down` clamped to `[0, rows − visible]`, and `compositeOverlay`
+  centering the single-line bordered box over the base frame.
 - `internal/app/browse.go` — the Issue #5 browse view: async
   `filebuffer.Load` commands gated by `WithLoadGate`, the
   `loading`/`bufs`/`failed` caches keyed by raw path, `fileLoadedMsg`,

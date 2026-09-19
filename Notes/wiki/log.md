@@ -238,3 +238,37 @@ collection command. Created
 binary bullet; Outcome and exit-status contract — last row),
 `internal/searchindex/index.go`, `internal/searchindex/index_test.go`,
 `internal/app/app.go`, `internal/app/noresults_test.go`.
+
+## [2026-09-16] ingest | Issue #9 error overlay and fatal outcomes
+
+Ingested Issue #9 ([issue](../issues/009-error-overlay-and-fatal-outcomes.md),
+[task](../tasks/009-error-overlay-and-fatal-outcomes.md)). `internal/searchindex`
+gained the lifecycle transition matrix: per-path open tracking on decoded raw
+bytes, retained-with-`Incomplete` orphaned matches, binary-exclusion precedence
+over retention (excluded paths cannot reopen; a well-formed `binary_offset` end
+excludes even when orphaned), summary-is-final with the Issue #9 context
+exemption (Issues #36/#44 correct it), the `FeedTail` unterminated-fragment
+double disposition, and `Integrity().Complete` assessed separately from the
+child's process result. `internal/app` gained `outcome.go` — the pure
+`DecideOutcome` mapping process result × integrity × usable results to
+presentation, overlay lines, dismiss-exits, and the fixed status — and
+`overlay.go`, the modal single-line-bordered overlay: grapheme-boundary
+wrapping to interior width, complete-row-set scrolling clamped to
+`[0, rows − visible]`, `q`/`Esc` dismissal (both exiting when there is no
+underlying state), `ctrl+c` → 130 precedence, all other keys ignored. stderr is
+diagnostic regardless of exit code; a silent failed process gets a generated
+code-or-signal line. The search-derived status is fixed at completion; only
+`ctrl+c` overrides it. Created
+[error-overlay-and-outcomes](error-overlay-and-outcomes.md); updated
+[search-collection](search-collection.md),
+[no-results-screen](no-results-screen.md), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/issues/009-error-overlay-and-fatal-outcomes.md`,
+`Notes/tasks/009-error-overlay-and-fatal-outcomes.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity; Outcome and
+exit-status contract; Colours, overlays, and key precedence),
+`internal/searchindex/index.go`, `internal/searchindex/lifecycle_test.go`,
+`internal/app/app.go`, `internal/app/outcome.go`, `internal/app/overlay.go`,
+`internal/app/outcome_test.go`, `internal/app/overlay_test.go`,
+`internal/app/sinksafety_test.go`, `cmd/vrg/outcome_test.go`,
+`cmd/vrg/search_test.go`.

@@ -83,6 +83,9 @@ const (
 	// complete successful search left no usable results.
 	stateNoResults
 	stateBrowse
+	// stateOverlayOnly is the fatal outcome with no usable results: the
+	// error overlay is the whole presentation, so dismissing it exits.
+	stateOverlayOnly
 )
 
 // model is the Bubble Tea model: "Searching…" while collection and index
@@ -117,6 +120,18 @@ type model struct {
 	failed  map[string]bool
 	vp      viewport.Viewport
 	theme   theme.Theme
+
+	// Modal error overlay. overlayOpen marks it up — key input routes
+	// to it ahead of the base state, and only ctrl+c outranks it.
+	// overlayExit marks a fatal overlay with no underlying state:
+	// dismissal exits with the fixed status instead of revealing a
+	// screen. overlayText is the escaped diagnostic body; it re-wraps
+	// to the interior width on every render, and overlayScroll — the
+	// first visible wrapped row — clamps to the complete row set.
+	overlayOpen   bool
+	overlayExit   bool
+	overlayText   string
+	overlayScroll int
 }
 
 func newModel(cfg Config, opts options, child Child) *model {
@@ -179,18 +194,33 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.clampOverlayScroll()
 	case searchDoneMsg:
 		m.idx = msg.idx
-		if msg.idx.UsableResults() == 0 {
-			// A complete successful search with no usable results
-			// presents the no-results screen; q dismisses it to
-			// exit 1. Issue #9 owns the fatal-outcome rows that
-			// take precedence over this branch.
+		var cmd tea.Cmd
+		outcome := DecideOutcome(OutcomeInput{
+			Result:    msg.res,
+			Integrity: msg.idx.Integrity(),
+			Usable:    msg.idx.UsableResults(),
+		})
+		// The search-derived status is fixed once searching completes;
+		// only ctrl+c overrides it afterwards.
+		m.status = outcome.Status
+		switch outcome.Presentation {
+		case presentNoResults:
 			m.state = stateNoResults
-			return m, nil
+		case presentOverlayOnly:
+			m.state = stateOverlayOnly
+		default:
+			m.state = stateBrowse
+			cmd = m.startLoad()
 		}
-		m.state = stateBrowse
-		return m, m.startLoad()
+		if len(outcome.Overlay) > 0 {
+			m.overlayOpen = true
+			m.overlayExit = outcome.DismissExits
+			m.overlayText = strings.Join(outcome.Overlay, "\n")
+		}
+		return m, cmd
 	case fileLoadedMsg:
 		key := string(msg.path)
 		delete(m.loading, key)
@@ -207,33 +237,51 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, m.quitCmd()
 	case tea.KeyPressMsg:
+		key := msg.Keystroke()
 		switch {
-		case msg.Keystroke() == "ctrl+c":
+		case key == "ctrl+c":
 			// ctrl+c has global precedence: cancellation in every state.
 			m.status = 130
 			m.quitting = true
 			return m, m.quitCmd()
-		case msg.Text == "q" && m.state == stateSearching:
+		case m.overlayOpen:
+			// The modal overlay takes precedence over base-state keys:
+			// up and down scroll the complete wrapped diagnostic,
+			// q and Esc dismiss it, and every other key is ignored.
+			switch key {
+			case "up":
+				m.scrollOverlay(-1)
+			case "down":
+				m.scrollOverlay(1)
+			case "q", "esc":
+				if m.overlayExit {
+					// A fatal overlay has no underlying state:
+					// dismissal exits with the fixed status —
+					// the one place Esc terminates.
+					m.quitting = true
+					return m, m.quitCmd()
+				}
+				m.overlayOpen = false
+			}
+		case key == "q" && m.state == stateSearching:
 			// q while searching — including gate-held index
 			// preparation after rg has exited — is cancellation.
 			m.status = 130
 			m.quitting = true
 			return m, m.quitCmd()
-		case msg.Text == "c":
+		case key == "c":
 			// c toggles the colour scheme between dark and light for
 			// the session; nothing persists.
 			m.theme = m.theme.Toggled()
-		case msg.Text == "q" && m.state == stateNoResults:
+		case key == "q" && m.state == stateNoResults:
 			// q dismisses the no-results screen to exit 1 through
 			// the same cleanup path; Esc is a no-op here and
 			// ctrl+c keeps its 130 override.
-			m.status = 1
 			m.quitting = true
 			return m, m.quitCmd()
-		case msg.Text == "q" && m.state == stateBrowse:
+		case key == "q" && m.state == stateBrowse:
 			// q in ordinary browsing exits with the fixed
 			// search-derived status through the same cleanup path.
-			m.status = 0
 			m.quitting = true
 			return m, m.quitCmd()
 		}
@@ -271,6 +319,13 @@ func (m *model) View() tea.View {
 		s = center(m.noResultsText(), m.width, m.height)
 	case stateBrowse:
 		s = m.browseView()
+	case stateOverlayOnly:
+		// The fatal overlay has no underlying state: it floats over a
+		// blank frame.
+		s = ""
+	}
+	if m.overlayOpen {
+		s = m.compositeOverlay(s)
 	}
 	v := tea.NewView(m.theme.Base(s))
 	v.AltScreen = true

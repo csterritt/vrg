@@ -33,6 +33,19 @@ type Stop struct {
 type File struct {
 	Path  []byte
 	Stops []Stop // ascending Number
+	// Incomplete marks a file retained with partial lifecycle metadata:
+	// its matches arrived without a pairing begin/end — orphaned, or the
+	// file was still open when the stream ended.
+	Incomplete bool
+}
+
+// Integrity is the stream's lifecycle-validation result, assessed
+// separately from the child's process result: a complete stream held
+// exactly one summary as its final newline-terminated record, every
+// begun file was closed by its end, no record followed the summary, and
+// no record was orphaned, duplicated, or left unterminated.
+type Integrity struct {
+	Complete bool
 }
 
 // Index accumulates stream records and prepares them into the navigation
@@ -41,56 +54,99 @@ type File struct {
 // be called once feeding is complete.
 type Index struct {
 	Files []File
-	// BinaryExcluded counts the distinct files dropped because a valid
-	// end event reported a non-null binary_offset for them.
+	// BinaryExcluded counts the distinct files dropped because an end
+	// record reported a non-null binary_offset for them.
 	BinaryExcluded int
 	acc            map[string]*fileAcc
 	excluded       map[string]struct{}
+	// Lifecycle validation state: open holds the decoded raw path bytes
+	// of files with an unclosed begin; sawSummary records that the
+	// final record arrived; broken accumulates every violation of the
+	// Issue #9 transition matrix — a duplicate or excluded-path begin,
+	// an orphaned match or end, a record after the summary, or an
+	// unterminated tail.
+	open       map[string]struct{}
+	sawSummary bool
+	broken     bool
 }
 
 // fileAcc is the per-path accumulation of stops before preparation.
 type fileAcc struct {
-	path  []byte
-	stops map[int64]*Stop
+	path       []byte
+	stops      map[int64]*Stop
+	incomplete bool
 }
 
 // New returns an empty index.
 func New() *Index { return &Index{} }
 
 // Build feeds every newline-delimited record in stream and prepares the
-// index against workdir. A trailing unterminated record is still fed;
-// its accounting lands with Issue #10.
+// index against workdir. A trailing unterminated fragment goes through
+// FeedTail, not Feed.
 func Build(stream []byte, workdir string) *Index {
 	ix := New()
 	for len(stream) > 0 {
-		line := stream
 		if i := bytes.IndexByte(stream, '\n'); i >= 0 {
-			line, stream = stream[:i], stream[i+1:]
+			ix.Feed(stream[:i])
+			stream = stream[i+1:]
 		} else {
+			ix.FeedTail(stream)
 			stream = nil
 		}
-		ix.Feed(line)
 	}
 	ix.Prepare(workdir)
 	return ix
 }
 
-// Feed parses one JSON record and applies it to the index, returning the
-// record's classification. KindMatch contributes stops; a KindEnd with a
-// non-null binary_offset drops that file's collected matches and counts
-// it in BinaryExcluded. The remaining lifecycle effects are Issue #9's,
-// and malformed/unknown counting is Issue #10's.
+// Feed parses one newline-terminated JSON record and applies it to the
+// index, returning the record's classification. Every lifecycle
+// transition of the Issue #9 matrix applies: begin opens its path,
+// match indexes under an open path, end closes it — a non-null
+// binary_offset drops the file's collected matches and counts it in
+// BinaryExcluded — and summary ends the stream. Records are compared on
+// decoded raw path bytes, so a path's text and bytes encodings pair.
+//
+// Violations never silently destroy retained data: an orphaned match is
+// retained with incomplete metadata unless the path is binary-excluded,
+// an orphaned or duplicated begin/end simply marks the stream broken,
+// and nothing after the summary is dispatched. Malformed and unknown
+// records carry no lifecycle; counting them is Issue #10's.
 func (ix *Index) Feed(raw []byte) Kind {
 	rec := ParseRecord(raw)
-	switch rec.Kind {
-	case KindMatch:
-		if ix.acc == nil {
-			ix.acc = make(map[string]*fileAcc)
+	if ix.sawSummary {
+		// The summary is final: any record after it — except context,
+		// which the Issue #9 matrix keeps lifecycle-neutral in every
+		// position — is an integrity failure and never dispatched.
+		// Issue #36 removes the context exemption.
+		if rec.Kind != KindContext {
+			ix.broken = true
 		}
-		fa := ix.acc[string(rec.Path)]
-		if fa == nil {
-			fa = &fileAcc{path: rec.Path, stops: make(map[int64]*Stop)}
-			ix.acc[string(rec.Path)] = fa
+		return rec.Kind
+	}
+	key := string(rec.Path)
+	switch rec.Kind {
+	case KindBegin:
+		switch {
+		case ix.isExcluded(key):
+			// Binary exclusion is terminal: the path cannot reopen.
+			ix.broken = true
+		case ix.isOpen(key):
+			ix.broken = true
+		default:
+			if ix.open == nil {
+				ix.open = make(map[string]struct{})
+			}
+			ix.open[key] = struct{}{}
+		}
+	case KindMatch:
+		if ix.isExcluded(key) {
+			ix.broken = true
+			return rec.Kind
+		}
+		fa := ix.fileAccFor(key, rec.Path)
+		if !ix.isOpen(key) {
+			ix.broken = true
+			fa.incomplete = true
 		}
 		st := fa.stops[rec.LineNumber]
 		if st == nil {
@@ -102,8 +158,60 @@ func (ix *Index) Feed(raw []byte) Kind {
 		if rec.Binary {
 			ix.exclude(rec.Path)
 		}
+		if ix.isOpen(key) {
+			delete(ix.open, key)
+		} else {
+			ix.broken = true
+		}
+	case KindSummary:
+		ix.sawSummary = true
 	}
 	return rec.Kind
+}
+
+// FeedTail consumes the stream's trailing fragment — the bytes after
+// the last newline that no newline terminated. Its disposition is
+// double: the fragment is classified malformed (Issue #10 owns the
+// count) and the stream is marked incomplete.
+func (ix *Index) FeedTail(raw []byte) Kind {
+	ix.broken = true
+	return KindMalformed
+}
+
+// Integrity reports the lifecycle-validation result for the fed stream:
+// Complete only when the summary closed the stream as its final record
+// and no violation — orphaned, duplicated, post-summary, or
+// unterminated — occurred and no begun file was left open. It is
+// meaningful once feeding is complete, independently of the child's
+// exit status.
+func (ix *Index) Integrity() Integrity {
+	return Integrity{
+		Complete: ix.sawSummary && !ix.broken && len(ix.open) == 0,
+	}
+}
+
+func (ix *Index) isOpen(key string) bool {
+	_, ok := ix.open[key]
+	return ok
+}
+
+func (ix *Index) isExcluded(key string) bool {
+	_, ok := ix.excluded[key]
+	return ok
+}
+
+// fileAcc returns the accumulation for key, creating it with path's raw
+// bytes when the path is first seen.
+func (ix *Index) fileAccFor(key string, path []byte) *fileAcc {
+	if ix.acc == nil {
+		ix.acc = make(map[string]*fileAcc)
+	}
+	fa := ix.acc[key]
+	if fa == nil {
+		fa = &fileAcc{path: path, stops: make(map[int64]*Stop)}
+		ix.acc[key] = fa
+	}
+	return fa
 }
 
 // exclude drops every stop collected for path — its end event's non-null
@@ -136,11 +244,17 @@ func (ix *Index) UsableResults() int {
 // Prepare resolves relative paths against workdir, orders files by
 // unsigned raw path bytes, orders each file's stops by line number, sorts
 // each stop's submatches by (Start, End), and computes the union
-// highlight coverage.
+// highlight coverage. Files whose begin never closed are marked
+// incomplete.
 func (ix *Index) Prepare(workdir string) {
+	for key := range ix.open {
+		if fa := ix.acc[key]; fa != nil {
+			fa.incomplete = true
+		}
+	}
 	files := make([]File, 0, len(ix.acc))
 	for _, fa := range ix.acc {
-		f := File{Path: resolvePath(workdir, fa.path)}
+		f := File{Path: resolvePath(workdir, fa.path), Incomplete: fa.incomplete}
 		for _, st := range fa.stops {
 			slices.SortFunc(st.Submatches, func(a, b Submatch) int {
 				if a.Start != b.Start {

@@ -51,6 +51,13 @@ Catalog of all wiki pages for the vrg project.
   `UsableResults` as retained stops after filtering, and the centred
   "No results found" screen with its "(N binary files skipped)" suffix,
   `q` → exit 1, `Esc` no-op, `ctrl+c` → 130
+- [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md) —
+  Issue #9: the stream-lifecycle transition matrix and
+  `Index.Integrity()` assessed separately from process success, the
+  pure `DecideOutcome` function and every outcome-table row, the modal
+  error overlay's keys/wrapping/scrolling/dismissal, stderr
+  classification with generated code-or-signal diagnostics, and the
+  fixed-status rule with the `ctrl+c` → 130 override
 
 ## Catalogs
 

@@ -24,9 +24,10 @@ an already-counted file from double-counting — while a second binary
 `end` still re-drops any matches collected for that path in between.
 
 Exclusion is keyed on completed `end` events only: a file lacking its
-`end` is not inferred nonbinary (Issue #9 owns the incomplete-metadata
-diagnostic for that case; Issue #10's record skipping will join binary
-exclusion in the filtering chain).
+`end` is not inferred nonbinary (Issue #9 marks it `Incomplete` —
+retained with partial lifecycle metadata — and fails the stream's
+integrity; Issue #10's record skipping will join binary exclusion in
+the filtering chain).
 
 ## Usable results
 
@@ -52,12 +53,15 @@ centred horizontally and vertically (the same `center` helper the
   binary. It applies to all-filtered rg-0 streams and rg-1 exits alike;
   N is the distinct-file count.
 
-On this screen `q` sets status 1 and quits through the Issue #4
+On this screen `q` exits the fixed status-1 outcome through the Issue #4
 `quitCmd`/`reapChild` cleanup path (see
 [cancellation-cleanup.md](cancellation-cleanup.md)); `Esc` is a no-op
 (no overlay exists to dismiss and `Esc` never quits a base state); and
-`ctrl+c` keeps its global 130 override. Error overlays, warning
-presentation, and the remaining outcome rows stay Issue #9/#10 scope.
+`ctrl+c` keeps its global 130 override. Issue #9's outcome decision can
+open a warning overlay on top of this screen when diagnostics exist —
+dismissal reveals the same no-results state; see
+[error-overlay-and-outcomes.md](error-overlay-and-outcomes.md). The
+record-loss outcome rows stay Issue #10 scope.
 
 > ripgrep 15.x note: `binary_offset` end records appear only for files
 > passed as explicit search operands. During directory traversal rg

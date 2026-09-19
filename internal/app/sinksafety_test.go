@@ -17,18 +17,18 @@ import (
 
 // sinkSafetySinks is the shared sink-safety table (Issue #6): one row
 // per output sink existing at this point — file-list entry, filename
-// rule, panel content, usage-error stderr, and the Issue #1 generated
-// command-line help on stdout (a sink distinct from the Issue #31 TUI
-// help dialog, which adds its own row later). Every row renders through
-// the no-style composition path so no escape byte may legitimately
-// appear, and the TUI rows repeat under the styled theme so a fixture's
-// payload can be checked against legitimate style sequences.
+// rule, panel content, the Issue #9 error overlay, usage-error stderr,
+// and the Issue #1 generated command-line help on stdout (a sink
+// distinct from the Issue #31 TUI help dialog, which adds its own row
+// later). Every row renders through the no-style composition path so no
+// escape byte may legitimately appear, and the TUI rows repeat under
+// the styled theme so a fixture's payload can be checked against
+// legitimate style sequences.
 //
-// Later issues that introduce sinks — the error overlay (#9), stderr
-// replay (#11), the pop-up (#15), the TUI help dialog (#31), generated
-// documentation (#34) — add rows here, or in their own package's test
-// file via sinktest.Run, reusing sinktest.Fixtures rather than
-// duplicating them.
+// Later issues that introduce sinks — stderr replay (#11), the pop-up
+// (#15), the TUI help dialog (#31), generated documentation (#34) — add
+// rows here, or in their own package's test file via sinktest.Run,
+// reusing sinktest.Fixtures rather than duplicating them.
 var sinkSafetySinks = []sinktest.Sink{
 	{
 		Name:         "file-list entry",
@@ -44,6 +44,11 @@ var sinkSafetySinks = []sinktest.Sink{
 		Name:         "panel content",
 		Render:       func(t *testing.T, fx sinktest.Fixture) string { return contentFixtureView(t, fx, theme.Plain()) },
 		RenderStyled: func(t *testing.T, fx sinktest.Fixture) string { return contentFixtureView(t, fx, theme.Dark()) },
+	},
+	{
+		Name:         "error overlay",
+		Render:       func(t *testing.T, fx sinktest.Fixture) string { return overlayFixtureView(t, fx, theme.Plain()) },
+		RenderStyled: func(t *testing.T, fx sinktest.Fixture) string { return overlayFixtureView(t, fx, theme.Dark()) },
 	},
 	{
 		Name:   "usage-error stderr",
@@ -167,4 +172,35 @@ func cliHelpStdout(t *testing.T, fx sinktest.Fixture) string {
 		t.Fatalf("Parse(%q -h).Kind = %v, want help", fx.Bytes, res.Kind)
 	}
 	return out.String()
+}
+
+// overlayFixtureView drives the fixture bytes through the error
+// overlay's real composition path — captured child stderr on a failed
+// process, escaped by the diagnostic utility — and returns the rendered
+// frame, failing when no escaped piece of the fixture reached it.
+func overlayFixtureView(t *testing.T, fx sinktest.Fixture, th theme.Theme) string {
+	t.Helper()
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	m.theme = th
+	idx := browseIndex(t, []fixtureFile{
+		{name: "target.txt", content: "x\n", line: 1, start: 0, end: 1},
+	})
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 50})
+	m.Update(searchDoneMsg{
+		res: Result{Code: 3, Stderr: fx.Bytes},
+		idx: idx,
+	})
+	if !m.overlayOpen {
+		t.Fatalf("overlay did not open for the failed process")
+	}
+	v := viewText(m)
+	for _, piece := range strings.Split(safepresentation.EscapeDiagnostic(string(fx.Bytes)), "\n") {
+		if piece == "" {
+			continue
+		}
+		if !strings.Contains(v, piece) {
+			t.Fatalf("overlay fixture %q did not reach the sink: %q missing from %q", fx.Bytes, piece, v)
+		}
+	}
+	return v
 }
