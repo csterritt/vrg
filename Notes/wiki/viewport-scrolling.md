@@ -39,7 +39,9 @@ height changes, and `MaxTop(rows, height)` is the largest valid top:
   clamps to 0: files shorter than the viewport naturally leave their
   unused rows blank, which is not overscrolling. Shrinking content or a
   growing viewport pulls a stranded top upward — the PRD's intentionally
-  lossy EOF clamp (the logical-anchor contract is Issue #17's).
+  lossy EOF clamp; since Issue #17 it also **rewrites the logical
+  anchor** to the clamped top so a later shrink cannot resurrect the
+  pre-clamp position (see [logical-anchor.md](logical-anchor.md)).
 
 ## App wiring (`internal/app`)
 
@@ -69,7 +71,12 @@ height changes, and `MaxTop(rows, height)` is the largest valid top:
   partitions each line's cells into text-width rows at grapheme-cluster
   boundaries while run-off-edge mode keeps one row per line, and a
   `w` toggle or resize rebuilds the model under its new key. Issue #17
-  owns moving that preparation off the update path. `contentCell`
+  moved that preparation off the update path — `requestLayout` runs
+  `viewport.Prepare` as a command and the keyed `layoutReadyMsg`
+  installs only while it still matches the live layout — and gave the
+  viewport its retained logical `Anchor`, which a `Scroll` replaces
+  whenever the effective top moves (see
+  [logical-anchor.md](logical-anchor.md)). `contentCell`
   renders the row at `top + content row` via the
   `rowSource` seam, so a frame queries only the visible range
   `[top, top + content height)` — never an O(N) scan of the buffer

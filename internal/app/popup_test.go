@@ -50,13 +50,15 @@ func navLeafMsgs(t *testing.T, m *model, key tea.KeyPressMsg) []tea.Msg {
 }
 
 // deliverLoad feeds the first fileLoadedMsg in msgs back through
-// Update and reports whether one was present. Expiry messages are
+// Update — plus the layout completion its preparation request
+// produced — and reports whether one was present. Expiry messages are
 // never delivered — tests inject them explicitly by instance ID.
 func deliverLoad(t *testing.T, m *model, msgs []tea.Msg) bool {
 	t.Helper()
 	for _, msg := range msgs {
 		if lm, ok := msg.(fileLoadedMsg); ok {
-			m.Update(lm)
+			_, lc := m.Update(lm)
+			deliverLayout(t, m, lc)
 			return true
 		}
 	}

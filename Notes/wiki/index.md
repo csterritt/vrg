@@ -106,6 +106,17 @@ Catalog of all wiki pages for the vrg project.
   the reserved 0/1 indicator width, the swappable row model keyed by
   (path, content revision, text width, wrap mode), and wrapped
   `TargetRow` reveal
+- [logical-anchor.md](logical-anchor.md) — Issue #17: the
+  width-independent `(source line, display column)` anchor retained
+  through rewrap/toggle/resize, the scroll and moving-reveal
+  replacement rules with the no-scroll reveal's retained column, the
+  intentionally lossy EOF clamp updating the anchor, `Restore`'s
+  containing-row mapping, `viewport.Prepare` moved off `Update` behind
+  keyed `layoutReadyMsg` completions with `layoutReqs` dedup,
+  `layoutKey` install-only-on-match guards, `currentRows` stale-model
+  hiding, `pendingReveals` intents committing on install, the
+  cached-file stale-layout re-request and fast path, and the
+  visible-window-only render-cost bounds
 
 ## Catalogs
 

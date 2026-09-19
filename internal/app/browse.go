@@ -16,11 +16,12 @@ import (
 	"vrg/internal/viewport"
 )
 
-// rowSource is the prepared rendered-row provider the frame render
-// consults: *viewport.Rows in production. Tests substitute a counting
-// fake to prove a frame queries only the visible row range.
+// rowSource is the prepared rendered-row provider the frame render and
+// position logic consult: *viewport.Rows in production. Tests
+// substitute a counting fake to prove a frame queries only the visible
+// row range.
 type rowSource interface {
-	Len() int
+	viewport.Model
 	At(i int) viewport.Row
 	GutterWidth() int
 	// TargetRow is the rendered row holding the navigation stop's
@@ -77,10 +78,11 @@ func (m *model) navigate(next bool) tea.Cmd {
 		return nil
 	}
 	m.reveal()
+	ck, _ := m.curKey()
 	if !mv.FileChanged {
-		return nil
+		return m.requestLayout(ck)
 	}
-	return tea.Batch(m.startLoad(), m.startPopup())
+	return tea.Batch(m.startLoad(), m.requestLayout(ck), m.startPopup())
 }
 
 // reveal applies the vertical destination-reveal rules to the current
@@ -89,24 +91,28 @@ func (m *model) navigate(next bool) tea.Cmd {
 // destination's display target is left in place when already visible
 // and otherwise moved to floor(content height / 3), clamped to valid
 // tops. A reveal that moves the viewport replaces the saved vertical
-// state; a no-scroll reveal leaves it. While the panel shows a
-// placeholder there is no row model and the reveal is a no-op.
+// state; a no-scroll reveal leaves it. When no layout matching the
+// current parameters is installed — the placeholder case — the reveal
+// cannot run, so the intent pends on the path and commits against the
+// layout whose matching completion installs.
 func (m *model) reveal() {
 	ck, ok := m.curKey()
 	if !ok {
 		return
 	}
-	rows := m.rows[ck]
+	rows := m.currentRows(ck)
 	h := m.contentRows()
 	if rows == nil || h < 1 {
+		m.pendingReveals[ck] = true
 		return
 	}
 	cur, ok := m.idx.Cursor()
 	if !ok {
 		return
 	}
+	delete(m.pendingReveals, ck)
 	vp := m.vps[ck]
-	if vp.Reveal(rows.TargetRow(m.idx.Files[cur.File].Stops[cur.Stop]), rows.Len(), h) {
+	if vp.Reveal(rows.TargetRow(m.idx.Files[cur.File].Stops[cur.Stop]), rows, h) {
 		m.vps[ck] = vp
 	}
 }
@@ -117,18 +123,12 @@ func (m *model) contentRows() int { return m.height - 1 }
 
 // listWidth is the file list's rendered width under the Issue #5
 // heuristic: the longest displayed path plus one padding cell, capped
-// at the terminal width. Issue #24 owns the real formula (40% cap,
-// minimum text width, left truncation).
+// at the terminal width. The longest-path width is prepared once per
+// index (m.listWBase) so a frame render never rescans the list.
+// Issue #24 owns the real formula (40% cap, minimum text width, left
+// truncation).
 func (m *model) listWidth() int {
-	longest := 0
-	if m.idx != nil {
-		for _, f := range m.idx.Files {
-			if cw := safepresentation.CellWidth(safepresentation.EscapePath(f.Path)); cw > longest {
-				longest = cw
-			}
-		}
-	}
-	if w := longest + 1; w < m.width {
+	if w := m.listWBase; w < m.width {
 		return w
 	}
 	return m.width
@@ -146,44 +146,76 @@ func (m *model) textWidth(gutter int) int {
 	return w
 }
 
-// prepareRows builds one buffer's rendered-row model under the current
-// layout, keyed by (path, content revision, text width, wrap mode) so a
-// later layout change cannot mistake it for current.
-func (m *model) prepareRows(key string, buf *filebuffer.Buffer) *viewport.Rows {
-	return viewport.Prepare(buf, viewport.Key{
-		Path:      key,
-		Revision:  m.revs[key],
+// layoutKey is the identity the current layout parameters demand for
+// path's cached buffer: the raw path, its content revision, the text
+// width under the buffer's gutter, and the wrap mode. A prepared row
+// model installs only while its key still equals this — a completion
+// minted under superseded parameters is obsolete.
+func (m *model) layoutKey(path string, buf *filebuffer.Buffer) viewport.Key {
+	return viewport.Key{
+		Path:      path,
+		Revision:  m.revs[path],
 		TextWidth: m.textWidth(buf.GutterWidth()),
 		Wrap:      m.wrap,
-	})
+	}
 }
 
-// rebuildRows swaps in a freshly prepared row model for every cached
-// buffer whose layout key changed — after a wrap toggle or a resize —
-// then re-clamps each saved viewport to the new row count so no
-// position can strand past EOF. A non-*Rows provider (a test fake) is
-// left alone.
-func (m *model) rebuildRows() {
-	for key, buf := range m.bufs {
-		k := viewport.Key{
-			Path:      key,
-			Revision:  m.revs[key],
-			TextWidth: m.textWidth(buf.GutterWidth()),
-			Wrap:      m.wrap,
-		}
-		cur, ok := m.rows[key].(*viewport.Rows)
-		if !ok {
-			continue
-		}
-		if cur.Key() != k {
-			m.rows[key] = viewport.Prepare(buf, k)
+// currentRows is path's installed row model when it matches the layout
+// the live parameters demand — the only prepared data the frame render,
+// scrolling, and reveals may slice. A stale installed model (prepared
+// for a superseded key) is invisible: the panel shows the placeholder
+// until its replacement installs. Test fakes standing in for *Rows are
+// always taken as current.
+func (m *model) currentRows(path string) rowSource {
+	rows := m.rows[path]
+	r, ok := rows.(*viewport.Rows)
+	if !ok {
+		return rows
+	}
+	buf := m.bufs[path]
+	if buf == nil || r.Key() != m.layoutKey(path, buf) {
+		return nil
+	}
+	return rows
+}
+
+// layoutReadyMsg delivers a prepared row model keyed by the exact
+// parameters it was built for: path, content revision, text width, and
+// wrap mode. The command ran the whole preparation off the update path
+// so Update only installs or discards the result.
+type layoutReadyMsg struct {
+	key  viewport.Key
+	rows *viewport.Rows
+}
+
+// requestLayout issues the preparation of path's cached buffer under
+// the current layout parameters as a command — row-model construction
+// stays off the update path so input keeps flowing while it runs. It
+// returns nil when the installed model already matches (the fast path),
+// when an identical request is already in flight, or when no buffer is
+// cached yet. The completion carries its key, so a superseded or
+// out-of-order delivery is discarded rather than installed.
+func (m *model) requestLayout(path string) tea.Cmd {
+	buf := m.bufs[path]
+	if buf == nil {
+		return nil
+	}
+	k := m.layoutKey(path, buf)
+	if rows := m.rows[path]; rows != nil {
+		if r, ok := rows.(*viewport.Rows); !ok || r.Key() == k {
+			return nil
 		}
 	}
-	for key, vp := range m.vps {
-		if rows := m.rows[key]; rows != nil {
-			vp.Clamp(rows.Len(), m.contentRows())
-			m.vps[key] = vp
+	if m.layoutReqs[path] == k {
+		return nil
+	}
+	m.layoutReqs[path] = k
+	gate := m.opts.layoutGate
+	return func() tea.Msg {
+		if gate != nil {
+			gate()
 		}
+		return layoutReadyMsg{key: k, rows: viewport.Prepare(buf, k)}
 	}
 }
 
@@ -207,7 +239,7 @@ func (m *model) scrollBy(key string) {
 	if !ok {
 		return
 	}
-	rows := m.rows[ck]
+	rows := m.currentRows(ck)
 	h := m.contentRows()
 	if rows == nil || h < 1 {
 		return
@@ -228,7 +260,7 @@ func (m *model) scrollBy(key string) {
 		d = h
 	}
 	vp := m.vps[ck]
-	vp.Scroll(d, rows.Len(), h)
+	vp.Scroll(d, rows, h)
 	m.vps[ck] = vp
 }
 
@@ -294,10 +326,6 @@ func (m *model) browseView() string {
 		return ""
 	}
 	files := m.idx.Files
-	escaped := make([]string, len(files))
-	for i, f := range files {
-		escaped[i] = safepresentation.EscapePath(f.Path)
-	}
 	listW := m.listWidth()
 	panelW := w - listW
 
@@ -315,7 +343,7 @@ func (m *model) browseView() string {
 	top := 0
 	if len(files) > 0 {
 		key := string(files[cur].Path)
-		rows, failed = m.rows[key], m.failed[key]
+		rows, failed = m.currentRows(key), m.failed[key]
 		if rows != nil {
 			// The saved top is clamped on every state change; clamp
 			// again here so a stale entry can never blank the panel.
@@ -335,7 +363,7 @@ func (m *model) browseView() string {
 	for r := 1; r < h; r++ {
 		sb.WriteByte('\n')
 		if listW > 0 {
-			sb.WriteString(m.listCell(escaped, listTop+r-1, listW))
+			sb.WriteString(m.listCell(listTop+r-1, listW))
 		}
 		if panelW > 0 {
 			sb.WriteString(m.contentCell(r-1, panelW, top, rows, failed, curLine))
@@ -345,12 +373,14 @@ func (m *model) browseView() string {
 }
 
 // listCell renders the file-list entry at index i padded to width
-// cells; the current entry is underlined.
-func (m *model) listCell(escaped []string, i, width int) string {
-	if i >= len(escaped) {
+// cells; the current entry is underlined. Only the visible window's
+// entries are escaped — the frame render never queries the provider
+// for off-window paths.
+func (m *model) listCell(i, width int) string {
+	if i >= len(m.idx.Files) {
 		return strings.Repeat(" ", width)
 	}
-	clipped := clipCells(escaped[i], width)
+	clipped := clipCells(m.escapePath(m.idx.Files[i].Path), width)
 	entry := m.theme.FileList(clipped)
 	if i == m.curFile() {
 		entry = m.theme.CurrentFile(clipped)
@@ -402,7 +432,7 @@ func (m *model) contentCell(cr, width, top int, rows rowSource, failed bool, cur
 func (m *model) filenameRule(width int) string {
 	name := ""
 	if m.idx != nil && len(m.idx.Files) > 0 {
-		name = safepresentation.EscapePath(m.idx.Files[m.curFile()].Path)
+		name = m.escapePath(m.idx.Files[m.curFile()].Path)
 	}
 	if width <= 4 {
 		return padTo(clipCells(name, width), width)

@@ -39,11 +39,11 @@ func TestScrollUnitsMoveRenderedRows(t *testing.T) {
 	}
 	for _, u := range units {
 		var v viewport.Viewport
-		v.Scroll(u.down, rows, height)
+		v.Scroll(u.down, seqRows(rows), height)
 		if v.Top() != u.down {
 			t.Fatalf("%s: after scrolling down top = %d, want %d", u.name, v.Top(), u.down)
 		}
-		v.Scroll(-u.down, rows, height)
+		v.Scroll(-u.down, seqRows(rows), height)
 		if v.Top() != 0 {
 			t.Fatalf("%s: after scrolling back up top = %d, want 0", u.name, v.Top())
 		}
@@ -85,11 +85,11 @@ func TestScrollClampByFileLength(t *testing.T) {
 			t.Fatalf("%s: MaxTop(%d, %d) = %d, want %d", c.name, c.rows, c.height, got, c.maxTop)
 		}
 		var v viewport.Viewport
-		v.Scroll(1000, c.rows, c.height)
+		v.Scroll(1000, seqRows(c.rows), c.height)
 		if v.Top() != c.maxTop {
 			t.Fatalf("%s: scrolling past EOF gave top = %d, want %d", c.name, v.Top(), c.maxTop)
 		}
-		v.Scroll(1000, c.rows, c.height)
+		v.Scroll(1000, seqRows(c.rows), c.height)
 		if v.Top() != c.maxTop {
 			t.Fatalf("%s: a second scroll at EOF moved top to %d, want it to stay %d", c.name, v.Top(), c.maxTop)
 		}
@@ -100,13 +100,13 @@ func TestScrollClampByFileLength(t *testing.T) {
 func TestScrollClampBOF(t *testing.T) {
 	var v viewport.Viewport
 	for _, d := range []int{-1, -viewport.HalfPage(10), -10} {
-		v.Scroll(d, 100, 10)
+		v.Scroll(d, seqRows(100), 10)
 		if v.Top() != 0 {
 			t.Fatalf("scroll %d at BOF gave top = %d, want 0", d, v.Top())
 		}
 	}
-	v.Scroll(50, 100, 10)
-	v.Scroll(-1000, 100, 10)
+	v.Scroll(50, seqRows(100), 10)
+	v.Scroll(-1000, seqRows(100), 10)
 	if v.Top() != 0 {
 		t.Fatalf("scrolling past BOF gave top = %d, want 0", v.Top())
 	}
@@ -117,18 +117,18 @@ func TestScrollClampBOF(t *testing.T) {
 // blank rows below EOF — the documented lossy EOF clamp.
 func TestClampPullsTopUp(t *testing.T) {
 	var v viewport.Viewport
-	v.Scroll(90, 100, 10)
+	v.Scroll(90, seqRows(100), 10)
 	if v.Top() != 90 {
 		t.Fatalf("top = %d, want 90", v.Top())
 	}
 	// The viewport grows to 50 rows: tops past 50 would leave blanks.
-	v.Clamp(100, 50)
+	v.Clamp(seqRows(100), 50)
 	if v.Top() != 50 {
 		t.Fatalf("after growing the height top = %d, want 50", v.Top())
 	}
 	// The content shrinks to 30 rows: every position past 0 leaves
 	// blanks, so the top collapses to the top of the file.
-	v.Clamp(30, 50)
+	v.Clamp(seqRows(30), 50)
 	if v.Top() != 0 {
 		t.Fatalf("after shrinking the content top = %d, want 0", v.Top())
 	}

@@ -117,7 +117,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   #16 adds `m.wrap` (on initially; the `w` browse key toggles it) and
   `m.revs` (the per-path content revision bumped on every successful
   load), and `WindowSizeMsg` now rebuilds the keyed row models through
-  `rebuildRows` rather than only re-clamping. Issue #11 adds the session
+  `rebuildRows` rather than only re-clamping. Issue #17 replaces that
+  synchronous rebuild with the prepared-layout pipeline:
+  `layoutReadyMsg` installs a row model only while its key still
+  matches `layoutKey` (obsolete completions are discarded untouched),
+  `layoutReqs`/`pendingReveals` hold the in-flight keys and deferred
+  reveal intents, `w` and `WindowSizeMsg` just record parameters and
+  return a `requestLayout` command, and installs `Restore` the saved
+  viewport's anchor into the fresh model. `options.layoutGate` and
+  `options.escapePath` (`WithLayoutGate`/`WithEscapePath`) are the new
+  test seams. Issue #11 adds the session
   diagnostic collection `model.diags`: `collectDiags` appends sanitized
   lines as `Update` processes `stderrLineMsg` (forwarded from
   `Child.Diags()` by a `prog.Send` goroutine in `Run`),
@@ -203,14 +212,25 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `viewport.Rows` models, `rowSource.At` now returns a `viewport.Row`,
   `contentCell` blanks continuation gutters and pads the reserved
   indicator column, and `contentText` renders a row's `[Start, End)`
-  cell span. See
+  cell span. Issue #17 moves preparation off `Update`: `layoutKey`
+  is the live demand, `requestLayout` issues gated `viewport.Prepare`
+  commands (deduplicated by `layoutReqs`, nil on the matching-layout
+  fast path), `currentRows` hides stale installed models so rendering
+  and scrolling see a placeholder, `reveal` pends intents on
+  `pendingReveals` that commit when a matching layout installs,
+  `navigate` requests the destination's layout so cached-stale files
+  re-prepare, `rowSource` embeds `viewport.Model` for the anchor
+  translations, `listWBase` fixes the list's longest-path width at
+  search-done, and `listCell` escapes only the visible window's
+  entries through the `escapePath` seam. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [file-change-popup.md](file-change-popup.md),
   [viewport-scrolling.md](viewport-scrolling.md),
   [match-navigation.md](match-navigation.md),
-  [destination-reveal.md](destination-reveal.md), and
-  [wrap-mode.md](wrap-mode.md).
+  [destination-reveal.md](destination-reveal.md),
+  [wrap-mode.md](wrap-mode.md), and
+  [logical-anchor.md](logical-anchor.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
@@ -231,8 +251,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   text width, wrap mode), `Row`/`span` cell-range rows, `Row.Continuation`,
   `ReservedIndicator` (0 wrapping, 1 run-off-edge), and `wrapLine`'s
   cluster-boundary partitioning with the never-split blank-cell rule.
-  See [viewport-scrolling.md](viewport-scrolling.md) and
-  [wrap-mode.md](wrap-mode.md).
+  Issue #17 adds `Anchor{Line, Cell}` — the width-independent logical
+  reading position — the `Model` interface (`Len`/`AnchorAt`/`RowOf`)
+  every positioning operation takes, `Viewport.anchor` plus
+  `Viewport.Anchor`/`Restore`, and the `Rows.AnchorAt`/`Rows.RowOf`
+  translations; `Scroll`/`Reveal` replace the anchor only when the
+  effective top moves and any clamp that pulls the top up rewrites it
+  (the lossy EOF rule). See
+  [viewport-scrolling.md](viewport-scrolling.md),
+  [wrap-mode.md](wrap-mode.md), and
+  [logical-anchor.md](logical-anchor.md).
 - `internal/viewport/reveal.go` — Issue #14's vertical destination
   reveal: `Target{Line, Cell}` (the display target — the first
   submatch's start cell), `Rows.StopTarget` (stop → target through the
@@ -241,8 +269,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   row whose span holds the target cell, falling back to the line's
   last row), and `Viewport.Reveal`
   (visible-target no-scroll, else top = `row − floor(h/3)` clamped to
-  `[0, MaxTop]`, reporting whether the viewport moved). See
-  [destination-reveal.md](destination-reveal.md).
+  `[0, MaxTop]`, reporting whether the viewport moved). Issue #17's
+  `Reveal` is model-aware and replaces the logical anchor only when
+  the viewport moves — a no-scroll reveal retains the logical column.
+  See [destination-reveal.md](destination-reveal.md) and
+  [logical-anchor.md](logical-anchor.md).
 - `internal/theme/theme.go` — the active scheme's style set: `Dark()`
   (white on black, initially active), `Light()` (black on white), the
   pure `Toggled` flip behind the `c` key, `Plain()` (the no-style

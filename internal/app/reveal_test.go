@@ -232,7 +232,7 @@ func TestFirstVisitStartsFromTopThenReveal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.Update(fileLoadedMsg{path: idx.Files[1].Path, buf: buf})
+	injectLoad(t, m, fileLoadedMsg{path: idx.Files[1].Path, buf: buf})
 
 	// The crossing opens a pop-up, but the cached file issues no load.
 	for _, msg := range navLeafMsgs(t, m, keyN) {

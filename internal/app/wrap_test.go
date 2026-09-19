@@ -66,7 +66,8 @@ func TestWTogglesWrapMode(t *testing.T) {
 		t.Fatalf("wrapped rows = %d, want the long line spanning several", wrapped)
 	}
 
-	m.Update(keyW)
+	_, wc := m.Update(keyW)
+	deliverLayout(t, m, wc)
 	if m.wrap {
 		t.Fatal("w did not toggle wrap off")
 	}
@@ -84,7 +85,8 @@ func TestWTogglesWrapMode(t *testing.T) {
 		t.Fatalf("row after the clipped line = %q, want line 2", row)
 	}
 
-	m.Update(keyW)
+	_, wc = m.Update(keyW)
+	deliverLayout(t, m, wc)
 	if !m.wrap {
 		t.Fatal("second w did not toggle wrap back on")
 	}
@@ -159,7 +161,8 @@ func TestResizeRebuildsRowModel(t *testing.T) {
 	key := string(idx.Files[0].Path)
 	before := m.rows[key].Len()
 
-	m.Update(tea.WindowSizeMsg{Width: 70, Height: 24})
+	_, rc := m.Update(tea.WindowSizeMsg{Width: 70, Height: 24})
+	deliverLayout(t, m, rc)
 	listW := safepresentation.CellWidth(escapedPath(idx.Files[0])) + 1
 	if listW > 70 {
 		listW = 70 // the list caps at the terminal width

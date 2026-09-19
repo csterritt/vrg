@@ -582,6 +582,57 @@ only the load leaf:
   newline in the raw path render as the single-line escaped form; the
   frame keeps its row count.
 
+`anchor_test.go` (same package; Issue #17) covers the logical anchor
+through the app model, plus the `deliverLayout` helper that runs a
+returned layout command and feeds its `layoutReadyMsg` back through
+`Update`:
+
+- `TestResizePreservesCursorAndAnchor` — after scrolling to a mid-line
+  anchor inside a wrapped 500-cell line, narrowing and re-widening the
+  frame keep the identical anchor, land the top on the row containing
+  it (not the former ordinal, and the original top returns), and never
+  move the matched-line cursor.
+
+`layout_test.go` (same package; Issue #17) covers the off-`Update`
+prepared-layout pipeline under the `heldLayouts` gate (workers signal
+`entered` then block on `release`, run via `runCmd` goroutines) and
+the `crossFiles` single-stop fixture:
+
+- `TestGatedLayoutKeepsInputsResponsive` — while a layout worker is
+  held, `n`/`p` move the cursor and record the pending reveal intent,
+  `w` flips wrap and issues a newly keyed request without releasing
+  the worker, a second resize is accepted likewise, `q` exits with the
+  fixed status, and releasing all workers installs only the newest key
+  and commits the pending reveal to the latest stop.
+- `TestGatedLayoutCtrlCExits130` — `ctrl+c` while a worker is held
+  cancels to 130 without waiting on it.
+- `TestOutOfOrderLayoutCompletions` — three resizes mint three keyed
+  requests; delivered out of order, the two stale ones change nothing
+  (installed layout, saved viewport, and anchor all untouched) while
+  the current key installs and restores the anchor's containing row.
+- `TestRapidWrapToggleDiscardsSupersededLayout` — the wrap-off
+  completion arriving after wrap toggled back on is obsolete; the
+  second `w` is the matching fast path issuing no request, and the
+  stale delivery changes neither the installed layout nor the anchor.
+- `TestObsoleteLayoutForOtherFileDiscarded` — a superseded completion
+  for a non-current file leaves that file's installed layout and saved
+  viewport and the visible frame untouched; an obsolete completion for
+  the current file does not consume its pending reveal intent, which
+  commits when the matching layout installs.
+- `TestStaleRevisionCompletionDiscarded` — a reload bumps the content
+  revision, so a completion minted under the superseded revision is
+  obsolete; the rev-2 request installs.
+- `TestCachedFileStaleLayoutRequestsFresh` — navigating to a cached
+  file whose installed layout no longer matches the live key pends the
+  reveal, requests a fresh preparation, shows "Loading…" rather than
+  stale rows, and commits the reveal on install.
+- `TestCachedFileFreshLayoutFastPath` — navigating to a cached file
+  whose installed layout still matches applies the reveal at once and
+  issues no request.
+- `TestRenderEscapesOnlyVisibleListEntries` — the `escapePath` seam
+  counts provider queries: one frame over a 50-file index escapes only
+  the visible list window plus the filename-rule path.
+
 ## internal/viewport
 
 `viewport_test.go` (external package `viewport_test`; Issue #12):
@@ -656,6 +707,29 @@ reveal over real prepared buffers:
 - `TestRevealStartsFromCurrentTop` — the reveal is relative to the
   viewport's current top: the same target moves a first-visit top of 0
   it is hidden from but stays put when visible from a saved top.
+
+`anchor_test.go` (external package; Issue #17) covers the logical
+anchor over real prepared buffers:
+
+- `TestAnchorRewrapKeepsTextLocation` — a 95-cell line scrolled to row
+  5 at text width 10 anchors `{Line: 1, Cell: 50}`; restoring at width
+  7 lands the top on the row containing cell 50 (row 7), and returning
+  to width 10 restores row 5 — the same text, not the same ordinal.
+- `TestAnchorSurvivesWrapToggle` — wrap-off shows the anchor's line as
+  one row while retaining cell 50; wrapping back restores the row
+  holding that cell.
+- `TestScrollReplacesAnchor` — a scroll that moves the effective top
+  replaces the anchor with the new top row's location.
+- `TestMovingRevealReplacesAnchor` — a reveal that moves the viewport
+  replaces the anchor with the resulting top row's location.
+- `TestNoScrollRevealRetainsLogicalColumn` — a reveal of an
+  already-visible target keeps the retained mid-row column rather than
+  snapping it to the top row's start.
+- `TestEOFClampUpdatesAnchorLossy` — `Clamp` pulling the top up (from
+  90 to 70) rewrites the anchor to the clamped row (line 91 → line
+  71), and a later shrink does not restore the pre-clamp top.
+- `TestRestoreEOFClampUpdatesAnchor` — `Restore` under a grown
+  viewport that forces the clamp updates the anchor the same way.
 
 ## internal/theme
 

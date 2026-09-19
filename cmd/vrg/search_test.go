@@ -20,6 +20,11 @@ type ptySession struct {
 	cmd  *exec.Cmd
 	pt   *os.File
 	done chan int // receives the exit code exactly once
+	// drained closes when the output goroutine has copied the child's
+	// last bytes off the pty — waitExit waits on it so assertions see
+	// the full stream (the drain can lag behind Wait by a scheduling
+	// quantum).
+	drained chan struct{}
 
 	mu  sync.Mutex
 	out bytes.Buffer
@@ -57,7 +62,7 @@ func startVrgPTY(t *testing.T, dir string, env []string, args ...string) *ptySes
 	if err != nil {
 		t.Fatalf("pty start: %v", err)
 	}
-	s := &ptySession{t: t, cmd: cmd, pt: pt, done: make(chan int, 1)}
+	s := &ptySession{t: t, cmd: cmd, pt: pt, done: make(chan int, 1), drained: make(chan struct{})}
 	s.watch()
 	return s
 }
@@ -78,6 +83,7 @@ func (s *ptySession) watch() {
 		s.done <- -1
 	}()
 	go func() {
+		defer close(s.drained)
 		buf := make([]byte, 4096)
 		for {
 			n, err := s.pt.Read(buf)
@@ -130,6 +136,13 @@ func (s *ptySession) waitExit() int {
 	s.t.Helper()
 	select {
 	case code := <-s.done:
+		// The process has exited; give the drain goroutine a moment to
+		// deliver the bytes still buffered in the pty (the display
+		// restoration sequence is among the last writes).
+		select {
+		case <-s.drained:
+		case <-time.After(5 * time.Second):
+		}
 		s.pt.Close()
 		return code
 	case <-time.After(20 * time.Second):
@@ -151,7 +164,8 @@ func runVrgWithQuit(t *testing.T, dir string, env []string, args ...string) (str
 		t.Fatalf("browse view never appeared; output: %q", s.output())
 	}
 	s.send("q")
-	return s.output(), s.waitExit()
+	code := s.waitExit()
+	return s.output(), code
 }
 
 // waitForFile polls for a path to appear, on an explicit condition.

@@ -71,13 +71,16 @@ func startBrowse(t *testing.T, m *model, idx *searchindex.Index) tea.Cmd {
 	return cmd
 }
 
-// finishLoad runs the load command and delivers its completion message.
-// A file-crossing navigation batches the pop-up's expiry command after
-// the load, so batches are unwrapped leaf by leaf until the load lands.
+// finishLoad runs the load command, delivers its completion message,
+// and delivers the layout completion the load's preparation request
+// produced — the full load-then-prepare sequence. A file-crossing
+// navigation batches the pop-up's expiry command after the load, so
+// batches are unwrapped leaf by leaf until the load lands.
 func finishLoad(t *testing.T, m *model, cmd tea.Cmd) {
 	t.Helper()
 	if msg, ok := fileLoadOf(cmd); ok {
-		m.Update(msg)
+		_, lcmd := m.Update(msg)
+		deliverLayout(t, m, lcmd)
 		return
 	}
 	t.Fatalf("load command produced no fileLoadedMsg")
@@ -245,7 +248,9 @@ func TestGatedLoadStaysResponsive(t *testing.T) {
 	}
 
 	close(release)
-	m.Update(<-done)
+	msg := <-done
+	_, lc := m.Update(msg)
+	deliverLayout(t, m, lc)
 	if v := viewText(m); strings.Contains(v, "Loading…") || !strings.Contains(v, "func") {
 		t.Fatalf("view = %q after release, want content without Loading…", v)
 	}
@@ -351,7 +356,8 @@ func TestResizeRecomposesBrowse(t *testing.T) {
 	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
 	cmd := startBrowse(t, m, browseIndex(t, browseFiles))
 	finishLoad(t, m, cmd)
-	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	_, rc := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	deliverLayout(t, m, rc)
 	if got := strings.Count(viewText(m), "\n") + 1; got != 30 {
 		t.Fatalf("view rows = %d, want 30 after resize", got)
 	}
@@ -424,7 +430,7 @@ func TestLateLoadForOtherFileIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m.Update(fileLoadedMsg{path: idx.Files[1].Path, buf: buf})
+	injectLoad(t, m, fileLoadedMsg{path: idx.Files[1].Path, buf: buf})
 	if v := viewText(m); !strings.Contains(v, "Loading…") {
 		t.Fatalf("view = %q, want Loading… — a foreign completion must not settle the current file", v)
 	}

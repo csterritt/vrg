@@ -10,35 +10,110 @@
 // with BOF/EOF precedence in reveal.go. Issue #16 lands the two row
 // models — wrap and run-off-edge — built from FileBuffer's shared
 // grapheme-cluster segmentation, and the keyed swappable row model.
-// Logical anchors and horizontal state arrive in later issues.
+// Issue #17 lands the logical anchor: the width-independent (source
+// line, display-column) reading position that survives rewraps, wrap
+// toggles, and resizes, updated by scrolling, moving reveals, and the
+// lossy EOF clamp. Horizontal state arrives in later issues.
 package viewport
 
 import "vrg/internal/filebuffer"
 
+// Anchor is the width-independent logical reading position: the source
+// line and the display-column offset within that line of the location
+// the effective top row must contain. Unlike a rendered-row ordinal it
+// means the same text under any wrap width or mode, so it is what a
+// rewrap, wrap toggle, or resize retains.
+type Anchor struct {
+	// Line is the anchor's 1-based source line number.
+	Line int64
+	// Cell is the anchor's display-column offset within that line.
+	Cell int
+}
+
+// Model is the prepared row model a viewport positions itself against:
+// the row count plus the two anchor translations. *Rows is the
+// production implementation; tests may substitute a fake.
+type Model interface {
+	// Len is the number of rendered rows.
+	Len() int
+	// AnchorAt is the logical location a rendered row starts at.
+	AnchorAt(row int) Anchor
+	// RowOf is the rendered row containing the anchor's location.
+	RowOf(a Anchor) int
+}
+
 // Viewport is the file panel's vertical window over one loaded file's
 // prepared rows. The zero value shows the top of the file.
-type Viewport struct{ top int }
+//
+// top is the effective top — the first visible rendered row in the
+// installed model. anchor is the retained logical position: scrolling
+// and moving reveals replace it with the resulting top row's location,
+// a no-scroll reveal leaves it — keeping a logical column that is
+// inside rather than at the start of the top row — and end-of-file
+// clamping rewrites it to the clamped top, the documented lossy case.
+type Viewport struct {
+	top    int
+	anchor Anchor
+}
 
 // Top is the index of the first visible rendered row.
 func (v Viewport) Top() int { return v.top }
 
+// Anchor is the retained logical reading position.
+func (v Viewport) Anchor() Anchor { return v.anchor }
+
 // Scroll moves the top row by d rendered rows — negative toward the top
 // of the file — then clamps to valid content: the result is never below
-// 0 and never past MaxTop.
-func (v *Viewport) Scroll(d, rows, height int) {
+// 0 and never past MaxTop. A scroll that moved the effective top
+// replaces the logical anchor with the resulting top row's location; a
+// clamped no-move scroll leaves a retained column intact.
+func (v *Viewport) Scroll(d int, m Model, height int) {
+	top := v.top
 	v.top += d
-	v.Clamp(rows, height)
+	v.clamp(m.Len(), height)
+	v.reanchor(top, m)
+}
+
+// Restore re-derives the effective top under a replacement row model —
+// a rewrap, wrap toggle, or resize — as the row containing the retained
+// anchor's location rather than the row with the same former ordinal.
+// The logical column survives a round trip through run-off-edge mode:
+// the anchor's line shows as one row while its cell is kept, and
+// wrapping again restores the row containing that cell. EOF clamping
+// may pull the effective top upward; when it does, the anchor is
+// updated to the resulting top — the documented lossy rule.
+func (v *Viewport) Restore(m Model, height int) {
+	v.top = m.RowOf(v.anchor)
+	top := v.top
+	v.clamp(m.Len(), height)
+	v.reanchor(top, m)
 }
 
 // Clamp brings the top row back into the valid range after the row
 // count or content height changes, dropping positions that would leave
-// avoidable blank rows below EOF.
-func (v *Viewport) Clamp(rows, height int) {
+// avoidable blank rows below EOF — the lossy clamp: a moved top updates
+// the anchor to the resulting top row's location.
+func (v *Viewport) Clamp(m Model, height int) {
+	top := v.top
+	v.clamp(m.Len(), height)
+	v.reanchor(top, m)
+}
+
+// clamp bounds the top row to [0, MaxTop].
+func (v *Viewport) clamp(rows, height int) {
 	if max := MaxTop(rows, height); v.top > max {
 		v.top = max
 	}
 	if v.top < 0 {
 		v.top = 0
+	}
+}
+
+// reanchor replaces the logical anchor with the effective top row's
+// location when the top moved under the model m.
+func (v *Viewport) reanchor(old int, m Model) {
+	if v.top != old && m.Len() > 0 {
+		v.anchor = m.AnchorAt(v.top)
 	}
 }
 
@@ -111,8 +186,9 @@ type span struct{ line, start, end int }
 // the buffer. In wrap mode each source line becomes one row per
 // text-width band, broken only at the buffer's grapheme-cluster
 // boundaries; in run-off-edge mode each line is exactly one row. The
-// model is built at load, toggle, and resize time — synchronously in
-// this issue, off the update path in Issue #17 — and swapped in whole.
+// model is prepared off the update path on load, toggle, and resize
+// (Issue #17) and installed whole, only while its key still matches
+// the live layout.
 type Rows struct {
 	key   Key
 	lines []filebuffer.Line
@@ -184,3 +260,39 @@ func (r *Rows) At(i int) Row {
 // GutterWidth is the line-number gutter width the rows' panel renders
 // with.
 func (r *Rows) GutterWidth() int { return r.gutter }
+
+// AnchorAt is the logical location rendered row i starts at: its source
+// line's number and the row's first display cell — the location a
+// scroll or moving reveal adopts as the new anchor. It panics outside
+// [0, Len), as a slice index does.
+func (r *Rows) AnchorAt(i int) Anchor {
+	s := r.spans[i]
+	return Anchor{Line: r.lines[s.line].Number, Cell: s.start}
+}
+
+// RowOf is the rendered row containing the anchor's location — the row
+// a retained anchor restores to after a rewrap, so the effective top is
+// the row holding the anchor's text, not the row with the same former
+// ordinal. A line number outside the prepared rows clamps to the
+// nearest real row; a cell past the line's cells lands on its last row.
+// The empty model maps every anchor to row 0.
+func (r *Rows) RowOf(a Anchor) int {
+	if len(r.spans) == 0 {
+		return 0
+	}
+	li := int(a.Line) - 1
+	if li < 0 {
+		li = 0
+	}
+	if li >= len(r.lines) {
+		li = len(r.lines) - 1
+	}
+	row := r.firstRow[li]
+	for i := row; i < r.firstRow[li+1]; i++ {
+		row = i
+		if a.Cell < r.spans[i].end {
+			break
+		}
+	}
+	return row
+}

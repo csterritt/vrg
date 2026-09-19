@@ -43,9 +43,11 @@ layout the key describes:
 
 - `Key{Path, Revision, TextWidth, Wrap}` — the exact inputs a model was
   built for. `Rows.Key()` reports it; a change in any field makes the
-  model stale. The model is a **swappable value**: Issue #17 can
-  prepare a replacement off the update path and swap it in while the
-  key still matches the live layout. Issue #16 prepares synchronously.
+  model stale. The model is a **swappable value**: Issue #17 prepares
+  replacements off the update path and swaps one in only while its key
+  still matches the live layout (see
+  [logical-anchor.md](logical-anchor.md)). Issue #16 prepared
+  synchronously.
 - **Wrap mode** partitions each source line's cells into rows of at
   most `TextWidth` cells, broken only at cluster boundaries. A cluster
   that does not fit in the row's remaining cells starts the next row,
@@ -67,8 +69,10 @@ layout the key describes:
 
 ## App wiring (`internal/app`)
 
-- `model.wrap` starts **true**; `w` (browse state only) flips it and
-  rebuilds every prepared row model under the new key — the text width
+- `model.wrap` starts **true**; `w` (browse state only) flips it and —
+  since Issue #17 — issues a `requestLayout` command preparing the
+  current file's model under the new key off the update path; the
+  retained logical anchor restores when it installs. The text width
   itself changes with the reserved indicator column.
 - `model.revs` is the per-path content revision: it bumps on every
   successful `fileLoadedMsg`, so a reload's row model never aliases the
@@ -76,9 +80,10 @@ layout the key describes:
 - `textWidth(gutter)` = frame width − file-list width − gutter −
   `ReservedIndicator(wrap)`; all wrapping, clipping, and reveal math
   uses it.
-- `rebuildRows` swaps in a fresh `viewport.Prepare` for every cached
-  buffer whose key changed — after a `w` toggle or a `WindowSizeMsg` —
-  then re-clamps each saved `vps` viewport to the new row count.
+- Issue #17 replaced the synchronous `rebuildRows` with
+  `requestLayout`/`layoutReadyMsg`: `w` and `WindowSizeMsg` record the
+  new parameters and return a preparation command, and the keyed
+  completion installs only while it still matches the live layout.
 - `contentText` renders a row's `[Start, End)` cells; `contentCell`
   emits a blank gutter for continuation rows and pads the reserved
   indicator column. A frame still queries `rowSource` only for the

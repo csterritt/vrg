@@ -45,7 +45,11 @@ the reveal starts from).
   EOF content take precedence over the exact third.
 - `Reveal` reports whether the top actually moved: the return value
   distinguishes a moving reveal (which replaces saved vertical state)
-  from a no-scroll reveal (which leaves it).
+  from a no-scroll reveal (which leaves it). Since Issue #17 the same
+  distinction drives the logical anchor: a moving reveal replaces it
+  with the resulting top row's location while a no-scroll reveal keeps
+  the retained logical column (see
+  [logical-anchor.md](logical-anchor.md)).
 
 ## Starting-viewport sequence and saved state (`internal/app`)
 
@@ -53,8 +57,14 @@ the reveal starts from).
 stop, resolve its target row through the file's `rowSource`, then
 `Reveal` against the file's saved `vps` viewport — absent on a first
 visit, so the zero value's top-of-file is the start — and write the
-viewport back to `vps` **only when it moved**. It is a no-op while the
-panel shows a placeholder (no row model) or at zero content height.
+viewport back to `vps` **only when it moved**. Since Issue #17 the
+placeholder case is not a plain no-op: when no layout matching the
+current parameters is installed, `reveal` records a **pending intent**
+on `pendingReveals[path]` that commits when the matching layout
+completion installs — so navigation under a gated worker still lands
+on the latest selection (see
+[logical-anchor.md](logical-anchor.md)). Zero content height remains a
+no-op.
 
 Two triggers, the ones this issue owns:
 

@@ -86,7 +86,7 @@ func TestTargetRow(t *testing.T) {
 // saved position a revisit would resume from.
 func atTop(top, rows, height int) viewport.Viewport {
 	var v viewport.Viewport
-	v.Scroll(top, rows, height)
+	v.Scroll(top, seqRows(rows), height)
 	return v
 }
 
@@ -96,7 +96,7 @@ func TestRevealVisibleTargetNoScroll(t *testing.T) {
 	const rows, height = 100, 10
 	for _, target := range []int{10, 15, 19} {
 		v := atTop(10, rows, height)
-		if moved := v.Reveal(target, rows, height); moved {
+		if moved := v.Reveal(target, seqRows(rows), height); moved {
 			t.Fatalf("target %d visible in [10,20) reported a move", target)
 		}
 		if v.Top() != 10 {
@@ -112,7 +112,7 @@ func TestRevealHiddenTargetOneThird(t *testing.T) {
 	const rows, height = 100, 9 // floor(9/3) = 3
 
 	v := atTop(0, rows, height)
-	if moved := v.Reveal(50, rows, height); !moved {
+	if moved := v.Reveal(50, seqRows(rows), height); !moved {
 		t.Fatal("hidden target below reported no move")
 	}
 	if v.Top() != 47 {
@@ -120,7 +120,7 @@ func TestRevealHiddenTargetOneThird(t *testing.T) {
 	}
 
 	v = atTop(50, rows, height)
-	if moved := v.Reveal(10, rows, height); !moved {
+	if moved := v.Reveal(10, seqRows(rows), height); !moved {
 		t.Fatal("hidden target above reported no move")
 	}
 	if v.Top() != 7 {
@@ -135,20 +135,20 @@ func TestRevealBOFEOFClamps(t *testing.T) {
 	const rows, height = 60, 10 // floor(10/3) = 3, MaxTop = 50
 
 	v := atTop(20, rows, height)
-	v.Reveal(2, rows, height)
+	v.Reveal(2, seqRows(rows), height)
 	if v.Top() != 0 {
 		t.Fatalf("target row 2 gave top = %d, want 0 — BOF beats one-third", v.Top())
 	}
 
 	v = atTop(0, rows, height)
-	v.Reveal(59, rows, height)
+	v.Reveal(59, seqRows(rows), height)
 	if v.Top() != 50 {
 		t.Fatalf("target row 59 gave top = %d, want the EOF clamp %d", v.Top(), 50)
 	}
 
 	// A file barely taller than the viewport clamps likewise.
 	v = atTop(0, 12, height)
-	v.Reveal(11, 12, height)
+	v.Reveal(11, seqRows(12), height)
 	if v.Top() != 2 {
 		t.Fatalf("target row 11 of 12 gave top = %d, want 2", v.Top())
 	}
@@ -162,13 +162,13 @@ func TestRevealStartsFromCurrentTop(t *testing.T) {
 	const rows, height = 100, 10
 
 	revisit := atTop(12, rows, height) // a saved position
-	if moved := revisit.Reveal(8, rows, height); !moved || revisit.Top() != 5 {
+	if moved := revisit.Reveal(8, seqRows(rows), height); !moved || revisit.Top() != 5 {
 		t.Fatalf("target 8 hidden above saved top 12: moved=%v top=%d, want moved to 5",
 			moved, revisit.Top())
 	}
 
 	fresh := atTop(0, rows, height) // a first visit: the top of the file
-	if moved := fresh.Reveal(8, rows, height); moved || fresh.Top() != 0 {
+	if moved := fresh.Reveal(8, seqRows(rows), height); moved || fresh.Top() != 0 {
 		t.Fatalf("target 8 visible from top 0: moved=%v top=%d, want no move",
 			moved, fresh.Top())
 	}

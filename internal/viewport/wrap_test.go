@@ -202,7 +202,7 @@ func TestRevealDeepInWrappedLine(t *testing.T) {
 		t.Fatalf("TargetRow = %d, want 24 (cells 240-249)", target)
 	}
 	var v viewport.Viewport
-	if !v.Reveal(target, rows.Len(), 6) {
+	if !v.Reveal(target, rows, 6) {
 		t.Fatal("hidden target reported no move")
 	}
 	if v.Top() != 22 {

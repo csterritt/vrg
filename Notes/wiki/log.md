@@ -569,3 +569,60 @@ graphemes, and safe presentation; Layout and indicators),
 `internal/filebuffer/filebuffer.go`, `internal/viewport/viewport.go`,
 `internal/viewport/reveal.go`, `internal/app/app.go`,
 `internal/app/browse.go`, and the new/updated test files.
+
+## [2026-09-17] ingest | Issue #17 logical anchor and prepared layouts
+
+The file panel's reading position is now a width-independent logical
+`Anchor{Line, Cell}` — the source line plus display-column offset the
+effective top row must contain — retained through rewraps, wrap
+toggles, and resizes, and every `viewport.Prepare` row model is built
+off the update path as a Bubble Tea command. `internal/viewport` adds
+`Anchor`, the `Model` interface (`Len`/`AnchorAt`/`RowOf`) every
+positioning operation takes, `Viewport.anchor` with `Anchor()` and
+`Restore(m, height)` (the new top is the row containing the retained
+location, never the former ordinal), and `Rows.AnchorAt`/`Rows.RowOf`
+translations over `firstRow`. Anchor replacement rules: `Scroll` and a
+moving `Reveal` replace it with the resulting top row's location, a
+no-scroll reveal keeps a retained mid-row column, and the EOF clamp —
+in `Scroll`, `Clamp`, or `Restore` — rewrites it to the clamped top
+(the intentionally lossy rule; a later shrink cannot resurrect the
+pre-clamp position). `internal/app` moves preparation off `Update`:
+`requestLayout` returns a gated `viewport.Prepare` command (nil on the
+matching-key fast path, deduplicated by `layoutReqs`' newest in-flight
+key per path), `layoutReadyMsg` carries its key and installs only while
+it still equals `layoutKey` — obsolete, out-of-order, superseded-mode,
+and superseded-revision completions are discarded without touching
+installed rows, saved viewports, anchors, or pending intents.
+`currentRows` hides stale installed models (rendering and scrolling
+see "Loading…"), `reveal` records `pendingReveals[path]` when no
+current layout exists and commits it on install alongside the
+first-visit reveal, `w`/`WindowSizeMsg`/`fileLoadedMsg`/`navigate` are
+the request triggers (the last re-preparing a cached file's stale
+layout), and `vps` entries restore their anchors on every matching
+install. Render cost stays bounded: `contentCell` still queries
+`rowSource` only for the visible range, `listWBase` fixes the list's
+longest-path width at `searchDoneMsg`, and `listCell` escapes only the
+visible window through the `escapePath` seam. New test seams:
+`WithLayoutGate` and `WithEscapePath`. New tests:
+`internal/viewport/anchor_test.go` (rewrap keeping the text location
+across widths, the wrap round trip preserving the column, scroll and
+moving-reveal replacement, no-scroll retention, and both lossy-clamp
+cases), `internal/app/anchor_test.go` (resize preserving cursor and
+anchor through the model), and `internal/app/layout_test.go` (gated
+responsiveness for n/p/w/resize/q and ctrl+c→130, out-of-order
+completions, rapid-toggle and other-file discards, the
+superseded-revision discard, cached stale-layout re-request and the
+fresh fast path, pending-reveal commit, and the file-list escape
+bound). Existing scroll/wrap/reveal tests updated for the `Model`
+signatures and async layout delivery (`finishLoad`, `injectLoad`,
+`deliverLayout`). Created [logical-anchor](logical-anchor.md); updated
+[wrap-mode](wrap-mode.md),
+[viewport-scrolling](viewport-scrolling.md),
+[destination-reveal](destination-reveal.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources: `Notes/issues/017-logical-anchor-through-rewrap-and-resize.md`,
+`Notes/tasks/017-logical-anchor-through-rewrap-and-resize.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors; Module
+Design → Viewport), `internal/viewport/viewport.go`,
+`internal/viewport/reveal.go`, `internal/app/app.go`,
+`internal/app/browse.go`, and the new/updated test files.

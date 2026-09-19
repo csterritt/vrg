@@ -65,6 +65,14 @@ type options struct {
 	// substitute an instantly resolving command so expiry is driven by
 	// injected popupExpireMsg values, never by real time.
 	popupTimer func(id int) tea.Cmd
+	// layoutGate, when set, runs inside each layout-preparation command
+	// before the row model is built — the hold proving preparation is
+	// off the update path and input stays actionable while it pends.
+	layoutGate func()
+	// escapePath, when set, replaces the safe-presentation path
+	// escaper — the render-cost seam proving a frame queries the
+	// file-list provider only for the visible window.
+	escapePath func([]byte) string
 }
 
 // WithGate holds index preparation until fn returns.
@@ -87,6 +95,14 @@ func WithDiagAck(fn func()) Option { return func(o *options) { o.diagAck = fn } 
 // WithLoadGate holds each file load — read and decode/map together —
 // until fn returns.
 func WithLoadGate(fn func()) Option { return func(o *options) { o.loadGate = fn } }
+
+// WithLayoutGate holds each layout preparation until fn returns.
+func WithLayoutGate(fn func()) Option { return func(o *options) { o.layoutGate = fn } }
+
+// WithEscapePath substitutes the file-list path escaper.
+func WithEscapePath(fn func([]byte) string) Option {
+	return func(o *options) { o.escapePath = fn }
+}
 
 type state int
 
@@ -138,23 +154,32 @@ type model struct {
 	// scrolling writes through to it, and a destination reveal that
 	// moves the viewport replaces it (Issue #14), so a file revisited
 	// later starts from its last position. rows caches each loaded
-	// file's prepared rendered-row model — built when its load
-	// completes and rebuilt on wrap toggles and resizes — which the
+	// file's prepared rendered-row model — installed when a keyed
+	// completion arrives still matching the live layout — which the
 	// frame render slices instead of rescanning the buffer. revs is the
 	// per-path content revision feeding the row model's key: it bumps
 	// on every successful load, so a reload's model never aliases the
-	// old content's.
+	// old content's. layoutReqs records the newest in-flight
+	// preparation key per path, deduplicating requests; pendingReveals
+	// records per-path destination-reveal intents that could not run
+	// against a missing or stale layout and commit when a matching
+	// completion installs (Issue #17). listWBase is the index's
+	// longest escaped path width plus one, prepared at search-done so
+	// listWidth never rescans the file list per frame.
 	// wrap is the session's wrap mode (Issue #16): on initially,
 	// toggled by w between wrapped rows and run-off-edge clipping.
-	idx     *searchindex.Index
-	loading map[string]bool
-	bufs    map[string]*filebuffer.Buffer
-	failed  map[string]bool
-	vps     map[string]viewport.Viewport
-	rows    map[string]rowSource
-	revs    map[string]int
-	wrap    bool
-	theme   theme.Theme
+	idx            *searchindex.Index
+	loading        map[string]bool
+	bufs           map[string]*filebuffer.Buffer
+	failed         map[string]bool
+	vps            map[string]viewport.Viewport
+	rows           map[string]rowSource
+	revs           map[string]int
+	layoutReqs     map[string]viewport.Key
+	pendingReveals map[string]bool
+	listWBase      int
+	wrap           bool
+	theme          theme.Theme
 
 	// Modal error overlay. overlayOpen marks it up — key input routes
 	// to it ahead of the base state, and only ctrl+c outranks it.
@@ -180,18 +205,20 @@ type model struct {
 
 func newModel(cfg Config, opts options, child Child) *model {
 	return &model{
-		cfg:     cfg,
-		opts:    opts,
-		child:   child,
-		state:   stateSearching,
-		loading: map[string]bool{},
-		bufs:    map[string]*filebuffer.Buffer{},
-		failed:  map[string]bool{},
-		vps:     map[string]viewport.Viewport{},
-		rows:    map[string]rowSource{},
-		revs:    map[string]int{},
-		wrap:    true,
-		theme:   theme.Dark(),
+		cfg:            cfg,
+		opts:           opts,
+		child:          child,
+		state:          stateSearching,
+		loading:        map[string]bool{},
+		bufs:           map[string]*filebuffer.Buffer{},
+		failed:         map[string]bool{},
+		vps:            map[string]viewport.Viewport{},
+		rows:           map[string]rowSource{},
+		revs:           map[string]int{},
+		layoutReqs:     map[string]viewport.Key{},
+		pendingReveals: map[string]bool{},
+		wrap:           true,
+		theme:          theme.Dark(),
 	}
 }
 
@@ -249,13 +276,34 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.clampOverlayScroll()
-		// The new text width rebuilds every prepared row model, and
-		// the new content height can strand a saved top past the last
-		// valid position — re-clamp so no revisit can leave avoidable
-		// blank rows below EOF.
-		m.rebuildRows()
+		// The new text width re-keys every prepared layout: the
+		// current file's replacement is requested here and prepared
+		// off the update path — the retained logical anchor, not the
+		// row ordinal, carries the position into it. Saved viewports
+		// whose installed layout still matches (a pure height change)
+		// re-clamp now; stale ones restore when their fresh layout
+		// installs, so no revisit can leave avoidable blank rows
+		// below EOF.
+		var cmd tea.Cmd
+		if ck, ok := m.curKey(); ok {
+			cmd = m.requestLayout(ck)
+		}
+		for key, vp := range m.vps {
+			if rows := m.currentRows(key); rows != nil {
+				vp.Restore(rows, m.contentRows())
+				m.vps[key] = vp
+			}
+		}
+		return m, cmd
 	case searchDoneMsg:
 		m.idx = msg.idx
+		m.listWBase = 0
+		for _, f := range msg.idx.Files {
+			if w := safepresentation.CellWidth(m.escapePath(f.Path)); w > m.listWBase {
+				m.listWBase = w
+			}
+		}
+		m.listWBase++
 		var cmd tea.Cmd
 		in := OutcomeInput{
 			Result:    msg.res,
@@ -300,21 +348,43 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.bufs[key] = msg.buf
 			m.revs[key]++
-			// The prepared row model is what the frame render slices;
-			// a saved viewport from an earlier visit re-clamps to the
-			// new content.
-			m.rows[key] = m.prepareRows(key, msg.buf)
-			if vp, ok := m.vps[key]; ok {
-				vp.Clamp(m.rows[key].Len(), m.contentRows())
-				m.vps[key] = vp
-			}
-			// A load completing for the current file runs the
+			// A load completing for the current file owes the
 			// file-change reveal sequence against the latest cursor
-			// target — covering the startup file's first visit.
+			// target — covering the startup file's first visit. With
+			// no layout installed yet the intent pends; it commits
+			// when the prepared row model arrives.
 			if ck, ok := m.curKey(); ok && ck == key {
 				m.reveal()
 			}
+			return m, m.requestLayout(key)
 		}
+	case layoutReadyMsg:
+		path := msg.key.Path
+		if m.layoutReqs[path] == msg.key {
+			delete(m.layoutReqs, path)
+		}
+		buf := m.bufs[path]
+		if buf == nil || msg.key != m.layoutKey(path, buf) {
+			// Obsolete: prepared for parameters since superseded, or
+			// for content no longer the revision on record — discard
+			// it without touching the installed layout, the saved
+			// viewports, the anchors, or the pending intents.
+			return m, nil
+		}
+		_, had := m.rows[path]
+		m.rows[path] = msg.rows
+		if vp, ok := m.vps[path]; ok {
+			vp.Restore(msg.rows, m.contentRows())
+			m.vps[path] = vp
+		}
+		// A pending reveal intent — or a first visit's initial
+		// reveal — commits against the freshly installed layout when
+		// the file is still current.
+		if ck, ok := m.curKey(); ok && ck == path && (m.pendingReveals[path] || !had) {
+			delete(m.pendingReveals, path)
+			m.reveal()
+		}
+		return m, nil
 	case failMsg:
 		if msg.err == nil {
 			return m, nil
@@ -374,12 +444,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the session; nothing persists.
 			m.theme = m.theme.Toggled()
 		case key == "w" && m.state == stateBrowse:
-			// w toggles wrap mode: wrapped rows versus run-off-edge
-			// clipping. Every prepared row model rebuilds under the
-			// new key — the text width changes with the reserved
-			// indicator column — and each saved viewport re-clamps.
+			// w toggles wrap mode at once: wrapped rows versus
+			// run-off-edge clipping. The current file's layout is
+			// re-keyed — the text width changes with the reserved
+			// indicator column — and prepared off the update path;
+			// the retained anchor restores when it installs.
 			m.wrap = !m.wrap
-			m.rebuildRows()
+			var cmd tea.Cmd
+			if ck, ok := m.curKey(); ok {
+				cmd = m.requestLayout(ck)
+			}
+			return m, cmd
 		case m.state == stateBrowse && (key == "n" || key == "p"):
 			// n advances and p retreats the circular matched-line
 			// cursor; crossing into another file's stop switches the
@@ -404,6 +479,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// escapePath is the file-list path escaper — the safe-presentation
+// core, or the test seam counting provider queries.
+func (m *model) escapePath(p []byte) string {
+	if m.opts.escapePath != nil {
+		return m.opts.escapePath(p)
+	}
+	return safepresentation.EscapePath(p)
 }
 
 // recordWarnings composes the caller's warning diagnostics from the

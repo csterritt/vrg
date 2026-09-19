@@ -207,7 +207,7 @@ func TestViewportStateSavedPerFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.Update(keyN)
-	m.Update(fileLoadedMsg{path: idx.Files[1].Path, buf: buf})
+	injectLoad(t, m, fileLoadedMsg{path: idx.Files[1].Path, buf: buf})
 	if got := m.vps[string(idx.Files[1].Path)].Top(); got != 0 {
 		t.Fatalf("file B top = %d on its first visit, want 0", got)
 	}
@@ -237,6 +237,21 @@ func (c *countingRows) GutterWidth() int { return 3 }
 func (c *countingRows) At(i int) viewport.Row {
 	c.queries = append(c.queries, i)
 	return viewport.Row{Line: filebuffer.Line{Number: int64(i + 1)}}
+}
+
+func (c *countingRows) AnchorAt(row int) viewport.Anchor {
+	return viewport.Anchor{Line: int64(row + 1)}
+}
+
+func (c *countingRows) RowOf(a viewport.Anchor) int {
+	row := int(a.Line) - 1
+	if row < 0 {
+		row = 0
+	}
+	if row >= c.n {
+		row = c.n - 1
+	}
+	return row
 }
 
 func (c *countingRows) TargetRow(st searchindex.Stop) int {

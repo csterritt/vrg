@@ -78,15 +78,19 @@ func (r *Rows) TargetRow(st searchindex.Stop) int {
 // row leaves the viewport unchanged; otherwise the viewport moves so
 // the row lands at zero-based position floor(height / 3) — the top
 // becomes row − height/3 — clamped to valid tops, so BOF and EOF
-// content take precedence over the one-third placement. Reveal reports
-// whether the viewport moved, distinguishing a saved-state replacement
-// from a no-scroll reveal.
-func (v *Viewport) Reveal(row, rows, height int) bool {
+// content take precedence over the one-third placement. A reveal that
+// moves the effective top replaces the logical anchor with the
+// resulting top row's location; a no-scroll reveal keeps it — a
+// retained logical column is not discarded. Reveal reports whether the
+// viewport moved, distinguishing a saved-state replacement from a
+// no-scroll reveal.
+func (v *Viewport) Reveal(row int, m Model, height int) bool {
 	if height > 0 && row >= v.top && row < v.top+height {
 		return false
 	}
 	top := v.top
 	v.top = row - height/3
-	v.Clamp(rows, height)
+	v.clamp(m.Len(), height)
+	v.reanchor(top, m)
 	return v.top != top
 }

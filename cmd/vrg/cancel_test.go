@@ -48,7 +48,7 @@ func startVrgTermPTY(t *testing.T, dir string, env []string, args ...string) *te
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	s := &ptySession{t: t, cmd: cmd, pt: pt, done: make(chan int, 1)}
+	s := &ptySession{t: t, cmd: cmd, pt: pt, done: make(chan int, 1), drained: make(chan struct{})}
 	s.watch()
 	return &termSession{ptySession: s, tty: tty, before: before}
 }
