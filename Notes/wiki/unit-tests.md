@@ -245,6 +245,20 @@ Issue #5) covers the escaping core and the byte→cell maps:
 - `TestCellsCovering`, `TestCellsCoveringEscapedForms` — byte ranges map
   to covering cell ranges; a match over ESC covers both `^` and `[`.
 
+`cellwidth_test.go` (same package; Issue #39) covers the shared
+ANSI-aware cell-width helper and the decoder boundary:
+
+- `TestCellWidthGraphemePolicy` — ASCII, two-cell CJK, a
+  base-plus-combining cluster, an emoji ZWJ sequence, and a tab each
+  measure their terminal-cell widths.
+- `TestCellWidthIgnoresANSI` — SGR-wrapped ASCII, a styled wide glyph,
+  a styled combining cluster, a styled ZWJ sequence, and a bare reset
+  each measure only their visible cells.
+- `TestDecodeRuneInStringAllowList` — walks every non-test production
+  `.go` file under `internal/` and `cmd/` and fails if
+  `utf8.DecodeRuneInString` appears anywhere but
+  `internal/safepresentation/cellwidth.go`.
+
 `diagnostic_test.go` (external package; Issue #6) covers the diagnostic
 presentation rules of `EscapeDiagnostic`:
 
@@ -766,6 +780,9 @@ only the load leaf:
   (Issue #26 owns which diagnostics open the overlay).
 - `TestPopupLeftTruncatesLongPath` — an over-wide path renders as a
   leading `…` plus the basename tail inside the frame width.
+- `TestPopupWideCombiningPathCells` (Issue #39) — a path of wide and
+  combining characters left-truncates on whole clusters and the box
+  centres by the escaped path's measured cell width.
 - `TestPopupEscapesHostilePath` — control bytes and an embedded
   newline in the raw path render as the single-line escaped form; the
   frame keeps its row count.
@@ -927,6 +944,10 @@ landing exact offsets:
   reserves; the marks return on toggling back.
 - `TestIndicatorsRenderInverseStyled` — under the dark scheme both
   marks render inside the `30;47` inverse SGR, not as plain text.
+- `TestWideMatchIndicatorColumns` (Issue #39) — a match on a
+  two-cell glyph straddling the window edge keeps the indicator
+  columns at one cell each while the mark judges the whole cluster
+  hidden.
 
 `pan_test.go` and `hreveal_test.go` row expectations gain the marks
 at nonzero offsets — hidden-left text and matches mark gutters, and
@@ -949,6 +970,16 @@ half of grapheme-cluster highlight expansion under the styled scheme:
   combining mark renders the `◌` fallback cell highlighted.
 - `TestCJKMatchPaintsBothCells` — a `文` match paints both cells
   inside one inverse-styled run.
+- Issue #39's unified-rendering additions —
+  `TestCJKPartialMatchNeverSwallowsNextChar` (a match overlapping a
+  two-cell CJK glyph highlights exactly that cluster's cells without
+  swallowing the following character),
+  `TestWideCombiningClusterClipsAsOne` (a base-plus-combining cluster
+  clips whole at the window edge while its hidden match still earns
+  the right-edge star), `TestZWJClusterPaintsWholeAndClipsWhole` (an
+  emoji ZWJ sequence paints or clips as one cluster, never split),
+  and `TestCenterMeasuresCells` (`center` pads a two-cell string by
+  measured cells, not runes).
 
 `filelist_test.go` (same package; Issue #24) drives the file-list
 layout contracts, with the `dropCells` cell-aware slicing helper
@@ -982,6 +1013,11 @@ layout contracts, with the `dropCells` cell-aware slicing helper
 - `TestHiddenListEscapesNoEntries` — the render-cost guard: a
   hidden list escapes zero entries; a visible one escapes only the
   visible window's.
+- Issue #39's cell-measurement additions —
+  `TestListEntryWidePathPadsInCells` (a path of two-cell glyphs pads
+  the entry to the list width in cells, not runes) and
+  `TestFilenameRuleWidePath` (a wide path embeds in the filename
+  rule fitted by cells).
 
 `nav_test.go`'s `TestFileListHasNoDirectSelection` drops the
 `tab`/`left`/`right` passive-key rows now that they toggle
@@ -1646,6 +1682,9 @@ real FileBuffer path, so empty spans arrive as marker positions:
   `FilenameRule` are plain base.
 - `TestOverlayBorderBaseColours` — `Overlay` frames rows in a plain
   single-line border, all base colours, padding short rows.
+- `TestOverlayPadsToCellWidth` (Issue #39) — a two-cell glyph row and
+  a one-cell combining row pad to aligned borders under the shared
+  `safepresentation.CellWidth`.
 - `TestPlainNoStyle` — every `Plain()` decorator is the identity;
   `Plain().Overlay` still draws the border without escapes.
 

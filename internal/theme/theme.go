@@ -11,7 +11,8 @@ package theme
 import (
 	"strconv"
 	"strings"
-	"unicode/utf8"
+
+	"vrg/internal/safepresentation"
 )
 
 // Theme is the active scheme's style set. The zero value is the
@@ -93,7 +94,7 @@ func (t Theme) CurrentFile(s string) string { return t.style(s, t.baseParams()+"
 func (t Theme) Overlay(rows []string) []string {
 	w := 0
 	for _, r := range rows {
-		if cw := cellWidth(r); cw > w {
+		if cw := safepresentation.CellWidth(r); cw > w {
 			w = cw
 		}
 	}
@@ -101,7 +102,7 @@ func (t Theme) Overlay(rows []string) []string {
 	out := make([]string, 0, len(rows)+2)
 	out = append(out, t.style("┌"+edge+"┐", t.baseParams()))
 	for _, r := range rows {
-		row := "│ " + r + strings.Repeat(" ", w-cellWidth(r)) + " │"
+		row := "│ " + r + strings.Repeat(" ", w-safepresentation.CellWidth(r)) + " │"
 		out = append(out, t.style(row, t.baseParams()))
 	}
 	return append(out, t.style("└"+edge+"┘", t.baseParams()))
@@ -128,6 +129,3 @@ func (t Theme) baseParams() string {
 func (t Theme) inverseParams() string {
 	return strconv.Itoa(int(t.bg-10)) + ";" + strconv.Itoa(int(t.fg+10))
 }
-
-// cellWidth measures s in terminal cells for overlay sizing.
-func cellWidth(s string) int { return utf8.RuneCountInString(s) }

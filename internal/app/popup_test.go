@@ -441,6 +441,57 @@ func TestPopupLeftTruncatesLongPath(t *testing.T) {
 	}
 }
 
+// The file-change pop-up truncates, sizes, and centres by cells
+// (Issue #39): a path of wide and combining characters left-truncates
+// on grapheme-cluster boundaries — never splitting a cluster, never
+// assuming EscapePath's output has none — and the box's measured cell
+// width centres it exactly.
+func TestPopupWideCombiningPathCells(t *testing.T) {
+	// 20 two-cell glyphs plus a combining cluster: 45 cells.
+	name := strings.Repeat("文", 20) + "é.txt"
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, popupStubTicks)
+	m.theme = theme.Plain()
+	idx := navIndex(t, []navFile{
+		{name: "a.txt", content: "a1\na2 hit\n", stops: []navStop{{line: 2, start: 3, end: 6}}},
+		{name: name, content: "bee\n", stops: []navStop{{line: 1, start: 0, end: 3}}},
+	})
+	finishLoad(t, m, startBrowse(t, m, idx))
+	navLeafMsgs(t, m, keyN) // into the wide-named file — pop-up up
+
+	boxRow := func() (border, interior string) {
+		for _, row := range strings.Split(viewText(m), "\n") {
+			if strings.Contains(row, "┌") {
+				border = row
+			}
+			if i := strings.Index(row, "│ "); i >= 0 {
+				interior = row[i+len("│ ") : strings.LastIndex(row, " │")]
+			}
+		}
+		return border, interior
+	}
+
+	// At 30 columns the interior is 26 cells: a leading … plus the
+	// path's last 25 cells — ten 文 then "é.txt", clusters whole.
+	m.Update(tea.WindowSizeMsg{Width: 30, Height: 7})
+	if _, interior := boxRow(); interior != "…"+strings.Repeat("文", 10)+"é.txt" {
+		t.Fatalf("pop-up interior = %q, want %q — a cluster-safe left truncation", interior, "…"+strings.Repeat("文", 10)+"é.txt")
+	}
+
+	// On a frame fourteen cells wider than the path the path fits
+	// whole and the box centres on the measured cell width:
+	// left = (W - boxW) / 2 = 5. A rune count — 26 runes fewer than
+	// the path's cells — would centre it further right.
+	path := escapedPath(idx.Files[1])
+	m.Update(tea.WindowSizeMsg{Width: safepresentation.CellWidth(path) + 14, Height: 7})
+	border, interior := boxRow()
+	if interior != path {
+		t.Fatalf("pop-up interior = %q, want the whole path %q", interior, path)
+	}
+	if left := strings.Index(border, "┌"); left != 5 {
+		t.Fatalf("pop-up border at column %d, want 5 — centred on the measured cell width: %q", left, border)
+	}
+}
+
 // The pop-up path is the single-line escaped form: control bytes in
 // the raw path can never reach the terminal, and an embedded newline
 // cannot add rows.

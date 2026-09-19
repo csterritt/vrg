@@ -187,6 +187,30 @@ func TestOverlayBorderBaseColours(t *testing.T) {
 	}
 }
 
+// Overlay sizing and padding measure cells, not runes (Issue #39):
+// a two-cell CJK glyph and a one-cell base-plus-combining cluster pad
+// so every row is the same cell width and the right border aligns.
+// Rune counting would under-pad the wide row and over-pad the
+// combining row, leaving a jagged edge.
+func TestOverlayPadsToCellWidth(t *testing.T) {
+	got := theme.Plain().Overlay([]string{"文x", "éx", "ab"})
+	want := []string{
+		"┌─────┐",
+		"│ 文x │",
+		"│ éx  │",
+		"│ ab  │",
+		"└─────┘",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("Overlay rows = %d, want %d: %q", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("Overlay row %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 // On the no-style composition path every decorator is the identity —
 // no escape byte may legitimately appear — except Overlay, which still
 // draws its border (structure, not styling).

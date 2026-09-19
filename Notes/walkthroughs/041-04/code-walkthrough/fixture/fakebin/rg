@@ -1,0 +1,13 @@
+#!/bin/sh
+cat <<'EOF'
+{"type":"begin","data":{"path":{"text":"./f"}}}
+{"type":"match","data":{"path":{"text":"./f"},"lines":{"text":"alpha line 2\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./f"},"binary_offset":null,"stats":{}}}
+{"type":"summary","data":{"stats":{}}}
+EOF
+i=0
+while [ $i -lt 40 ]; do
+    printf 'diag-%02d\n' "$i" >&2
+    i=$((i + 1))
+done
+exit 3

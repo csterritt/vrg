@@ -1494,3 +1494,45 @@ index. Sources:
 `internal/app/pan_test.go`, `internal/app/grapheme_test.go`,
 `internal/app/encoding_test.go`, `internal/app/readfail_test.go`,
 `internal/app/filelist_test.go`.
+
+## [2026-09-18] ingest | Issue #39 unified rendering — one ANSI-aware grapheme/cell helper end to end
+
+The final rendering stage now uses the same grapheme/cell model as
+every upstream stage. `internal/safepresentation/cellwidth.go`'s
+`CellWidth` became the single ANSI-aware cell-width helper: uniseg
+grapheme clusters summed to terminal cells, ANSI CSI sequences
+skipped by `csiPrefix`, and the file remains the only production
+file under `internal/` or `cmd/` permitted to name
+`utf8.DecodeRuneInString` — a boundary `cellwidth_test.go`'s
+`TestDecodeRuneInStringAllowList` now scans mechanically.
+`internal/theme/theme.go`'s `Overlay` sizes and pads through
+`CellWidth` (the rune-per-cell `cellWidth` is gone),
+`internal/app/app.go`'s `center` pads by cells, and the file panel
+renders straight from `Line.Clusters` — a straddling cluster
+contributes unstyled clip blanks, never a partial glyph. Pop-up
+truncation routes through `leftTruncate`/`tailCells`, the shared
+cluster/cell primitives replacing the retired rune-boundary
+`truncateLeftCells`, with box width and centring cell-measured.
+New coverage: `cellwidth_test.go` (grapheme policy, ANSI
+awareness, allow-list), `theme_test.go`'s
+`TestOverlayPadsToCellWidth`, and `internal/app`'s
+`TestCJKPartialMatchNeverSwallowsNextChar`,
+`TestWideCombiningClusterClipsAsOne`,
+`TestZWJClusterPaintsWholeAndClipsWhole`,
+`TestCenterMeasuresCells`, `TestWideMatchIndicatorColumns`,
+`TestListEntryWidePathPadsInCells`, `TestFilenameRuleWidePath`,
+and `TestPopupWideCombiningPathCells`. Created
+[unified-rendering](unified-rendering.md); updated
+[safe-presentation](safe-presentation.md),
+[browse-tracer](browse-tracer.md), [theme](theme.md),
+[file-change-popup](file-change-popup.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and
+the index. Sources:
+`Notes/issues/039-render-from-shared-grapheme-cell-model.md`,
+`Notes/tasks/039-render-from-shared-grapheme-cell-model.md`,
+`internal/safepresentation/cellwidth.go`,
+`internal/safepresentation/cellwidth_test.go`,
+`internal/theme/theme.go`, `internal/theme/theme_test.go`,
+`internal/app/app.go`, `internal/app/grapheme_test.go`,
+`internal/app/indicators_test.go`, `internal/app/filelist_test.go`,
+`internal/app/popup_test.go`.

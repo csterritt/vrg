@@ -64,10 +64,13 @@ single-line path).
 - Centring and truncation are computed from the current terminal size
   at **every render**, with no state mutation in `View`: the path is
   left-truncated with a leading `…` (`leftTruncate`/`tailCells`, whole
-  grapheme clusters only) so the basename end stays visible, and the
-  box centres at `((h − boxRows) / 2, (w − boxW) / 2)`, clamped at the
-  top-left when it exceeds the frame. A resize therefore recentres and
-  re-truncates the same live instance without restarting its timer.
+  grapheme clusters only — [Issue #39](unified-rendering.md)'s shared
+  cluster/cell primitives, with the truncated text and box width
+  measured by `safepresentation.CellWidth`) so the basename end stays
+  visible, and the box centres at `((h − boxRows) / 2, (w − boxW) / 2)`,
+  clamped at the top-left when it exceeds the frame. A resize
+  therefore recentres and re-truncates the same live instance without
+  restarting its timer.
 - **Precedence**: `View` composites the pop-up over the base frame and
   the error overlay over both — the modal overlay always wins while
   open.

@@ -1,0 +1,5 @@
+s0006.txt line 0001 hit
+s0006.txt line 0002 hit
+s0006.txt line 0003 hit
+s0006.txt line 0004 hit
+s0006.txt line 0005 hit

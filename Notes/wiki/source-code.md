@@ -294,8 +294,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `options.popupTimer` test seam), and `compositePopup` — the
   `theme.Overlay`-bordered box centred over the base frame carrying the
   current file's `EscapePath`-sanitized path, left-truncated with a
-  leading `…` by `leftTruncate`/`tailCells` on whole grapheme clusters,
-  all recomputed from the live terminal size at every render. See
+  leading `…` by `leftTruncate`/`tailCells` on whole grapheme clusters —
+  the Issue #39 replacement for the rune-boundary `truncateLeftCells`,
+  with box width and centring measured in cells by
+  `safepresentation.CellWidth` — all recomputed from the live terminal
+  size at every render. See
   [file-change-popup.md](file-change-popup.md).
 - `internal/app/browse.go` — the Issue #5 browse view: async
   `filebuffer` load commands gated by `WithLoadGate`, the
@@ -592,7 +595,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `Gutter`, `Match` (true-inverse colours), `CurrentMatch` (inverse +
   underline), `Indicator`, `FilenameRule`, `FileList`, `CurrentFile`
   (base + underline), and `Overlay` (base colours inside a plain
-  single-line border). See [theme.md](theme.md).
+  single-line border, sized and padded in cells through
+  `safepresentation.CellWidth` since Issue #39). See
+  [theme.md](theme.md).
 - `internal/safepresentation/safepresentation.go` — `EscapePath`,
   `MapContent`, `Mapped`/`Cell`/`CellsCovering` byte→cell maps, and
   (Issue #16) `Cluster`/`Mapped.Clusters` — the shared grapheme
@@ -601,8 +606,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   real line boundaries preserved (CRLF normalizes to LF), tabs expand
   to eight-column stops, other controls escaped; embedded external
   strings are `EscapePath`-escaped first.
-- `internal/safepresentation/cellwidth.go` — `CellWidth` and the
-  package-internal rune decoders (Issue #39 boundary).
+- `internal/safepresentation/cellwidth.go` — `CellWidth`, the single
+  ANSI-aware cell-width helper every display-geometry consumer
+  routes through (uniseg grapheme clusters, ANSI CSI sequences
+  skipped by `csiPrefix`), and the package-internal rune decoders —
+  the only production file under `internal/` or `cmd/` permitted to
+  name `utf8.DecodeRuneInString` (the Issue #39 boundary). See
+  [unified-rendering.md](unified-rendering.md).
 - `internal/safepresentation/sinktest/sinktest.go` — test-support
   package (imported only by `_test.go` files): the shared hostile
   `Fixtures`, the `Sink` row type, the `AssertRawOutput`/

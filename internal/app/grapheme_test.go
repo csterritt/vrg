@@ -153,3 +153,102 @@ func TestCJKMatchPaintsBothCells(t *testing.T) {
 		t.Fatalf("view = %q, want the whole two-cell glyph highlighted", v)
 	}
 }
+
+// Issue #39 — the composed view renders the shared grapheme/cell
+// model end to end: a match overlapping only part of a two-cell CJK
+// character highlights exactly that cluster's cells and never
+// swallows the following character.
+func TestCJKPartialMatchNeverSwallowsNextChar(t *testing.T) {
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	idx := navIndex(t, []navFile{{
+		name:    "a.txt",
+		content: "ab文cd\n",
+		// The recorded submatch covers only the first two of 文's
+		// three bytes — a partial-cluster overlap that expands
+		// outward to the whole cluster and no further.
+		stops: []navStop{{line: 1, start: 2, end: 4}},
+	}})
+	finishLoad(t, m, startBrowse(t, m, idx))
+	v := viewText(m)
+	// The styled run is exactly the glyph: it closes immediately
+	// after 文 and 'cd' follows unstyled — the highlight neither
+	// splits the cluster nor consumes the character after it.
+	if !strings.Contains(v, "\x1b[30;47;4m文\x1b[37;40;24mcd") {
+		t.Fatalf("view = %q, want 文 highlighted alone with 'cd' unstyled after it", v)
+	}
+}
+
+// A base-plus-combining sequence straddling the clip edge is clipped
+// only as one cluster: its in-window cell renders as an unstyled
+// blank — never a partial glyph, never a match cell — and the hidden
+// match still earns the right-edge star (Issue #39).
+func TestWideCombiningClusterClipsAsOne(t *testing.T) {
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	// "文\u0301" is one two-cell cluster: a wide base plus its
+	// combining mark. It spans cells 39–40 of the line, so its second
+	// cell straddles the 40-cell text window's right edge.
+	idx := navIndex(t, []navFile{{
+		name:    "a.txt",
+		content: strings.Repeat("x", 39) + "文́" + strings.Repeat("x", 30) + "\n",
+		stops:   []navStop{{line: 1, start: 39, end: 44}},
+	}})
+	flatIndicatorModel(t, m, idx, 3)
+	listW := m.listWidth()
+
+	row := frameRow(t, m, 1)[listW+1:]
+	if !strings.Contains(row, strings.Repeat("x", 39)+" ") {
+		t.Fatalf("clip row = %q, want an unstyled blank for the straddling cluster", row)
+	}
+	if strings.Contains(row, "文") {
+		t.Fatalf("clip row = %q paints a partial glyph — the cluster may only clip whole", row)
+	}
+	if !strings.Contains(row, "\x1b[30;47m*\x1b[37;40;24m") {
+		t.Fatalf("clip row = %q, want the right star for the entirely hidden match", row)
+	}
+}
+
+// An emoji ZWJ sequence occupies its measured cell width and is never
+// split: a match overlapping part of its bytes highlights the whole
+// glyph, and a clip boundary inside its cells blanks them rather
+// than cutting the sequence in half (Issue #39).
+func TestZWJClusterPaintsWholeAndClipsWhole(t *testing.T) {
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	// The emoji is one two-cell cluster at cells 1–2 (bytes 1–18);
+	// the recorded submatch covers only part of its bytes.
+	idx := navIndex(t, []navFile{{
+		name:    "a.txt",
+		content: "x👨‍👩‍👧y" + strings.Repeat("x", 50) + "\n",
+		stops:   []navStop{{line: 1, start: 1, end: 8}},
+	}})
+	key := flatIndicatorModel(t, m, idx, 3)
+	listW := m.listWidth()
+
+	row := frameRow(t, m, 1)[listW+1:]
+	if !strings.Contains(row, "\x1b[30;47;4m👨‍👩‍👧\x1b[37;40;24my") {
+		t.Fatalf("row = %q, want the whole ZWJ glyph highlighted with 'y' unstyled", row)
+	}
+
+	// Pan inside the cluster — off 2 starts the window at the
+	// emoji's second cell: that cell is an unstyled clip blank, the
+	// emoji paints nothing, and its entirely hidden match upgrades
+	// the gutter mark to '*'.
+	panTo(t, m, key, 2)
+	row = frameRow(t, m, 1)[listW+1:]
+	if strings.Contains(row, "👨") {
+		t.Fatalf("row = %q paints part of the ZWJ sequence — it may only clip whole", row)
+	}
+	if !strings.Contains(row, "\x1b[30;47m*\x1b[37;40;24m") {
+		t.Fatalf("row = %q, want the gutter star for the hidden-left match", row)
+	}
+}
+
+// center pads by measured cells, not runes (Issue #39): a two-cell
+// glyph counts two toward the frame width, so the pad leaves the
+// text centred in cells.
+func TestCenterMeasuresCells(t *testing.T) {
+	// "文x" is three cells; centred in a 10-cell frame it pads
+	// (10-3)/2 = 3 — rune counting would pad 4 and drift right.
+	if got, want := center("文x", 10, 3), "\n   文x"; got != want {
+		t.Fatalf("center = %q, want %q", got, want)
+	}
+}

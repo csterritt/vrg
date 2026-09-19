@@ -275,6 +275,41 @@ func TestLastCellMatchWithFartherMatchHidden(t *testing.T) {
 	}
 }
 
+// The indicator columns size by cells (Issue #39): a match on a
+// two-cell glyph straddling the right edge paints nothing — its
+// cluster counts hidden and earns the star — while the same glyph one
+// cell inward paints whole and is visible, not hidden.
+func TestWideMatchIndicatorColumns(t *testing.T) {
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	m.theme = theme.Plain()
+	// Line 1: "one" at cells 0–2 keeps the reveal at offset 0; 文
+	// straddles cells 39–40 of the 40-cell window — a clip blank,
+	// entirely hidden right.
+	// Line 2: 文 sits at cells 38–39, fully painted inside the window.
+	idx := navIndex(t, []navFile{{
+		name: "a.txt",
+		content: "one" + strings.Repeat("x", 36) + "文" + strings.Repeat("x", 30) + "\n" +
+			strings.Repeat("x", 38) + "文" + strings.Repeat("x", 30) + "\n",
+		stops: []navStop{
+			{line: 1, start: 0, end: 3}, {line: 1, start: 39, end: 42},
+			{line: 2, start: 38, end: 41},
+		},
+	}})
+	flatIndicatorModel(t, m, idx, 3)
+	listW := m.listWidth()
+
+	// Line 1 is current: the straddling cluster's in-window cell is a
+	// clip blank and the reserved column stars.
+	if row := dropCells(frameRow(t, m, 1), listW+1); row != "1  one"+strings.Repeat("x", 36)+" *" {
+		t.Fatalf("straddling wide match: row = %q, want a clip blank then the right star", row)
+	}
+	// Line 2's match is painted, so its reserved column stays blank —
+	// the two-cell glyph paints at cells 38–39 as one unit.
+	if row := dropCells(frameRow(t, m, 2), listW+1); row != "2  "+strings.Repeat("x", 38)+"文 " {
+		t.Fatalf("painted wide match: row = %q, want the whole glyph then a blank column", row)
+	}
+}
+
 // A wide glyph clipped to blanks counts as hidden, not partially
 // visible: a match on the clipped 文 upgrades the left gutter to '*'
 // and earns the right star — the painted-cell visibility rule the

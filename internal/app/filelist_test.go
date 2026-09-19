@@ -264,6 +264,46 @@ func TestListEntriesLeftTruncate(t *testing.T) {
 	}
 }
 
+// File-list entry padding is measured in cells (Issue #39): paths of
+// wide and combining characters pad to exactly the list's cell width —
+// a rune count would leave wide entries short and combining entries
+// over-padded.
+func TestListEntryWidePathPadsInCells(t *testing.T) {
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	idx := navIndex(t, []navFile{
+		{name: "文文.txt", content: "hit\n", stops: []navStop{{line: 1, start: 0, end: 3}}},
+		{name: "é.txt", content: "hit\n", stops: []navStop{{line: 1, start: 0, end: 3}}},
+		{name: "b.txt", content: "hit\n", stops: []navStop{{line: 1, start: 0, end: 3}}},
+	})
+	startBrowse(t, m, idx)
+	listW := m.listWidth()
+	for i := range idx.Files {
+		// The styled entry measures its content cells — SGR runs
+		// around the text are not cells.
+		if w := safepresentation.CellWidth(m.listCell(i, listW)); w != listW {
+			t.Fatalf("entry %d = %d cells, want the %d-cell list width", i, w, listW)
+		}
+	}
+}
+
+// The filename row fits by cells (Issue #39): a wide path embeds in a
+// rule measuring exactly the frame width — a rune count would leave
+// the rule short of the right edge.
+func TestFilenameRuleWidePath(t *testing.T) {
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	idx := navIndex(t, []navFile{
+		{name: "文文文.txt", content: "hit\n", stops: []navStop{{line: 1, start: 0, end: 3}}},
+	})
+	finishLoad(t, m, startBrowse(t, m, idx))
+	row := frameRow(t, m, 0)
+	if w := safepresentation.CellWidth(row); w != 80 {
+		t.Fatalf("filename row = %d cells, want the 80-cell frame: %q", w, row)
+	}
+	if !strings.Contains(row, "文文文.txt") {
+		t.Fatalf("filename row = %q, want the wide path's tail embedded", row)
+	}
+}
+
 // The filename row provides a buffer-status note slot at its right
 // edge: the note renders inside the rule and the embedded path
 // truncates — leading …, grapheme-safe — to make room for it where

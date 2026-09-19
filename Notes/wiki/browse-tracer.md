@@ -46,9 +46,12 @@ keys.
   `\uXXXX` form. Wide graphemes occupy multiple cells that all map to
   the cluster's bytes; a cluster with no visible cell gets the Issue #43
   `◌` fallback cell.
-- **Cell policy** — `CellWidth` is the shared uniseg cell measurement;
-  `decodeRune` is kept inside the package so display-geometry code
-  elsewhere never decodes runes itself (the Issue #39 boundary).
+- **Cell policy** — `CellWidth` is the shared ANSI-aware uniseg cell
+  measurement every display-geometry consumer routes through;
+  `decodeRune`/`decodeRuneInString` are kept inside the package so
+  display-geometry code elsewhere never decodes runes itself — the
+  Issue #39 boundary, mechanically enforced across `internal/` and
+  `cmd/` (see [unified-rendering.md](unified-rendering.md)).
 
 ## FileBuffer (`internal/filebuffer`)
 

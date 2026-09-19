@@ -46,7 +46,12 @@ Three entry points cover the sink classes:
   consumes the same records for highlight expansion — a partial-cluster
   match covers its whole cluster — and for the standalone combining
   cluster's Issue #43 `◌`-plus-marks one-cell fallback, so a highlight
-  is never an inaccessible zero-cell span.
+  is never an inaccessible zero-cell span. Issue #39
+  ([unified-rendering.md](unified-rendering.md)) completes the model:
+  `CellWidth` in `cellwidth.go` is the single ANSI-aware cell-width
+  helper every display-geometry consumer routes through, and the file
+  is the only production file under `internal/` or `cmd/` permitted to
+  name `utf8.DecodeRuneInString`.
 - **Diagnostics** — `EscapeDiagnostic(string) string` (new): real
   diagnostic line boundaries are preserved — LF stays, CRLF normalizes
   to LF — tabs expand to the next multiple of eight display columns,

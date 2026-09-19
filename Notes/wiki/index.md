@@ -302,6 +302,16 @@ Catalog of all wiki pages for the vrg project.
   every wrap/clip/pan/reveal/indicator measures against, and the
   install paths (load, resize, wrap toggle, list hide/show,
   navigation) that re-key it
+- [unified-rendering.md](unified-rendering.md) — Issue #39: the
+  single ANSI-aware `safepresentation.CellWidth` every
+  display-geometry consumer routes through (line rendering,
+  highlight styling, centering, list-entry padding, indicator
+  sizing, filename-row fitting, pop-up truncation/width/centering,
+  theme overlay sizing), the cluster-driven file-panel renderer
+  drawing straight from `Line.Clusters`, the `truncateLeftCells`
+  replacement by shared cluster/cell primitives, and the mechanical
+  `utf8.DecodeRuneInString` allow-list scanning `internal/` and
+  `cmd/`
 
 ## Catalogs
 

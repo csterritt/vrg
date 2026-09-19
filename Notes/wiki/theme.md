@@ -54,11 +54,13 @@ even padding cells carry the background colour.
 - **Overlay** — `Overlay(rows)` frames interior rows in a plain
   single-line border (`┌─┐ │ └─┘`), padding short rows to the widest,
   all in the base colours; on the no-style path the border still draws
-  because it is structure, not styling. Interior width is measured by
-  theme's `cellWidth` (rune-per-cell — the shared grapheme/cell
-  helper's takeover is [Issue #39](../issues/039-render-from-shared-grapheme-cell-model.md)'s).
+  because it is structure, not styling. Interior width is measured in
+  terminal cells by the shared ANSI-aware
+  `safepresentation.CellWidth` — [Issue #39](unified-rendering.md)
+  replaced the rune-per-cell `cellWidth`, so borders align for wide
+  and combining interior text.
   The error overlay (#9), help overlay (#31), and file-change pop-up
-  (#15) will consume it.
+  (#15) consume it.
 
 ## How rendering consumes the theme
 

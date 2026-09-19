@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -930,7 +929,7 @@ func center(s string, w, h int) string {
 		return s
 	}
 	pad := 0
-	if n := utf8.RuneCountInString(s); n < w {
+	if n := safepresentation.CellWidth(s); n < w {
 		pad = (w - n) / 2
 	}
 	top := 0
