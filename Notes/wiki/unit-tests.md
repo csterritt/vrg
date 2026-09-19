@@ -93,6 +93,19 @@ the scan (each declared flag recorded verbatim, help never forwarded).
 - `TestSubmatchRangeBoundaries` — ranges may touch the ends of the
   decoded line; zero-width matches are in range.
 
+Issue #8 binary-exclusion and usable-results cases:
+
+- `TestBinaryEndDropsFileMatches` — an `end` with non-null
+  `binary_offset` (delivered in the other encoding) drops the file and
+  its two collected match stops; the retained neighbour survives,
+  `BinaryExcluded` is 1, `UsableResults` is 1.
+- `TestBinaryExclusionCountsDistinctFiles` — two binary files count
+  two; a repeated binary `end` re-drops interim matches without
+  double-counting.
+- `TestUsableResultsCountsRetainedStops` — usable results is retained
+  stops after filtering: a summary-only stream and an all-excluded
+  stream report 0; merged surviving matches count once.
+
 ## internal/safepresentation
 
 `safepresentation_test.go` (external package `safepresentation_test`;
@@ -252,6 +265,24 @@ only after the child is reaped:
 - `TestRunCleansUpOnProgramError` — `app.Run` under a pre-cancelled
   context still terminates/reaps the child, fires the reap report
   exactly once, and writes one sanitized `vrg:` line, exit 2.
+
+`noresults_test.go` (same package; Issue #8) covers the empty-outcome
+contracts through the real collection command and `Update`:
+
+- `TestEmptySearchShowsNoResultsScreen` — a complete rg-1 stream
+  (summary only) presents the centred "No results found" screen, no
+  binary suffix.
+- `TestQOnNoResultsExitsOne` — `q` exits 1 through the cleanup path:
+  the still-running `killChild` is terminated and reaped before quit.
+- `TestAllBinarySearchShowsSkipCount` — an all-excluded stream shows
+  "No results found (2 binary files skipped)" under rg code 0 and 1
+  alike; `q` exits 1.
+- `TestMixedBinaryStreamBrowses` — one excluded + one retained file
+  browses with usable results 1; the excluded path never appears.
+- `TestEscOnNoResultsNoOp` — `Esc` returns no command and leaves the
+  screen up.
+- `TestCtrlCOnNoResultsExits130` — `ctrl+c` overrides the fixed exit-1
+  outcome with 130.
 
 ## internal/theme
 

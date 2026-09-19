@@ -41,7 +41,11 @@ type File struct {
 // be called once feeding is complete.
 type Index struct {
 	Files []File
-	acc   map[string]*fileAcc
+	// BinaryExcluded counts the distinct files dropped because a valid
+	// end event reported a non-null binary_offset for them.
+	BinaryExcluded int
+	acc            map[string]*fileAcc
+	excluded       map[string]struct{}
 }
 
 // fileAcc is the per-path accumulation of stops before preparation.
@@ -72,29 +76,61 @@ func Build(stream []byte, workdir string) *Index {
 }
 
 // Feed parses one JSON record and applies it to the index, returning the
-// record's classification. Only KindMatch contributes stops; the other
-// known events are consumed here but their lifecycle effects are Issue
-// #9's, and malformed/unknown counting is Issue #10's.
+// record's classification. KindMatch contributes stops; a KindEnd with a
+// non-null binary_offset drops that file's collected matches and counts
+// it in BinaryExcluded. The remaining lifecycle effects are Issue #9's,
+// and malformed/unknown counting is Issue #10's.
 func (ix *Index) Feed(raw []byte) Kind {
 	rec := ParseRecord(raw)
-	if rec.Kind != KindMatch {
-		return rec.Kind
+	switch rec.Kind {
+	case KindMatch:
+		if ix.acc == nil {
+			ix.acc = make(map[string]*fileAcc)
+		}
+		fa := ix.acc[string(rec.Path)]
+		if fa == nil {
+			fa = &fileAcc{path: rec.Path, stops: make(map[int64]*Stop)}
+			ix.acc[string(rec.Path)] = fa
+		}
+		st := fa.stops[rec.LineNumber]
+		if st == nil {
+			st = &Stop{Number: rec.LineNumber, Bytes: rec.Line}
+			fa.stops[rec.LineNumber] = st
+		}
+		st.Submatches = append(st.Submatches, rec.Submatches...)
+	case KindEnd:
+		if rec.Binary {
+			ix.exclude(rec.Path)
+		}
 	}
-	if ix.acc == nil {
-		ix.acc = make(map[string]*fileAcc)
-	}
-	fa := ix.acc[string(rec.Path)]
-	if fa == nil {
-		fa = &fileAcc{path: rec.Path, stops: make(map[int64]*Stop)}
-		ix.acc[string(rec.Path)] = fa
-	}
-	st := fa.stops[rec.LineNumber]
-	if st == nil {
-		st = &Stop{Number: rec.LineNumber, Bytes: rec.Line}
-		fa.stops[rec.LineNumber] = st
-	}
-	st.Submatches = append(st.Submatches, rec.Submatches...)
 	return rec.Kind
+}
+
+// exclude drops every stop collected for path — its end event's non-null
+// binary_offset confirmed the file binary — and counts the file once in
+// BinaryExcluded, however many times the stream repeats the end.
+func (ix *Index) exclude(path []byte) {
+	key := string(path)
+	delete(ix.acc, key)
+	if ix.excluded == nil {
+		ix.excluded = make(map[string]struct{})
+	}
+	if _, seen := ix.excluded[key]; !seen {
+		ix.excluded[key] = struct{}{}
+		ix.BinaryExcluded++
+	}
+}
+
+// UsableResults is the number of retained stops after filtering —
+// confirmed binary exclusion now, record skipping with Issue #10 — and
+// the single value the outcome logic consumes; it is never the count of
+// match events received. It is meaningful once Prepare has run.
+func (ix *Index) UsableResults() int {
+	n := 0
+	for _, f := range ix.Files {
+		n += len(f.Stops)
+	}
+	return n
 }
 
 // Prepare resolves relative paths against workdir, orders files by

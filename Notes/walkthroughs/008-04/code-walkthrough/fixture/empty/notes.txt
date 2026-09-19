@@ -1,0 +1,3 @@
+a small text file
+with ordinary contents
+no hits in here

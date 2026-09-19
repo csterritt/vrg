@@ -42,6 +42,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `Prepare` / `Build`, same-path/same-line `Stop` merging, submatch
   `(start, end)` ordering, union `Highlights`, unsigned raw-path ordering,
   and working-directory path resolution without canonicalization.
+  Issue #8 added binary exclusion — an `end` with non-null
+  `binary_offset` drops the file's stops and counts it once in
+  `Index.BinaryExcluded` — and `UsableResults()`, the retained-stop count
+  the outcome logic consumes. See
+  [no-results-screen.md](no-results-screen.md).
 - `internal/searchindex/doc.go` — package comment.
 
 ## internal/app
@@ -54,7 +59,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 - `internal/app/app.go` — the Bubble Tea model and `app.Run`: the
   "Searching…" state covering collection and post-exit index
   preparation, the `WithGate`/`WithCollectAck` test seams, the
-  `stateBrowse` transition on completion with `q` → exit 0, the
+  `stateBrowse` transition on completion with `q` → exit 0 and the
+  Issue #8 `stateNoResults` alternative — the centred "No results found"
+  screen with its "(N binary files skipped)" suffix, `q` → exit 1,
+  `Esc` a no-op, `ctrl+c` → 130 — the
   sanitized start-failure diagnostic with exit 2 before the TUI, and the
   Issue #4 surface: `ctrl+c`/`q` cancellation to 130, the
   `quitCmd`/`reapChild` cleanup boundary, `WithFailFunc`/
@@ -62,8 +70,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   alt-screen views, `ErrInterrupted` → 130, `writeFailureDiag` (the
   single post-restoration stderr writer) → exit 2, and the Issue #7
   `c` key toggling `m.theme` between the dark and light schemes. See
-  [cancellation-cleanup.md](cancellation-cleanup.md) and
-  [theme.md](theme.md).
+  [cancellation-cleanup.md](cancellation-cleanup.md),
+  [theme.md](theme.md), and
+  [no-results-screen.md](no-results-screen.md).
 - `internal/app/browse.go` — the Issue #5 browse view: async
   `filebuffer.Load` commands gated by `WithLoadGate`, the
   `loading`/`bufs`/`failed` caches keyed by raw path, `fileLoadedMsg`,

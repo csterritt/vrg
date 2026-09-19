@@ -23,9 +23,10 @@ current file's contents with matches highlighted.
 Six internal packages mirror the PRD Module Design: `cli`,
 `searchindex`, `filebuffer`, `viewport`, `theme`, `app` — all under
 `internal/`, plus the thin entry point `cmd/vrg`. `cli` and
-`searchindex` cover Issues #1–3 (the CLI contract and the record
-parser/navigation index); `app` carries Issues #3–5 (spawn/drain,
-searching screen, cancellation/cleanup, and the two-pane browse view);
+`searchindex` cover Issues #1–3 and #8 (the CLI contract and the record
+parser/navigation index with binary exclusion); `app` carries Issues
+#3–5 and #8 (spawn/drain, searching screen, cancellation/cleanup, the
+two-pane browse view, and the no-results outcome);
 `filebuffer` and `viewport` gained their first Issue #5
 implementations (prepared file loading and the top-of-file window
 seam); `theme` holds the full Issue #7 style set (dark/light schemes,

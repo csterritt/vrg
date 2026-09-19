@@ -79,11 +79,15 @@ type state int
 
 const (
 	stateSearching state = iota
+	// stateNoResults is the centred "No results found" screen: a
+	// complete successful search left no usable results.
+	stateNoResults
 	stateBrowse
 )
 
 // model is the Bubble Tea model: "Searching…" while collection and index
-// preparation run off the update path, then the two-pane browse view.
+// preparation run off the update path, then the two-pane browse view, or
+// the no-results screen when a complete search retains nothing usable.
 type model struct {
 	cfg   Config
 	opts  options
@@ -176,8 +180,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case searchDoneMsg:
-		m.state = stateBrowse
 		m.idx = msg.idx
+		if msg.idx.UsableResults() == 0 {
+			// A complete successful search with no usable results
+			// presents the no-results screen; q dismisses it to
+			// exit 1. Issue #9 owns the fatal-outcome rows that
+			// take precedence over this branch.
+			m.state = stateNoResults
+			return m, nil
+		}
+		m.state = stateBrowse
 		return m, m.startLoad()
 	case fileLoadedMsg:
 		key := string(msg.path)
@@ -211,6 +223,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// c toggles the colour scheme between dark and light for
 			// the session; nothing persists.
 			m.theme = m.theme.Toggled()
+		case msg.Text == "q" && m.state == stateNoResults:
+			// q dismisses the no-results screen to exit 1 through
+			// the same cleanup path; Esc is a no-op here and
+			// ctrl+c keeps its 130 override.
+			m.status = 1
+			m.quitting = true
+			return m, m.quitCmd()
 		case msg.Text == "q" && m.state == stateBrowse:
 			// q in ordinary browsing exits with the fixed
 			// search-derived status through the same cleanup path.
@@ -247,12 +266,25 @@ func reapChild(c Child, report func(Result)) {
 
 func (m *model) View() tea.View {
 	s := center("Searching…", m.width, m.height)
-	if m.state == stateBrowse {
+	switch m.state {
+	case stateNoResults:
+		s = center(m.noResultsText(), m.width, m.height)
+	case stateBrowse:
 		s = m.browseView()
 	}
 	v := tea.NewView(m.theme.Base(s))
 	v.AltScreen = true
 	return v
+}
+
+// noResultsText is the empty-search screen's single line: "No results
+// found", plus the binary-skip suffix when every matched file was
+// excluded as binary.
+func (m *model) noResultsText() string {
+	if m.idx != nil && m.idx.BinaryExcluded > 0 {
+		return fmt.Sprintf("No results found (%d binary files skipped)", m.idx.BinaryExcluded)
+	}
+	return "No results found"
 }
 
 // Run is the whole search lifecycle: spawn the child, show "Searching…"

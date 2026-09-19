@@ -64,9 +64,13 @@ these env-var seams behind the `vrg_testhooks` build tag.
 Completion delivers `searchDoneMsg` carrying the collected result and the
 prepared index; Issue #3 transitioned to an interim `stateSummary`
 rendering `N files, M matched lines`. Issue #5 replaced that screen:
-the model now transitions to `stateBrowse` and starts loading the first
-file — see [browse-tracer.md](browse-tracer.md). `q` in browse returns
-`tea.Quit` with the fixed exit status 0.
+when the prepared index's usable results are nonzero the model
+transitions to `stateBrowse` and starts loading the first file — see
+[browse-tracer.md](browse-tracer.md). `q` in browse returns `tea.Quit`
+with the fixed exit status 0. Issue #8 added the empty branch: zero
+usable results enters `stateNoResults` — the centred "No results found"
+screen, `q` → exit 1 — see
+[no-results-screen.md](no-results-screen.md).
 
 A start failure (rg absent, exec error) is detected in `app.Run` **before**
 `tea.NewProgram` runs: a sanitized single-line diagnostic
@@ -101,16 +105,21 @@ process exits 2 — no TUI is entered.
   invocation working directory (`wd + "/" + path`) without
   canonicalization — interior `.`/`..` elements stay literal.
 
-Lifecycle/integrity accounting (begin/end pairing, binary exclusion,
-summary completeness) is Issue #9's; skip/oversize counting is Issue
-#10's; only `match` records build stops today.
+Binary exclusion landed with Issue #8: an `end` record carrying a
+non-null `binary_offset` drops that file's collected stops and counts it
+once in `Index.BinaryExcluded`, and `Index.UsableResults()` reports
+retained stops after filtering — see
+[no-results-screen.md](no-results-screen.md). The remaining
+lifecycle/integrity accounting (begin/end pairing, summary
+completeness) is Issue #9's and skip/oversize counting is Issue #10's.
 
 ## Tests
 
 See [unit-tests.md](unit-tests.md): `internal/searchindex/index_test.go`
-covers the record/index contracts; `internal/app/app_test.go` covers the
-model lifecycle, `browse_test.go` the browse view, and `rg_test.go` the
-spawn seam; `cmd/vrg/search_test.go` drives the real binary on a pty
+covers the record/index contracts including binary exclusion;
+`internal/app/app_test.go` covers the model lifecycle,
+`noresults_test.go` the no-results outcome (Issue #8), `browse_test.go`
+the browse view, and `rg_test.go` the spawn seam; `cmd/vrg/search_test.go` drives the real binary on a pty
 (`runVrgWithQuit`) for the exact child argv/workdir, the ≥1 MiB
 dual-pipe backpressure fixture, stderr capture, the gate-held searching
 state, and `TestStartFailureExit2`.

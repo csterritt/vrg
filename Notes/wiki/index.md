@@ -46,6 +46,11 @@ Catalog of all wiki pages for the vrg project.
   colours, current-match and current-file underlines, the indicator,
   overlay, gutter, filename-rule, and file-list styles, and how the
   base-wrapped frame consumes them
+- [no-results-screen.md](no-results-screen.md) — Issue #8: binary
+  exclusion on non-null `binary_offset` with the distinct-file count,
+  `UsableResults` as retained stops after filtering, and the centred
+  "No results found" screen with its "(N binary files skipped)" suffix,
+  `q` → exit 1, `Esc` no-op, `ctrl+c` → 130
 
 ## Catalogs
 

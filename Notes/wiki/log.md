@@ -211,3 +211,30 @@ Design → Theme), `internal/theme/theme.go`,
 `internal/app/app.go`, `internal/app/browse.go`,
 `internal/app/browse_test.go`, `internal/app/cancel_test.go`,
 `cmd/vrg/search_test.go`.
+
+## [2026-09-16] ingest | Issue #8 no-results screen and binary exclusion
+
+Ingested the completed Issue #8 implementation: `internal/searchindex`'s
+`Index.Feed` now drops a file and all its previously collected matches
+when a valid `end` event reports a non-null `binary_offset`, counting
+distinct excluded files in `Index.BinaryExcluded`, and
+`Index.UsableResults()` exposes retained stops after filtering as the
+single value the outcome logic consumes. `internal/app` gained
+`stateNoResults`: a completed search with zero usable results — the
+rg-1 empty stream and the rg-0/rg-1 all-filtered stream alike — shows
+the centred "No results found" screen, appending "(N binary files
+skipped)" when every matched file was excluded; `q` exits 1 through the
+Issue #4 `quitCmd`/`reapChild` cleanup path, `Esc` is a no-op, and
+`ctrl+c` keeps the 130 override. New `internal/app/noresults_test.go`
+drives the empty, all-binary, and mixed streams through the real
+collection command. Created
+[no-results-screen](no-results-screen.md); updated
+[search-collection](search-collection.md),
+[project-overview](project-overview.md), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/issues/008-no-results-screen-and-binary-exclusion.md`,
+`Notes/tasks/008-no-results-screen-and-binary-exclusion.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity —
+binary bullet; Outcome and exit-status contract — last row),
+`internal/searchindex/index.go`, `internal/searchindex/index_test.go`,
+`internal/app/app.go`, `internal/app/noresults_test.go`.

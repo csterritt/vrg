@@ -51,6 +51,15 @@ func endRec(path string) string {
 		path)
 }
 
+// endBinaryRec emits an end record whose binary_offset is non-null:
+// ripgrep's confirmation that the file was binary, which drops the file
+// and all its previously collected matches.
+func endBinaryRec(path string, off int) string {
+	return fmt.Sprintf(
+		`{"type":"end","data":{"path":%s,"binary_offset":%d,"stats":{"elapsed":{"secs":0,"nanos":1,"human":"0.000001s"},"searches":1,"searches_with_match":1,"bytes_searched":12,"bytes_printed":0,"matched_lines":1,"matches":1}}}`,
+		path, off)
+}
+
 func summaryRec() string {
 	return `{"data":{"elapsed_total":{"human":"0.005s","nanos":5000000,"secs":0},"stats":{"bytes_printed":482,"bytes_searched":34,"elapsed":{"human":"0.000039s","nanos":38542,"secs":0},"matched_lines":2,"matches":2,"searches":2,"searches_with_match":2}},"type":"summary"}`
 }
@@ -320,7 +329,7 @@ func TestRecordKindsAndIgnoredContext(t *testing.T) {
 		{"begin", beginRec(text("f.txt")), searchindex.KindBegin},
 		{"match", matchRec(text("f.txt"), text("hit\n"), 4, sub(text("hit"), 0, 3)), searchindex.KindMatch},
 		{"end", endRec(text("f.txt")), searchindex.KindEnd},
-		{"end with binary offset", `{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":12,"stats":{}}}`, searchindex.KindEnd},
+		{"end with binary offset", `{"type":"end","data":{"path":{"text":"gone.bin"},"binary_offset":12,"stats":{}}}`, searchindex.KindEnd},
 		{"summary", summaryRec(), searchindex.KindSummary},
 		{"context ignored", contextRec(), searchindex.KindContext},
 		{"unknown type", `{"type":"stats","data":{"searches":1}}`, searchindex.KindUnknown},
@@ -392,4 +401,89 @@ func TestSubmatchRangeBoundaries(t *testing.T) {
 		{Start: 4, End: 4, Bytes: []byte("")},
 	})
 	wantHighlights(t, st, []searchindex.Span{{Start: 0, End: 4}})
+}
+
+// A valid end event with a non-null binary_offset drops that file and
+// all its previously collected matches: none of its stops survive into
+// the prepared index, the exclusion counts once, and a retained file in
+// the same stream is unaffected. The end record's path may arrive in
+// either encoding — exclusion matches on the decoded bytes.
+func TestBinaryEndDropsFileMatches(t *testing.T) {
+	ix := build(t, "/wd",
+		beginRec(text("bin.dat")),
+		matchRec(text("bin.dat"), text("foo one\n"), 1, sub(text("foo"), 0, 3)),
+		matchRec(text("bin.dat"), text("foo two\n"), 4, sub(text("foo"), 0, 3)),
+		endBinaryRec(byts("bin.dat"), 12),
+		beginRec(text("ok.txt")),
+		matchRec(text("ok.txt"), text("foo three\n"), 2, sub(text("foo"), 0, 3)),
+		endRec(text("ok.txt")),
+		summaryRec(),
+	)
+	if len(ix.Files) != 1 {
+		t.Fatalf("files = %v, want only the retained file", filePaths(ix))
+	}
+	if string(ix.Files[0].Path) != "/wd/ok.txt" {
+		t.Fatalf("retained path = %q, want %q; the excluded file must be absent", ix.Files[0].Path, "/wd/ok.txt")
+	}
+	wantStops(t, ix.Files[0], []int64{2})
+	if ix.BinaryExcluded != 1 {
+		t.Fatalf("BinaryExcluded = %d, want 1", ix.BinaryExcluded)
+	}
+	if got := ix.UsableResults(); got != 1 {
+		t.Fatalf("UsableResults = %d, want 1 retained stop — not the 3 match events received", got)
+	}
+}
+
+// Exclusion counts distinct files: two binary files count two, and a
+// repeated binary end for an already-counted path does not double-count
+// — while matches collected for it between its end events are dropped
+// again.
+func TestBinaryExclusionCountsDistinctFiles(t *testing.T) {
+	ix := build(t, "/wd",
+		matchRec(text("a.bin"), text("x\n"), 1, sub(text("x"), 0, 1)),
+		endBinaryRec(text("a.bin"), 3),
+		matchRec(text("a.bin"), text("x\n"), 7, sub(text("x"), 0, 1)),
+		endBinaryRec(text("a.bin"), 9), // already counted: still one file
+		matchRec(text("b.bin"), text("x\n"), 1, sub(text("x"), 0, 1)),
+		endBinaryRec(text("b.bin"), 5),
+		summaryRec(),
+	)
+	if len(ix.Files) != 0 {
+		t.Fatalf("files = %v, want every binary file dropped", filePaths(ix))
+	}
+	if ix.BinaryExcluded != 2 {
+		t.Fatalf("BinaryExcluded = %d, want 2 distinct files", ix.BinaryExcluded)
+	}
+	if got := ix.UsableResults(); got != 0 {
+		t.Fatalf("UsableResults = %d, want 0", got)
+	}
+}
+
+// Usable results is the count of retained stops after filtering — never
+// the number of match events received. A complete stream with no match
+// events at all and a stream whose every matched file was excluded both
+// report zero; only retained stops count.
+func TestUsableResultsCountsRetainedStops(t *testing.T) {
+	empty := build(t, "/wd", summaryRec())
+	if got := empty.UsableResults(); got != 0 {
+		t.Fatalf("summary-only stream: UsableResults = %d, want 0", got)
+	}
+	if empty.BinaryExcluded != 0 {
+		t.Fatalf("summary-only stream: BinaryExcluded = %d, want 0", empty.BinaryExcluded)
+	}
+
+	ix := build(t, "/wd",
+		matchRec(text("bin.dat"), text("foo\n"), 1, sub(text("foo"), 0, 3)),
+		matchRec(text("bin.dat"), text("foo\n"), 2, sub(text("foo"), 0, 3)),
+		endBinaryRec(text("bin.dat"), 4),
+		matchRec(text("ok.txt"), text("foo\n"), 9, sub(text("foo"), 0, 3)),
+		matchRec(text("ok.txt"), text("foo\n"), 9, sub(text("foo"), 0, 3)),
+		endRec(text("ok.txt")),
+		summaryRec(),
+	)
+	// Four match events arrived; two stops were excluded and the two
+	// surviving match events merged into one retained stop.
+	if got := ix.UsableResults(); got != 1 {
+		t.Fatalf("UsableResults = %d, want 1 retained stop", got)
+	}
 }
