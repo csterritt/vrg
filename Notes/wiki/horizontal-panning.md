@@ -85,8 +85,8 @@ Two consequences are contractual:
 
 - **No restoration.** Scrolling from a 300-cell line into "pad" lines
   clamps the offset to 2; scrolling back does **not** restore 200 —
-  the clamped value is the new state, and Issue #19's reveal will
-  operate on it.
+  the clamped value is the new state, and Issue #19's reveal (see
+  [horizontal-reveal.md](horizontal-reveal.md)) operates on it.
 - **Retention through toggles.** Entering wrap keeps the offset; a
   wrap-mode scroll does not touch it; re-entering run-off-edge clamps
   it against whatever is visible *then* — which may differ from what

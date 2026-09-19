@@ -126,6 +126,12 @@ Catalog of all wiki pages for the vrg project.
   and re-entry clamping, the file-change `ResetOff` before reveal,
   split-cluster blank cells at the left edge, the `Extent` interface,
   and the visible-rows-only extent-evaluation guard
+- [horizontal-reveal.md](horizontal-reveal.md) — Issue #19: the
+  minimal horizontal reveal at startup and on every `n`/`p` —
+  painted-cell visibility (`CellVisible`), the left/right offset
+  arithmetic with cluster widths, the oversized-match start-cell
+  rule, and the unpaintable-cluster geometric fallback with its
+  no-loop guarantee and indicator interplay
 
 ## Catalogs
 

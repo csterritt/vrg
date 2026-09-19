@@ -1,6 +1,9 @@
 package viewport
 
-import "vrg/internal/searchindex"
+import (
+	"vrg/internal/filebuffer"
+	"vrg/internal/searchindex"
+)
 
 // Target is the display location a destination reveal brings on
 // screen: the start cell of the first submatch on a matched source
@@ -95,4 +98,72 @@ func (v *Viewport) Reveal(row int, e Extent, height int) bool {
 	v.reanchor(top, e)
 	v.clampOff(e, height)
 	return v.top != top
+}
+
+// RevealOff applies the minimal horizontal reveal for the display
+// target on rendered row row — the row TargetRow returned — and
+// reports whether the offset changed. Under a run-off-edge model a
+// horizontally hidden target moves the offset by the fewest columns
+// that paints its whole grapheme cluster: to the cluster's start
+// column when hidden left, to start + width − text width when hidden
+// right or clipped blank at the right edge. An already-painted target
+// leaves the offset unchanged. Visibility is painted-cell visibility —
+// a cell inside the window's geometry whose cluster clips to blanks at
+// either edge is hidden — and only the start cell must paint, so a
+// match wider than the text area reveals by that cell alone. A target
+// cluster wider than the text area can never paint: the offset is set
+// to its start column — the closest achievable position — and the
+// target counts as geometrically revealed, so repeated reveals move
+// nothing (no panning loop), while CellVisible still reports it
+// unpainted for Issue #20's indicators. Wrap mode, an empty model, and
+// a zero text width are no-ops. The result needs no clamping: a
+// paintable cluster's reveal offset never exceeds its line's MaxStart
+// contribution, and the unpaintable fallback deliberately sets the
+// start column.
+func (v *Viewport) RevealOff(t Target, row int, e Extent) bool {
+	k := e.Key()
+	if k.Wrap || k.TextWidth < 1 || e.Len() == 0 {
+		return false
+	}
+	start, w := targetCluster(e.At(row).Line, t.Cell)
+	old := v.off
+	switch {
+	case w > k.TextWidth:
+		v.off = start
+	case start < v.off:
+		v.off = start
+	case start+w > v.off+k.TextWidth:
+		v.off = start + w - k.TextWidth
+	}
+	return v.off != old
+}
+
+// CellVisible reports whether line l's cell is painted in the text
+// window [off, off+width): the whole grapheme cluster holding the cell
+// must fit inside the window — a cluster clipped at either edge
+// renders its in-window cells as blanks, so a geometrically covered
+// cell can still be hidden. A cell at or past the line's end — the
+// end-of-line marker position — counts as a one-cell target. This is
+// the painted-cell visibility the horizontal reveal and Issue #20's
+// hidden-content indicators share; the reserved indicator column is
+// already excluded because width is the text width.
+func CellVisible(l filebuffer.Line, cell, off, width int) bool {
+	start, w := targetCluster(l, cell)
+	return start >= off && start+w <= off+width
+}
+
+// targetCluster is the grapheme cluster holding the cell: its start
+// and cell width. A cell at or past the line's last — the end-of-line
+// marker position (Issue #23) — and a negative cell are one-cell
+// targets at the given column, clamped to zero.
+func targetCluster(l filebuffer.Line, cell int) (start, width int) {
+	if cell < 0 {
+		cell = 0
+	}
+	for _, cl := range l.Clusters {
+		if cell >= cl.Start && cell < cl.End {
+			return cl.Start, cl.End - cl.Start
+		}
+	}
+	return cell, 1
 }

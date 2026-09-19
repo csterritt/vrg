@@ -165,5 +165,7 @@ fast path, the pending reveal committing on install, and the
 file-list escape-count bound. Issue #18 widened `Model` into
 `Extent` (`Key`/`At` added) for the operations that re-clamp the
 horizontal offset — see
-[horizontal-panning.md](horizontal-panning.md). See
+[horizontal-panning.md](horizontal-panning.md). Issue #19 added
+`StopTarget` to `rowSource` for the horizontal reveal's target cell —
+see [horizontal-reveal.md](horizontal-reveal.md). See
 [unit-tests.md](unit-tests.md).

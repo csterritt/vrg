@@ -228,7 +228,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   placeholders), `navigate`'s `ResetOff` before the reveal on every
   file change, `rowSource` now embedding `viewport.Extent`, and
   `contentText`'s `off` window with blank cells for a cluster split
-  by the left clip edge. See
+  by the left clip edge. Issue #19 extends `rowSource` with
+  `StopTarget` and makes `reveal` run `Viewport.RevealOff` after the
+  vertical `Reveal` — the minimal horizontal reveal on startup and
+  every `n`/`p` transition, writing the viewport back when either
+  half moved. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [file-change-popup.md](file-change-popup.md),
@@ -236,8 +240,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [match-navigation.md](match-navigation.md),
   [destination-reveal.md](destination-reveal.md),
   [wrap-mode.md](wrap-mode.md),
-  [logical-anchor.md](logical-anchor.md), and
-  [horizontal-panning.md](horizontal-panning.md).
+  [logical-anchor.md](logical-anchor.md),
+  [horizontal-panning.md](horizontal-panning.md), and
+  [horizontal-reveal.md](horizontal-reveal.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
@@ -298,10 +303,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `Reveal` is model-aware and replaces the logical anchor only when
   the viewport moves — a no-scroll reveal retains the logical column.
   Issue #18 widens the parameter to `Extent` and re-clamps the
-  horizontal offset against the newly visible rows on a move. See
+  horizontal offset against the newly visible rows on a move.
+  Issue #19 adds `Viewport.RevealOff` — the minimal horizontal
+  reveal (left rule `off = start`, right rule
+  `off = start + cluster width − text width`, unpaintable-cluster
+  geometric fallback to the start column) — plus `CellVisible`, the
+  painted-cell visibility predicate the reveal and Issue #20's
+  indicators share, and `targetCluster`, the `Clusters`-backed
+  cell→(start, width) lookup. See
   [destination-reveal.md](destination-reveal.md),
-  [logical-anchor.md](logical-anchor.md), and
-  [horizontal-panning.md](horizontal-panning.md).
+  [logical-anchor.md](logical-anchor.md),
+  [horizontal-panning.md](horizontal-panning.md), and
+  [horizontal-reveal.md](horizontal-reveal.md).
 - `internal/theme/theme.go` — the active scheme's style set: `Dark()`
   (white on black, initially active), `Light()` (black on white), the
   pure `Toggled` flip behind the `c` key, `Plain()` (the no-style

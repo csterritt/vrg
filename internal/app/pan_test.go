@@ -338,7 +338,9 @@ func TestScrollReclampsOffsetLeftwards(t *testing.T) {
 }
 
 // A navigation reveal that moves the viewport re-clamps the stored
-// offset against the newly visible rows.
+// offset against the newly visible rows. The destination match starts
+// at cell 2 — painted at the clamped offset — so Issue #19's
+// horizontal reveal leaves the re-clamped value in place.
 func TestRevealReclampsOffset(t *testing.T) {
 	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
 	m.theme = theme.Plain()
@@ -346,7 +348,7 @@ func TestRevealReclampsOffset(t *testing.T) {
 	idx := navIndex(t, []navFile{{
 		name:    "a.txt",
 		content: content,
-		stops:   []navStop{{line: 1, start: 0, end: 1}, {line: 35, start: 0, end: 3}},
+		stops:   []navStop{{line: 1, start: 0, end: 1}, {line: 35, start: 2, end: 3}},
 	}})
 	finishLoad(t, m, startBrowse(t, m, idx))
 	key := string(idx.Files[0].Path)

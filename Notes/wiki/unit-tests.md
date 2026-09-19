@@ -661,7 +661,9 @@ regardless of temporary-path length:
   re-clamps the stored 200 to the pad lines' 2; `up` returns to the
   long line without restoring it.
 - `TestRevealReclampsOffset` — `n` to a same-file stop whose reveal
-  scrolls into short lines re-clamps the offset.
+  scrolls into short lines re-clamps the offset; the destination
+  match starts at cell 2, painted at the clamped offset, so Issue
+  #19's horizontal reveal leaves it in place.
 - `TestWrapReentryReclampsOffset` — offset retained through wrap,
   `pgdn` deep into short lines while wrapped, then `w` re-entry
   clamps it to 2.
@@ -669,6 +671,35 @@ regardless of temporary-path length:
   long line leaves the window re-clamps the stored offset.
 - `TestPanKeysNoOpOnPlaceholder` — pan keys over "Loading…" create no
   viewport state and change nothing.
+
+`hreveal_test.go` (same package; Issue #19) drives the minimal
+horizontal reveal through `Update`/`View` under `theme.Plain()` in
+run-off-edge mode:
+
+- `TestSameFileNavTriggersHorizontalReveal` — over the three-stop
+  `hrevealFile` (matches at cells 5, 300, 270): `n` to the cell-300
+  match sets `off = 261` (`300 + 1 − 40`) with the match start at the
+  right edge, `n` to the already-painted cell-270 match moves nothing,
+  and wrapping `n` back to cell 5 reveals left to the target column.
+- `TestStartupRevealAppliesHorizontalReveal` — toggling `w` before the
+  first load lands makes the pending startup reveal commit against the
+  flat layout: `off = 261` with the match start at the right edge.
+- `TestFileChangeResetsOffsetBeforeHorizontalReveal` — a revisited
+  file whose saved offset was 50 resets to 0 before the reveal, so its
+  cell-10 target is already visible and the offset stays 0 rather than
+  revealing to 10.
+- `TestHorizontalRevealPaintsWideClusterAtRightEdge` — a match on `文`
+  at cell 298 sets `off = 260` (`298 + 2 − 40`) and the row paints
+  both cells of the glyph at the right edge.
+- `TestHorizontalRevealClippedBlankCountsHidden` — a match on `文`
+  whose start cell is inside the window but clipped blank by the right
+  edge reveals to `off = 1`, painting the whole cluster.
+- `TestHorizontalRevealUnpaintableClusterFallback` — a match on a
+  six-cell tab cluster at text width 5 sets `off` to its start column
+  2, the in-window cells render all blank, and repeated `n` round
+  trips land on 2 again — no panning loop.
+- `TestHorizontalRevealInertInWrapMode` — startup on a wrapped layout
+  records no horizontal offset even with a far-off match.
 
 ## internal/viewport
 
@@ -720,8 +751,9 @@ run-off-edge row models:
 - `TestRevealDeepInWrappedLine` — a stop deep inside a line taller
   than several screens reveals its own row at `floor(h / 3)`.
 
-`reveal_test.go` (external package; Issue #14) covers destination
-reveal over real prepared buffers:
+`reveal_test.go` (external package; Issue #14, extended by Issues
+#17–#19) covers destination reveal, the row/target selectors, and the
+minimal horizontal reveal over real prepared buffers:
 
 - `TestStopTargetIsFirstSubmatchStartCell` — the display target's cell
   is the first submatch's *start cell* through the byte→cell map, not
@@ -744,6 +776,32 @@ reveal over real prepared buffers:
 - `TestRevealStartsFromCurrentTop` — the reveal is relative to the
   viewport's current top: the same target moves a first-visit top of 0
   it is hidden from but stays put when visible from a saved top.
+- `TestRevealOffRightOfView` — a target right of the window sets
+  `off = start + cluster width − text width` (single-cell and
+  two-cell targets alike), landing the whole target cluster at the
+  right edge.
+- `TestRevealOffLeftOfView` — a target left of the window sets
+  `off = start`, landing it at the left edge.
+- `TestRevealOffPaintedTargetKeepsOffset` — a target whose start cell
+  is already painted leaves the offset alone, mid-window and at the
+  edges.
+- `TestRevealOffClippedBlankCountsHidden` — a two-cell target
+  geometrically inside the window but clipped to a blank start cell
+  counts as hidden and reveals by the right-edge rule.
+- `TestRevealOffOversizedSpanByStartCell` — a match wider than the
+  text width reveals by its start cell only; the off-screen tail does
+  not force further movement.
+- `TestRevealOffUnpaintableClusterFallback` — a target cluster wider
+  than the whole text width sets `off` to its start and is treated as
+  geometrically revealed: a second `RevealOff` is a no-op, so
+  repeated navigation cannot loop.
+- `TestRevealOffMarkerCell` — a zero-width match's marker cell (one
+  past the last cell) reveals by the single-cell right-edge rule.
+- `TestRevealOffNoOpWrapAndEmpty` — a wrap model and a nil-buffer
+  model both leave the offset at 0.
+- `TestCellVisible` — the painted-cell predicate itself: start cell
+  painted, clipped blank (hidden), left/right of window, and marker
+  cell at the boundary.
 
 `anchor_test.go` (external package; Issue #17) covers the logical
 anchor over real prepared buffers:

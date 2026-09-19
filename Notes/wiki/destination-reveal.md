@@ -57,7 +57,11 @@ the reveal starts from).
 stop, resolve its target row through the file's `rowSource`, then
 `Reveal` against the file's saved `vps` viewport — absent on a first
 visit, so the zero value's top-of-file is the start — and write the
-viewport back to `vps` **only when it moved**. Since Issue #17 the
+viewport back to `vps` **only when it moved**. Since Issue #19 the
+same call then runs `RevealOff` — the minimal horizontal reveal — on
+the resolved `StopTarget` and target row, writing the viewport back
+when *either* half moved (see
+[horizontal-reveal.md](horizontal-reveal.md)). Since Issue #17 the
 placeholder case is not a plain no-op: when no layout matching the
 current parameters is installed, `reveal` records a **pending intent**
 on `pendingReveals[path]` that commits when the matching layout
@@ -80,7 +84,8 @@ Two triggers, the ones this issue owns:
   is read at completion time, the revealed target is always the latest
   selection. Issue #28 owns the deeper contract — a two-stage
   prepared-layout commit with reveal/reload-intent arbitration — and
-  Issue #19 owns horizontal reveal.
+  Issue #19's horizontal reveal rides the same two triggers (see
+  [horizontal-reveal.md](horizontal-reveal.md)).
 
 The saved-state rules fall out of the write-through: a moving reveal
 replaces the file's saved top with the revealed position (a later

@@ -666,3 +666,41 @@ and indicators), `internal/viewport/pan.go`,
 `internal/filebuffer/filebuffer.go`, `internal/app/app.go`,
 `internal/app/browse.go`, `internal/viewport/pan_test.go`,
 `internal/app/pan_test.go`.
+
+## [2026-09-17] ingest | Issue #19 minimal horizontal reveal
+
+Ingested the completed Issue #19 implementation: in run-off-edge
+mode the display target's start cell is horizontally revealed with
+the minimum offset movement, on startup and on every actual `n`/`p`
+transition — same-file steps included — after Issue #18's `ResetOff`
+on a file change. `internal/viewport/reveal.go` gains
+`CellVisible` (painted-cell visibility: the cluster holding the
+target cell must fit whole inside `[off, off + textW)`, so a
+geometrically inside position clipped to a blank still counts as
+hidden — the same criterion Issue #20's indicators will use),
+`targetCluster` (target cell → cluster start/width via
+`Line.Clusters`; a past-end marker cell resolves to `(cell, 1)`), and
+`Viewport.RevealOff` — hidden left → `off = start`, hidden right →
+`off = start + w − textW` so a two-cell cluster paints both cells at
+the right edge, painted → unchanged, oversized match → start cell
+only, and a cluster wider than the text area falls back to
+`off = start` treated as geometrically revealed (checked first, so
+repeats are idempotent — no panning loop — while `CellVisible` still
+reports it hidden). `model.reveal` runs `RevealOff` after the
+vertical `Reveal` and writes the viewport back when either moved, so
+the rule rides every existing trigger: the pending startup reveal,
+same-file `n`/`p`, file change (after the reset), and load
+completion; `rowSource` gains `StopTarget`. Wrap mode is a strict
+no-op. Created [horizontal-reveal](horizontal-reveal.md); updated
+[destination-reveal](destination-reveal.md),
+[horizontal-panning](horizontal-panning.md),
+[wrap-mode](wrap-mode.md), [logical-anchor](logical-anchor.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/019-minimal-horizontal-reveal.md`,
+`Notes/tasks/019-minimal-horizontal-reveal.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors; Layout
+and indicators), `internal/viewport/reveal.go`,
+`internal/viewport/viewport.go`, `internal/app/browse.go`,
+`internal/viewport/reveal_test.go`, `internal/app/hreveal_test.go`,
+`internal/app/pan_test.go`.

@@ -26,6 +26,10 @@ type rowSource interface {
 	// TargetRow is the rendered row holding the navigation stop's
 	// display target — the row a destination reveal must show.
 	TargetRow(st searchindex.Stop) int
+	// StopTarget resolves a stop to its display target: the
+	// destination line and the first submatch's start cell — the cell
+	// the horizontal reveal must paint (Issue #19).
+	StopTarget(st searchindex.Stop) viewport.Target
 }
 
 // curFile is the cursor's current file index — the current file derives
@@ -120,7 +124,18 @@ func (m *model) reveal() {
 	}
 	delete(m.pendingReveals, ck)
 	vp := m.vps[ck]
-	if vp.Reveal(rows.TargetRow(m.idx.Files[cur.File].Stops[cur.Stop]), rows, h) {
+	st := m.idx.Files[cur.File].Stops[cur.Stop]
+	row := rows.TargetRow(st)
+	// The vertical reveal runs first — its movement re-clamps the
+	// stored offset against the newly visible rows — then the minimal
+	// horizontal reveal adjusts the offset to paint the target's
+	// cluster (Issue #19). A same-file n/p triggers both; in wrap
+	// mode the horizontal half is a no-op.
+	moved := vp.Reveal(row, rows, h)
+	if vp.RevealOff(rows.StopTarget(st), row, rows) {
+		moved = true
+	}
+	if moved {
 		m.vps[ck] = vp
 	}
 }

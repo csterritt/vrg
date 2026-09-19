@@ -57,7 +57,9 @@ layout the key describes:
 - **Run-off-edge mode** maps each source line to exactly one row; the
   render clips at the text width without splitting a grapheme.
   Issue #18 gives this mode the horizontal pan window and offset —
-  see [horizontal-panning.md](horizontal-panning.md).
+  see [horizontal-panning.md](horizontal-panning.md) — and Issue #19
+  the minimal horizontal reveal on navigation, inert while wrapped —
+  see [horizontal-reveal.md](horizontal-reveal.md).
 - `Row{Line, Start, End}` is one rendered row — a half-open cell range
   of its source line — and `Row.Continuation()` (Start > 0) marks the
   rows that continue a wrapped line: their gutter is blank and their

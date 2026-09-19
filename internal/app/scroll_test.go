@@ -270,6 +270,12 @@ func (c *countingRows) TargetRow(st searchindex.Stop) int {
 	return row
 }
 
+// StopTarget satisfies rowSource; the fake's cells are empty so the
+// submatch start is the whole answer the horizontal reveal needs.
+func (c *countingRows) StopTarget(st searchindex.Stop) viewport.Target {
+	return viewport.Target{Line: st.Number}
+}
+
 // A frame render queries the row provider only for the visible row
 // range — the prepared-row window [top, top + content height) — never
 // scanning the whole buffer.

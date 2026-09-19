@@ -16,6 +16,10 @@
 // lossy EOF clamp. Issue #18 lands the horizontal pan offset: the
 // run-off-edge cell window, its pan units, the visible-lines extent
 // policy, and the paintable-boundary clamp — all in pan.go.
+// Issue #19 lands the minimal horizontal reveal: painted-cell
+// visibility, the cluster-width reveal arithmetic, and the unpaintable
+// cluster's geometric fallback — RevealOff and CellVisible in
+// reveal.go.
 package viewport
 
 import "vrg/internal/filebuffer"
@@ -72,7 +76,8 @@ type Extent interface {
 // meaningful only under a run-off-edge model, retained untouched while
 // a wrap model is installed, and re-clamped to the paintable boundary
 // of the visible rows on every visible-set change — pan, scroll,
-// reveal, rewrap, restore, or clamp.
+// reveal, rewrap, restore, or clamp. Issue #19's horizontal reveal may
+// also move it, by the minimum columns that paint the target cluster.
 type Viewport struct {
 	top    int
 	anchor Anchor
