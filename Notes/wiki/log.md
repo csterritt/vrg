@@ -1871,3 +1871,30 @@ untagged production probe. New page
 `cmd/vrg/outcome_test.go`, `cmd/vrg/cancel_test.go`,
 `cmd/vrg/replay_test.go`, `cmd/vrg/runshape_test.go`,
 `cmd/vrg/testhooks_test.go`.
+
+## [2026-09-18] ingest | Issue #49 dependency-manifest tidy — Bubbles/Lip Gloss removal decision
+
+Ingested the completed Issue #49 work
+([issue](../issues/049-tidy-dependency-manifests.md),
+[task](../tasks/049-tidy-dependency-manifests.md)) recording the
+product owner's 2026-09-14 removal decision: the implementation
+imports neither `charm.land/bubbles/v2` nor `charm.land/lipgloss/v2`,
+no token import may be added to retain a manifest entry, and the
+remaining TUI dependency is `charm.land/bubbletea/v2` with VRG's own
+`internal/theme` owning presentation. `go mod tidy` confirms the
+committed `go.mod`/`go.sum` are already the clean tidied result —
+both modules absent, every real direct/test dependency declared with
+correct direct/indirect marking, `go mod tidy -diff` empty,
+`go mod verify` green, and `go build`/`go vet`/`go test ./...`
+passing. Current stated-stack and prescriptive references agree:
+`Notes/PRD-vrg.md` *Further Notes*, [project-overview](project-overview.md),
+the Scope paragraph in [AGENTS.md](AGENTS.md),
+`Notes/skills/code-writing/styling-tui.md`, and the
+`code-writing/styling-tui` entry in `Notes/skills/AGENTS.md`; historical
+audit/issue/decision references are preserved unchanged. Evidence lives
+in the [Issue #49 walkthrough](../walkthroughs/049-04/code-walkthrough/walkthrough.md).
+Issue #50 remains the sole owner of `scripts/verify.sh` and will adopt
+this already-green `go mod tidy -diff` into the permanent gate. Sources:
+`Notes/issues/049-tidy-dependency-manifests.md`,
+`Notes/tasks/049-tidy-dependency-manifests.md`,
+`Notes/PRD-vrg.md` (Further Notes), `go.mod`, `go.sum`.
