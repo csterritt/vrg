@@ -12,10 +12,14 @@ const REMOTE_PATH_PREFIX = "export PATH=/home/linuxbrew/.linuxbrew/bin:$PATH";
 const JJ_TEMPLATE =
   'change_id.short() ++ "\\t" ++ if(empty, "EMPTY", "nonempty") ++ "\\t" ++ description.trim() ++ "\\n"';
 const DRY_RUN = Bun.argv.includes("--dry-run");
-const BRANCH = Bun.argv.slice(2).find((arg) => !arg.startsWith("--"));
+const POSITIONAL_ARGS = Bun.argv.slice(2).filter((arg) => !arg.startsWith("--"));
+const BRANCH = POSITIONAL_ARGS[0];
+const START_MATCH = POSITIONAL_ARGS[1];
 
-if (!BRANCH) {
-  console.error("Usage: bun scripts/unify-history.ts <local-branch> [--dry-run]");
+if (!BRANCH || !START_MATCH) {
+  console.error(
+    "Usage: bun scripts/unify-history.ts <local-branch> <start-commit-match> [--dry-run]",
+  );
   process.exit(1);
 }
 
@@ -82,10 +86,24 @@ async function getRemoteCommits(): Promise<CommitEntry[]> {
   return parseJjLog(output);
 }
 
+// remoteCommits is oldest-first; drop everything before the first commit whose
+// change id or description contains START_MATCH.
+function remoteCommitsFromMatch(remoteCommits: CommitEntry[]): CommitEntry[] {
+  const startIndex = remoteCommits.findIndex(
+    (commit) => commit.description.includes(START_MATCH) || commit.changeId.includes(START_MATCH),
+  );
+  if (startIndex === -1) {
+    throw new Error(`No remote commit matches "${START_MATCH}".`);
+  }
+  const matched = remoteCommits[startIndex]!;
+  log(`Starting at remote commit ${matched.changeId}: ${matched.description} (skipped ${startIndex} older).`);
+  return remoteCommits.slice(startIndex);
+}
+
 async function printDryRunPlan(): Promise<void> {
   log("Dry run: fetching local and remote commit maps...");
   const localCommits = await getLocalCommits();
-  const remoteCommits = await getRemoteCommits();
+  const remoteCommits = remoteCommitsFromMatch(await getRemoteCommits());
   const localDescriptions = new Set(localCommits.map((c) => c.description));
   log(`Local branch '${BRANCH}': ${localCommits.length} commits, remote: ${remoteCommits.length} commits.`);
   const missing = remoteCommits.filter((c) => !localDescriptions.has(c.description));
@@ -97,7 +115,7 @@ async function printDryRunPlan(): Promise<void> {
   for (const commit of missing) {
     log(`${commit.changeId}: ${commit.description}`);
     log(`  ssh ${REMOTE_HOST} '${REMOTE_PATH_PREFIX} && cd ${REMOTE_DIR} && jj edit ${commit.changeId}'`);
-    // log(`  jj new ${BRANCH}`);
+    log(`  jj new ${BRANCH}`);
     log("  bash scripts/pull-up-new.sh");
     log(`  jj describe -m "${commit.description}"`);
     log(`  jj bookmark set ${BRANCH} -r @`);
@@ -112,7 +130,7 @@ async function main(): Promise<void> {
   for (;;) {
     log("Fetching local and remote commit maps...");
     const localCommits = await getLocalCommits();
-    const remoteCommits = await getRemoteCommits();
+    const remoteCommits = remoteCommitsFromMatch(await getRemoteCommits());
     const localDescriptions = new Set(localCommits.map((c) => c.description));
     log(`Local branch '${BRANCH}': ${localCommits.length} commits, remote: ${remoteCommits.length} commits.`);
 
@@ -146,6 +164,8 @@ async function main(): Promise<void> {
     await run("jj", ["bookmark", "set", BRANCH, "-r", "@"]);
 
     log("Iteration complete.");
+
+    break
   }
 }
 
