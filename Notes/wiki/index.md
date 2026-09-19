@@ -74,6 +74,12 @@ Catalog of all wiki pages for the vrg project.
   controlled-failure path, `EscapePath`-single-lined embedded
   filenames, and the `VRG_TEST_DIAG_ACK` application-side
   acknowledgement
+- [viewport-scrolling.md](viewport-scrolling.md) — Issue #12: the
+  rendered-row scroll units (`up`/`down` one row, `u`/`d` half page,
+  `pgup`/`pgdn` a page of the content height), the BOF/EOF clamps with
+  no avoidable blank rows, placeholder no-ops, the per-file saved
+  viewport map, and prepared-row rendering with the visible-range-only
+  render-cost guard
 
 ## Catalogs
 

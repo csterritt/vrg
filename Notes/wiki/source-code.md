@@ -93,7 +93,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   and light schemes. The search-derived `status` is fixed at
   completion; only `ctrl+c` overrides it to 130. Issue #10's
   `recordWarnings` composes the "N unrecognised record types skipped"
-  warning from the index's `Unknown` count. Issue #11 adds the session
+  warning from the index's `Unknown` count. Issue #12 adds the browse
+  scroll-key route (`stateBrowse` + `isScrollKey` → `scrollBy`), the
+  per-file `vps`/`rows` maps, saved-viewport re-clamping on resize and
+  on load completion. Issue #11 adds the session
   diagnostic collection `model.diags`: `collectDiags` appends sanitized
   lines as `Update` processes `stderrLineMsg` (forwarded from
   `Child.Diags()` by a `prog.Send` goroutine in `Run`),
@@ -141,9 +144,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   true-inverse matches, underlined current match and current file).
   Issue #11's `loadDiag` composes the single-line `cannot read
   \<EscapePath(path)\>: \<reason\>` diagnostic a failed load collects
-  (`*fs.PathError` contributes only its cause). See
-  [browse-tracer.md](browse-tracer.md), [theme.md](theme.md), and
-  [stderr-replay.md](stderr-replay.md).
+  (`*fs.PathError` contributes only its cause). Issue #12 adds the
+  `rowSource` seam the frame render queries per visible row,
+  `curKey`/`contentRows`, and `isScrollKey`/`scrollBy` — the
+  `up`/`down`/`u`/`d`/`pgup`/`pgdown` handling that scrolls the
+  current file's saved per-file viewport clamped to the prepared row
+  count and content height, a no-op on placeholders. See
+  [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
+  [stderr-replay.md](stderr-replay.md), and
+  [viewport-scrolling.md](viewport-scrolling.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
@@ -153,9 +162,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `safepresentation.MapContent`, and produces `Buffer`/`Line` records
   with `GutterWidth`, source `Raw` bytes, and `Highlights` mapped to
   display cells. See [browse-tracer.md](browse-tracer.md).
-- `internal/viewport/viewport.go` — the minimal top-of-file vertical
-  window seam (`Viewport`, `Visible`, `Top`); scrolling and reveal are
-  later issues.
+- `internal/viewport/viewport.go` — `Viewport`, the file panel's
+  vertical window (`Top`, `Scroll`, `Clamp`), the scroll-unit helpers
+  `HalfPage` and `MaxTop` (the BOF/EOF clamp bound), and `Rows`, the
+  prepared rendered-row model built by `Prepare` that the frame render
+  slices. Destination reveal, wrap, logical anchors, and horizontal
+  state are later issues. See
+  [viewport-scrolling.md](viewport-scrolling.md).
 - `internal/theme/theme.go` — the active scheme's style set: `Dark()`
   (white on black, initially active), `Light()` (black on white), the
   pure `Toggled` flip behind the `c` key, `Plain()` (the no-style

@@ -125,3 +125,14 @@ Usage
  Input tokens: 302037 tokens
  Output tokens: 57367 tokens
  Cached input tokens: 9014143 tokens
+
+----
+Task 012-manual-vertical-scrolling-and-per-file-viewport.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 39 messages
+ Input tokens: 85106 tokens
+ Output tokens: 30233 tokens
+ Cached input tokens: 2704773 tokens

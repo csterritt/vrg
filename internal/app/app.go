@@ -128,12 +128,19 @@ type model struct {
 	// in-flight raw paths, bufs caches prepared buffers, and failed
 	// records read failures, all keyed by the raw path bytes — never by
 	// an escaped display form.
+	// vps is the saved vertical viewport per file keyed by raw path:
+	// scrolling writes through to it, so a file revisited later
+	// (Issue #13) starts from its last position. rows caches each
+	// loaded file's prepared rendered-row model — built when its load
+	// completes — which the frame render slices instead of rescanning
+	// the buffer.
 	idx     *searchindex.Index
 	cur     int
 	loading map[string]bool
 	bufs    map[string]*filebuffer.Buffer
 	failed  map[string]bool
-	vp      viewport.Viewport
+	vps     map[string]viewport.Viewport
+	rows    map[string]rowSource
 	theme   theme.Theme
 
 	// Modal error overlay. overlayOpen marks it up — key input routes
@@ -158,6 +165,8 @@ func newModel(cfg Config, opts options, child Child) *model {
 		loading: map[string]bool{},
 		bufs:    map[string]*filebuffer.Buffer{},
 		failed:  map[string]bool{},
+		vps:     map[string]viewport.Viewport{},
+		rows:    map[string]rowSource{},
 		theme:   theme.Dark(),
 	}
 }
@@ -216,6 +225,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.clampOverlayScroll()
+		// The new content height can strand a saved top past the last
+		// valid position; re-clamp every prepared file's viewport so no
+		// revisit can leave avoidable blank rows below EOF.
+		for key, vp := range m.vps {
+			if rows := m.rows[key]; rows != nil {
+				vp.Clamp(rows.Len(), m.contentRows())
+				m.vps[key] = vp
+			}
+		}
 	case searchDoneMsg:
 		m.idx = msg.idx
 		var cmd tea.Cmd
@@ -263,6 +281,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.collectDiags(loadDiag(msg.path, msg.err))
 		} else {
 			m.bufs[key] = msg.buf
+			// The prepared row model is what the frame render slices;
+			// a saved viewport from an earlier visit re-clamps to the
+			// new content.
+			m.rows[key] = viewport.Prepare(msg.buf)
+			if vp, ok := m.vps[key]; ok {
+				vp.Clamp(m.rows[key].Len(), m.contentRows())
+				m.vps[key] = vp
+			}
 		}
 	case failMsg:
 		if msg.err == nil {
@@ -312,6 +338,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// c toggles the colour scheme between dark and light for
 			// the session; nothing persists.
 			m.theme = m.theme.Toggled()
+		case m.state == stateBrowse && isScrollKey(key):
+			// Manual vertical scrolling moves the current file's
+			// viewport; it never moves the matched-line cursor, and
+			// on a placeholder it is a no-op.
+			m.scrollBy(key)
 		case key == "q" && m.state == stateNoResults:
 			// q dismisses the no-results screen to exit 1 through
 			// the same cleanup path; Esc is a no-op here and

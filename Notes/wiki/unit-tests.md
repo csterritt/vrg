@@ -392,6 +392,32 @@ skipped record plus binary exclusion leaving zero retained stops (→ 2,
 assessed after all filtering), and missing `end` with and without
 retained matches (browse + overlay → 2 and overlay-only → 2).
 
+`scroll_test.go` (same package; Issue #12) covers manual vertical
+scrolling and the per-file viewport:
+
+- `TestScrollKeysMoveRenderedRows` — `down`/`up` move the saved top by
+  one rendered row, `d`/`u` by `floor(h/2)` of the content height, and
+  `pgdn`/`pgup` by a full page, each returning no command; the rendered
+  first content row shows the line at the new top.
+- `TestScrollStopsAtEOF` — scrolling past EOF clamps at
+  `rows − content height` with the file's last line on the panel's
+  bottom row; further down keys change nothing.
+- `TestScrollStopsAtBOF` — `up`/`u`/`pgup` at the top do nothing.
+- `TestScrollShortFileLeavesUnusedRows` — a file shorter than the
+  viewport cannot scroll; the unused rows below its content stay
+  naturally blank.
+- `TestScrollKeysNoOpOnPlaceholders` — every scroll key on the
+  "Loading…" and "(unreadable)" placeholders changes nothing and
+  creates no viewport state.
+- `TestViewportStateSavedPerFile` — file A's scrolled top is recorded
+  under A's raw path and survives a simulated leave-and-revisit while
+  file B keeps its own top-of-file state.
+- `TestRenderQueriesOnlyVisibleRows` — the `countingRows` fake proves a
+  frame render queries the `rowSource` only for `[top, top + content
+  height)`, each visible row exactly once — no O(N) buffer scan.
+- `TestResizeReclampsViewport` — growing the frame past the saved top's
+  last valid position clamps it to the new `MaxTop`.
+
 `overlay_test.go` (same package; Issue #9) covers the modal overlay's
 mechanics:
 
@@ -409,6 +435,25 @@ mechanics:
   contract: one frame needn't show both ends).
 - `TestGeneratedProcessDiagnostics` — a failed process without stderr
   gets the generated line naming the exit code or the signal.
+
+## internal/viewport
+
+`viewport_test.go` (external package `viewport_test`; Issue #12):
+
+- `TestScrollUnitsMoveRenderedRows` — each scroll unit (one row, half
+  page, full page) moves the top by its rendered-row count on a file
+  longer than the viewport, symmetrically down and back up.
+- `TestHalfPageUnit` — `HalfPage` is `max(1, floor(height / 2))` over
+  odd and degenerate heights.
+- `TestScrollClampByFileLength` — `MaxTop` and the EOF clamp over files
+  shorter than, equal to, and longer than the viewport (plus empty and
+  zero-height); a second scroll at EOF moves nothing.
+- `TestScrollClampBOF` — scrolling up never takes the top below 0.
+- `TestClampPullsTopUp` — `Clamp` pulls a stranded top up when the
+  height grows or the content shrinks — the lossy EOF clamp.
+- `TestPrepareRows` — `Prepare` maps each source line to one rendered
+  row in file order with the buffer's gutter width; a nil buffer gives
+  an empty model.
 
 ## internal/theme
 

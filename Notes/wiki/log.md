@@ -354,3 +354,37 @@ overlays, and key precedence; Testing Decisions → Subprocess boundary),
 `internal/app/outcome.go`, `internal/app/replay_test.go`,
 `internal/app/sinksafety_test.go`, `cmd/vrg/main.go`,
 `cmd/vrg/replay_test.go`.
+
+## [2026-09-16] ingest | Issue #12 manual vertical scrolling and per-file viewport
+
+Ingested Issue #12 ([issue](../issues/012-manual-vertical-scrolling-and-per-file-viewport.md),
+[task](../tasks/012-manual-vertical-scrolling-and-per-file-viewport.md)).
+`internal/viewport` replaced the Issue #5 `Visible` seam with the real
+scroll surface: `Viewport.Scroll`/`Clamp` move the top rendered row under
+the valid-content bound `MaxTop` (`max(0, rows − height)` — never below 0,
+never leaving avoidable blank rows below EOF, shorter-than-viewport files
+clamped to 0), `HalfPage` is the `u`/`d` unit `max(1, floor(height/2))`,
+and `Rows`/`Prepare` build the prepared rendered-row model (one row per
+source line in the still-unwrapped panel, plus the gutter width) that the
+frame render slices. `internal/app` gained the `rowSource` seam
+(`Len`/`At`/`GutterWidth`) so a frame queries only `[top, top + content
+height)`, the `vps` per-file saved-viewport map written through on every
+scroll and re-clamped on resize and load completion, and `scrollBy` behind
+`stateBrowse && isScrollKey` — `up`/`down` one row, `u`/`d` half page,
+`pgup`/`pgdown` a page of the content height (frame − filename row), a
+strict no-op on "Loading…"/"(unreadable)" placeholders, never moving the
+matched-line cursor. New tests: `internal/viewport/viewport_test.go`
+(units, odd-height half pages, both clamps across file-length cases,
+lossy clamp, `Prepare`) and `internal/app/scroll_test.go` (key-driven
+movement, EOF/BOF stops, short-file blank rows, placeholder no-ops,
+per-file save/restore, the `countingRows` render-cost guard, resize
+re-clamp). Created [viewport-scrolling](viewport-scrolling.md); updated
+[browse-tracer](browse-tracer.md), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/issues/012-manual-vertical-scrolling-and-per-file-viewport.md`,
+`Notes/tasks/012-manual-vertical-scrolling-and-per-file-viewport.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors; Module
+Design → Viewport; Resources and responsiveness),
+`internal/viewport/viewport.go`, `internal/viewport/viewport_test.go`,
+`internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/scroll_test.go`.

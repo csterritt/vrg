@@ -74,7 +74,9 @@ plus two spaces, minimum one digit slot. Stale-match validation is Issue
 `Viewport` is a vertical window over a loaded buffer — `Visible(lines,
 height)` returns `[top, top+height)` and the zero value shows the top of
 the file. Scrolling, destination reveal, wrap, logical anchors, and
-horizontal state arrive in Issues #12–21.
+horizontal state arrive in Issues #12–21. [Issue
+#12](viewport-scrolling.md) has since replaced `Visible` with the
+prepared `Rows` model and landed manual scrolling with clamping.
 
 `internal/theme` lands the initial scheme `Dark()` (white on black;
 `Inverse` for match runs, `Underline` for the current list entry) and
@@ -120,7 +122,10 @@ The frame is exactly `height` rows:
   replaced. No left/right/bottom panel border is drawn.
 - Until the current file's buffer arrives the panel shows "Loading…";
   a read failure shows "(unreadable)". The first visit starts at the
-  top of the file — no reveal yet (Issue #14).
+  top of the file — no reveal yet (Issue #14). Since Issue #12 the
+  panel renders the prepared `viewport.Rows` model through the
+  `rowSource` seam at the saved per-file top — see
+  [viewport-scrolling.md](viewport-scrolling.md).
 
 ## Sink-safety method
 

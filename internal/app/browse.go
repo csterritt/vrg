@@ -12,7 +12,76 @@ import (
 
 	"vrg/internal/filebuffer"
 	"vrg/internal/safepresentation"
+	"vrg/internal/viewport"
 )
+
+// rowSource is the prepared rendered-row provider the frame render
+// consults: *viewport.Rows in production. Tests substitute a counting
+// fake to prove a frame queries only the visible row range.
+type rowSource interface {
+	Len() int
+	At(i int) filebuffer.Line
+	GutterWidth() int
+}
+
+// curKey is the current file's raw-path map key — the identity for the
+// buffer, row-model, and per-file viewport caches — or false when the
+// index is empty.
+func (m *model) curKey() (string, bool) {
+	if m.idx == nil || len(m.idx.Files) == 0 {
+		return "", false
+	}
+	return string(m.idx.Files[m.cur].Path), true
+}
+
+// contentRows is the file panel's content height: the frame height
+// minus the filename-rule row it shares with the file list.
+func (m *model) contentRows() int { return m.height - 1 }
+
+// isScrollKey reports whether key is a browse-state vertical scroll key.
+func isScrollKey(key string) bool {
+	switch key {
+	case "up", "down", "u", "d", "pgup", "pgdown":
+		return true
+	}
+	return false
+}
+
+// scrollBy applies one vertical scroll key to the current file's saved
+// viewport: up/down move one rendered row, u/d a half page
+// (max(1, floor(h/2))), and pgup/pgdown a full page of the content
+// height — all clamped to valid content. While the panel shows a
+// placeholder ("Loading…" or "(unreadable)") there is no row model and
+// the keys are no-ops.
+func (m *model) scrollBy(key string) {
+	ck, ok := m.curKey()
+	if !ok {
+		return
+	}
+	rows := m.rows[ck]
+	h := m.contentRows()
+	if rows == nil || h < 1 {
+		return
+	}
+	var d int
+	switch key {
+	case "up":
+		d = -1
+	case "down":
+		d = 1
+	case "u":
+		d = -viewport.HalfPage(h)
+	case "d":
+		d = viewport.HalfPage(h)
+	case "pgup":
+		d = -h
+	case "pgdown":
+		d = h
+	}
+	vp := m.vps[ck]
+	vp.Scroll(d, rows.Len(), h)
+	m.vps[ck] = vp
+}
 
 // fileLoadedMsg delivers the prepared buffer — or the read error — for
 // one requested path. The command performed the read plus decode and
@@ -101,12 +170,21 @@ func (m *model) browseView() string {
 		listTop = m.cur - h + 2
 	}
 
-	var buf *filebuffer.Buffer
+	var rows rowSource
 	failed := false
 	curLine := int64(-1)
+	top := 0
 	if len(files) > 0 {
 		key := string(files[m.cur].Path)
-		buf, failed = m.bufs[key], m.failed[key]
+		rows, failed = m.rows[key], m.failed[key]
+		if rows != nil {
+			// The saved top is clamped on every state change; clamp
+			// again here so a stale entry can never blank the panel.
+			top = m.vps[key].Top()
+			if max := viewport.MaxTop(rows.Len(), h-1); top > max {
+				top = max
+			}
+		}
 		// Until Issue #13's navigation, the current matched line is the
 		// current file's first stop.
 		if stops := files[m.cur].Stops; len(stops) > 0 {
@@ -122,7 +200,7 @@ func (m *model) browseView() string {
 			sb.WriteString(m.listCell(escaped, listTop+r-1, listW))
 		}
 		if panelW > 0 {
-			sb.WriteString(m.contentCell(r-1, panelW, h-1, buf, failed, curLine))
+			sb.WriteString(m.contentCell(r-1, panelW, top, rows, failed, curLine))
 		}
 	}
 	return sb.String()
@@ -143,10 +221,10 @@ func (m *model) listCell(escaped []string, i, width int) string {
 }
 
 // contentCell renders file-panel content row cr padded to width cells:
-// gutter plus text for the buffer's visible lines, or the placeholder
-// while no buffer is available.
-func (m *model) contentCell(cr, width, avail int, buf *filebuffer.Buffer, failed bool, curLine int64) string {
-	if buf == nil {
+// gutter plus text for the prepared row at index top+cr, or the
+// placeholder while no row model is available.
+func (m *model) contentCell(cr, width, top int, rows rowSource, failed bool, curLine int64) string {
+	if rows == nil {
 		placeholder := "Loading…"
 		if failed {
 			placeholder = "(unreadable)"
@@ -156,12 +234,12 @@ func (m *model) contentCell(cr, width, avail int, buf *filebuffer.Buffer, failed
 		}
 		return strings.Repeat(" ", width)
 	}
-	lines := m.vp.Visible(buf.Lines(), avail)
-	if cr >= len(lines) {
+	ri := top + cr
+	if ri >= rows.Len() {
 		return strings.Repeat(" ", width)
 	}
-	l := lines[cr]
-	gutter := fmt.Sprintf("%*d  ", buf.GutterWidth()-2, l.Number)
+	l := rows.At(ri)
+	gutter := fmt.Sprintf("%*d  ", rows.GutterWidth()-2, l.Number)
 	if len(gutter) > width {
 		return m.theme.Gutter(gutter[:width])
 	}
