@@ -252,6 +252,7 @@ func TestExecutableBoundary(t *testing.T) {
 // the search runs and reaches the interim summary.
 func TestDashFileRootAtProcessBoundary(t *testing.T) {
 	dir := t.TempDir()
+	writeHappyFiles(t, dir)
 	if err := os.WriteFile(filepath.Join(dir, "-"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}

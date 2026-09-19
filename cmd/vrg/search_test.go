@@ -196,6 +196,21 @@ cat <<'EOF'
 EOF
 `
 
+// writeHappyFiles creates the two files happyStreamRG reports so the
+// browse loads succeed — under Issue #26 a failed current-file load
+// opens the modal error overlay, which the quit-driving tests do not
+// exercise.
+func writeHappyFiles(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "a.go"),
+		[]byte("one\nalpha\nthree\nfour\nalpha again\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.go"), []byte("beta alpha\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // The child argv at the process boundary: vrg runs "rg" with the exact
 // protected vector from the invocation working directory.
 func TestChildArgvAndWorkdir(t *testing.T) {
@@ -211,6 +226,7 @@ func TestChildArgvAndWorkdir(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
+			writeHappyFiles(t, dir)
 			if tc.name == "flags and root" {
 				if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
 					t.Fatal(err)
@@ -380,6 +396,7 @@ func TestGateHeldPreparationKeepsSearching(t *testing.T) {
 	if err := os.WriteFile(gate, []byte("held"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	writeHappyFiles(t, dir)
 	fakebin := fakeRG(t, happyStreamRG)
 	env := testEnv(fakebin, "VRG_TEST_GATE="+gate, "VRG_TEST_COLLECT_ACK="+ack)
 

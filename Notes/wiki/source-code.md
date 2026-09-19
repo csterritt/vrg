@@ -145,14 +145,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   when the `(path, req)` pair matches a live request — unrequested,
   stale, forged, and already-settled completions are discarded
   untouched — while `options.decodeGate` (`WithDecodeGate`) joins
-  `loadGate` as the seam holding the decode/map phase alone. See
+  `loadGate` as the seam holding the decode/map phase alone. Issue #26
+  adds `failDiag` — each failed path's latest load diagnostic — and
+  the notification split in `fileLoadedMsg`'s error path: a failure
+  for the current file calls `openOverlay` (opening fresh or
+  appending one occurrence scroll-preserved), a non-current failure
+  collects the diagnostic only. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
   [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md),
   [record-robustness.md](record-robustness.md),
-  [stderr-replay.md](stderr-replay.md), and
-  [async-load-isolation.md](async-load-isolation.md).
+  [stderr-replay.md](stderr-replay.md),
+  [async-load-isolation.md](async-load-isolation.md), and
+  [read-failures.md](read-failures.md).
 - `internal/app/outcome.go` — Issue #9's pure outcome decision:
   `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
   `Integrity`, usable-results count, `RecordLoss`, caller `Warnings`)
@@ -279,9 +285,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   runs `filebuffer.Read` under `loadGate`, then `decodeGate`, then
   `filebuffer.Decode`, so the read and the decode/map phase gate
   separately and the completion still carries a fully prepared
-  buffer. See
+  buffer. Issue #26 makes a failed path retryable: `startLoad` clears
+  `failed[key]` when it mints so the panel reads "Loading…" until
+  settlement, `navigate` opens the prior-failure overlay from
+  `failDiag` on a file-changed entry into a failed path while a
+  same-file step still issues nothing, and `options.loader`
+  (`WithLoader`) substitutes `filebuffer.Read` as the injected-loader
+  test seam. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
+  [read-failures.md](read-failures.md),
   [file-change-popup.md](file-change-popup.md),
   [viewport-scrolling.md](viewport-scrolling.md),
   [match-navigation.md](match-navigation.md),

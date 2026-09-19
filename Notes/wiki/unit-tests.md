@@ -482,7 +482,13 @@ unknown-type warnings with zero results (warning overlay → no-results →
 0), malformed loss with zero usable results (`q` and `Esc` → 2), a
 skipped record plus binary exclusion leaving zero retained stops (→ 2,
 assessed after all filtering), and missing `end` with and without
-retained matches (browse + overlay → 2 and overlay-only → 2).
+retained matches (browse + overlay → 2 and overlay-only → 2). Issue #26
+adds the `failLoads` field — index file positions whose loads fail once
+the search settles, the current file's through the transition's own
+load command under `failAllLoader` — plus three rows proving the fixed
+status survives: all loads failing under status 0 (→ 0), a current-file
+failure under status 2 (→ 2), and the composed usable-results-at-2
+all-fail row (→ 2, failures confined to presentation and diagnostics).
 
 `scroll_test.go` (same package; Issue #12) covers manual vertical
 scrolling and the per-file viewport:
@@ -891,6 +897,48 @@ file's; `reqOf`/`mintRequest` read and mint request identities:
   resize applies, and `ctrl+c` exits 130 without waiting; the
   released completions land on the cancelled UI as non-events.
 
+`readfail_test.go` (same package; Issue #26) drives the read-failure
+notification and retry contracts through the `WithLoader` injected
+loader — `failAllLoader` fails every read, `failPathsLoader` fails
+listed raw paths, `gatedFailLoader` arms a mutex-guarded fail set a
+gated worker's read observes — plus `heldNthLoad`, the gate holding
+only the nth minted load (the re-entry retry is a deterministic
+ordinal):
+
+- `TestCurrentFileFailureShowsOverlay` — a current-file failure opens
+  the overlay with the `cannot read …` diagnostic, shows
+  "(unreadable)", keeps the filename row naming the path, and the
+  retained stops still step without minting a load or a new overlay.
+- `TestNonCurrentFailureIsDiagnosticOnly` and
+  `TestNonCurrentFailureAppearsInReplay` — a non-current failure
+  changes no frame and opens no overlay, yet collects the diagnostic
+  that reaches the stderr replay.
+- `TestCrossFileEntryRetriesFailedFile` — re-entering a failed file
+  shows the prior-failure overlay with "Loading…" and mints exactly
+  one retry; its second failure appends once to the still-open
+  overlay and the collection.
+- `TestUnreadableComposedViewAtConstrainedWidths` — the unreadable
+  state at 80/30/20 columns: the …-truncated path in the filename
+  rule, the placeholder up, no row overflowing, nonnegative layout
+  dimensions.
+- `TestReentryShowsPriorFailureAndStartsOneRetry` — the gated
+  re-entry: prior-failure overlay and "Loading…" immediately, one
+  minted retry, and a re-entry during the in-flight retry dropped by
+  the one-load-per-path rule.
+- `TestReentryRetryEscLeavesLoadUndisturbed` — `Esc` dismisses the
+  overlay while the request stays live and held; the second failure
+  then restores "(unreadable)" and re-opens the overlay.
+- `TestReentryRetrySuccessKeepsPriorOverlay` — a successful retry
+  shows content, collects nothing new, and leaves the prior-failure
+  overlay up until dismissed.
+- `TestReentryRetrySecondFailureAppends` — the append-preserving
+  scroll primitive: the reader's `overlayScroll` survives the second
+  failure's single appended occurrence, mirrored once in the
+  collection.
+- `TestReentryRetryAwayAndBack` — navigating away lets the retry
+  settle as a non-current diagnostic-only failure; a later re-entry
+  runs the same sequence against the new prior state.
+
 Since Issue #25, `injectLoad` (in `layout_test.go`) fills a
 fabricated completion with the live request's identity before
 feeding `Update` — a message for a path with no request in flight
@@ -1174,7 +1222,10 @@ stdout/stderr/status separately:
 
 `search_test.go` (Issue #3) adds the PTY harness — `startVrgPTY`,
 `runVrgWithQuit`, `waitForFile`, `fakeRG`, `testEnv` — and the named
-boundary tests:
+boundary tests. Since Issue #26, `writeHappyFiles` creates the two
+files `happyStreamRG` reports so the quit-driving tests' browse loads
+succeed — a failed current-file load now opens the modal error
+overlay, which a single `q` would only dismiss:
 
 - `TestChildArgvAndWorkdir` — a fake `rg` records its argv and `pwd`
   through `VRG_TEST_ARGV`/`VRG_TEST_CWD`; the exact protected vector and
@@ -1274,4 +1325,6 @@ after the display-restoration sequence, in collection order:
 - `TestReplayEscapesHostileFilename` — a stream path carrying ESC and
   LF bytes fails its browse load; the replayed `cannot read …`
   diagnostic is `EscapePath`-single-lined after restoration and the
-  raw bytes never reach the terminal.
+  raw bytes never reach the terminal. Since Issue #26 the same
+  failure opens the modal error overlay, so the test dismisses it
+  with one `q` before the ordinary browse quit.

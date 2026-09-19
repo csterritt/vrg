@@ -42,7 +42,11 @@ any overlay ever displayed them. Producers:
 - `fileLoadedMsg` — a failed browse load collects `loadDiag`'s
   `cannot read <EscapePath(path)>: <reason>` (a `*fs.PathError`
   contributes only its cause, so the raw path never leaks through the
-  error string) whether or not the display side shows it.
+  error string) whether or not the display side shows it. Since
+  Issue #26 the collection is deliberately the *only* place a
+  non-current failure surfaces mid-session: no overlay, no indicator,
+  no review key — the replay is how it is seen without visiting the
+  file ([read-failures.md](read-failures.md)).
 - `failMsg` — the controlled failure's `vrg: <escaped>` line enters the
   collection **before** the exit decision, replacing Issue #4's
   separate direct write.

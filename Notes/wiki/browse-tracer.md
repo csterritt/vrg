@@ -99,9 +99,11 @@ derives from the index's matched-line cursor (`model.curFile()`), and
 `n`/`p` navigation crosses into other files through `model.navigate` —
 see [match-navigation.md](match-navigation.md). The model keeps
 `loading` (in-flight request identity per path since Issue #25),
-`bufs` (prepared buffers), and `failed` (read failures), all keyed by
-raw path bytes; `startLoad` drops repeated requests for a path already
-loading rather than queueing them, and the load command runs the read
+`bufs` (prepared buffers), `failed` (settled read failures — Issue #26
+retries them on re-entry and keeps each path's latest diagnostic in
+`failDiag`), all keyed by raw path bytes; `startLoad` drops repeated
+requests for a path already loading rather than queueing them, and
+the load command runs the read
 under the optional `loadGate`, then `decodeGate`, then the decode/map
 before returning `fileLoadedMsg{path, req, buf, err}` — Issue #25's
 keyed-identity completion a path with no matching live request

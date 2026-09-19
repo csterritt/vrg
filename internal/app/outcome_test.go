@@ -101,6 +101,14 @@ type outcomeCase struct {
 	shows   []string // must appear in the rendered frame
 	omits   []string // must not appear in the rendered frame
 
+	// failLoads lists index file positions whose loads fail once the
+	// search has settled — the Issue #26 rows. The current file's
+	// failure runs the transition's own load command under the
+	// injected failing loader; other positions are minted and failed
+	// by injected completions. Load failures touch only presentation
+	// and diagnostics: the fixed status must survive all of them.
+	failLoads []int
+
 	// dismiss is the key pressed next — "q" or "esc" — asserted to
 	// dismiss the overlay (or to be a base-state no-op when no overlay
 	// is open). after is the presentation the dismissal reveals;
@@ -340,6 +348,45 @@ func TestOutcomeMatrix(t *testing.T) {
 			state: stateBrowse, overlay: true,
 			close: "ctrl+c", status: 130,
 		},
+		{
+			// Issue #26: every retained file fails to load — the
+			// ordinary status stays 0; the failures touch only file
+			// presentation and the diagnostic collection.
+			name:   "all loads fail with fixed status 0 still exits 0",
+			stream: happyStream, code: 0,
+			state: stateBrowse, shows: []string{"a.go"},
+			failLoads: []int{0, 1},
+			dismiss:   "esc", after: stateBrowse,
+			showsAfter: []string{"(unreadable)"},
+			close:      "q", status: 0,
+		},
+		{
+			// A current-file read failure cannot reopen the
+			// fatal-search outcome already fixed at 2.
+			name:   "current-file failure with fixed status 2 still exits 2",
+			stream: happyStream, code: 3, stderr: "boom\n",
+			state: stateBrowse, overlay: true,
+			shows:     []string{"boom", "a.go"},
+			failLoads: []int{0},
+			dismiss:   "esc", after: stateBrowse,
+			showsAfter: []string{"(unreadable)"},
+			close:      "q", status: 2,
+		},
+		{
+			// The composed row: usable results with fixed status 2
+			// where every retained file subsequently fails to load —
+			// the ordinary status remains 2, the load failures affect
+			// only file presentation and diagnostics, and the
+			// already-fixed fatal-search outcome is not recomputed.
+			name:   "all loads fail with fixed status 2 still exits 2",
+			stream: missingEndStream, code: 0,
+			state: stateBrowse, overlay: true,
+			shows:     []string{"incomplete", "a.go"},
+			failLoads: []int{0},
+			dismiss:   "esc", after: stateBrowse,
+			showsAfter: []string{"(unreadable)"},
+			close:      "q", status: 2,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res := Result{
@@ -348,10 +395,40 @@ func TestOutcomeMatrix(t *testing.T) {
 				Code:   tc.code,
 				Err:    tc.err,
 			}
-			m := newTestModel(fakeChild{res: res}, options{})
+			var opts options
+			if len(tc.failLoads) > 0 {
+				opts.loader = failAllLoader
+			}
+			m := newTestModel(fakeChild{res: res}, opts)
 			m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-			m.Update(runCollectCmd(t, m))
+			_, loadCmd := m.Update(runCollectCmd(t, m))
 			assertOutcomeFrame(t, m, tc.state, tc.overlay, tc.shows, tc.omits)
+
+			// Issue #26 rows: fail the listed files' loads — the
+			// current file's through the transition's own load
+			// command, the rest by minted injected completions — then
+			// prove the fixed status survived all of them.
+			for _, fi := range tc.failLoads {
+				if fi == m.curFile() {
+					msg, ok := fileLoadOf(loadCmd)
+					if !ok {
+						t.Fatal("the browse transition's load command produced no completion")
+					}
+					m.Update(msg)
+					continue
+				}
+				p := m.idx.Files[fi].Path
+				m.Update(fileLoadedMsg{path: p, req: mintRequest(m, p), err: errUnreadable})
+			}
+			if len(tc.failLoads) > 0 {
+				if m.status != tc.status {
+					t.Fatalf("load failures changed the fixed status to %d, want %d", m.status, tc.status)
+				}
+				if !m.overlayOpen || !strings.Contains(m.overlayText, "cannot read") {
+					t.Fatalf("overlay open=%v text=%q, want the current file's load failure shown",
+						m.overlayOpen, m.overlayText)
+				}
+			}
 
 			if tc.dismiss != "" {
 				_, cmd := m.Update(outcomeKey(tc.dismiss))

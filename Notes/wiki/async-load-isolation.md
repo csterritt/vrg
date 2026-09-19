@@ -16,7 +16,8 @@ behavior* in [`Notes/PRD-vrg.md`](../PRD-vrg.md). Builds on the
 [Issue #4 `quitting` discard](cancellation-cleanup.md), and the
 [Issue #16 wrap mode](wrap-mode.md) `w` toggle. Load-completion reveal
 semantics are [Issue #28](../issues/028-load-completion-reveal.md)'s
-and failure/retry handling is Issue #26's.
+and failure/retry handling is
+[Issue #26's](read-failures.md).
 
 ## Navigation during loads
 
@@ -60,12 +61,14 @@ target (Issue #28 owns the semantics) and requests the keyed layout.
 ## One load in flight per path
 
 `startLoad` returns nil — the request is **dropped, not queued** —
-when the destination is already loading, already cached, or already
-failed. Re-entering a path whose load is pending therefore mints no
+when the destination is already loading or already cached.
+Re-entering a path whose load is pending therefore mints no
 second request: the crossing's batch carries only the pop-up leaf, the
 live request keeps its identity, and settlement leaves nothing queued
 behind. There is no load cancellation; a settled placeholder is the
-user's only signal a load finished (retry semantics are Issue #26's).
+user's only signal a load finished. Issue #26 has since made a failed
+path retryable: minting the retry clears the failure record — see
+[read-failures.md](read-failures.md).
 
 ## Session-long retention
 

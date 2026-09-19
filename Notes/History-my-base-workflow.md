@@ -279,3 +279,14 @@ Usage
  Input tokens: 122991 tokens
  Output tokens: 37291 tokens
  Cached input tokens: 9191936 tokens
+
+----
+Task 026-read-failures-unreadable-retry-rules.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 100 messages
+ Input tokens: 113986 tokens
+ Output tokens: 49350 tokens
+ Cached input tokens: 9162752 tokens

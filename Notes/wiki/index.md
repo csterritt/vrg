@@ -184,6 +184,15 @@ Catalog of all wiki pages for the vrg project.
   session-long buffer retention, post-cancellation rejection, the
   filebuffer `Read`/`Decode` split, and the separately gated
   decode/map phase with its actionable-input list
+- [read-failures.md](read-failures.md) — Issue #26: the
+  "(unreadable)" placeholder with the current-file error overlay and
+  retained stops, the non-current diagnostic-only policy and its
+  mid-session visibility limits, the same-file-step versus
+  cross-file-entry retry distinction, the five-step re-entry sequence
+  (prior-failure overlay, "Loading…", exactly one retry, settlement
+  independent of dismissal, the append-preserving-scroll primitive),
+  composed-view robustness, the `WithLoader` injected-loader seam,
+  and load failures never changing the fixed exit status
 
 ## Catalogs
 

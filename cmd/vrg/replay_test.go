@@ -259,7 +259,8 @@ func TestReplayEscapesHostileFilename(t *testing.T) {
 		<-s.done
 		t.Fatalf("browse view never appeared; output: %q", s.output())
 	}
-	s.send("q")
+	s.send("q") // dismiss the Issue #26 failure overlay
+	s.send("q") // ordinary browse quit — each keypress is a discrete message
 	code := s.waitExit()
 	out := s.output()
 	if code != 0 {

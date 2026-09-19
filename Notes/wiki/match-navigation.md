@@ -58,8 +58,10 @@ computes (the same number `UsableResults` reports) for the no-op rules.
   reveal ([destination-reveal.md](destination-reveal.md)) before
   returning `tea.Batch(startLoad(), startPopup())` for the destination —
   only when the returned `Move.FileChanged`. The load leaf is
-  deduplicated: a cached, in-flight, or failed path contributes no load
-  command, so the Issue #15 file-change pop-up
+  deduplicated: a cached or in-flight path contributes no load
+  command (a failed path contributes the Issue #26
+  [re-entry retry](read-failures.md) instead), so the Issue #15
+  file-change pop-up
   ([file-change-popup.md](file-change-popup.md)) is then the only leaf —
   it starts at selection on every crossing. A same-file move returns nil
   and re-styles

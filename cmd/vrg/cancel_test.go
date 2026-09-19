@@ -212,6 +212,7 @@ func TestQDuringGateHeldPreparationCancels(t *testing.T) {
 // quit leaves vrg's wait/reap evidence behind and no live rg process.
 func TestOrdinaryQuitLeavesNoChild(t *testing.T) {
 	dir := t.TempDir()
+	writeHappyFiles(t, dir)
 	pidFile := filepath.Join(dir, "pid")
 	reapFile := filepath.Join(dir, "reap")
 	fakebin := fakeRG(t, `echo $$ > "$VRG_TEST_RG_PID"`+happyStreamRG)

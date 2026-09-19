@@ -78,6 +78,11 @@ type options struct {
 	// escaper — the render-cost seam proving a frame queries the
 	// file-list provider only for the visible window.
 	escapePath func([]byte) string
+	// loader, when set, replaces filebuffer.Read inside each file-load
+	// command — the injected-loader seam making read failures
+	// deterministic in model tests rather than depending on
+	// filesystem permission bits (Issue #26).
+	loader func(path []byte) ([]byte, error)
 }
 
 // WithGate holds index preparation until fn returns.
@@ -111,6 +116,11 @@ func WithLayoutGate(fn func()) Option { return func(o *options) { o.layoutGate =
 // WithEscapePath substitutes the file-list path escaper.
 func WithEscapePath(fn func([]byte) string) Option {
 	return func(o *options) { o.escapePath = fn }
+}
+
+// WithLoader substitutes the file-load command's read phase.
+func WithLoader(fn func([]byte) ([]byte, error)) Option {
+	return func(o *options) { o.loader = fn }
 }
 
 type state int
@@ -159,8 +169,10 @@ type model struct {
 	// records the in-flight request's identity per raw path — minted
 	// from loadSeq, at most one per path — so a completion updates
 	// only the request it answers (Issue #25); bufs caches prepared
-	// buffers for the session, and failed records read failures, all
-	// keyed by the raw path bytes — never by an escaped display form.
+	// buffers for the session, failed marks paths whose last settled
+	// load failed, and failDiag keeps each such path's latest failure
+	// diagnostic — the content the re-entry overlay shows (Issue #26)
+	// — all keyed by the raw path bytes, never an escaped display form.
 	// vps is the saved vertical viewport per file keyed by raw path:
 	// scrolling writes through to it, and a destination reveal that
 	// moves the viewport replaces it (Issue #14), so a file revisited
@@ -190,6 +202,7 @@ type model struct {
 	loadSeq        int
 	bufs           map[string]*filebuffer.Buffer
 	failed         map[string]bool
+	failDiag       map[string]string
 	vps            map[string]viewport.Viewport
 	rows           map[string]rowSource
 	revs           map[string]int
@@ -232,6 +245,7 @@ func newModel(cfg Config, opts options, child Child) *model {
 		loading:        map[string]int{},
 		bufs:           map[string]*filebuffer.Buffer{},
 		failed:         map[string]bool{},
+		failDiag:       map[string]string{},
 		vps:            map[string]viewport.Viewport{},
 		rows:           map[string]rowSource{},
 		revs:           map[string]int{},
@@ -368,11 +382,20 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.loading, key)
 		if msg.err != nil {
 			m.failed[key] = true
-			// A load failure is a collected diagnostic whether or not
-			// an overlay ever shows it — Issue #26 owns the display
-			// side (current-file overlay, non-current silence).
-			m.collectDiags(loadDiag(msg.path, msg.err))
+			// Every load failure is a collected diagnostic and the
+			// path's recorded prior failure; only a current file's is
+			// also modal — the overlay opens with it or, while an
+			// overlay is already up, appends the single new occurrence
+			// without moving the reader's scroll position. A
+			// non-current failure stays diagnostic-only (Issue #26).
+			diag := loadDiag(msg.path, msg.err)
+			m.failDiag[key] = diag
+			m.collectDiags(diag)
+			if ck, ok := m.curKey(); ok && ck == key {
+				m.openOverlay(diag, false)
+			}
 		} else {
+			delete(m.failDiag, key)
 			m.bufs[key] = msg.buf
 			m.revs[key]++
 			// A load completing for the current file owes the

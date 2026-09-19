@@ -82,7 +82,14 @@ screen at exit 1. See
 
 The anomalous rg-1-with-retained-results case browses and exits 0.
 `status` is decided once at `searchDoneMsg` — later keys can never
-change it; only `ctrl+c` overrides to 130.
+change it; only `ctrl+c` overrides to 130. Issue #26 extends the
+matrix with three load-failure rows proving post-search failures
+never reopen the fixed outcome: every retained file failing under
+status 0 still exits 0, a current-file failure under status 2 still
+exits 2, and the composed row — usable results at fixed status 2 with
+every retained file subsequently failing — keeps 2 with the failures
+confined to file presentation and diagnostics. See
+[read-failures.md](read-failures.md).
 
 ## Diagnostics and stderr classification
 

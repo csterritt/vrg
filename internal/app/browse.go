@@ -94,6 +94,16 @@ func (m *model) navigate(next bool) tea.Cmd {
 	if !mv.FileChanged {
 		return m.requestLayout(ck)
 	}
+	if m.failed[ck] {
+		// Re-entering a previously failed file from a different file
+		// shows its prior failure immediately — the overlay opens
+		// with the recorded diagnostic while the panel switches to
+		// "Loading…" — and exactly one retry is minted below, before
+		// any dismissal (Issue #26's re-entry sequence). A load for
+		// the path somehow already in flight drops the request per
+		// Issue #25's one-load-per-path rule.
+		m.openOverlay(m.failDiag[ck], false)
+	}
 	return tea.Batch(m.startLoad(), m.requestLayout(ck), m.startPopup())
 }
 
@@ -395,33 +405,41 @@ type fileLoadedMsg struct {
 }
 
 // startLoad issues the current file's load command, or nil when the path
-// is already loaded, already in flight, or already failed — a repeated
-// request is dropped, never queued, and there is no load cancellation.
-// Each issued load mints a request identity under the raw path that its
-// completion must echo back. The command runs the read under the test
-// gate and the decode/map phase under its own gate so "Loading…"
-// provably spans both, all off the update path.
+// is already loaded or already in flight — a repeated request is
+// dropped, never queued, and there is no load cancellation. A
+// previously failed path retries here: minting the retry clears the
+// failure record so the panel reads "Loading…" until settlement marks
+// it content or "(unreadable)" (Issue #26). Each issued load mints a
+// request identity under the raw path that its completion must echo
+// back. The command runs the read under the test gate and the
+// decode/map phase under its own gate so "Loading…" provably spans
+// both, all off the update path.
 func (m *model) startLoad() tea.Cmd {
 	if m.idx == nil || len(m.idx.Files) == 0 {
 		return nil
 	}
 	f := m.idx.Files[m.curFile()]
 	key := string(f.Path)
-	if _, ok := m.loading[key]; ok || m.failed[key] {
+	if _, ok := m.loading[key]; ok {
 		return nil
 	}
 	if _, ok := m.bufs[key]; ok {
 		return nil
 	}
+	delete(m.failed, key)
 	m.loadSeq++
 	m.loading[key] = m.loadSeq
 	path, stops := f.Path, f.Stops
 	req, gate, decode := m.loadSeq, m.opts.loadGate, m.opts.decodeGate
+	read := m.opts.loader
+	if read == nil {
+		read = filebuffer.Read
+	}
 	return func() tea.Msg {
 		if gate != nil {
 			gate()
 		}
-		raw, err := filebuffer.Read(path)
+		raw, err := read(path)
 		if err != nil {
 			return fileLoadedMsg{path: path, req: req, err: err}
 		}

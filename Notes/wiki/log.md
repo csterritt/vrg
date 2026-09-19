@@ -953,3 +953,44 @@ consistency), `internal/app/app.go`, `internal/app/browse.go`,
 `internal/app/reveal_test.go`, `internal/app/scroll_test.go`,
 `internal/app/popup_test.go`, `internal/app/replay_test.go`,
 `internal/app/sinksafety_test.go`.
+
+## [2026-09-17] ingest | Issue #26 read failures — "(unreadable)", notification, and retry rules
+
+Issue #26 lands the read-failure notification split and the
+deterministic re-entry retry sequence. Every load failure records
+`failed[path]` plus the path's latest diagnostic in the new `failDiag`
+map and collects `cannot read <path>: <reason>` into the session
+collection; the display splits on whether the path is current at
+arrival — a current-file failure calls `openOverlay` (opening fresh or
+appending one occurrence scroll-preserved, the primitive Issue #32
+later generalizes) while a non-current failure is diagnostic-only with
+no overlay, no indicator, and no review key until a visit or the exit
+replay. `startLoad` now treats `failed` as retryable: minting clears
+the record so the panel reads "Loading…" until settlement, while
+`navigate` opens the prior-failure overlay on a file-changed entry —
+the five-step sequence: prior failure shown immediately, exactly one
+retry while the overlay is up (a somehow-in-flight load drops the
+request), settlement updating the placeholder without waiting on
+dismissal, a second failure appending one occurrence overlay-and-replay
+with the reader's scroll preserved, and navigate-away settling per
+Issue #25 with a later re-entry re-running the sequence. A same-file
+step still mints nothing. Three new `outcomeCase.failLoads` rows prove
+load failures never change the fixed status: all-fail under 0 exits 0,
+current-file failure under 2 exits 2, and the composed
+usable-results-at-2 all-fail row keeps 2. `options.loader`
+(`WithLoader`) substitutes `filebuffer.Read` — the injected-loader seam
+the tests use instead of permission bits. `internal/app/readfail_test.go`
+covers the notification split, retry rules, composed-view robustness,
+and the gated re-entry tests (`heldNthLoad`, `gatedFailLoader`). Created
+[read-failures](read-failures.md); updated
+[async-load-isolation](async-load-isolation.md),
+[match-navigation](match-navigation.md),
+[error-overlay-and-outcomes](error-overlay-and-outcomes.md),
+[stderr-replay](stderr-replay.md), [browse-tracer](browse-tracer.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/026-read-failures-unreadable-retry-rules.md`,
+`Notes/tasks/026-read-failures-unreadable-retry-rules.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency), `internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/readfail_test.go`, `internal/app/outcome_test.go`.
