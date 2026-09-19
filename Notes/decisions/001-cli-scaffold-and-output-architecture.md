@@ -116,10 +116,6 @@ every Issue #1 acceptance criterion. Findings:
 - **Named downstream suites**: `TestGeneratedHelpStdout`,
   `TestCLIOutputSafety`, `TestExecutableBoundary` in
   `cmd/vrg/main_test.go` exist for Issue #6/#34/#35 reuse.
-- **Docs**: wiki pages (`cli-foundation`, `source-code`, `unit-tests`,
-  `project-overview`, index, log) and the showboat walkthrough at
-  `Notes/walkthroughs/001-06/code-walkthrough/walkthrough.md` (verified
-  with `showboat verify`, exit 0) are in place.
 
 Corrections applied during implementation review: `isHelpToken` initially
 accepted `-h=false` as help (saw `h` before the letters-only check) — now

@@ -40,18 +40,16 @@ Label each task with exactly one of these types and satisfy its verification obl
 - **REFACTOR**: improve code without changing behavior. Begin from an already-green behavioral safety net, run it unchanged after the edit, and use lint/build/source checks only as supplemental evidence for structural cleanup.
 - **MIGRATE**: apply a schema or data migration and verify both migration correctness and the supported upgrade/rollback contract.
 - **CONFIG**: change environment, tooling, or infrastructure; validate syntax/configuration, execute the affected gate where possible, and include a fail-closed negative check when the configuration enforces a release requirement.
-- **DOCUMENT**: update docs, READMEs, the wiki in `Notes/wiki` (see `Notes/wiki/wiki-rules.md`), or other non-code artifacts; verify links, terminology, and claimed commands against the implementation.
-- **CODE WALKTHROUGH**: use showboat (run `uvx showboat --help` for details) to create evidence under `Notes/walkthroughs/{{TASK-ID}}/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the acceptance contracts and retain verification output. For a documentation-only or mechanical no-behavior-change issue, a lightweight walkthrough containing the changed artifact plus focused verification output is sufficient; do not require a full interactive product demonstration.
 - **REVIEW**: require a recorded human decision before proceeding; use only for HITL issues.
 
-Write DOCUMENT and CODE WALKTHROUGH tasks after implementation, just before the final REVIEW step (if any). RED must pair with GREEN when production behavior changes. A REFACTOR instead starts from existing behavioral coverage and must not be presented as the GREEN half of a structural-test-only RED/REFACTOR cycle.
+RED must pair with GREEN when production behavior changes. A REFACTOR instead starts from existing behavioral coverage and must not be presented as the GREEN half of a structural-test-only RED/REFACTOR cycle.
 
 ### 4. Quiz the user
 
 Present the proposed task list as a numbered list. For each task show:
 
 - **Title**: short imperative description (e.g. "Add `user_id` column to `sessions` table")
-- **Type**: RED / GREEN / REFACTOR / MIGRATE / CONFIG / DOCUMENT / CODE WALKTHROUGH / REVIEW
+- **Type**: RED / GREEN / REFACTOR / MIGRATE / CONFIG / REVIEW
 - **Output**: what exists or passes when this task is done
 - **Depends on**: task numbers that must complete first
 
@@ -77,13 +75,12 @@ Parent issue: #<issue-number>
 Parent PRD: #<prd-issue-number>
 **Blocked by issues**: <issue IDs or "none">
 **Acceptance criteria**: <AC-to-task map>
-**Manual verification**: <state which task owns it; for unattended work, normally the final walkthrough after the production composition prerequisite is available>
 
 ## Tasks
 
 ### <n>. <Task title>
 
-**Type**: RED / GREEN / REFACTOR / MIGRATE / CONFIG / DOCUMENT / CODE WALKTHROUGH / REVIEW  
+**Type**: RED / GREEN / REFACTOR / MIGRATE / CONFIG / REVIEW  
 **Output**: <what exists or passes when done>  
 **Depends on**: <sibling task numbers or "none">
 

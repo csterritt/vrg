@@ -14,7 +14,6 @@ The single closing verification pass over the fully composed implementation. Iss
 - From a clean checkout of the completed repository, run `go build ./...`, `go vet ./...`, and `go test ./...`. All three must pass over the fully composed implementation. A regression in any package or test fails this issue's closure; previously green focused tests do not substitute for a clean full-suite pass.
 - Run the critical PTY/subprocess tests (Issues #4, #9, and #11) explicitly — not skipped, not short-circuited, and not satisfied only by cached results — without relying on sleeps, per the PRD's Testing Decisions.
 - Build the final `vrg` binary and smoke-run it end to end through the five representative outcomes, using the Issue #4 fake-rg harness for determinism: a successful browse (exit 0 after `q`), a no-results search (exit 1 after `q`), a fatal fake-rg outcome with no usable results (exit 2 after overlay dismissal with either `q` or `Esc`), cancellation while searching (exit 130 with the child terminated and reaped and the terminal restored), and a help-only invocation (bare `vrg`, `-h`, and `--help` → exactly one help copy on stdout, empty stderr, exit 0) run with ripgrep unavailable on `PATH` and a sentinel fake rg available but never invoked, proving the final binary's no-child/no-TUI startup branch. Each smoke run asserts the exit status, terminal restoration, and stderr replay where applicable.
-- Record every command and its results in the final walkthrough artifact; that record is the closing review evidence for the whole task set.
 
 A regression discovered by this pass is fixed here only insofar as it restores the composed contract of the owning issue, with the full suite rerun green afterwards — never by patching, weakening, or deleting a single focused test.
 
@@ -31,7 +30,6 @@ See PRD *Testing Decisions* (subprocess boundary, responsiveness boundaries) and
 - [ ] Given the final verification run, then the critical PTY/subprocess tests execute explicitly without sleeps — not skipped, short-circuited, or satisfied only by cached results.
 - [ ] Given the final `vrg` binary, then smoke runs of a successful browse (0), a no-results search (1), a fatal fake-rg outcome (2), cancellation (130), and a help-only invocation (bare `vrg`, `-h`, `--help` → one help copy on stdout, empty stderr, exit 0, no child, no TUI) succeed with terminal restoration and, where applicable, stderr replay.
 - [ ] Given any regression found by the pass, then it is fixed against the owning issue's contract and the full suite is rerun green; closure fails otherwise.
-- [ ] Given the completed pass, then every command and its results are recorded in the final walkthrough artifact.
 
 ### User stories addressed
 

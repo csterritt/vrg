@@ -14,7 +14,7 @@ The other material gaps are verification omissions: Issue 34 maps all acceptance
 
 ### What is good
 
-- Every issue has a corresponding task file, explicit issue blockers, per-file task dependencies, acceptance-criteria mapping, and an assigned manual-verification walkthrough.
+- Every issue has a corresponding task file, explicit issue blockers, per-file task dependencies, acceptance-criteria mapping.
 - Behavioral work generally follows RED then GREEN. Tests are specified before implementation and focus on stable behavior rather than provisional Go signatures.
 - The task set preserves the single outcome matrix, shared sink-safety table, binding table, and flag allow-list rather than creating competing sources of truth.
 - Subprocess cleanup, reaping, terminal restoration, stderr ordering, dual-pipe backpressure, and cancellation use fake-process/PTY boundaries with handshakes rather than sleeps or model-only assertions.
@@ -162,18 +162,6 @@ Issue 9 later tests `text`/`bytes` path identity for lifecycle tracking, but Tas
 
 **Ready when:** normalization behavior in Issue 3 line 26 is directly tested rather than inferred from separate encoding fixtures.
 
-### F8 — Low: the unreadable-file walkthrough changes permissions without requiring cleanup
-
-**Affected:**
-
-- `Notes/tasks/026-read-failures-unreadable-retry-rules.md:69-75`
-
-The walkthrough instructs the implementer to run `chmod 000` on a matched file but does not instruct them to use a disposable fixture or restore the original mode. A walkthrough should not leave a repository file unreadable, especially if interrupted after the permission change.
-
-**Recommended correction:** require a temporary/disposable fixture directory and a cleanup step that restores the original mode (preferably through a shell trap), while retaining the injected-loader test as the authoritative deterministic verification.
-
-**Ready when:** completing or interrupting the walkthrough does not leave user files with altered permissions.
-
 ## Coverage and readiness assessment
 
 | Area | Assessment |
@@ -186,14 +174,12 @@ The walkthrough instructs the implementer to run `chmod 000` on a matched file b
 | Async loading, failures, reload | Behavior is detailed, but Issues 26–28 have future-owned contract ambiguity that must be untangled (F1–F2). |
 | Overlays, pop-ups, help, too-small state | Comprehensive after ownership is clarified for append-preserving-scroll. |
 | Documentation and limits | Content requirements are complete, but RED coverage does not enforce the main resource statements or footer (F3). |
-| Operational walkthroughs | Generally specific and reproducible; unreadable-file cleanup needs tightening (F8). |
 
 ## Recommended revision order
 
 1. Resolve F1 and F2 first by assigning the shared primitives and rewriting blockers/ownership. These affect whether the later task sequence can be executed at all.
 2. Fix Task 034's RED contract (F3) and Task 011's missing cancellation route (F4).
 3. Add the focused edge-case fixtures in Tasks 010, 018, and 003 (F5–F7).
-4. Make the Issue 026 walkthrough disposable and self-cleaning (F8).
-5. Recheck every task header's blocker list and AC mapping after the ownership edits; avoid creating explicit bidirectional blockers while fixing forward references.
+4. Recheck every task header's blocker list and AC mapping after the ownership edits; avoid creating explicit bidirectional blockers while fixing forward references.
 
 After those targeted changes, the task set should be ready for implementation without a broader decomposition pass.

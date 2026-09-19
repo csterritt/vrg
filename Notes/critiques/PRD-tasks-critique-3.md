@@ -103,11 +103,9 @@ Task 026-6 correctly requires a disposable temporary fixture and a restoration t
 
 - `Notes/tasks/002-cli-flag-allow-list-and-child-argv.md:14,19,31,35-41,45-51`
 
-The RED, GREEN, and walkthrough tasks now correctly distinguish the first `--` option terminator from a subsequent positional whose bytes are also `--`. The documentation task says to document `--`, dash-leading patterns, literal `-`, and the empty pattern, but does not explicitly require the literal-`--` positional case. This is a subtle parser rule and is precisely the kind of edge behavior likely to disappear from prose if not named.
+The RED, GREEN, tasks now correctly distinguish the first `--` option terminator from a subsequent positional whose bytes are also `--`. The documentation task says to document `--`, dash-leading patterns, literal `-`, and the empty pattern, but does not explicitly require the literal-`--` positional case. This is a subtle parser rule and is precisely the kind of edge behavior likely to disappear from prose if not named.
 
 **Recommended correction:** add the literal-`--` positional rule and examples `vrg -- --` / `vrg -- -- .` to Task 002-3's documentation requirements.
-
-**Ready when:** implementation tests, walkthrough, and wiki-ingest instructions all preserve the distinction between the first terminator and a later identically spelled positional.
 
 ## Coverage and readiness assessment
 

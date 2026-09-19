@@ -43,7 +43,6 @@ Task 001 owns none of that work:
 - Task 001-3 explicitly says to implement only positional/root behavior and not add flag parsing.
 - No RED task covers bare help, first/later/combined help, help precedence, native stderr suppression, exact stdout/stderr behavior, generated help content, or the explicit result kind.
 - No GREEN task configures `flag.ContinueOnError`, creates the shared declaration table and raw-token preflight, integrates `mow.cli`, or implements either approved output strategy.
-- The documentation and walkthrough tasks describe the old `vrg pattern [root]` stub and omit command-line help entirely.
 
 This is not merely incomplete acceptance wording. Executing Task 001 exactly as written produces a CLI that violates the first six acceptance criteria of its current issue and leaves no implementation seam on which the revised Issue 2 can safely build.
 
@@ -56,7 +55,6 @@ This is not merely incomplete acceptance wording. Executing Task 001 exactly as 
 5. the selected complete native-output prevention/containment strategy;
 6. distinct help-only, parsed-search, and usage-error results;
 7. hostile-substitution and subprocess tests for exactly one stdout help copy, empty stderr, no child, and no TUI;
-8. updated wiki and walkthrough coverage.
 
 **Ready when:** every Issue 1 acceptance criterion has a named RED/GREEN owner, Task 001 builds a runnable `mow.cli`-using binary, and its executable-boundary tests cover bare, first-token, later-token, combined, missing-pattern, excess-operand, unsupported-option, invalid-root, and after-`--` help cases.
 
@@ -77,11 +75,11 @@ Issue 2 was correctly revised after the upstream `mow.cli` probes. It now requir
 - adds every search flag to generated command-line help from the shared declarations;
 - retains all Issue 1 help-only regressions.
 
-Task 002 still contains the older generic instructions to test and implement an allow-list, combined shorts, cumulative `-u`, `--`, and child argv. It does not instruct the implementer to use or extend the shared declaration table/raw-token scan, avoid callback order, reject assignment forms, preserve supplied aliases in repeated mixed options, add generated help entries, or keep help-only sentinels green. Its documentation and walkthrough tasks omit these behaviors too.
+Task 002 still contains the older generic instructions to test and implement an allow-list, combined shorts, cumulative `-u`, `--`, and child argv. It does not instruct the implementer to use or extend the shared declaration table/raw-token scan, avoid callback order, reject assignment forms, preserve supplied aliases in repeated mixed options, add generated help entries, or keep help-only sentinels green.
 
 The phrase “forwarded in user order” is not enough. The previous upstream verification established that the obvious `VarOpt` implementation cannot satisfy it; the task must prescribe the tested adapter seam that the issue now requires. Likewise, the parent issue has eleven acceptance criteria, but Task 002's RED/GREEN content does not cover AC2, AC5-AC6, or AC11 completely.
 
-**Required correction:** regenerate Task 002 against the current issue, explicitly extending Task 001's shared scan/declarations. RED tests must assert public child argv rather than callback logs for `-i -s -i`, `-isi`, mixed long/short aliases, and options interleaved with both operands; cover all help regressions and all rejected assignment forms; and assert generated help from the shared metadata. Carry those requirements into GREEN, documentation, and walkthrough tasks.
+**Required correction:** regenerate Task 002 against the current issue, explicitly extending Task 001's shared scan/declarations. RED tests must assert public child argv rather than callback logs for `-i -s -i`, `-isi`, mixed long/short aliases, and options interleaved with both operands; cover all help regressions and all rejected assignment forms; and assert generated help from the shared metadata. Carry those requirements into GREEN.
 
 **Ready when:** Task 002 can be followed without guessing how order survives `mow.cli`, and all eleven parent acceptance criteria have explicit test and implementation ownership.
 
@@ -115,7 +113,7 @@ Those are sound downstream checks, but the current Tasks 001 and 002 never creat
 
 Issue 1 requires a human decision covering the module path, package layout, Go version, all pinned dependencies including `mow.cli`, and—most importantly—the complete library-output strategy. The choice between file-descriptor containment and metadata rendering plus proven emission prevention changes the CLI adapter architecture and its tests.
 
-Task 001-6 is the old review task. It mentions only the module path, package layout, Go version, and Bubble Tea/Bubbles/Lip Gloss pins. It omits `mow.cli` and the output strategy entirely. It also runs after implementation, documentation, and walkthrough work, even though the omitted strategy must guide those earlier tasks.
+Task 001-6 is the old review task. It mentions only the module path, package layout, Go version, and Bubble Tea/Bubbles/Lip Gloss pins. It omits `mow.cli` and the output strategy entirely. It also runs after implementation work, even though the omitted strategy must guide those earlier tasks.
 
 A late review can approve completed work, but it cannot serve as the required design choice on which that work depends. Implementers would have to select a strategy without the required human decision and potentially redo the entire CLI/output boundary afterward.
 
@@ -172,7 +170,7 @@ The remaining failure is propagation in the opposite direction: the updated down
 ## Required revision order
 
 1. Resolve and record Issue 1's architecture choices before implementation work.
-2. Regenerate Task 001 from the current Issue 1, including RED/GREEN, documentation, walkthrough, and accurate AC mappings.
+2. Regenerate Task 001 from the current Issue 1, including RED/GREEN and accurate AC mappings.
 3. Regenerate Task 002 from the current Issue 2, extending Task 001's shared declarations/preflight and retaining all help regressions.
 4. Recheck the interfaces named by Tasks 006, 034, and 035 against the regenerated early-task outputs.
 5. Rerun this task critique or at minimum perform a focused closure check on Issues/Tasks 001, 002, 006, 034, and 035 before code generation.

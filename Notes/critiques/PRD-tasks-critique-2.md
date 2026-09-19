@@ -21,7 +21,6 @@ All prior findings are resolved:
 - Task 010 now names both composite malformed-plus-integrity fixtures.
 - Task 018 now names wrap-toggle re-entry and every pan as re-clamp triggers.
 - Task 003 now tests mixed-encoding identity and overlapping-submatch union coverage.
-- Task 026's permission walkthrough now uses a disposable fixture and restoration trap.
 
 ### Severity definitions
 
@@ -38,23 +37,23 @@ All prior findings are resolved:
 
 - `Notes/tasks/001-go-scaffold-cli-positionals-and-root.md:13-17,55-61`
 - `Notes/tasks/034-documentation-scale-and-memory-limits.md:11-31,45-51`
-- All intervening GREEN and walkthrough tasks, which generally name focused tests rather than a final complete suite
+- All intervening GREEN generally name focused tests rather than a final complete suite
 
-The only explicit `go build ./...` and `go vet ./...` requirements occur in the initial scaffold. The Issue 1 walkthrough also runs those commands and focused early tests. Later tasks require their own tests to pass, and Task 034 finishes with documentation synchronization tests and a documentation walkthrough, but no final task reruns:
+The only explicit `go build ./...` and `go vet ./...` requirements occur in the initial scaffold.
+Later tasks require their own tests to pass, and Task 034 finishes with synchronization tests, but no final task reruns:
 
 - `go test ./...` over the fully composed implementation;
 - `go vet ./...` after all packages and asynchronous paths exist;
 - `go build ./...` after the final help/footer/documentation integration; and
 - a smoke invocation of the final binary rather than an earlier feature slice.
 
-This matters because the task sequence repeatedly extends shared code and tables: the Issue 9 outcome matrix, Issue 6 sink-safety table, binding table, App key routing, prepared-layout message flow, and process-boundary harness. A late change can break an earlier package or test while its focused task still appears green. Walkthroughs do not replace one clean final verification owner.
+This matters because the task sequence repeatedly extends shared code and tables: the Issue 9 outcome matrix, Issue 6 sink-safety table, binding table, App key routing, prepared-layout message flow, and process-boundary harness. A late change can break an earlier package or test while its focused task still appears green.
 
 **Recommended correction:** add a final verification task after Task 034's implementation/documentation work (or a dedicated final integration issue) that, from a clean checkout:
 
 1. runs `go test ./...`, `go vet ./...`, and `go build ./...`;
 2. runs the critical PTY/subprocess tests without relying on sleeps;
 3. builds and smoke-runs the final `vrg` binary for a successful browse, no results, a fatal fake-rg outcome, and cancellation; and
-4. records the commands and results in the final walkthrough or review artifact.
 
 The task should fail closure on any regression; it should not merely say that individual focused tests were previously green.
 
@@ -75,7 +74,7 @@ The internal implementation distinction—`Esc` dismisses, then a terminal post-
 
 **Recommended correction:** make the PRD explicit: “`Esc` never exits from a base state; dismissing a fatal no-results overlay with `Esc` terminates with status 2 because there is no underlying state.” Use that same wording in Issues 9 and 32 and in Task 032's output. Avoid the unqualified “never exits” claim.
 
-**Ready when:** the PRD, issue acceptance criteria, RED rows, GREEN output, walkthrough, and wiki instructions state one observable rule without relying on an internal-event semantic distinction.
+**Ready when:** the PRD, issue acceptance criteria, RED rows, GREEN output, and state one observable rule without relying on an internal-event semantic distinction.
 
 ### F3 — Medium: Task 017 maps AC6 to its RED/GREEN pair but omits two required gated inputs
 
