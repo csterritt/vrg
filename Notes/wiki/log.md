@@ -1327,3 +1327,36 @@ Further Notes), `README.md`, `internal/docs/docs.go`,
 `internal/docs/docs_test.go`, `internal/app/help.go`,
 `internal/app/readme_test.go`, `internal/app/sinksafety_test.go`,
 `internal/app/help_test.go`, `internal/cli/readme_test.go`.
+## [2026-09-17] ingest | Issue #35 final integration verification — clean gates, explicit PTY reruns, five smoke outcomes
+
+Ingested Issue #35
+([issue](../issues/035-final-integration-verification.md),
+[task](../tasks/035-final-integration-verification.md)): the closing
+verification pass over the fully composed implementation — no new
+product behavior. The pass ran from a fresh `git clone` of the
+repository at the Issue #34 head (`a1647a6`) with a cold `GOCACHE`:
+`go build ./...`, `go vet ./...`, and `go test ./...` all pass; the
+Issue #4/#9/#11 PTY/subprocess suites in `cmd/vrg` were re-run
+explicitly with `-count=1` (all 28 tests executed, no cached results,
+no sleeps), plus uncached `internal/app` and `internal/searchindex`.
+The clean-checkout binary was driven through the five representative
+outcomes by the walkthrough `smoke.py` — the Issue #4 fake-rg PTY
+harness with handshake/ready/pid fixture files, the `VRG_TEST_REAP`
+wait-status side channel, a separated stderr pipe, and pre/post
+termios capture: browse `q` → 0; no-results with a `warn` diagnostic
+→ `Esc`, `q` → 1 with the warning replayed; fatal malformed-record
+exit-2 → overlay naming the code, the incomplete stream, and the
+skipped record, `q` and `Esc` alike → 2 with the composed diagnostic
+replayed; `q` and `ctrl+c` while "Searching…" → 130 with the child
+externally gone and the reap evidence recorded; bare `vrg`, `-h`,
+`--help` → one `Usage:` copy on stdout, empty stderr, exit 0, with
+`PATH` holding only a sentinel fake rg never invoked. Terminal
+restoration (cursor, alt-screen, termios) held on every PTY run. No
+regressions found; no production code changed and no focused test
+touched. Created
+[final-verification](final-verification.md); updated the index.
+Sources: `Notes/issues/035-final-integration-verification.md`,
+`Notes/tasks/035-final-integration-verification.md`, `Notes/PRD-vrg.md`
+(Testing Decisions), the clean-checkout gate and test output, and
+`Notes/walkthroughs/035-03/code-walkthrough/` (`walkthrough.md`,
+`smoke.py`, `vrg`).

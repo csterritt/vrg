@@ -267,6 +267,14 @@ Catalog of all wiki pages for the vrg project.
   `DecideOutcome`, the three independent scale examples with the
   64 MiB/base64/session-retention limits, and the "help footer note"
   sink-safety row
+- [final-verification.md](final-verification.md) — Issue #35: the
+  closing verification pass over the composed implementation — the
+  clean-checkout `go build`/`go vet`/`go test ./...` gates, the
+  uncached `-count=1` rerun of the Issue #4/#9/#11 PTY/subprocess
+  suites, and the final binary's five smoke outcomes (browse 0,
+  no-results 1, fatal 2 via `q` and `Esc`, cancellation 130 with the
+  child gone and reaped, help-only 0 with the sentinel rg never
+  invoked) — all green with no regressions
 
 ## Catalogs
 

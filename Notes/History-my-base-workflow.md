@@ -378,3 +378,14 @@ Usage
  Input tokens: 84993 tokens
  Output tokens: 26452 tokens
  Cached input tokens: 5035520 tokens
+
+----
+Task 035-final-integration-verification.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 84 messages
+ Input tokens: 108303 tokens
+ Output tokens: 38900 tokens
+ Cached input tokens: 6474752 tokens
