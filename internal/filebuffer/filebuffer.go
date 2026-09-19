@@ -16,8 +16,13 @@
 // zero-width and terminator-only mappings into markers: an empty
 // highlight span records the marker's cell — the existing cell it
 // marks inside text, or the one-cell unit past the last cluster that
-// extends the effective line width. Stale-match validation is
-// Issue #29's and unsupported encodings are Issue #30's.
+// extends the effective line width. Issue #29 validates every recorded
+// submatch against the loaded bytes on each load: a submatch whose
+// line vanished, whose range outgrew the line, or whose bytes no
+// longer equal the recorded ones is dropped — the buffer reports
+// Stale — while survivors keep their highlights and each stale stop
+// keeps a landing, the first survivor's cell or the clamped recorded
+// start. Unsupported encodings are Issue #30's.
 package filebuffer
 
 import (
@@ -35,13 +40,14 @@ var utf8BOM = []byte{0xef, 0xbb, 0xbf}
 // Line is one source line prepared for display: the escaped Text with
 // its byte→cell map and grapheme-cluster segmentation (embedded Mapped),
 // the original Raw bytes — leading BOM and terminator included —
-// retained for identity and later validation, and the matched spans as
+// retained for identity and validation, and the matched spans as
 // display-cell ranges in Highlights — each expanded outward to whole
 // grapheme clusters, the single span source Viewport and App consume
 // (Issue #21). An empty span records a zero-width marker's position —
-// the display cell it marks (Issue #23). Cell byte offsets are raw-file
-// coordinates; the rg-line coordinate view ripgrep's offsets index is
-// SearchBytes.
+// the display cell it marks (Issue #23). Only submatches that survived
+// Issue #29's stale validation contribute spans; a dropped submatch
+// paints nothing. Cell byte offsets are raw-file coordinates; the
+// rg-line coordinate view ripgrep's offsets index is SearchBytes.
 type Line struct {
 	safepresentation.Mapped
 	Number     int64
@@ -53,6 +59,15 @@ type Line struct {
 	// Raw[contentEnd:] is the undisplayed terminator.
 	searchOff  int
 	contentEnd int
+	// target is the navigation stop's resolved reveal cell (Issue
+	// #29): the first surviving submatch's start cell — the marker
+	// cell for a zero-width survivor — or, when every recorded
+	// submatch dropped, the first recorded start clamped to the
+	// line's bytes and mapped to a valid display cell. hasTarget
+	// records that the line is a stop whose recorded submatches were
+	// validated.
+	target    int
+	hasTarget bool
 }
 
 // SearchBytes is the line's bytes in the rg-line coordinate view —
@@ -106,6 +121,10 @@ func (l Line) CellsCovering(start, end int) (lo, hi int, ok bool) {
 // Buffer is one loaded file's display-ready content.
 type Buffer struct {
 	lines []Line
+	// stale marks that at least one recorded submatch failed
+	// validation against the loaded bytes — Issue #29's "file changed
+	// since search" state the filename row notes.
+	stale bool
 }
 
 // Read loads path's raw bytes — the raw bytes are the filesystem key,
@@ -117,14 +136,13 @@ func Read(path []byte) ([]byte, error) {
 }
 
 // Decode splits raw content into source lines, maps each line's
-// content through the safe-presentation core, and maps each stop's
-// recorded byte-range highlights onto display cells — the decode/map
-// phase of Load, with no filesystem access.
+// content through the safe-presentation core, then validates every
+// recorded submatch against the loaded bytes — the decode/map phase
+// of Load, with no filesystem access. Surviving submatches map onto
+// display cells as the lines' highlights; dropped ones mark the
+// buffer stale. A file the UTF-16/32 signatures classify keeps the
+// unchecked mapping — Issue #30 owns that contract.
 func Decode(raw []byte, stops []searchindex.Stop) *Buffer {
-	byLine := make(map[int64][]searchindex.Span)
-	for _, st := range stops {
-		byLine[st.Number] = append(byLine[st.Number], st.Highlights...)
-	}
 	b := &Buffer{}
 	for start := 0; start < len(raw); {
 		end := start
@@ -134,10 +152,137 @@ func Decode(raw []byte, stops []searchindex.Stop) *Buffer {
 		if end < len(raw) {
 			end++ // the line keeps its \n terminator
 		}
-		b.lines = append(b.lines, makeLine(raw[start:end], int64(len(b.lines))+1, byLine))
+		b.lines = append(b.lines, makeLine(raw[start:end], int64(len(b.lines))+1))
 		start = end
 	}
+	if utf16Or32(raw) {
+		for _, st := range stops {
+			b.mapRecorded(st)
+		}
+		return b
+	}
+	for _, st := range stops {
+		b.validateStop(st)
+	}
 	return b
+}
+
+// utf16Or32 reports whether raw carries a UTF-16 or UTF-32 byte-order
+// mark — the unsupported encodings Issue #30 owns, whose raw bytes
+// Issue #29's per-submatch byte validation does not check.
+func utf16Or32(raw []byte) bool {
+	return bytes.HasPrefix(raw, []byte{0xff, 0xfe, 0x00, 0x00}) || // UTF-32 LE
+		bytes.HasPrefix(raw, []byte{0x00, 0x00, 0xfe, 0xff}) || // UTF-32 BE
+		bytes.HasPrefix(raw, []byte{0xff, 0xfe}) || // UTF-16 LE
+		bytes.HasPrefix(raw, []byte{0xfe, 0xff}) // UTF-16 BE
+}
+
+// mapRecorded maps a stop's prepared highlight coverage onto its line
+// unchecked — the UTF-16/32 path Issue #30 owns, and the
+// no-recorded-submatches case inside validation.
+func (b *Buffer) mapRecorded(st searchindex.Stop) {
+	if row := int(st.Number) - 1; row >= 0 && row < len(b.lines) {
+		b.lines[row].mapSpans(st.Highlights)
+	}
+}
+
+// validateStop checks the stop's recorded submatches against the
+// loaded line — the Issue #29 best-effort stale-match guard run on
+// first load and every reload. Each submatch must satisfy line
+// existence, range validity against the line's search bytes — the
+// terminator-including, BOM-adjusted rg-line view — and byte equality
+// with its recorded bytes; any failure drops that submatch and marks
+// the buffer stale while valid submatches keep their highlights. The
+// line's reveal target then resolves to the first survivor's start
+// cell, or — when every recorded submatch dropped — to the first
+// recorded start clamped to a valid display cell. A stop recording no
+// submatches maps its prepared union coverage unchecked.
+func (b *Buffer) validateStop(st searchindex.Stop) {
+	row := int(st.Number) - 1
+	if row < 0 || row >= len(b.lines) {
+		// The recorded line is gone: every submatch fails line
+		// existence. The stop keeps a landing — StopTarget resolves it
+		// to the last source line's start.
+		if len(st.Submatches) > 0 {
+			b.stale = true
+		}
+		return
+	}
+	if len(st.Submatches) == 0 {
+		b.mapRecorded(st)
+		return
+	}
+	l := &b.lines[row]
+	var surv []searchindex.Submatch
+	sb := l.SearchBytes()
+	for _, sm := range st.Submatches {
+		if sm.Start < 0 || sm.End < sm.Start || sm.End > len(sb) ||
+			!bytes.Equal(sb[sm.Start:sm.End], sm.Bytes) {
+			b.stale = true
+			continue
+		}
+		surv = append(surv, sm)
+	}
+	l.mapSpans(unionSubRanges(surv))
+	l.hasTarget = true
+	if len(surv) > 0 {
+		// The first surviving submatch's start cell — a zero-width
+		// survivor's marker position.
+		s := surv[0]
+		end := s.End
+		if end <= s.Start {
+			end = s.Start + 1
+		}
+		l.target, _, _ = l.CellsCovering(s.Start, end)
+		return
+	}
+	// No survivors: the first recorded start clamped to the line's
+	// bytes and mapped to a valid display cell — an end-of-line
+	// landing clamps to the last rendered cell when no marker cell
+	// sits there.
+	start := st.Submatches[0].Start
+	switch {
+	case start > len(sb):
+		start = len(sb)
+	case start < 0:
+		start = 0
+	}
+	l.target, _, _ = l.CellsCovering(start, start)
+	if n := len(l.Cells); l.target >= n && !l.MarkerAt(n) {
+		l.target = n - 1
+	}
+	if l.target < 0 {
+		l.target = 0
+	}
+}
+
+// mapSpans maps recorded rg-line byte ranges onto display cells as the
+// line's highlight spans, each expanded outward to whole grapheme
+// clusters — the single highlight source Viewport and App consume.
+func (l *Line) mapSpans(spans []searchindex.Span) {
+	for _, sp := range spans {
+		if lo, hi, ok := l.CellsCovering(sp.Start, sp.End); ok {
+			lo, hi = l.expandToClusters(lo, hi)
+			l.Highlights = append(l.Highlights, searchindex.Span{Start: lo, End: hi})
+		}
+	}
+}
+
+// unionSubRanges merges the surviving submatches' sorted byte ranges
+// into coverage spans — the union the index prepared for the recorded
+// set, restricted to what still validates.
+func unionSubRanges(subs []searchindex.Submatch) []searchindex.Span {
+	var out []searchindex.Span
+	for _, s := range subs {
+		if n := len(out); n > 0 && s.Start <= out[n-1].End {
+			if s.End > out[n-1].End {
+				out[n-1].End = s.End
+			}
+			continue
+		}
+		out = append(out, searchindex.Span{Start: s.Start, End: s.End})
+	}
+	return out
 }
 
 // Load reads path and decodes the result — Read plus Decode in one
@@ -158,6 +303,56 @@ func (b *Buffer) LineCount() int { return len(b.lines) }
 
 // Lines returns the prepared source lines in file order.
 func (b *Buffer) Lines() []Line { return b.lines }
+
+// Stale reports whether any recorded submatch failed validation
+// against the loaded content — its line vanished, its range outgrew
+// the line's bytes, or its bytes no longer equal the recorded ones —
+// so at least one recorded highlight could not be honored (Issue
+// #29). The mark is recomputed on every load and clears only on fully
+// validating content.
+func (b *Buffer) Stale() bool { return b.stale }
+
+// StopTarget resolves a navigation stop to its reveal target under
+// the loaded content: the destination's source line number and the
+// display cell the reveal must show — Issue #29's stale-entry
+// landings. A stop whose line still exists resolves to the cell
+// validation recorded: the first surviving submatch's start cell —
+// the marker cell for a zero-width survivor — or, when every recorded
+// submatch dropped, the first recorded start clamped to the line's
+// bytes and mapped to a valid display cell. A stop whose line the
+// file no longer has lands at the last source line's start; an empty
+// file has no rows and the stop keeps its bare recorded line.
+func (b *Buffer) StopTarget(st searchindex.Stop) (line int64, cell int) {
+	row := int(st.Number) - 1
+	if row < 0 {
+		return st.Number, 0
+	}
+	if row >= len(b.lines) {
+		if len(b.lines) == 0 {
+			return st.Number, 0
+		}
+		return b.lines[len(b.lines)-1].Number, 0
+	}
+	l := b.lines[row]
+	if l.hasTarget {
+		return st.Number, l.target
+	}
+	if len(st.Submatches) == 0 {
+		return st.Number, 0
+	}
+	// A line validation never resolved — a stop that was not among
+	// the buffer's load stops: the recorded first submatch's start
+	// cell, the pre-validation mapping.
+	s := st.Submatches[0]
+	end := s.End
+	if end <= s.Start {
+		end = s.Start + 1
+	}
+	if lo, _, ok := l.CellsCovering(s.Start, end); ok {
+		return st.Number, lo
+	}
+	return st.Number, len(l.Cells)
+}
 
 // GutterWidth is the decimal digit width of the largest line number plus
 // the two trailing spaces, with a one-digit-slot minimum for empty or
@@ -223,9 +418,9 @@ func (l Line) MaxStart(width int) int {
 // display: the line is split into the leading-BOM, content, and
 // terminator regions so the three coordinate views stay separate.
 // Content maps through the safe-presentation core with cell byte
-// offsets kept in raw-file coordinates, and the line's recorded rg
-// highlight ranges map onto cells through CellsCovering.
-func makeLine(raw []byte, number int64, byLine map[int64][]searchindex.Span) Line {
+// offsets kept in raw-file coordinates; highlights arrive later, when
+// validation maps the surviving rg byte ranges onto cells.
+func makeLine(raw []byte, number int64) Line {
 	// A leading UTF-8 BOM is invisible and never reaches rg's searched
 	// line data: it lives only in the raw-file view. A U+FEFF anywhere
 	// else is ordinary content.
@@ -247,14 +442,7 @@ func makeLine(raw []byte, number int64, byLine map[int64][]searchindex.Span) Lin
 		m.Cells[i].Start += off
 		m.Cells[i].End += off
 	}
-	l := Line{Mapped: m, Number: number, Raw: raw, searchOff: off, contentEnd: end}
-	for _, sp := range byLine[number] {
-		if lo, hi, ok := l.CellsCovering(sp.Start, sp.End); ok {
-			lo, hi = l.expandToClusters(lo, hi)
-			l.Highlights = append(l.Highlights, searchindex.Span{Start: lo, End: hi})
-		}
-	}
-	return l
+	return Line{Mapped: m, Number: number, Raw: raw, searchOff: off, contentEnd: end}
 }
 
 // expandToClusters snaps a nonempty mapped cell range outward to

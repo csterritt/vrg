@@ -254,6 +254,7 @@ type span struct{ line, start, end int }
 // the live layout.
 type Rows struct {
 	key   Key
+	buf   *filebuffer.Buffer
 	lines []filebuffer.Line
 	spans []span
 	// firstRow maps a source-line index to the index of its first
@@ -267,7 +268,7 @@ type Rows struct {
 // layout the key describes; a nil buffer prepares an empty model whose
 // queries stay safe.
 func Prepare(buf *filebuffer.Buffer, key Key) *Rows {
-	r := &Rows{key: key}
+	r := &Rows{key: key, buf: buf}
 	if buf == nil {
 		return r
 	}

@@ -163,7 +163,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   stage one, `pendingReveals` records the owed reveal, and
   `pendingAnchor` mints only when a reload completes with no reveal
   already pending, so navigation during a load replaces the
-  reload-anchor intent outright. See
+  reload-anchor intent outright. Issue #29 makes the success branch
+  also the stale-note supplier: `notes[key]` sets or clears
+  `staleNote` from the installed buffer's `Stale()` mark — the
+  failure branch deletes it — so the filename row's slot recomputes
+  on every load. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
@@ -317,7 +321,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `pendingAnchor` only when `pendingReveals` is unset — while the
   `layoutReadyMsg` install switch commits the pending reveal, the
   pending anchor, or the first-visit fallback against the freshly
-  installed rows. See
+  installed rows. Issue #29 supplies the slot's second note:
+  `staleNote` — "file changed since search" — rides `m.notes` on
+  every display with no timer while the buffer's mark holds. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [read-failures.md](read-failures.md),
@@ -367,13 +373,22 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   span at a cell, `Line.Extent()` is the effective display width —
   the cell count plus one for an end-of-line marker — and `MaxStart`
   counts the EOL marker as a one-cell paintable candidate, so a
-  marker-only line reports 0. See
+  marker-only line reports 0. Issue #29 adds the stale-match guard:
+  `Decode` runs `validateStop` per stop after line splitting — each
+  recorded submatch checked for line existence, range validity, and
+  recorded-bytes equality against `SearchBytes` — with dropped
+  submatches marking `Buffer.Stale()`, surviving unions feeding
+  `Line.mapSpans` through `unionSubRanges`, `utf16Or32` excluding the
+  Issue #30 encodings, each stop's resolved reveal cell recorded on
+  the line (`target`/`hasTarget`), and `Buffer.StopTarget` surfacing
+  the three landings. See
   [browse-tracer.md](browse-tracer.md),
   [wrap-mode.md](wrap-mode.md),
   [horizontal-panning.md](horizontal-panning.md),
   [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
-  [line-structure.md](line-structure.md), and
-  [zero-width-markers.md](zero-width-markers.md).
+  [line-structure.md](line-structure.md),
+  [zero-width-markers.md](zero-width-markers.md), and
+  [stale-match-validation.md](stale-match-validation.md).
 - `internal/viewport/viewport.go` — `Viewport`, the file panel's
   vertical window (`Top`, `Scroll`, `Clamp`), the scroll-unit helpers
   `HalfPage` and `MaxTop` (the BOF/EOF clamp bound), and `Rows`, the
@@ -433,12 +448,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   geometric fallback to the start column) — plus `CellVisible`, the
   painted-cell visibility predicate the reveal and Issue #20's
   indicators share, and `targetCluster`, the `Clusters`-backed
-  cell→(start, width) lookup. See
+  cell→(start, width) lookup. Issue #29 retargets `Rows.StopTarget`
+  to the buffer's resolved landings — `Rows` keeps `buf` and
+  delegates, so the first-survivor cell, the clamped recorded start,
+  and the missing-line last-line landing reach every reveal. See
   [destination-reveal.md](destination-reveal.md),
   [logical-anchor.md](logical-anchor.md),
   [horizontal-panning.md](horizontal-panning.md),
-  [horizontal-reveal.md](horizontal-reveal.md), and
-  [hidden-content-indicators.md](hidden-content-indicators.md).
+  [horizontal-reveal.md](horizontal-reveal.md),
+  [hidden-content-indicators.md](hidden-content-indicators.md), and
+  [stale-match-validation.md](stale-match-validation.md).
 - `internal/viewport/indicators.go` — Issue #20's hidden-content
   indicators over the prepared row model: `LeftMark` (the row's
   gutter mark — `*` when a match or marker span is entirely hidden

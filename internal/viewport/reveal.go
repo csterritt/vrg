@@ -6,9 +6,9 @@ import (
 )
 
 // Target is the display location a destination reveal brings on
-// screen: the start cell of the first submatch on a matched source
-// line — the marker cell for a zero-width match (Issue #23) — subject
-// to Issue #29's stale-entry fallback.
+// screen: the start cell of the first surviving submatch on a matched
+// source line — the marker cell for a zero-width match (Issue #23) —
+// or Issue #29's stale landing when the file changed on disk.
 type Target struct {
 	// Line is the destination line's source line number.
 	Line int64
@@ -16,35 +16,20 @@ type Target struct {
 	Cell int
 }
 
-// StopTarget resolves a navigation stop to its display target: the
-// destination line's number plus the display cell where its first
-// submatch starts, mapped through the line's byte→cell map — an
-// escaped byte widens into several cells, so the cell is not the byte
-// offset. A submatch whose bytes produced no cell — a zero-width
-// position or a terminator-only span (Issues #22/#23) — targets the
-// marker cell one past the line's last. A stop whose line the prepared
-// rows do not hold (the file changed on disk; Issue #29 owns stale
-// handling) keeps the bare line number.
+// StopTarget resolves a navigation stop to its display target —
+// delegated to the loaded buffer, where Issue #29's validation
+// resolved each stop's landing: the destination line's number plus
+// the first surviving submatch's start cell — the marker cell for a
+// zero-width survivor — or a stale landing: the first recorded start
+// clamped to a valid display cell when every recorded submatch
+// dropped, and the last source line's start when the recorded line is
+// gone. An empty model resolves nothing — the bare recorded line.
 func (r *Rows) StopTarget(st searchindex.Stop) Target {
-	t := Target{Line: st.Number}
-	row := int(st.Number) - 1
-	if len(st.Submatches) == 0 || row < 0 || row >= len(r.lines) {
-		return t
+	if r.buf == nil {
+		return Target{Line: st.Number}
 	}
-	l := r.lines[row]
-	s := st.Submatches[0]
-	// A zero-width submatch maps to the cell holding its position; a
-	// nonempty one to the first cell its bytes produced.
-	end := s.End
-	if end <= s.Start {
-		end = s.Start + 1
-	}
-	if lo, _, ok := l.CellsCovering(s.Start, end); ok {
-		t.Cell = lo
-	} else {
-		t.Cell = len(l.Cells)
-	}
-	return t
+	line, cell := r.buf.StopTarget(st)
+	return Target{Line: line, Cell: cell}
 }
 
 // TargetRow is the rendered row containing the stop's display target —

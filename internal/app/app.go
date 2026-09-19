@@ -400,6 +400,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// diagnostic-only (Issue #26).
 			delete(m.bufs, key)
 			delete(m.rows, key)
+			delete(m.notes, key)
 			diag := loadDiag(msg.path, msg.err)
 			m.failDiag[key] = diag
 			m.collectDiags(diag)
@@ -410,6 +411,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.failDiag, key)
 			m.bufs[key] = msg.buf
 			m.revs[key]++
+			// Issue #29's stale mark recomputes on every load: a
+			// buffer whose recorded submatches failed validation
+			// carries the filename row's "file changed since search"
+			// note until a load validates fully again.
+			if msg.buf.Stale() {
+				m.notes[key] = staleNote
+			} else {
+				delete(m.notes, key)
+			}
 			// Stage one of the two-stage completion is limited to
 			// filing the result — no row-based decision runs here:
 			// the intent owed to the latest selection is recorded in

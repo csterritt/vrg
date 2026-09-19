@@ -214,6 +214,16 @@ Catalog of all wiki pages for the vrg project.
   startup visible/hidden cases, and reload-intent arbitration where
   navigation during a load — even away-and-back ending on the same
   stop — replaces the anchor intent
+- [stale-match-validation.md](stale-match-validation.md) — Issue #29:
+  per-submatch validation on every load (line existence, range
+  validity against the search-byte view, recorded-bytes equality),
+  dropped submatches marking the buffer stale while survivors keep
+  their highlights and markers, the three fallback landings (first
+  survivor's cell, clamped recorded start, last source line) with no
+  invented highlights or markers, the persistent "file changed since
+  search" filename-row note recomputed per reload, UTF-16/32
+  exclusion, and the all-stale outcome-matrix row proving the fixed
+  status unchanged
 
 ## Catalogs
 

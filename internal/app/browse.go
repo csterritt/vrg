@@ -642,6 +642,12 @@ func (m *model) contentCell(cr, width, top, off int, rows rowSource, failed bool
 	return head + m.contentText(row, off, textW, cur) + tail
 }
 
+// staleNote is the buffer-status note the filename row's slot shows
+// while the buffer's recorded submatches fail validation — the file
+// changed on disk since the search ran (Issue #29). It persists on
+// every display — no timer — until a load validates fully again.
+const staleNote = "file changed since search"
+
 // filenameRule renders the current file's escaped path embedded in a
 // horizontal rule across the full frame width above both panes:
 // "─ path ────". The buffer-status note slot sits inside the rule

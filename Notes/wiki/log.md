@@ -1087,3 +1087,41 @@ consistency; Navigation, viewport, and logical anchors),
 `internal/app/app.go`, `internal/app/browse.go`,
 `internal/app/loadreveal_test.go`,
 `internal/app/reloadintent_test.go`.
+
+## [2026-09-17] ingest | Issue #29 stale-match validation — per-submatch checks, fallback landings, and the file-changed note
+
+`internal/filebuffer` now validates every recorded submatch against the
+loaded bytes on first load and every reload: line existence, range
+validity, and recorded-bytes equality all checked against
+`Line.SearchBytes` — the terminator-including, BOM-adjusted rg-line
+view — never stripped display text. A failed submatch drops alone and
+marks `Buffer.Stale()`; survivors' union keeps painting `Highlights`
+through `mapSpans`/`unionSubRanges`, and `utf16Or32` excludes the
+Issue #30 encodings from the byte-level checks. Validation also
+resolves each stop's reveal target on the line (`target`/`hasTarget`),
+surfaced as `Buffer.StopTarget`: the first survivor's start cell, the
+first recorded start clamped to a valid display cell when all dropped
+(end-of-line landing clamped to the last rendered cell without a
+marker), or the last source line's start when the line is gone — an
+empty file staying a zero-line panel, fallbacks inventing no highlight
+or marker. `viewport.Rows` keeps `buf` so `StopTarget` delegates to
+the resolved landings; the app needs no new plumbing — `fileLoadedMsg`
+sets or clears `notes[key] = "file changed since search"` per the
+installed buffer's mark, the Issue #24 slot composing it on every
+display with no timer and clearing only on fully validating content,
+and the `staleLoads` outcome-matrix row proves the fixed status
+survives an all-stale index. `internal/filebuffer/stale_test.go` adds
+the validation and landing coverage; `internal/app/stale_test.go` adds
+the note, reload-recompute, gated-commit survivor/fallback, and
+missing-line integration plus the `staleIndex` multi-submatch fixture.
+Created [stale-match-validation](stale-match-validation.md); updated
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/029-stale-match-validation-and-file-changed-note.md`,
+`Notes/tasks/029-stale-match-validation-and-file-changed-note.md`,
+`Notes/PRD-vrg.md` (Encodings and stale-content validation; Navigation,
+viewport, and logical anchors; the FileBuffer module contract),
+`internal/filebuffer/filebuffer.go`, `internal/viewport/reveal.go`,
+`internal/viewport/viewport.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/filebuffer/stale_test.go`,
+`internal/app/stale_test.go`, `internal/app/outcome_test.go`.

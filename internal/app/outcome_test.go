@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"vrg/internal/filebuffer"
 	"vrg/internal/searchindex"
 )
 
@@ -84,6 +85,15 @@ const missingEndEmptyStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}
 // fatal overlay-only presentation has no underlying state to reveal.
 const stateGone = state(-1)
 
+// staleContent is the injected stale payload for the Issue #29 rows:
+// its bytes never equal the fixtures' recorded submatch bytes, so
+// every submatch drops and every buffer decodes stale.
+var staleContent = []byte("stale changed content\n")
+
+// staleAllLoader is the injected loader returning the stale payload
+// for every read — the Issue #29 outcome-matrix seam.
+func staleAllLoader([]byte) ([]byte, error) { return staleContent, nil }
+
 // outcomeCase is one row of the Issue #9 outcome matrix: the completed
 // search in — a process result and an event stream — and the expected
 // presentation, dismissal behavior, and fixed exit status out.
@@ -108,6 +118,14 @@ type outcomeCase struct {
 	// by injected completions. Load failures touch only presentation
 	// and diagnostics: the fixed status must survive all of them.
 	failLoads []int
+
+	// staleLoads lists index file positions whose loads return stale
+	// content — the Issue #29 rows. The current file's load command
+	// runs the injected stale-returning loader; other positions are
+	// minted and completed by injected stale-decoded buffers. Stale
+	// validation touches only presentation: the fixed status must
+	// survive all of it.
+	staleLoads []int
 
 	// dismiss is the key pressed next — "q" or "esc" — asserted to
 	// dismiss the overlay (or to be a base-state no-op when no overlay
@@ -387,6 +405,19 @@ func TestOutcomeMatrix(t *testing.T) {
 			showsAfter: []string{"(unreadable)"},
 			close:      "q", status: 2,
 		},
+		{
+			// Issue #29: every retained stop validates stale — the
+			// files changed since the search — yet the fixed status
+			// stays the search-derived one; the stale note rides the
+			// filename row, touching only presentation.
+			name:   "all stops stale with fixed status 0 still exits 0",
+			stream: happyStream, code: 0,
+			state: stateBrowse, shows: []string{"a.go"},
+			staleLoads: []int{0, 1},
+			dismiss:    "esc", after: stateBrowse,
+			showsAfter: []string{"file changed since search"},
+			close:      "q", status: 0,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res := Result{
@@ -398,6 +429,9 @@ func TestOutcomeMatrix(t *testing.T) {
 			var opts options
 			if len(tc.failLoads) > 0 {
 				opts.loader = failAllLoader
+			}
+			if len(tc.staleLoads) > 0 {
+				opts.loader = staleAllLoader
 			}
 			m := newTestModel(fakeChild{res: res}, opts)
 			m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -428,6 +462,35 @@ func TestOutcomeMatrix(t *testing.T) {
 					t.Fatalf("overlay open=%v text=%q, want the current file's load failure shown",
 						m.overlayOpen, m.overlayText)
 				}
+			}
+
+			// Issue #29 rows: stale the listed files' loads — the
+			// current file's through the transition's own load command
+			// under the injected stale loader, the rest by minted
+			// completions carrying stale-decoded buffers — then prove
+			// the fixed status survived all of it.
+			for _, fi := range tc.staleLoads {
+				p := m.idx.Files[fi].Path
+				if fi == m.curFile() {
+					msg, ok := fileLoadOf(loadCmd)
+					if !ok {
+						t.Fatal("the browse transition's load command produced no completion")
+					}
+					_, lc := m.Update(msg)
+					deliverLayout(t, m, lc)
+					continue
+				}
+				m.Update(fileLoadedMsg{path: p, req: mintRequest(m, p),
+					buf: filebuffer.Decode(staleContent, m.idx.Files[fi].Stops)})
+			}
+			for _, fi := range tc.staleLoads {
+				key := string(m.idx.Files[fi].Path)
+				if buf := m.bufs[key]; buf == nil || !buf.Stale() {
+					t.Fatalf("file %d did not install a stale buffer", fi)
+				}
+			}
+			if len(tc.staleLoads) > 0 && m.status != tc.status {
+				t.Fatalf("stale loads changed the fixed status to %d, want %d", m.status, tc.status)
 			}
 
 			if tc.dismiss != "" {

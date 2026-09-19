@@ -311,6 +311,42 @@ the table driver.
   nothing.
 - `TestLoadReadFailure` — a read error is returned, not panicked.
 
+`stale_test.go` (same external package; Issue #29) drives the
+stale-match guard — recorded submatches carried by the `stopSubs`
+helper — and `Buffer.StopTarget`'s three landings:
+
+- `TestCleanContentNotStale` — fully validating content stays clean
+  and targets the first submatch's start cell.
+- `TestStaleOutOfBoundsRangeDrops`,
+  `TestStaleSameLengthReplacementDrops` — a range past the line's
+  bytes and a same-length byte swap each drop the submatch, paint no
+  highlight, and mark the buffer stale.
+- `TestStalePartialSurvivalKeepsValidHighlight` — one of two recorded
+  submatches surviving keeps its highlight, marks the buffer stale,
+  and supplies the first-survivor reveal cell.
+- `TestStaleAllDroppedClampedStart`,
+  `TestStaleClampedStartEOLFallbackLastCell` — every submatch dropped
+  with the line present resolves the recorded start's cell, and a
+  start beyond the shortened line clamps through the end-of-line
+  position to the last rendered cell — no marker, no highlight.
+- `TestStaleMissingLineLandsOnLastLine` — a gone recorded line lands
+  at the last source line's start.
+- `TestStaleEmptyFileZeroLines` — the empty file stays a zero-line
+  panel, still stale, the stop keeping its bare recorded line.
+- `TestStaleRecomputedPerLoad` — the mark is per-load state:
+  mismatched, clean, and mismatched-again contents flip it.
+- `TestStaleValidationComparesSearchBytesNotDisplay` — a match on the
+  raw ESC byte validates against search bytes where stripped display
+  text could never equal it.
+- `TestStaleCRLFTerminatorMatchValidates` — a match recorded on the
+  removed CRLF terminator bytes validates and lands on the
+  end-of-line marker.
+- `TestStaleBOMAdjustedValidation` — rg coordinates index the
+  BOM-stripped view: the adjusted range validates, the unadjusted
+  misses and marks stale.
+- `TestStaleZeroWidthSurvives` — a recorded zero-width submatch
+  validates trivially and keeps its marker.
+
 ## internal/app
 
 `app_test.go` (same package; Issues #3–5), driving `Update`/`View` and
@@ -489,6 +525,12 @@ load command under `failAllLoader` — plus three rows proving the fixed
 status survives: all loads failing under status 0 (→ 0), a current-file
 failure under status 2 (→ 2), and the composed usable-results-at-2
 all-fail row (→ 2, failures confined to presentation and diagnostics).
+Issue #29 adds the mirroring `staleLoads` field — positions whose loads
+return stale content, the current file's under `staleAllLoader` and the
+rest by injected `filebuffer.Decode(staleContent, stops)` buffers —
+plus the all-stale row: every retained stop validates stale, the
+filename row carries "file changed since search", and the fixed status
+stays 0 (→ 0).
 
 `scroll_test.go` (same package; Issue #12) covers manual vertical
 scrolling and the per-file viewport:
@@ -1061,6 +1103,30 @@ cross-file leg — with `heldNthLoad(2)` holding only the reload:
   delivered before the revision-2 one is discarded without consuming
   the reveal intent navigation pended during the load; the revision-2
   install commits it.
+
+`stale_test.go` (same package; Issue #29) drives the file-changed
+integration — the `staleIndex`/`staleFile`/`staleStop` helpers extend
+`navIndex` to several recorded submatches per stop:
+
+- `TestStaleNoteInFilenameRow` — a same-length replacement on disk
+  before the load puts "file changed since search" in the filename
+  row's slot beside the still-named path, holding through a scroll and
+  a constrained resize with nothing overflowing and nonnegative
+  composed dimensions.
+- `TestStaleNoteClearedByCleanReload` — reverting the file and `r`
+  clears the slot; a still-mismatched reload restores it — the note
+  recomputes per load.
+- `TestStaleGatedReloadCommitRevealsSurvivor` — `n` during the held
+  reload selects the stop whose first recorded submatch the new bytes
+  drop; the matching-layout commit reveals the first survivor's cell,
+  the render highlights the survivor and not the dropped bytes, and
+  the note shows.
+- `TestStaleGatedReloadCommitRevealsClampedFallback` — all submatches
+  dropped with the line present commits the clamped recorded start,
+  the stale row paints no invented highlight, and the note shows.
+- `TestStaleMissingLineLandsOnLastLine` — a deleted trailing matched
+  line lands at the last source line's start, revealed in view, with
+  no invented highlight and the note showing.
 
 Since Issue #25, `injectLoad` (in `layout_test.go`) fills a
 fabricated completion with the live request's identity before
