@@ -56,8 +56,10 @@ holds preparation while the file exists (a polled watcher), and
 `VRG_TEST_COLLECT_ACK=<file>` appends a line when collection completes,
 so a test can observe "rg exited, stream collected, preparation still
 held". Issue #4 added `VRG_TEST_REAP` and `VRG_TEST_FAIL` (see
-[cancellation-cleanup.md](cancellation-cleanup.md)). Issue #45 will move
-these env-var seams behind the `vrg_testhooks` build tag.
+[cancellation-cleanup.md](cancellation-cleanup.md)). Issue #45 moved
+these env-var seams into `seams_testhooks.go` behind the
+`vrg_testhooks` build tag — the released binary contains none of them;
+see [test-hook-topology.md](test-hook-topology.md).
 
 ## Search completion and start failure
 

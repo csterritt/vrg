@@ -1,0 +1,13 @@
+#!/bin/sh
+# Fake rg for the Issue #45 walkthrough: a complete, well-formed
+# ripgrep 15.x JSON stream over ./a.txt and ./b.txt, exiting 0.
+cat <<'EOF'
+{"type":"begin","data":{"path":{"text":"./a.txt"}}}
+{"type":"match","data":{"path":{"text":"./a.txt"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"match","data":{"path":{"text":"./a.txt"},"lines":{"text":"alpha again\n"},"line_number":5,"absolute_offset":20,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./a.txt"},"binary_offset":null,"stats":{"elapsed":{"secs":0,"nanos":1,"human":"0s"},"searches":1,"searches_with_match":1,"bytes_searched":12,"bytes_printed":0,"matched_lines":1,"matches":1}}}
+{"type":"begin","data":{"path":{"text":"./b.txt"}}}
+{"type":"match","data":{"path":{"text":"./b.txt"},"lines":{"text":"beta alpha\n"},"line_number":1,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":5,"end":10}]}}
+{"type":"end","data":{"path":{"text":"./b.txt"},"binary_offset":null,"stats":{"elapsed":{"secs":0,"nanos":1,"human":"0s"},"searches":1,"searches_with_match":1,"bytes_searched":12,"bytes_printed":0,"matched_lines":1,"matches":1}}}
+{"type":"summary","data":{"elapsed_total":{"human":"0.005s","nanos":5000000,"secs":0},"stats":{"bytes_printed":482,"bytes_searched":34,"elapsed":{"human":"0s","nanos":1,"secs":0},"matched_lines":3,"matches":3,"searches":2,"searches_with_match":2}}}
+EOF

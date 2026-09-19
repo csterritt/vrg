@@ -113,7 +113,7 @@ func TestCancelReplaysProcessedDiagnostic(t *testing.T) {
 			fakebin := fakeRG(t, warnThenBlockRG)
 			env := testEnv(fakebin,
 				"VRG_TEST_RG_PID="+pidFile,
-				"VRG_TEST_DIAG_ACK="+ack,
+				"VRG_TEST_DIAGNOSTIC_TRIGGER="+ack,
 				"VRG_TEST_REAP="+reapFile)
 
 			s := startVrgTermPTY(t, dir, env, "foo")
@@ -150,7 +150,7 @@ func TestQDuringGateHeldPreparationReplaysDiagnostic(t *testing.T) {
 	fakebin := fakeRG(t, `printf 'warn one\n' >&2`+happyStreamRG)
 	env := testEnv(fakebin,
 		"VRG_TEST_GATE="+gate,
-		"VRG_TEST_DIAG_ACK="+ack,
+		"VRG_TEST_DIAGNOSTIC_TRIGGER="+ack,
 		"VRG_TEST_REAP="+reapFile)
 
 	s := startVrgTermPTY(t, dir, env, "foo")
@@ -184,7 +184,7 @@ func TestNormalQuitReplaysDiagnosticsInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	fakebin := fakeRG(t, warnStreamRG)
-	env := testEnv(fakebin, "VRG_TEST_DIAG_ACK="+ack)
+	env := testEnv(fakebin, "VRG_TEST_DIAGNOSTIC_TRIGGER="+ack)
 
 	s := startVrgTermPTY(t, dir, env, "foo")
 	waitForAcks(t, ack, 2)
@@ -218,9 +218,9 @@ func TestControlledFailureReplaysViaCollection(t *testing.T) {
 	fakebin := fakeRG(t, warnThenBlockRG)
 	env := testEnv(fakebin,
 		"VRG_TEST_RG_PID="+pidFile,
-		"VRG_TEST_DIAG_ACK="+ack,
+		"VRG_TEST_DIAGNOSTIC_TRIGGER="+ack,
 		"VRG_TEST_REAP="+reapFile,
-		"VRG_TEST_FAIL="+trigger)
+		"VRG_TEST_FAIL_TRIGGER="+trigger)
 
 	s := startVrgTermPTY(t, dir, env, "foo")
 	waitForAcks(t, ack, 1) // "warn one" is collected
@@ -250,7 +250,7 @@ func TestReplayEscapesHostileFilename(t *testing.T) {
 	dir := t.TempDir()
 	ack := filepath.Join(dir, "diag.ack")
 	fakebin := fakeRG(t, hostileNameRG)
-	env := testEnv(fakebin, "VRG_TEST_DIAG_ACK="+ack)
+	env := testEnv(fakebin, "VRG_TEST_DIAGNOSTIC_TRIGGER="+ack)
 
 	s := startVrgTermPTY(t, dir, env, "foo")
 	waitForAcks(t, ack, 1) // the load failure is collected

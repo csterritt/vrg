@@ -53,3 +53,9 @@ Notes/walkthroughs/043-05/code-walkthrough/vrg
 # Built at run time by the Issue #44 walkthrough.
 Notes/walkthroughs/044-03/code-walkthrough/vrg
 Notes/walkthroughs/044-03/code-walkthrough/__pycache__/
+
+# Built at run time by the Issue #45 walkthrough; the probe dir is
+# regenerated on every run.
+Notes/walkthroughs/045-04/code-walkthrough/vrg
+Notes/walkthroughs/045-04/code-walkthrough/vrg-testhooks
+Notes/walkthroughs/045-04/code-walkthrough/probe/

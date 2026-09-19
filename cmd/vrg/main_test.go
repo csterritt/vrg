@@ -9,9 +9,10 @@ import (
 	"testing"
 )
 
-// binPath is the real cmd/vrg binary built once per test run; subprocess
-// assertions cover stream and exit-status ownership at the true process
-// boundary.
+// binPath is the real cmd/vrg binary built once per test run with the
+// vrg_testhooks variant so the subprocess suite can drive the tagged
+// seams; subprocess assertions cover stream and exit-status ownership
+// at the true process boundary.
 var binPath string
 
 func TestMain(m *testing.M) {
@@ -20,9 +21,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	binPath = filepath.Join(dir, "vrg")
-	build := exec.Command("go", "build", "-o", binPath, ".")
+	build := exec.Command("go", "build", "-tags", "vrg_testhooks", "-o", binPath, ".")
 	if out, err := build.CombinedOutput(); err != nil {
-		panic("go build ./cmd/vrg failed: " + err.Error() + "\n" + string(out))
+		panic("go build -tags vrg_testhooks ./cmd/vrg failed: " + err.Error() + "\n" + string(out))
 	}
 	code := m.Run()
 	os.RemoveAll(dir)

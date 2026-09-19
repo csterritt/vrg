@@ -97,10 +97,12 @@ output stays clean.
 
 `WithDiagAck` is the test-only acknowledgement: it runs once per
 diagnostic line *after* `Update` has processed it into the collection —
-not when the child merely wrote the bytes. `cmd/vrg/main.go` wires it
-to `VRG_TEST_DIAG_ACK=<file>` (one `diag` line appended per collected
-diagnostic) — the same file-evidence mechanism family as
-`VRG_TEST_REAP`. PTY tests wait on the ack file before sending an exit
+not when the child merely wrote the bytes. `cmd/vrg` wires it to
+`VRG_TEST_DIAGNOSTIC_TRIGGER=<file>` (one `diag` line appended per
+collected diagnostic; `VRG_TEST_DIAGNOSTIC_TEXT` overrides the line) —
+the same file-evidence mechanism family as `VRG_TEST_REAP`. Since Issue
+#45 the wiring compiles only under `vrg_testhooks` (see
+[test-hook-topology.md](test-hook-topology.md)). PTY tests wait on the ack file before sending an exit
 key, proving a diagnostic was collected ahead of the exit decision
 rather than racing it.
 

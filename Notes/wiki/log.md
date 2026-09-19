@@ -1725,3 +1725,39 @@ session collection for post-restoration stderr replay. Updated
 `Notes/PRD-vrg.md` (Result index, records, and stream integrity),
 `internal/searchindex/lifecycle_test.go`,
 `internal/app/outcome_test.go`.
+## [2026-09-18] ingest | Issue #45 test-hook topology — `vrg_testhooks` variant, clean production artifact
+
+Ingested the completed Issue #45 implementation
+([issue](../issues/045-remove-test-hooks-from-production-binary.md),
+[task](../tasks/045-remove-test-hooks-from-production-binary.md); audit
+Medium finding 10): the env-var test seams no longer compile into the
+released binary. `cmd/vrg` now keeps two build-constrained boundaries
+with unconditional call sites in `run`: `seams.go`
+(`!vrg_testhooks`, nil) / `seams_testhooks.go` reads the explicit
+manifest into `app.Option`s and owns the file watchers, and
+`runner.go` / `runner_testhooks.go` wrap the `program.Run()` call via
+the new `app.Config.RunProgram` seam (nil → direct delegation) so the
+tagged variant can inject Issue #46's final-model/error tuples at the
+real return site. Manifest names: `VRG_TEST_REAP`, `VRG_TEST_GATE`,
+`VRG_TEST_LOAD_GATE`, `VRG_TEST_COLLECT_ACK`, `VRG_TEST_FAIL_TRIGGER`
+(+`VRG_TEST_FAIL_DIAGNOSTIC`), `VRG_TEST_DIAGNOSTIC_TRIGGER`
+(+`VRG_TEST_DIAGNOSTIC_TEXT`), `VRG_TEST_RUN_FINAL_MODEL`,
+`VRG_TEST_RUN_ERROR` — `VRG_TEST_FAIL`/`VRG_TEST_DIAG_ACK` renamed,
+capabilities identical; fixture-owned fake-rg variables are excluded
+and become `FAKE_RG_*` under Issue #50. `TestMain` builds
+`-tags vrg_testhooks` so the whole subprocess suite exercises the
+hooked binary; `testhooks_test.go` proves both halves — the untagged
+artifact ignores every manifest name and contains none of their
+strings, and the tagged runner reaches every `program.Run()` return
+shape. New page [test-hook-topology](../wiki/test-hook-topology.md);
+updated [source-code](../wiki/source-code.md),
+[unit-tests](../wiki/unit-tests.md),
+[cancellation-cleanup](../wiki/cancellation-cleanup.md),
+[search-collection](../wiki/search-collection.md),
+[stderr-replay](../wiki/stderr-replay.md), and the index. Sources:
+`Notes/issues/045-remove-test-hooks-from-production-binary.md`,
+`Notes/tasks/045-remove-test-hooks-from-production-binary.md`,
+`Notes/PRD-vrg.md` (Outcome and exit-status contract, Testing
+Decisions), `cmd/vrg/main.go`, `cmd/vrg/seams*.go`,
+`cmd/vrg/runner*.go`, `cmd/vrg/testhooks_test.go`,
+`internal/app/app.go`.

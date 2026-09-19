@@ -53,7 +53,14 @@ func fakeRG(t *testing.T, script string) string {
 
 func startVrgPTY(t *testing.T, dir string, env []string, args ...string) *ptySession {
 	t.Helper()
-	cmd := exec.Command(binPath, args...)
+	return startVrgPTYBin(t, binPath, dir, env, args...)
+}
+
+// startVrgPTYBin is startVrgPTY against an explicitly chosen binary, so
+// boundary tests can drive untagged or separately tagged builds.
+func startVrgPTYBin(t *testing.T, bin, dir string, env []string, args ...string) *ptySession {
+	t.Helper()
+	cmd := exec.Command(bin, args...)
 	if dir != "" {
 		cmd.Dir = dir
 	}
@@ -157,7 +164,14 @@ func (s *ptySession) waitExit() int {
 // q, and returns the captured output and exit code.
 func runVrgWithQuit(t *testing.T, dir string, env []string, args ...string) (string, int) {
 	t.Helper()
-	s := startVrgPTY(t, dir, env, args...)
+	return runVrgWithQuitBin(t, binPath, dir, env, args...)
+}
+
+// runVrgWithQuitBin is runVrgWithQuit against an explicitly chosen
+// binary.
+func runVrgWithQuitBin(t *testing.T, bin, dir string, env []string, args ...string) (string, int) {
+	t.Helper()
+	s := startVrgPTYBin(t, bin, dir, env, args...)
 	if !s.waitFor("─ ") {
 		s.cmd.Process.Kill()
 		<-s.done

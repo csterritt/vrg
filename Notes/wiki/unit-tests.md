@@ -1778,8 +1778,30 @@ real FileBuffer path, so empty spans arrive as marker positions:
 
 ## cmd/vrg (subprocess boundary)
 
-`main_test.go` builds the real binary once in `TestMain` and asserts
-stdout/stderr/status separately:
+`main_test.go` builds the real binary once in `TestMain` — since Issue
+#45 with `go build -tags vrg_testhooks`, so every subprocess/PTY test
+exercises the hooked variant — and asserts stdout/stderr/status
+separately. `testhooks_test.go` (Issue #45) adds the two boundary
+proofs and the `buildVrg`/`startVrgPTYBin`/`runVrgWithQuitBin` helpers
+that drive explicitly chosen binaries:
+
+- `TestProductionBinaryIgnoresHookManifest` — builds an untagged
+  binary, runs it on a pty with every name in the explicit
+  vrg-consumed hook manifest set to a live trigger or writer path
+  (present gate/fail-trigger files, runner controls), asserts the
+  normal exit-0 browse/quit with no probe-dir side effects, then scans
+  the artifact bytes for each manifest name. The probed list derives
+  only from the manifest — never from grepping `VRG_TEST_*`
+  occurrences, since fixture-owned fake-rg variables are not vrg
+  behaviour (Issue #50 renames them `FAKE_RG_*`).
+- `TestRunnerSeamInjectsRunReturnShapes` — builds the tagged binary
+  and drives every `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR`
+  tuple Issue #46 needs (valid/nil/invalid final model × nil/non-nil
+  error) through a real PTY lifecycle, asserting each reaches the
+  executable's actual `program.Run()` return branches unchanged: exit
+  2 with the injected error replayed exactly once for error tuples,
+  exit 2 for nil/invalid models without error, exit 0 for delegated
+  runs.
 
 - **`TestGeneratedHelpStdout`** (named group, rerun by Issue #6) — all
   help rows exit 0 with exactly one help copy, empty stderr, no TUI, no
@@ -1849,7 +1871,7 @@ code, the recorded pid's absence, the `VRG_TEST_REAP` side-channel line
   never renders; the already-exited child reaps as `code=0`.
 - `TestOrdinaryQuitLeavesNoChild` — the browse `q` exits 0 with reap
   evidence (`code=0`), restoration, and termios equality.
-- `TestControlledFailureCleanupExit2` — `VRG_TEST_FAIL` triggered after
+- `TestControlledFailureCleanupExit2` — `VRG_TEST_FAIL_TRIGGER` triggered after
   the child's ready signal: exit 2, the sanitized
   `vrg: injected test failure ^[[7m` diagnostic appears exactly once and
   after the restoration sequence, child gone and reaped, termios
@@ -1886,7 +1908,7 @@ bytes:
 
 `replay_test.go` (Issue #11; `//go:build unix`) drives the replay
 contract on the real binary: `waitForAcks` polls the
-`VRG_TEST_DIAG_ACK` file — the application-side acknowledgement that a
+`VRG_TEST_DIAGNOSTIC_TRIGGER` file — the application-side acknowledgement that a
 diagnostic was processed into the session collection, the same
 file-evidence family as `VRG_TEST_REAP` — and `assertReplayedOnce`/
 `assertReplayOrder` require each diagnostic to appear exactly once
@@ -1902,7 +1924,7 @@ after the display-restoration sequence, in collection order:
 - `TestNormalQuitReplaysDiagnosticsInOrder` — two warnings shown in the
   overlay replay exactly once each, in collection order, on the normal
   browse quit.
-- `TestControlledFailureReplaysViaCollection` — `VRG_TEST_FAIL` after
+- `TestControlledFailureReplaysViaCollection` — `VRG_TEST_FAIL_TRIGGER` after
   the acknowledgement: the earlier diagnostic replays first, the
   `vrg:` failure line second, each exactly once across the whole
   capture, exit 2.

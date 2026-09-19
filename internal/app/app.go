@@ -32,6 +32,11 @@ type Config struct {
 	Err io.Writer
 	// Start spawns the search child; nil means spawn rg from PATH.
 	Start StartFunc
+	// RunProgram, when set, runs the constructed Bubble Tea program in
+	// place of Program.Run — the executable's program-runner seam,
+	// consumed only by the vrg_testhooks build variant. Nil means call
+	// Run directly.
+	RunProgram func(*tea.Program) (tea.Model, error)
 }
 
 // Option configures optional seams.
@@ -902,7 +907,11 @@ func Run(ctx context.Context, cfg Config, opts ...Option) int {
 			}
 		}()
 	}
-	final, err := prog.Run()
+	run := cfg.RunProgram
+	if run == nil {
+		run = func(p *tea.Program) (tea.Model, error) { return p.Run() }
+	}
+	final, err := run(prog)
 	// Exits that bypass the model — interrupt, program error, a caught
 	// panic — still owe the child termination and reaping.
 	reapChild(child, o.reap)

@@ -27,7 +27,7 @@ Catalog of all wiki pages for the vrg project.
   `Wait`, `quitting` discard of late completions, alt-screen display
   and PTY termios restoration, the `WithFailFunc` hook and the single
   post-restoration `writeFailureDiag` → exit 2, and the
-  `VRG_TEST_REAP`/`VRG_TEST_FAIL` seams with the termios PTY harness
+  `VRG_TEST_REAP`/`VRG_TEST_FAIL_TRIGGER` seams with the termios PTY harness
 - [browse-tracer.md](browse-tracer.md) — Issue #5 browse view: the
   two-pane file list + file panel with the filename rule, gutter, and
   inverse-video matches; async `filebuffer` loading with prepared
@@ -72,7 +72,7 @@ Catalog of all wiki pages for the vrg project.
   shutdown boundary, `replayDiags`' exactly-once in-order replay after
   terminal restoration on every controlled exit, the unified
   controlled-failure path, `EscapePath`-single-lined embedded
-  filenames, and the `VRG_TEST_DIAG_ACK` application-side
+  filenames, and the `VRG_TEST_DIAGNOSTIC_TRIGGER` application-side
   acknowledgement
 - [viewport-scrolling.md](viewport-scrolling.md) — Issue #12: the
   rendered-row scroll units (`up`/`down` one row, `u`/`d` half page,
@@ -346,6 +346,12 @@ Catalog of all wiki pages for the vrg project.
   constructed-not-measured normalization rule, the preserved
   source-byte mapping, and the one-cell propagation through clusters,
   wrapping, clipping, panning, highlight expansion, and the renderer
+- [test-hook-topology.md](test-hook-topology.md) — Issue #45: the
+  `vrg_testhooks` build variant, the two build-constrained `cmd/vrg`
+  boundaries (option wiring and the `Config.RunProgram`
+  program-runner), the explicit vrg-consumed hook manifest with the
+  `VRG_TEST_FAIL`/`VRG_TEST_DIAG_ACK` renames, the `TestMain` tagged
+  build, and the untagged-artifact boundary test
 
 ## Catalogs
 

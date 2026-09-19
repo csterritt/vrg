@@ -255,7 +255,7 @@ func TestControlledFailureCleanupExit2(t *testing.T) {
 		"VRG_TEST_RG_READY="+ready,
 		"VRG_TEST_RG_PID="+pidFile,
 		"VRG_TEST_REAP="+reapFile,
-		"VRG_TEST_FAIL="+trigger)
+		"VRG_TEST_FAIL_TRIGGER="+trigger)
 
 	s := startVrgTermPTY(t, dir, env, "foo")
 	waitForFile(t, ready)

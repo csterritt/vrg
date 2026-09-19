@@ -76,19 +76,24 @@ exactly once after restoration — there is no separate direct write. See
 
 ## Test seams and the PTY harness
 
-New `VRG_TEST_*` seams wired in `cmd/vrg/main.go`:
+`VRG_TEST_*` seams wired in `cmd/vrg` — since Issue #45 only in
+`seams_testhooks.go` under the `vrg_testhooks` build tag, never in the
+released binary (see [test-hook-topology.md](test-hook-topology.md)):
 
 - `VRG_TEST_REAP=<file>` — `WithReapReport` appends
   `reaped code=N err=<wait status>` once the wait/reap path ran; the
   evidence side channel proving reaping rather than inferring it from a
   missing pid.
-- `VRG_TEST_FAIL=<file>` — `WithFailFunc` blocks until the file exists,
-  then returns an error containing a raw ESC byte (proving diagnostic
-  sanitization).
-- `VRG_TEST_DIAG_ACK=<file>` — Issue #11's `WithDiagAck` appends one
-  line per diagnostic processed into the session collection, so a test
-  can wait on collection rather than a child-side write; see
-  [stderr-replay.md](stderr-replay.md).
+- `VRG_TEST_FAIL_TRIGGER=<file>` — `WithFailFunc` blocks until the file
+  exists, then returns an error containing a raw ESC byte (proving
+  diagnostic sanitization); `VRG_TEST_FAIL_DIAGNOSTIC` overrides the
+  injected text. (Pre-#45 name: `VRG_TEST_FAIL`.)
+- `VRG_TEST_DIAGNOSTIC_TRIGGER=<file>` — Issue #11's `WithDiagAck`
+  appends one line per diagnostic processed into the session
+  collection (`VRG_TEST_DIAGNOSTIC_TEXT` overrides the recorded line),
+  so a test can wait on collection rather than a child-side write; see
+  [stderr-replay.md](stderr-replay.md). (Pre-#45 name:
+  `VRG_TEST_DIAG_ACK`.)
 
 `cmd/vrg/cancel_test.go` extends the Issue #3 harness with
 `startVrgTermPTY`: it opens the pty pair itself (via `pty.Open`), keeps

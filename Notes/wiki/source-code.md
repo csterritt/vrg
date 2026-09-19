@@ -8,14 +8,29 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `os.Stat` injected and maps the explicit result kind to stream/status:
   help → exit 0 (help already on stdout), usage error → sanitized
   diagnostic + usage on stderr, exit 2, search → `app.Run` with the
-  protected child argv and the invocation working directory. It also
-  wires the `VRG_TEST_*` seam env vars (`VRG_TEST_GATE`,
-  `VRG_TEST_COLLECT_ACK`, `VRG_TEST_REAP`, `VRG_TEST_FAIL`,
-  `VRG_TEST_LOAD_GATE`, `VRG_TEST_DIAG_ACK`) into `app.Option`s — see
+  protected child argv and the invocation working directory. It keeps
+  only the two unconditional seam call sites (`testSeamOptions()` and
+  `Config.RunProgram`); since Issue #45 the hooks themselves live in
+  the `vrg_testhooks`-constrained files — see
+  [test-hook-topology.md](test-hook-topology.md).
+- `cmd/vrg/seams.go` / `seams_testhooks.go` — Issue #45's complementary
+  option-wiring boundary. The untagged half returns nil; the tagged
+  half reads the explicit hook manifest (`VRG_TEST_GATE`,
+  `VRG_TEST_LOAD_GATE`, `VRG_TEST_COLLECT_ACK`, `VRG_TEST_REAP`,
+  `VRG_TEST_FAIL_TRIGGER`/`VRG_TEST_FAIL_DIAGNOSTIC`,
+  `VRG_TEST_DIAGNOSTIC_TRIGGER`/`VRG_TEST_DIAGNOSTIC_TEXT`) into
+  `app.Option`s and owns the `appendLine`/`waitFileGone`/
+  `waitFileExists` watchers. See
   [search-collection.md](search-collection.md),
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [browse-tracer.md](browse-tracer.md), and
   [stderr-replay.md](stderr-replay.md).
+- `cmd/vrg/runner.go` / `runner_testhooks.go` — Issue #45's
+  program-runner boundary: `runProgram(*tea.Program)` delegates to
+  `Run()` untagged; tagged, it additionally applies
+  `VRG_TEST_RUN_FINAL_MODEL` (`nil`/`invalid`) and
+  `VRG_TEST_RUN_ERROR` overrides at the real `program.Run()` return
+  site for Issue #46's return shapes.
 
 ## internal/cli
 
@@ -225,7 +240,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `m.idx.Files[i].Path` once through the `escapePath` seam and fills
   `displayPaths[i]` via `newDisplayPath`, computing `listWBase` from
   the prepared widths in the same pass — so no `Update`/`View` path
-  escapes or re-segments a path again. See
+  escapes or re-segments a path again. Issue #45 adds
+  `Config.RunProgram`: when set it replaces `prog.Run()` at the real
+  program-runner call site (nil defaults to direct delegation) — the
+  channel through which the `vrg_testhooks` variant injects Issue #46's
+  return shapes. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
@@ -239,8 +258,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [unsupported-encodings.md](unsupported-encodings.md),
   [help-overlay.md](help-overlay.md),
   [overlay-precedence.md](overlay-precedence.md),
-  [terminal-too-small.md](terminal-too-small.md), and
-  [bounded-browse-render.md](bounded-browse-render.md).
+  [terminal-too-small.md](terminal-too-small.md),
+  [bounded-browse-render.md](bounded-browse-render.md), and
+  [test-hook-topology.md](test-hook-topology.md).
 - `internal/app/outcome.go` — Issue #9's pure outcome decision:
   `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
   `Integrity`, usable-results count, `RecordLoss`, caller `Warnings`)
