@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"vrg/internal/filebuffer"
+	"vrg/internal/searchindex"
 	"vrg/internal/viewport"
 )
 
@@ -13,11 +14,19 @@ import (
 // filebuffer path.
 func loadBuffer(t *testing.T, content string) *filebuffer.Buffer {
 	t.Helper()
+	return loadBufferStops(t, content)
+}
+
+// loadBufferStops loads content with the given navigation stops, so
+// recorded byte spans arrive as the cluster-expanded cell spans
+// FileBuffer hands to the viewport (Issue #21).
+func loadBufferStops(t *testing.T, content string, stops ...searchindex.Stop) *filebuffer.Buffer {
+	t.Helper()
 	p := filepath.Join(t.TempDir(), "f.txt")
 	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	buf, err := filebuffer.Load([]byte(p), nil)
+	buf, err := filebuffer.Load([]byte(p), stops)
 	if err != nil {
 		t.Fatal(err)
 	}

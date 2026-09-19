@@ -140,6 +140,14 @@ Catalog of all wiki pages for the vrg project.
   excluding the reserved column, split-glyph blanks counted hidden,
   partial visibility counting visible, and wrap mode drawing neither
   indicators nor the column
+- [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md) —
+  Issue #21: nonempty match spans snapped outward to whole grapheme
+  clusters in `makeLine` (`CellsCovering` + `expandToClusters`), the
+  expanded `Line.Highlights` the single source for painting, reveal,
+  and indicators, combining-only matches covering their base cluster,
+  the Issue #43 `◌` fallback cell for standalone combining clusters,
+  wide glyphs and ZWJ sequences never split, and wrap/clip filler
+  blanks never styled as match cells
 
 ## Catalogs
 

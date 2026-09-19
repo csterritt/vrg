@@ -544,10 +544,9 @@ func (m *model) filenameRule(width int) string {
 // maximal run of highlighted cells in the match style — the true
 // inverse, additionally underlined when the line is the current
 // matched line — and padding the rest with blanks. Clipping never
-// splits a grapheme's cells: a cell that would cross the right
-// boundary ends the row, and a cluster straddling the left edge
-// contributes blank cells for its clipped portion — never half a
-// glyph.
+// splits a grapheme's cells: a cluster straddling either boundary
+// contributes one blank per in-window cell for its clipped portion —
+// never half a glyph, and never a match-styled blank (Issue #21).
 func (m *model) contentText(row viewport.Row, off, textW int, cur bool) string {
 	var sb strings.Builder
 	var run strings.Builder
@@ -576,40 +575,42 @@ func (m *model) contentText(row viewport.Row, off, textW int, cur bool) string {
 		return false
 	}
 	cells := row.Line.Cells
+	clusters := row.Line.Clusters
 	// The painted window starts at the horizontal offset: cells left
-	// of off are clipped away. A cluster straddling the edge — its
-	// first cell left of off, continuation cells inside the window —
-	// renders one blank per clipped cell rather than a partial glyph.
+	// of off are clipped away. A cluster straddling either clip edge
+	// — starting left of the window or ending beyond it — contributes
+	// one blank per in-window cell rather than a partial glyph, and a
+	// clip blank is never a match cell (Issue #21).
 	lo := row.Start
 	if off > lo {
 		lo = off
 	}
 	col := 0
-	clipped := false
+	ci := 0 // cursor into the clusters tiling the row's cells
 	for i := lo; i < row.End; i++ {
-		c := cells[i]
-		cont := i > 0 && cells[i-1].Start == c.Start && cells[i-1].End == c.End
-		if !cont {
-			clipped = false
-		} else if i == lo {
-			clipped = true
+		for ci < len(clusters) && i >= clusters[ci].End {
+			ci++
 		}
+		if ci == len(clusters) {
+			break
+		}
+		cl := clusters[ci]
+		c := cells[i]
 		text := c.Text
-		if text == "" {
-			switch {
-			case !cont:
-				text = string(rune(0xfffd)) // an invalid byte's replacement char
-			case clipped:
-				text = " "
-			default:
-				continue // continuation cell of a painted wide glyph
-			}
+		hl := highlighted(i)
+		switch {
+		case cl.Start < lo || cl.End-lo > textW:
+			text, hl = " ", false // a clip blank — never a match cell
+		case text == "" && i > cl.Start:
+			continue // continuation cell of a painted wide glyph
+		case text == "":
+			text = string(rune(0xfffd)) // an invalid byte's replacement char
 		}
 		cw := safepresentation.CellWidth(text)
 		if col+cw > textW {
 			break
 		}
-		if hl := highlighted(i); hl != runHL {
+		if hl != runHL {
 			flush()
 			runHL = hl
 		}

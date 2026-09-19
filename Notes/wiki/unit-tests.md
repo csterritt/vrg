@@ -253,6 +253,21 @@ the table driver.
 - `TestHighlightSpans`, `TestHighlightCoversEscapedCells` — stop byte
   ranges become display-cell ranges; a match over an escaped byte
   covers the whole escape form.
+- `TestHighlightExpandsPartialCluster` — Issue #21: a nonempty span
+  snaps outward to whole clusters for a start inside, an end inside,
+  both ends inside one cluster (decomposed `é`), and both
+  ends inside different wide clusters (`文`/`日`).
+- `TestHighlightCombiningOnlyMatchExpandsToBaseCluster` — a match on
+  only `U+0301`'s bytes highlights the whole é cluster, never a
+  zero-width sliver.
+- `TestHighlightStandaloneCombiningGetsFallbackCell` — a standalone
+  combining mark's cell is the Issue #43 `◌`-plus-marks form occupying
+  exactly one cell, and a match on it highlights that cell — never a
+  zero-cell highlight.
+- `TestHighlightWideGlyphPairNeverSplit` — a match touching any byte
+  range of `文` covers both cells `[2,4)` together.
+- `TestHighlightEmojiZWJCluster` — a partial-byte match inside
+  `👨‍👩‍👧` expands to the whole two-cell ZWJ cluster.
 - `TestStopBeyondFileIgnored` — stops outside the loaded file contribute
   nothing.
 - `TestLoadReadFailure` — a read error is returned, not panicked.
@@ -740,6 +755,23 @@ at nonzero offsets — hidden-left text and matches mark gutters, and
 the unpaintable-tab row shows the gutter `_` beside the reserved `*`
 for its entirely-hidden-right match.
 
+`grapheme_test.go` (same package; Issue #21) drives the rendering
+half of grapheme-cluster highlight expansion under the styled scheme:
+
+- `TestClipBlanksNeverPaintMatchCells` — a `文` clipped at the right
+  edge and another plus a tab expansion clipped at the left edge each
+  render their in-window cells as unstyled clip blanks — no inverse
+  styled blank anywhere — while the hidden-match stars still appear.
+- `TestWrapBoundaryBlankIsNotAMatchCell` — a cluster that cannot fit
+  a row's last cell wraps whole; the boundary row's filler blank is
+  unstyled and the wrapped row highlights the glyph whole.
+- `TestCombiningOnlyMatchPaintsWholeGlyph` — a match on `U+0301`'s
+  bytes alone styles the whole decomposed é.
+- `TestStandaloneCombiningFallbackCellHighlighted` — a standalone
+  combining mark renders the `◌` fallback cell highlighted.
+- `TestCJKMatchPaintsBothCells` — a `文` match paints both cells
+  inside one inverse-styled run.
+
 ## internal/viewport
 
 `viewport_test.go` (external package `viewport_test`; Issue #12):
@@ -759,6 +791,11 @@ for its entirely-hidden-right match.
   in run-off-edge mode each source line is one rendered row in file
   order with the buffer's gutter width; a nil buffer gives an empty
   model.
+
+The file's `loadBufferStops` helper (Issue #21) loads content through
+the real `filebuffer.Load` with recorded navigation stops, so tests
+consume the cluster-expanded highlight cell spans production hands
+the viewport rather than hand-built `Line` values.
 
 `wrap_test.go` (external package; Issue #16) covers the wrap and
 run-off-edge row models:
@@ -924,6 +961,13 @@ hidden-content mark predicates over real prepared lines:
   stars, and zero-width marker positions.
 - `TestLeftMarkOnEveryFlatRow` — the uniform-lines layout: every
   prepared row reports `_` at a nonzero offset.
+- `TestMidClusterMatchCountsFromClusterBoundary` — Issue #21: the
+  `markRowOf` helper loads recorded byte spans through the real
+  FileBuffer path, so a byte match inside `文` arrives as the expanded
+  cell span `[2,4)` and the marks judge it from the cluster
+  boundaries — entirely hidden left when the cluster start is hidden
+  left, entirely hidden right when the window ends inside it, no star
+  when the whole cluster paints.
 
 ## internal/theme
 

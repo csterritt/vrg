@@ -94,6 +94,52 @@ func TestRightMark(t *testing.T) {
 	}
 }
 
+// markRowOf loads content through the real FileBuffer path with the
+// given recorded byte spans, so the line's highlights arrive as the
+// cluster-expanded cell spans production indicators consume — the
+// Issue #21 single span source.
+func markRowOf(t *testing.T, content string, byteSpans ...[2]int) viewport.Row {
+	t.Helper()
+	st := searchindex.Stop{Number: 1}
+	for _, s := range byteSpans {
+		st.Highlights = append(st.Highlights, searchindex.Span{Start: s[0], End: s[1]})
+	}
+	l := loadBufferStops(t, content, st).Lines()[0]
+	return viewport.Row{Line: l, Start: 0, End: len(l.Cells)}
+}
+
+// A match whose recorded bytes start mid-cluster is indicator-counted
+// from the cluster start — the expanded span is what FileBuffer hands
+// to the marks: when that start is hidden left the whole match counts
+// hidden left, and symmetrically for a mid-cluster end hidden right.
+func TestMidClusterMatchCountsFromClusterBoundary(t *testing.T) {
+	// 文 is bytes [2,5) over cells [2,4): a recorded match on bytes
+	// [3,4) starts inside the cluster and expands to its whole cell
+	// range.
+	row := markRowOf(t, "ab文xx", [2]int{3, 4})
+	if l := row.Line; len(l.Highlights) != 1 || l.Highlights[0].Start != 2 || l.Highlights[0].End != 4 {
+		t.Fatalf("expanded highlights = %v, want the whole 文 cluster [{2 4}]", l.Highlights)
+	}
+	// At offset 3 the cluster's start is hidden left — the match
+	// counts entirely hidden left even though a span cell sits in
+	// the window's geometry.
+	if got := viewport.LeftMark(row, 3); got != '*' {
+		t.Fatalf("LeftMark = %q, want '*' — a mid-cluster start counts from the cluster start", got)
+	}
+	// The mirror image: a window ending inside the cluster hides the
+	// whole match right.
+	if got := viewport.RightMark(row, 0, 3); got != '*' {
+		t.Fatalf("RightMark = %q, want '*' — a mid-cluster end counts from the cluster end", got)
+	}
+	// Painted whole, the same expanded span earns no star.
+	if got := viewport.LeftMark(row, 0); got != ' ' {
+		t.Fatalf("LeftMark at offset 0 = %q, want blank — the cluster is fully painted", got)
+	}
+	if got := viewport.RightMark(row, 0, 6); got != ' ' {
+		t.Fatalf("RightMark over the whole line = %q, want blank — the cluster is painted", got)
+	}
+}
+
 // The marks hold on a uniform-lines layout too: at a nonzero offset
 // every prepared row reports text hidden left, so '_' shows on every
 // visible line.

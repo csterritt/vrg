@@ -38,6 +38,12 @@ Three entry points cover the sink classes:
   each escaped-form character and each invalid-byte replacement is a
   single-cell cluster, while a wide glyph or a tab expansion is one
   unbreakable multi-cell cluster, so wrapping never splits a cluster.
+  Issue #21
+  ([grapheme-highlight-expansion.md](grapheme-highlight-expansion.md))
+  consumes the same records for highlight expansion — a partial-cluster
+  match covers its whole cluster — and for the standalone combining
+  cluster's Issue #43 `◌`-plus-marks one-cell fallback, so a highlight
+  is never an inaccessible zero-cell span.
 - **Diagnostics** — `EscapeDiagnostic(string) string` (new): real
   diagnostic line boundaries are preserved — LF stays, CRLF normalizes
   to LF — tabs expand to the next multiple of eight display columns,

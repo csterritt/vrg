@@ -743,3 +743,45 @@ logical anchors), `internal/viewport/indicators.go`,
 `internal/viewport/indicators_test.go`,
 `internal/app/indicators_test.go`, `internal/app/pan_test.go`,
 `internal/app/hreveal_test.go`.
+
+## [2026-09-17] ingest | Issue #21 grapheme-cluster highlight expansion
+
+Every nonempty highlight span FileBuffer records now snaps outward to
+the whole grapheme clusters it touches: `makeLine` applies the new
+`Line.expandToClusters` after `CellsCovering`, making the
+cluster-aligned `Line.Highlights` cell spans the explicit single span
+source — `contentText` paints them, `LeftMark`/`RightMark` judge
+hidden-left/right from them, and `StopTarget`'s first-submatch
+`CellsCovering` mapping lands on the cluster's first cell unchanged.
+A combining-only match (`U+0301` alone) expands to its whole base
+cluster; a standalone combining cluster keeps the Issue #43
+`◌`-plus-marks one-cell fallback so the highlight is never zero
+cells; wide glyph pairs and emoji ZWJ sequences are never split. On
+the render side, `contentText`'s clip detection is now cluster-aware
+(`cl.Start < lo || cl.End - lo > textW`): a cluster straddling either
+clip edge contributes one unstyled blank per in-window cell — clip
+blanks are never match cells — replacing the byte-range
+`cont`/`clipped` inference that styled a clipped cluster's blank when
+the cluster was highlighted; wrap-boundary filler blanks were already
+unstyled and are now pinned by test.
+`internal/filebuffer/filebuffer_test.go` gains the expansion tables
+(partial boundaries in
+every position, combining-only, `◌` fallback, wide pair, ZWJ);
+`internal/app/grapheme_test.go` is new (clip blanks unstyled at both
+edges, wrap-boundary blank unstyled, combining-only/standalone/CJK
+rendering); `internal/viewport` gains `loadBufferStops` +
+`markRowOf` so `TestMidClusterMatchCountsFromClusterBoundary` proves
+the marks consume expanded spans. Created
+[grapheme-highlight-expansion](grapheme-highlight-expansion.md);
+updated [safe-presentation](safe-presentation.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/021-grapheme-cluster-highlight-expansion.md`,
+`Notes/tasks/021-grapheme-cluster-highlight-expansion.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; Layout and
+indicators), `Notes/decisions/043-combining-cluster-fallback-cell.md`,
+`internal/filebuffer/filebuffer.go`, `internal/app/browse.go`,
+`internal/filebuffer/filebuffer_test.go`,
+`internal/app/grapheme_test.go`,
+`internal/viewport/indicators_test.go`,
+`internal/viewport/viewport_test.go`.

@@ -237,7 +237,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   trailing space takes `LeftMark`'s `_`/`*` (composed
   `Gutter`/`Indicator`/`Gutter`), and the reserved rightmost cell
   takes `RightMark`'s `*` on the current matched line's row when a
-  match is entirely hidden right — wrap mode draws neither. See
+  match is entirely hidden right — wrap mode draws neither. Issue
+  #21 rewrites `contentText`'s clip detection cluster-aware: a cluster
+  straddling either edge (`cl.Start < lo || cl.End - lo > textW`)
+  contributes one unstyled blank per in-window cell — clip blanks are
+  never match cells — replacing the byte-range `cont`/`clipped`
+  inference that styled a clipped cluster's blank when the cluster
+  was highlighted. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [file-change-popup.md](file-change-popup.md),
@@ -247,8 +253,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [wrap-mode.md](wrap-mode.md),
   [logical-anchor.md](logical-anchor.md),
   [horizontal-panning.md](horizontal-panning.md),
-  [horizontal-reveal.md](horizontal-reveal.md), and
-  [hidden-content-indicators.md](hidden-content-indicators.md).
+  [horizontal-reveal.md](horizontal-reveal.md),
+  [hidden-content-indicators.md](hidden-content-indicators.md), and
+  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
@@ -261,10 +268,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   grapheme-cluster segmentation Viewport wraps from. Issue #18 adds
   `Line.MaxStart(width)` — the paintable boundary: the largest cell
   index where a cluster begins and fits within `width`, skipping an
-  over-wide trailing cluster and reporting 0 when none fits. See
+  over-wide trailing cluster and reporting 0 when none fits. Issue
+  #21 adds `Line.expandToClusters`, applied in `makeLine` after
+  `CellsCovering`: every nonempty highlight range snaps outward to the
+  whole clusters it touches, so `Highlights` is the
+  cluster-aligned single span source painting, reveal, and the
+  hidden-content indicators all consume. See
   [browse-tracer.md](browse-tracer.md),
-  [wrap-mode.md](wrap-mode.md), and
-  [horizontal-panning.md](horizontal-panning.md).
+  [wrap-mode.md](wrap-mode.md),
+  [horizontal-panning.md](horizontal-panning.md), and
+  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md).
 - `internal/viewport/viewport.go` — `Viewport`, the file panel's
   vertical window (`Top`, `Scroll`, `Clamp`), the scroll-unit helpers
   `HalfPage` and `MaxTop` (the BOF/EOF clamp bound), and `Rows`, the

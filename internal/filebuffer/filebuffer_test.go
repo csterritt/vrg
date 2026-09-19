@@ -230,6 +230,93 @@ func TestHighlightCoversEscapedCells(t *testing.T) {
 	}
 }
 
+// A nonempty span partially covering a grapheme cluster expands
+// outward to the whole cluster — whether the span's start lands
+// inside, its end lands inside, or both — so highlight cell ranges
+// always align to cluster boundaries (Issue #21).
+func TestHighlightExpandsPartialCluster(t *testing.T) {
+	// "cafe\xcc\x81x": é is one cluster over bytes [3,6) mapping to
+	// cell 3; 'x' is byte 6, cell 4.
+	decomposed := "cafe\xcc\x81x\n"
+	// "a文b日c": 文 is bytes [1,4) over cells [1,3), 日 bytes [5,8)
+	// over cells [4,6).
+	wide := "a文b日c\n"
+	cases := []struct {
+		name    string
+		content string
+		span    [2]int
+		want    [2]int
+	}{
+		{"start inside a cluster", decomposed, [2]int{4, 7}, [2]int{3, 5}},
+		{"end inside a cluster", decomposed, [2]int{1, 5}, [2]int{1, 4}},
+		{"both ends inside one cluster", decomposed, [2]int{4, 5}, [2]int{3, 4}},
+		{"both ends inside different clusters", wide, [2]int{2, 6}, [2]int{1, 6}},
+		{"wide cluster start inside", wide, [2]int{2, 4}, [2]int{1, 3}},
+		{"wide cluster end inside", wide, [2]int{6, 8}, [2]int{4, 6}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b := load(t, writeFile(t, tc.content), stop(1, tc.span))
+			got := b.Lines()[0].Highlights
+			if len(got) != 1 || got[0].Start != tc.want[0] || got[0].End != tc.want[1] {
+				t.Fatalf("span %v: highlights = %v, want [%d %d]", tc.span, got, tc.want[0], tc.want[1])
+			}
+		})
+	}
+}
+
+// A match consisting only of combining-mark bytes inside a base
+// cluster highlights that whole cluster — the whole é glyph, not a
+// zero-width sliver of it.
+func TestHighlightCombiningOnlyMatchExpandsToBaseCluster(t *testing.T) {
+	b := load(t, writeFile(t, "cafe\xcc\x81x\n"), stop(1, [2]int{4, 6}))
+	got := b.Lines()[0].Highlights
+	if len(got) != 1 || got[0].Start != 3 || got[0].End != 4 {
+		t.Fatalf("combining-only match: highlights = %v, want [{3 4}] covering the whole é", got)
+	}
+}
+
+// A cluster with no base or independent visible cell still gets a
+// visible fallback cell — the recorded Issue #43 ◌-plus-marks form —
+// so a match on it is never a zero-cell highlight.
+func TestHighlightStandaloneCombiningGetsFallbackCell(t *testing.T) {
+	b := load(t, writeFile(t, "\xcc\x81x\n"), stop(1, [2]int{0, 2}))
+	l := b.Lines()[0]
+	if l.Cells[0].Text != "◌́" {
+		t.Fatalf("standalone combining cell text = %q, want the ◌ fallback form", l.Cells[0].Text)
+	}
+	if len(l.Clusters) == 0 || l.Clusters[0].End != 1 {
+		t.Fatalf("clusters = %v, want the fallback occupying exactly one cell", l.Clusters)
+	}
+	if len(l.Highlights) != 1 || l.Highlights[0].Start != 0 || l.Highlights[0].End != 1 {
+		t.Fatalf("highlights = %v, want [{0 1}] — the fallback cell highlighted, never zero cells",
+			l.Highlights)
+	}
+}
+
+// A two-cell glyph is never split by a highlight boundary: a match
+// touching any of its bytes covers both cells together.
+func TestHighlightWideGlyphPairNeverSplit(t *testing.T) {
+	for _, span := range [][2]int{{2, 3}, {3, 4}, {4, 5}, {2, 5}} {
+		b := load(t, writeFile(t, "ab文cd\n"), stop(1, span))
+		got := b.Lines()[0].Highlights
+		if len(got) != 1 || got[0].Start != 2 || got[0].End != 4 {
+			t.Fatalf("span %v on a wide glyph: highlights = %v, want [{2 4}] — both cells together",
+				span, got)
+		}
+	}
+}
+
+// An emoji ZWJ sequence is one cluster under the shared policy: a
+// match inside its bytes highlights the whole two-cell cluster.
+func TestHighlightEmojiZWJCluster(t *testing.T) {
+	b := load(t, writeFile(t, "x👨‍👩‍👧y\n"), stop(1, [2]int{5, 10}))
+	l := b.Lines()[0]
+	if len(l.Highlights) != 1 || l.Highlights[0].Start != 1 || l.Highlights[0].End != 3 {
+		t.Fatalf("ZWJ partial match: highlights = %v, want [{1 3}] — the whole sequence", l.Highlights)
+	}
+}
+
 // Stops outside the loaded file's range contribute nothing.
 func TestStopBeyondFileIgnored(t *testing.T) {
 	b := load(t, writeFile(t, "one\ntwo\n"), stop(99, [2]int{0, 2}))

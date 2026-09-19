@@ -23,7 +23,8 @@ import (
 // its byte→cell map and grapheme-cluster segmentation (embedded Mapped),
 // the original Raw bytes — terminator included — retained for identity
 // and later validation, and the matched spans as display-cell ranges in
-// Highlights.
+// Highlights — each expanded outward to whole grapheme clusters, the
+// single span source Viewport and App consume (Issue #21).
 type Line struct {
 	safepresentation.Mapped
 	Number     int64
@@ -118,8 +119,29 @@ func makeLine(raw []byte, number int64, byLine map[int64][]searchindex.Span) Lin
 	l := Line{Mapped: safepresentation.MapContent(content), Number: number, Raw: raw}
 	for _, sp := range byLine[number] {
 		if lo, hi, ok := l.CellsCovering(sp.Start, sp.End); ok {
+			lo, hi = l.expandToClusters(lo, hi)
 			l.Highlights = append(l.Highlights, searchindex.Span{Start: lo, End: hi})
 		}
 	}
 	return l
+}
+
+// expandToClusters snaps a nonempty mapped cell range outward to
+// whole grapheme clusters: a span touching any cell of a cluster
+// covers that cluster entirely (Issue #21), so a partial-cluster
+// match — a combining-only match or a span starting or ending inside
+// a wide glyph — highlights the whole cluster and never splits it.
+// The recorded spans are the single highlight source Viewport and App
+// consume for painting, reveal targets, and hidden-content
+// indicators.
+func (l Line) expandToClusters(lo, hi int) (int, int) {
+	for _, cl := range l.Clusters {
+		if lo > cl.Start && lo < cl.End {
+			lo = cl.Start
+		}
+		if hi > cl.Start && hi < cl.End {
+			hi = cl.End
+		}
+	}
+	return lo, hi
 }
