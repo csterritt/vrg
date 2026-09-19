@@ -38,7 +38,9 @@ blocking/event-driven (`notify` channel, `ReadString`).
 
 The tagged build consumes exactly these names — the manifest the
 boundary test probes (fixture-owned fake-rg variables are excluded
-because vrg never reads them; Issue #50 renames them `FAKE_RG_*`):
+because vrg never reads them; since Issue #50 they carry `FAKE_RG_*`
+names — see
+[post-audit-verification.md](post-audit-verification.md)):
 
 | Variable | Seam |
 |---|---|

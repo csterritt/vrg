@@ -512,6 +512,18 @@ scripts on `PATH`:
 - `TestSpawnMissingBinary` — rg absent from `PATH` is a start error
   naming `rg`.
 
+`rg_unix_test.go` (same package; `//go:build unix`; Issue #50) covers
+the process-group boundary:
+
+- `TestTerminateKillsChildProcessGroup` — a fixture child that forks a
+  grandchild holding its inherited output pipes is killed end to end:
+  `Terminate` signals the child's whole process group, the bounded
+  `waitGone` probes observe both the child and the grandchild gone
+  (ESRCH), and `Wait` completes because no surviving descendant still
+  holds the pipes. The regression the Issue #50 smoke pass caught —
+  killing only the direct child left a `sleep` descendant holding the
+  pipes open, deadlocking the collection drain before `cmd.Wait()`.
+
 `cancel_test.go` (same package; Issue #4) covers the cancellation and
 cleanup contracts. `killChild` blocks `Wait` until `Terminate`, so a
 cleanup path that forgets to terminate hangs instead of passing;
@@ -1824,7 +1836,8 @@ that drive explicitly chosen binaries:
   the artifact bytes for each manifest name. The probed list derives
   only from the manifest — never from grepping `VRG_TEST_*`
   occurrences, since fixture-owned fake-rg variables are not vrg
-  behaviour (Issue #50 renames them `FAKE_RG_*`).
+  behaviour (since Issue #50 they carry `FAKE_RG_*` names — see
+  [post-audit-verification.md](post-audit-verification.md)).
 - `TestRunnerSeamInjectsRunReturnShapes` — builds the tagged binary
   and drives every `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR`
   tuple Issue #46 needs (valid/nil/invalid final model × nil/non-nil
@@ -1873,7 +1886,9 @@ the following `q`'s key record), `TestAckWaitFailsOnBoundedTimeout`
 reported the same way), and `TestNoFixedSleepsInPTYHelpers` — the
 AST-level static check forbidding `time.Sleep` outside the allow-listed
 bounded condition polls (`waitFor`/`waitForFrom`/`waitForFile`/
-`waitForAcks`/`awaitAck`/`waitFileGone`/`waitFileExists`), each of which
+`waitForAcks`/`awaitAck`/`waitFileGone`/`waitFileExists`; Issue #50 adds
+`waitProbeGone`, the ESRCH process/process-group disappearance poll),
+each of which
 must also name its `deadline`/`bound`.
 
 `search_test.go` (Issue #3) adds the PTY harness — `startVrgPTY`,
@@ -1889,7 +1904,8 @@ succeed — a failed current-file load now opens the modal error
 overlay, which a single `q` would only dismiss:
 
 - `TestChildArgvAndWorkdir` — a fake `rg` records its argv and `pwd`
-  through `VRG_TEST_ARGV`/`VRG_TEST_CWD`; the exact protected vector and
+  through `FAKE_RG_ARGV_FILE`/`FAKE_RG_CWD_FILE`; the exact protected
+  vector and
   the invocation working directory are asserted for no-flag, flag+root,
   and `--`-protected cases.
 - `TestStartFailureExit2` — rg-free `PATH` gives the sanitized
@@ -1901,7 +1917,7 @@ overlay, which a single `q` would only dismiss:
   check), the final content frame
   shows all 18 recorded matches as true-inverse spans (the `30;47`
   pair, since Issue #7; the current matched line's span also carries
-  `;4`), the `VRG_TEST_HANDSHAKE` file exists (the child finished
+  `;4`), the `FAKE_RG_HANDSHAKE_FILE` file exists (the child finished
   writing both pipes), and `q` exits 0.
 - `TestStderrCapturedWithoutBlocking` — stderr diagnostics with a
   well-formed stream and exit 0 surface as the Issue #9 warning overlay;
@@ -1941,6 +1957,13 @@ code, the recorded pid's absence, the `VRG_TEST_REAP` side-channel line
   `vrg: injected test failure ^[[7m` diagnostic appears exactly once and
   after the restoration sequence, child gone and reaped, termios
   restored.
+- `TestCancelTerminatesChildProcessGroup` (Issue #50) — the PTY
+  regression proof for the process-group kill: a fake rg whose shell
+  forks a pipe-holding `sleep` descendant (recording both its pid and
+  its process-group id through `FAKE_RG_PID_FILE`) is cancelled with
+  `q`; exit 130, and bounded `waitProbeGone` polls observe both the
+  pid and the whole process group gone (ESRCH) — the same external
+  probes `scripts/smoke.py` performs on the untagged binary.
 
 `outcome_test.go` (Issue #9) drives the outcome contract against the
 real binary on a pty: `runVrgWithKeys`/`runVrgKillChild` script

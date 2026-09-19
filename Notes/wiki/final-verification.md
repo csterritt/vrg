@@ -94,3 +94,10 @@ pre/post termios capture; bounded condition polls, no sleeps):
 None. Every gate and smoke outcome passed on the first clean pass, so
 no production repair was needed and no focused test was touched —
 AC4's fix-and-rerun path went unused.
+
+Issue #50 ran the post-audit counterpart of this pass over the composed
+post-audit implementation: a permanent ten-gate `scripts/verify.sh`, a
+canonical condition-driven `scripts/smoke.py` (this page's walkthrough
+harness stays frozen as Issue #35's record), and a real regression
+caught and repaired — see
+[post-audit-verification.md](post-audit-verification.md).

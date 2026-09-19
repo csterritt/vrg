@@ -366,6 +366,15 @@ Catalog of all wiki pages for the vrg project.
   per-occurrence correlation with stale-record impossibility, the
   bounded-timeout failures, the AST-level no-fixed-sleep static check,
   and every rewritten PTY helper's wait-on-handshake contract
+- [post-audit-verification.md](post-audit-verification.md) — Issue #50:
+  the post-audit closing pass — the permanent ten-gate
+  `scripts/verify.sh` (tagged build/vet variants, uncached and race
+  tests, repeated `cmd/vrg`, `go mod verify`, pinned govulncheck with
+  its cache/network prerequisite distinguished, `go mod tidy -diff`),
+  the `FAKE_RG_*` fixture-variable rename, the canonical
+  condition-driven `scripts/smoke.py` versus the frozen Issue #35
+  harness, the five smoke outcomes on the untagged binary, and the
+  process-group-termination regression repair under Issue #4's contract
 
 ## Catalogs
 

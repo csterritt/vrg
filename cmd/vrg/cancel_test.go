@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/term"
 	"github.com/creack/pty"
@@ -82,6 +84,24 @@ func assertDisplayRestored(t *testing.T, out string) {
 	}
 }
 
+// waitProbeGone polls a pid or negative-pgid probe until the kernel
+// reports ESRCH — the explicit condition for "process/group gone",
+// bounded so a surviving member fails the test rather than hanging it.
+func waitProbeGone(t *testing.T, probe int) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		err := syscall.Kill(probe, 0)
+		if errors.Is(err, syscall.ESRCH) {
+			return
+		}
+		if err != nil || time.Now().After(deadline) {
+			t.Fatalf("pid/group %d still exists: %v", probe, err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // assertChildGone proves the pid the fake rg recorded no longer exists.
 func assertChildGone(t *testing.T, pidFile string) {
 	t.Helper()
@@ -117,8 +137,8 @@ func reapEvidence(t *testing.T, path string) string {
 // its pid, then replaces itself with sleep so the test controls whether
 // it ever finishes — termination must come from vrg.
 const blockedRG = `
-: > "$VRG_TEST_RG_READY"
-echo $$ > "$VRG_TEST_RG_PID"
+: > "$FAKE_RG_READY_FILE"
+echo $$ > "$FAKE_RG_PID_FILE"
 exec sleep 600
 `
 
@@ -138,8 +158,8 @@ func TestCancelWhileSearchingKillsChild(t *testing.T) {
 			reapFile := filepath.Join(dir, "reap")
 			fakebin := fakeRG(t, blockedRG)
 			env := testEnv(fakebin,
-				"VRG_TEST_RG_READY="+ready,
-				"VRG_TEST_RG_PID="+pidFile,
+				"FAKE_RG_READY_FILE="+ready,
+				"FAKE_RG_PID_FILE="+pidFile,
 				"VRG_TEST_REAP="+reapFile,
 				ackEnv(t))
 
@@ -221,9 +241,9 @@ func TestOrdinaryQuitLeavesNoChild(t *testing.T) {
 	writeHappyFiles(t, dir)
 	pidFile := filepath.Join(dir, "pid")
 	reapFile := filepath.Join(dir, "reap")
-	fakebin := fakeRG(t, `echo $$ > "$VRG_TEST_RG_PID"`+happyStreamRG)
+	fakebin := fakeRG(t, `echo $$ > "$FAKE_RG_PID_FILE"`+happyStreamRG)
 	env := testEnv(fakebin,
-		"VRG_TEST_RG_PID="+pidFile,
+		"FAKE_RG_PID_FILE="+pidFile,
 		"VRG_TEST_REAP="+reapFile,
 		ackEnv(t))
 
@@ -261,8 +281,8 @@ func TestControlledFailureCleanupExit2(t *testing.T) {
 	trigger := filepath.Join(dir, "fail")
 	fakebin := fakeRG(t, blockedRG)
 	env := testEnv(fakebin,
-		"VRG_TEST_RG_READY="+ready,
-		"VRG_TEST_RG_PID="+pidFile,
+		"FAKE_RG_READY_FILE="+ready,
+		"FAKE_RG_PID_FILE="+pidFile,
 		"VRG_TEST_REAP="+reapFile,
 		"VRG_TEST_FAIL_TRIGGER="+trigger,
 		ackEnv(t))
@@ -298,4 +318,73 @@ func TestControlledFailureCleanupExit2(t *testing.T) {
 	s.assertTermiosRestored()
 	assertChildGone(t, pidFile)
 	reapEvidence(t, reapFile)
+}
+
+// Cancellation reaches the child's whole process group: a fake rg whose
+// shell leaves a spawned subprocess holding the output pipes — a
+// backgrounded sleep — cannot stall vrg's exit. The recorded pid heads
+// the child's group, so probing the group afterwards proves every
+// member is gone; killing only the direct child would orphan the pipe
+// holder and the run would hang instead of exiting 130.
+func TestCancelTerminatesChildProcessGroup(t *testing.T) {
+	dir := t.TempDir()
+	ready := filepath.Join(dir, "ready")
+	pidFile := filepath.Join(dir, "pid")
+	subFile := filepath.Join(dir, "subpid")
+	reapFile := filepath.Join(dir, "reap")
+	fakebin := fakeRG(t, `
+echo $$ > "$FAKE_RG_PID_FILE"
+sleep 600 &
+echo $! > "$FAKE_RG_SUBPID_FILE"
+: > "$FAKE_RG_READY_FILE"
+wait
+`)
+	env := testEnv(fakebin,
+		"FAKE_RG_PID_FILE="+pidFile,
+		"FAKE_RG_SUBPID_FILE="+subFile,
+		"FAKE_RG_READY_FILE="+ready,
+		"VRG_TEST_REAP="+reapFile,
+		ackEnv(t))
+
+	s := startVrgTermPTY(t, dir, env, "foo")
+	waitForFile(t, ready)
+	s.waitAck(t, "state:searching", 0)
+	s.send("q")
+	s.waitAck(t, keyEvent("q"), 0)
+	code := s.waitExit()
+	out := s.output()
+	if code != 130 {
+		t.Fatalf("exit = %d, want 130; output: %q", code, out)
+	}
+	assertDisplayRestored(t, out)
+	s.assertTermiosRestored()
+	assertChildGone(t, pidFile)
+	// The recorded pid headed the child's process group: pid and
+	// grandchild probes both return ESRCH only when every member is
+	// gone — the group kill, not merely the leader's death.
+	pidBytes, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatalf("fake rg pid record: %v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(pidBytes)))
+	if err != nil {
+		t.Fatalf("fake rg pid record %q: %v", pidBytes, err)
+	}
+	subBytes, err := os.ReadFile(subFile)
+	if err != nil {
+		t.Fatalf("fake rg grandchild record: %v", err)
+	}
+	sub, err := strconv.Atoi(strings.TrimSpace(string(subBytes)))
+	if err != nil {
+		t.Fatalf("fake rg grandchild record %q: %v", subBytes, err)
+	}
+	// A killed member can still appear as a zombie for a scheduling
+	// quantum after the group signal lands, so each probe is a bounded
+	// poll on the explicit ESRCH condition rather than a single check.
+	for _, probe := range []int{pid, sub, -pid} {
+		waitProbeGone(t, probe)
+	}
+	if ev := reapEvidence(t, reapFile); !strings.Contains(ev, "code=-1") {
+		t.Fatalf("reap evidence = %q, want the killed child's wait status", ev)
+	}
 }

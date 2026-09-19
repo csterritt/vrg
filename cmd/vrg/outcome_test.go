@@ -152,7 +152,7 @@ cat <<'EOF'
 {"type":"summary","data":{"stats":{}}}
 EOF
 printf 'boom\n' >&2
-[ -n "$VRG_TEST_HANDSHAKE" ] && : > "$VRG_TEST_HANDSHAKE"
+[ -n "$FAKE_RG_HANDSHAKE_FILE" ] && : > "$FAKE_RG_HANDSHAKE_FILE"
 exit 3
 `
 
@@ -162,8 +162,8 @@ exit 3
 const killedRG = `
 printf '%s\n' '{"type":"begin","data":{"path":{"text":"./f"}}}'
 printf '%s\n' '{"type":"match","data":{"path":{"text":"./f"},"lines":{"text":"alpha line 2\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}'
-echo $$ > "$VRG_TEST_RG_PID"
-: > "$VRG_TEST_RG_READY"
+echo $$ > "$FAKE_RG_PID_FILE"
+: > "$FAKE_RG_READY_FILE"
 exec sleep 600
 `
 
@@ -183,7 +183,7 @@ func TestFatalExitWithResultsShowsOverlay(t *testing.T) {
 	writeOutcomeFile(t, dir)
 	handshake := filepath.Join(dir, "done")
 	fakebin := fakeRG(t, fatalExitRG)
-	env := testEnv(fakebin, "VRG_TEST_HANDSHAKE="+handshake)
+	env := testEnv(fakebin, "FAKE_RG_HANDSHAKE_FILE="+handshake)
 
 	out, code := runVrgWithKeys(t, dir, env, []keyStep{
 		{expect: "boom", ack: "overlay:open"},                            // overlay opens with the stderr diagnostic
@@ -240,7 +240,7 @@ func TestSignalDeathNamesSignal(t *testing.T) {
 	pidFile := filepath.Join(dir, "rg.pid")
 	ready := filepath.Join(dir, "rg.ready")
 	fakebin := fakeRG(t, killedRG)
-	env := testEnv(fakebin, "VRG_TEST_RG_PID="+pidFile, "VRG_TEST_RG_READY="+ready)
+	env := testEnv(fakebin, "FAKE_RG_PID_FILE="+pidFile, "FAKE_RG_READY_FILE="+ready)
 
 	out, code := runVrgKillChild(t, dir, env, pidFile, ready, []keyStep{
 		{expect: "killed", ack: "overlay:open"},
@@ -295,9 +295,9 @@ done
 printf '%s\n' '{"type":"end","data":{"path":{"text":"./f"},"binary_offset":null,"stats":{}}}'
 printf '%s\n' '{"type":"summary","data":{"stats":{}}}'
 printf 'STDERR-TAIL\n' >&2
-[ -n "$VRG_TEST_HANDSHAKE" ] && : > "$VRG_TEST_HANDSHAKE"
+[ -n "$FAKE_RG_HANDSHAKE_FILE" ] && : > "$FAKE_RG_HANDSHAKE_FILE"
 `)
-	env := testEnv(fakebin, "VRG_TEST_HANDSHAKE="+handshake, ackEnv(t))
+	env := testEnv(fakebin, "FAKE_RG_HANDSHAKE_FILE="+handshake, ackEnv(t))
 
 	s := startVrgPTY(t, dir, env, "foo")
 	s.waitAck(t, "overlay:open", 0)

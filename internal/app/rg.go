@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"sync"
 )
@@ -63,13 +65,28 @@ type proc struct {
 }
 
 // spawn starts rg with args (the protected vector, excluding the program
-// name) running from dir — the invocation working directory. Both output
-// pipes drain concurrently from the first spawn for the child's whole
-// lifetime; drainage reads to EOF before Wait so a blocked pipe can never
-// stall the child, and child termination ends drainage promptly.
+// name) running from dir — the invocation working directory — heading
+// its own process group so Terminate can reach every member: a child
+// that leaves a subprocess holding the output pipes open would
+// otherwise stall drainage — and Wait — forever after the direct
+// process died. Both output pipes drain concurrently from the first
+// spawn for the child's whole lifetime; drainage reads to EOF before
+// Wait so a blocked pipe can never stall the child, and child
+// termination ends drainage promptly.
 func spawn(ctx context.Context, args []string, dir string) (Child, error) {
 	cmd := exec.CommandContext(ctx, "rg", args...)
 	cmd.Dir = dir
+	cmd.SysProcAttr = procGroupAttr()
+	// Context cancellation takes the same group termination as
+	// Terminate; an already-finished child maps to ErrProcessDone so
+	// Wait keeps the child's own result rather than injecting ctx.Err.
+	cmd.Cancel = func() error {
+		if err := killProcGroup(cmd.Process); errors.Is(err, errProcGroupGone) {
+			return os.ErrProcessDone
+		} else {
+			return err
+		}
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
@@ -181,10 +198,18 @@ func (p *proc) Wait() Result {
 	return p.res
 }
 
-// Terminate kills the child so collection and Wait end promptly; it is a
-// no-op once the child has exited.
+// Terminate kills the child's whole process group — the spawned process
+// plus any subprocess it left running — so collection's pipe drains
+// reach EOF and Wait ends promptly; it is a no-op once the child has
+// exited and been reaped, when the group id may already belong to an
+// unrelated group.
 func (p *proc) Terminate() {
+	select {
+	case <-p.done:
+		return
+	default:
+	}
 	if p.cmd.Process != nil {
-		_ = p.cmd.Process.Kill()
+		_ = killProcGroup(p.cmd.Process)
 	}
 }

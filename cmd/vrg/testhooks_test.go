@@ -11,11 +11,13 @@ import (
 
 // hookManifest is the explicit list of environment-variable names a
 // vrg_testhooks-tagged binary may consume — the only VRG_TEST_* names
-// that are vrg behaviour. Fixture-owned fake-rg variables
-// (VRG_TEST_ARGV, VRG_TEST_CWD, VRG_TEST_HANDSHAKE, VRG_TEST_RG_PID,
-// VRG_TEST_RG_READY) are deliberately absent: vrg never reads them, and
-// Issue #50 renames them FAKE_RG_*. Issues #46 and #48 extend this list
-// through the same mechanism rather than adding production hooks.
+// that are vrg behaviour. Fixture-owned fake-rg variables are
+// deliberately absent — vrg never reads them, and Issue #50 renamed
+// them off the VRG_TEST_ prefix: the fake-rg shell fixtures and the
+// smoke harness consume FAKE_RG_ARGV_FILE, FAKE_RG_CWD_FILE,
+// FAKE_RG_HANDSHAKE_FILE, FAKE_RG_PID_FILE, and FAKE_RG_READY_FILE
+// instead. Issues #46 and #48 extend this list through the same
+// mechanism rather than adding production hooks.
 var hookManifest = []string{
 	"VRG_TEST_REAP",
 	"VRG_TEST_GATE",

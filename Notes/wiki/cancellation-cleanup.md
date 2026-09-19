@@ -34,10 +34,21 @@ Every controlled exit routes through `model.quitCmd` in
 the reaped status through the once-wrapped `reap` option, then return
 `tea.QuitMsg` so the program shuts down and restores the terminal.
 `Child` (`internal/app/rg.go`) gained `Terminate()` (a best-effort
-`Process.Kill`, a no-op once exited) and an idempotent `Wait` — the
+kill, a no-op once exited) and an idempotent `Wait` — the
 collection command and the cleanup path may both call it. Terminating
 the child closes its pipes, so Issue #3's dual-pipe drainage ends
 promptly and `cmd.Wait()` reaps the process.
+
+Since Issue #50 termination is process-group scoped: `spawn` starts the
+child as a process-group leader (`rg_unix.go`/`rg_other.go` hold the
+platform split) and `Terminate` signals the whole group. The closing
+smoke pass caught the regression this repairs — a descendant that
+inherited the child's output pipes (a fake rg whose shell `sleep`s
+without `exec`) survived a direct-PID kill and held the pipes open, so
+collection's drain-before-`Wait` deadlock-prone order hung the
+cancellation. Killing the group guarantees no surviving descendant
+holds the pipes; see
+[post-audit-verification.md](post-audit-verification.md).
 
 `app.Run` additionally calls `reapChild` unconditionally after
 `program.Run` returns. That safety net covers the exits that bypass the
@@ -117,6 +128,9 @@ reuse this harness.
 
 See [unit-tests.md](unit-tests.md): `internal/app/cancel_test.go` covers
 the model-level cancellation, discard, and failure contracts plus the
-`Run` cleanup net; `cmd/vrg/cancel_test.go` covers the PTY contracts for
+`Run` cleanup net; `internal/app/rg_unix_test.go` covers the
+process-group `Terminate` directly; `cmd/vrg/cancel_test.go` covers the
+PTY contracts for
 `q`/`ctrl+c` cancellation, gate-held cancellation, ordinary-exit
-reaping, and the injected controlled failure.
+reaping, the injected controlled failure, and Issue #50's end-to-end
+process-group termination.

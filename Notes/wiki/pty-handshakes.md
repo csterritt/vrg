@@ -99,7 +99,10 @@ assertions after the acknowledgement proves the transition. The static
 check `TestNoFixedSleepsInPTYHelpers` parses every `cmd/vrg/*.go` file's
 AST and forbids `time.Sleep` outside the allow-listed bounded condition
 polls — `waitFor`, `waitForFrom`, `waitForFile`, `waitForAcks`,
-`awaitAck`, and the tagged seam's `waitFileGone`/`waitFileExists`
+`awaitAck`, Issue #50's `waitProbeGone` (the ESRCH
+process/process-group disappearance poll backing
+`TestCancelTerminatesChildProcessGroup`), and the tagged seam's
+`waitFileGone`/`waitFileExists`
 watchers (whose unbounded holds are the gate mechanism itself, not
 test-side synchronization) — each of which re-checks an explicit
 condition every 10 ms against a deadline; a permitted poll in test code

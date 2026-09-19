@@ -131,6 +131,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   Issue #11 added `Child.Diags`: `drainStderr` line-splits stderr into
   a mutex-guarded pending queue (drainage never blocks on a consumer)
   and `feedDiags` forwards it onto the channel in order, closed at EOF.
+  Issue #50 made termination process-group scoped: `spawn` sets the
+  child a process-group leader via `procGroupAttr()` and `Terminate`/
+  the context-cancel path call `killProcGroup()`
+  (`rg_unix.go` on unix — `SysProcAttr.Setpgid` plus a negative-pid
+  SIGKILL; `rg_other.go` falls back to the direct `Process.Kill`
+  elsewhere — keeping the package portable), so a
+  descendant inheriting the output pipes cannot survive the kill and
+  deadlock the drain-before-`Wait` collection. See
+  [cancellation-cleanup.md](cancellation-cleanup.md) and
+  [post-audit-verification.md](post-audit-verification.md).
 - `internal/app/app.go` — the Bubble Tea model and `app.Run`: the
   "Searching…" state covering collection and post-exit index
   preparation, the `WithGate`/`WithCollectAck`/`WithDiagAck` test

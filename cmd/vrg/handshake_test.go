@@ -298,8 +298,8 @@ func TestAckWaitFailsOnBoundedTimeout(t *testing.T) {
 	pidFile := filepath.Join(dir, "pid")
 	fakebin := fakeRG(t, blockedRG)
 	env := testEnv(fakebin,
-		"VRG_TEST_RG_READY="+ready,
-		"VRG_TEST_RG_PID="+pidFile,
+		"FAKE_RG_READY_FILE="+ready,
+		"FAKE_RG_PID_FILE="+pidFile,
 		ackEnv(t))
 
 	s := startVrgPTY(t, dir, env, "foo")
@@ -344,6 +344,7 @@ func TestNoFixedSleepsInPTYHelpers(t *testing.T) {
 		"awaitAck":       true,
 		"waitFileGone":   true,
 		"waitFileExists": true,
+		"waitProbeGone":  true,
 	}
 	entries, err := os.ReadDir(".")
 	if err != nil {

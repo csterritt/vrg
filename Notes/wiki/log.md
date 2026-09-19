@@ -1898,3 +1898,55 @@ this already-green `go mod tidy -diff` into the permanent gate. Sources:
 `Notes/issues/049-tidy-dependency-manifests.md`,
 `Notes/tasks/049-tidy-dependency-manifests.md`,
 `Notes/PRD-vrg.md` (Further Notes), `go.mod`, `go.sum`.
+
+## [2026-09-18] ingest | Issue #50 post-audit re-verification — verify.sh, FAKE_RG rename, process-group regression repair
+
+Ingested the completed Issue #50 closing verification pass
+([issue](../issues/050-post-audit-reverification.md),
+[task](../tasks/050-post-audit-reverification.md)) — the post-audit
+counterpart of the Issue #35 final-integration pass over the composed
+post-audit implementation (Issues #36–#49). `scripts/verify.sh` is the
+permanent ten-gate ordered entry point: `go build`/`go vet ./...`, the
+`vrg_testhooks`-tagged `go build`/`go vet` variants on `cmd/vrg`,
+uncached `go test ./... -count=1`, `CGO_ENABLED=1 go test -race ./...
+-count=1`, `go test ./cmd/vrg -count=3`, `go mod verify`, pinned
+`govulncheck@v1.5.0` (network/cache prerequisite failures reported as
+environmental, exit 75), and `go mod tidy -diff` adopting Issue #49's
+tidy proof. Fixture-owned fake-rg variables renamed `VRG_TEST_*` →
+`FAKE_RG_*` (`FAKE_RG_HANDSHAKE_FILE`/`FAKE_RG_ARGV_FILE`/
+`FAKE_RG_CWD_FILE`/`FAKE_RG_PID_FILE`/`FAKE_RG_READY_FILE`) across
+`internal/app/rg_test.go` and the `cmd/vrg` fixtures so the `VRG_TEST_`
+prefix means only vrg-consumed tagged seams. `scripts/smoke.py` is the
+canonical condition-driven smoke harness — observed-marker-gated key
+sends, event-driven drains, an AST-level no-`time.sleep` assertion, and
+external pid/process-group/PTY-EOF/termios observations on
+cancellation — distinct from the frozen Issue #35 record at
+`Notes/walkthroughs/035-03/code-walkthrough/smoke.py`. The closing pass
+caught one real regression, repaired against the owning Issue #4
+contract: `Child.Terminate` killed only the direct `rg` pid, and a
+pipe-inheriting `sleep` descendant deadlocked the drain-before-`Wait`
+collection; `spawn` now starts the child a process-group leader and
+`Terminate`/the context-cancel path kill the group
+(`internal/app/rg.go`, `rg_unix.go`, `rg_other.go`), covered by
+`TestTerminateKillsChildProcessGroup` and
+`TestCancelTerminatesChildProcessGroup` (`waitProbeGone` joins the
+no-sleep allowlist). All gates green; the five smoke outcomes pass on
+the untagged binary (browse 0, no-results 1, fatal 2 via `q`/`Esc` with
+composed integrity+record-loss diagnostics, cancel 130 via `q`/`ctrl+c`
+with group/EOF/termios observed, help-only 0 with no child). New page
+[post-audit-verification](../wiki/post-audit-verification.md); updated
+[final-verification](../wiki/final-verification.md),
+[cancellation-cleanup](../wiki/cancellation-cleanup.md),
+[test-hook-topology](../wiki/test-hook-topology.md),
+[pty-handshakes](../wiki/pty-handshakes.md),
+[source-code](../wiki/source-code.md),
+[unit-tests](../wiki/unit-tests.md), and the index. Sources:
+`Notes/issues/050-post-audit-reverification.md`,
+`Notes/tasks/050-post-audit-reverification.md`,
+`Notes/PRD-vrg.md` (Testing Decisions), `scripts/verify.sh`,
+`scripts/smoke.py`, `internal/app/rg.go`, `internal/app/rg_unix.go`,
+`internal/app/rg_other.go`, `internal/app/rg_unix_test.go`,
+`cmd/vrg/cancel_test.go`, `cmd/vrg/handshake_test.go`,
+`cmd/vrg/testhooks_test.go`. The audit artifact
+`Notes/critiques/final-audit-vrg.md` referenced by the issue is absent
+from this checkout; the issue's quoted overall assessment is used.

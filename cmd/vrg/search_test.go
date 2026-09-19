@@ -272,10 +272,10 @@ func TestChildArgvAndWorkdir(t *testing.T) {
 			argvFile := filepath.Join(dir, "argv")
 			cwdFile := filepath.Join(dir, "cwd")
 			fakebin := fakeRG(t, `
-[ -n "$VRG_TEST_ARGV" ] && { : > "$VRG_TEST_ARGV"; for a in "$@"; do printf '%s\n' "$a" >> "$VRG_TEST_ARGV"; done; }
-[ -n "$VRG_TEST_CWD" ] && pwd -P > "$VRG_TEST_CWD"
+[ -n "$FAKE_RG_ARGV_FILE" ] && { : > "$FAKE_RG_ARGV_FILE"; for a in "$@"; do printf '%s\n' "$a" >> "$FAKE_RG_ARGV_FILE"; done; }
+[ -n "$FAKE_RG_CWD_FILE" ] && pwd -P > "$FAKE_RG_CWD_FILE"
 `+happyStreamRG)
-			env := testEnv(fakebin, "VRG_TEST_ARGV="+argvFile, "VRG_TEST_CWD="+cwdFile)
+			env := testEnv(fakebin, "FAKE_RG_ARGV_FILE="+argvFile, "FAKE_RG_CWD_FILE="+cwdFile)
 
 			out, code := runVrgWithQuit(t, dir, env, tc.args...)
 			if code != 0 {
@@ -347,9 +347,9 @@ while [ $i -lt 18 ]; do
 done
 printf '%s\n' '{"type":"end","data":{"path":{"text":"./f"},"binary_offset":null,"stats":{}}}'
 printf '%s\n' '{"type":"summary","data":{"stats":{}}}'
-[ -n "$VRG_TEST_HANDSHAKE" ] && : > "$VRG_TEST_HANDSHAKE"
+[ -n "$FAKE_RG_HANDSHAKE_FILE" ] && : > "$FAKE_RG_HANDSHAKE_FILE"
 `)
-	env := testEnv(fakebin, "VRG_TEST_HANDSHAKE="+handshake, ackEnv(t))
+	env := testEnv(fakebin, "FAKE_RG_HANDSHAKE_FILE="+handshake, ackEnv(t))
 
 	s := startVrgPTY(t, dir, env, "foo")
 	// The captured stderr opens the warning overlay over the browse

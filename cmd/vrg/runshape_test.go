@@ -19,7 +19,7 @@ const invalidFinalModelDiag = "vrg: program ended without a valid final model"
 // still runs, so the replay proves collection order, not just presence.
 const warnTwiceThenBlockRG = `
 printf 'warn one\nwarn two\n' >&2
-echo $$ > "$VRG_TEST_RG_PID"
+echo $$ > "$FAKE_RG_PID_FILE"
 exec sleep 600
 `
 
@@ -68,7 +68,7 @@ func TestRunReturnShapesShutdownReplay(t *testing.T) {
 			reapFile := filepath.Join(dir, "reap")
 			fakebin := fakeRG(t, warnTwiceThenBlockRG)
 			env := testEnv(fakebin,
-				"VRG_TEST_RG_PID="+pidFile,
+				"FAKE_RG_PID_FILE="+pidFile,
 				"VRG_TEST_DIAGNOSTIC_TRIGGER="+ack,
 				"VRG_TEST_REAP="+reapFile,
 				"VRG_TEST_RUN_FINAL_MODEL="+tc.finalModel,
