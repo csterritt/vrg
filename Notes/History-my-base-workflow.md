@@ -70,3 +70,14 @@ Usage
  Input tokens: 62856 tokens
  Output tokens: 13245 tokens
  Cached input tokens: 1857063 tokens
+
+----
+Task 007-theme-colour-toggle-and-match-styles.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 67 messages
+ Input tokens: 316237 tokens
+ Output tokens: 65597 tokens
+ Cached input tokens: 8646125 tokens

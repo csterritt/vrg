@@ -80,7 +80,8 @@ horizontal state arrive in Issues #12–21.
 `Inverse` for match runs, `Underline` for the current list entry) and
 `Plain()`, the no-style composition path where every decorator is the
 identity — the sink-safety tests' way to prove no escape byte may
-legitimately appear. The `c` toggle and full style set are Issue #7's.
+legitimately appear. [Issue #7](theme.md) has since replaced the two
+decorators with the full style set and the `c` toggle.
 
 ## App browse composition (`internal/app`)
 

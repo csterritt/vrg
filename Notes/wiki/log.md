@@ -182,3 +182,32 @@ index. Sources:
 `internal/safepresentation/cellwidth.go`,
 `internal/safepresentation/diagnostic_test.go`,
 `internal/safepresentation/sinktest/sinktest.go`.
+
+## [2026-09-16] ingest | Issue #7 theme: colour toggle, inverse matches, underlines
+
+Ingested the completed Issue #7 implementation: `internal/theme` is now
+the full style set from Module Design — `Dark()`/`Light()` schemes
+(white-on-black `37;40` initially, black-on-white `30;47`), the pure
+`Toggled()` flip behind the App's base-state `c` keypress with no
+persistence, and the decorators `Base` (the frame's outermost wrap so
+padding cells carry the background), `Gutter`, `FilenameRule`,
+`FileList`, `Match` (the true inverse — the scheme's pair swapped by
+SGR 3x↔4x, not SGR 7 reverse video), `CurrentMatch` (inverse + `;4`,
+the current matched line being the current file's first stop until
+Issue #13), `Indicator` (the inverse style), `CurrentFile` (base +
+underline), and `Overlay` (rows framed in a plain single-line border,
+all base colours, still drawn on the no-style path). Every styled run
+closes by re-asserting base and clearing underline. `Plain()` and the
+sink-safety contract are unchanged. `internal/app` routes the whole
+`View()` through `Base` and each browse region through its style.
+Created [theme](theme.md); updated [browse-tracer](browse-tracer.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md),
+[project-overview](project-overview.md), and the index. Sources:
+`Notes/issues/007-theme-colour-toggle-and-match-styles.md`,
+`Notes/tasks/007-theme-colour-toggle-and-match-styles.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence; Module
+Design → Theme), `internal/theme/theme.go`,
+`internal/theme/theme_test.go`, `internal/theme/doc.go`,
+`internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/browse_test.go`, `internal/app/cancel_test.go`,
+`cmd/vrg/search_test.go`.

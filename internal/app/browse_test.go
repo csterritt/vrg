@@ -130,8 +130,10 @@ func TestLoadCompletionRendersContent(t *testing.T) {
 	if !strings.Contains(v, "func ") || !strings.Contains(v, "package a") {
 		t.Fatalf("view = %q, want the loaded content rows", v)
 	}
-	if !strings.Contains(v, "\x1b[7malpha\x1b[27m") {
-		t.Fatalf("view = %q, want the match in inverse video", v)
+	// Line 2 is the first stop — the current matched line — so its
+	// match renders in the true inverse plus underline.
+	if !strings.Contains(v, "\x1b[30;47;4malpha\x1b[37;40;24m") {
+		t.Fatalf("view = %q, want the match in inverse video and underlined", v)
 	}
 	// The filename rule embeds the escaped current path in a horizontal
 	// rule above the content.
@@ -141,7 +143,7 @@ func TestLoadCompletionRendersContent(t *testing.T) {
 	}
 	// Right-justified gutter followed by two spaces: line 2 shows as
 	// "2  " ahead of its text.
-	if !strings.Contains(v, "2  func \x1b[7malpha") {
+	if !strings.Contains(v, "\x1b[37;40m2  \x1b[37;40;24mfunc \x1b[30;47;4malpha") {
 		t.Fatalf("view = %q, want gutter %q then text before the highlighted match", v, "2  func ")
 	}
 }
@@ -153,11 +155,11 @@ func TestCurrentFileListEntryUnderlined(t *testing.T) {
 	startBrowse(t, m, idx)
 
 	v := viewText(m)
-	underlined := "\x1b[4m" + escapedPath(idx.Files[0]) + "\x1b[24m"
+	underlined := "\x1b[37;40;4m" + escapedPath(idx.Files[0]) + "\x1b[37;40;24m"
 	if !strings.Contains(v, underlined) {
 		t.Fatalf("view = %q, want the current entry underlined as %q", v, underlined)
 	}
-	if n := strings.Count(v, "\x1b[4m"); n != 1 {
+	if n := strings.Count(v, ";4m"); n != 1 {
 		t.Fatalf("view = %q, want exactly one underlined list entry, got %d", v, n)
 	}
 }
@@ -177,11 +179,13 @@ func TestGutterRightJustified(t *testing.T) {
 	finishLoad(t, m, cmd)
 
 	v := viewText(m)
-	if !strings.Contains(v, " 9  line 9") {
+	if !strings.Contains(v, "\x1b[37;40m 9  \x1b[37;40;24mline 9") {
 		t.Fatalf("view = %q, want %q (padded to the 2-digit gutter)", v, " 9  line 9")
 	}
-	if !strings.Contains(v, "10  line \x1b[7m10\x1b[27m") {
-		t.Fatalf("view = %q, want %q", v, "10  line 10 with the match in inverse")
+	// Line 10 is the file's only stop — the current matched line — so
+	// its match is inverse and underlined.
+	if !strings.Contains(v, "\x1b[37;40m10  \x1b[37;40;24mline \x1b[30;47;4m10\x1b[37;40;24m") {
+		t.Fatalf("view = %q, want %q", v, "10  line 10 with the match inverse and underlined")
 	}
 }
 
@@ -283,6 +287,39 @@ func TestQOnBrowseExitsZero(t *testing.T) {
 		if m.status != 0 {
 			t.Fatalf("status = %d, want 0", m.status)
 		}
+	}
+}
+
+// c toggles the composed view's styling between the schemes: the
+// session opens dark (white on black), c flips to light (black on
+// white) — matches stay inverse and the current matched line's match
+// stays underlined, now in the other scheme's colours — and a second c
+// returns to the dark frame. Nothing persists beyond the model's theme.
+func TestCTogglesColourScheme(t *testing.T) {
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	cmd := startBrowse(t, m, browseIndex(t, browseFiles))
+	finishLoad(t, m, cmd)
+
+	dark := viewText(m)
+	if !strings.HasPrefix(dark, "\x1b[37;40m") {
+		t.Fatalf("initial view = %q, want the dark scheme's white-on-black base", dark)
+	}
+	if !strings.Contains(dark, "\x1b[30;47;4malpha") {
+		t.Fatalf("dark view = %q, want the current-line match in inverse black-on-white plus underline", dark)
+	}
+
+	m.Update(keyC)
+	light := viewText(m)
+	if !strings.HasPrefix(light, "\x1b[30;47m") {
+		t.Fatalf("view after c = %q, want the light scheme's black-on-white base", light)
+	}
+	if !strings.Contains(light, "\x1b[37;40;4malpha") {
+		t.Fatalf("light view = %q, want the current-line match in inverse white-on-black plus underline", light)
+	}
+
+	m.Update(keyC)
+	if got := viewText(m); got != dark {
+		t.Fatalf("view after second c = %q, want the dark frame restored", got)
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 
 var (
 	keyQ     = tea.KeyPressMsg{Text: "q", Code: 'q'}
+	keyC     = tea.KeyPressMsg{Text: "c", Code: 'c'}
 	keyCtrlC = tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
 	keyEsc   = tea.KeyPressMsg{Code: tea.KeyEscape}
 )

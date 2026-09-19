@@ -297,13 +297,14 @@ printf '%s\n' '{"type":"summary","data":{"stats":{}}}'
 	}
 	// The final content frame begins at the last line-1 gutter; every
 	// recorded match survives as an inverse-video span there. The
-	// renderer normalizes the reset sequence, so count the inverse-video
-	// marker before each matched f rather than a full styled run.
+	// renderer normalizes the reset sequence, so count the inverse
+	// colour pair before each matched f rather than a full styled run —
+	// the current matched line's span additionally carries ;4.
 	last := strings.LastIndex(out, " 1  x ")
 	if last < 0 {
 		t.Fatalf("content frame missing: %q", out)
 	}
-	if n := strings.Count(out[last:], "\x1b[7mf"); n != 18 {
+	if n := strings.Count(out[last:], "30;47"); n != 18 {
 		t.Fatalf("inverse-video matches = %d, want 18 — records lost", n)
 	}
 	if _, err := os.Stat(handshake); err != nil {

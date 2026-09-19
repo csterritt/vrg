@@ -88,9 +88,15 @@ func (m *model) browseView() string {
 
 	var buf *filebuffer.Buffer
 	failed := false
+	curLine := int64(-1)
 	if len(files) > 0 {
 		key := string(files[m.cur].Path)
 		buf, failed = m.bufs[key], m.failed[key]
+		// Until Issue #13's navigation, the current matched line is the
+		// current file's first stop.
+		if stops := files[m.cur].Stops; len(stops) > 0 {
+			curLine = stops[0].Number
+		}
 	}
 
 	var sb strings.Builder
@@ -101,7 +107,7 @@ func (m *model) browseView() string {
 			sb.WriteString(m.listCell(escaped, listTop+r-1, listW))
 		}
 		if panelW > 0 {
-			sb.WriteString(m.contentCell(r-1, panelW, h-1, buf, failed))
+			sb.WriteString(m.contentCell(r-1, panelW, h-1, buf, failed, curLine))
 		}
 	}
 	return sb.String()
@@ -114,9 +120,9 @@ func (m *model) listCell(escaped []string, i, width int) string {
 		return strings.Repeat(" ", width)
 	}
 	clipped := clipCells(escaped[i], width)
-	entry := clipped
+	entry := m.theme.FileList(clipped)
 	if i == m.cur {
-		entry = m.theme.Underline(entry)
+		entry = m.theme.CurrentFile(clipped)
 	}
 	return entry + strings.Repeat(" ", width-safepresentation.CellWidth(clipped))
 }
@@ -124,7 +130,7 @@ func (m *model) listCell(escaped []string, i, width int) string {
 // contentCell renders file-panel content row cr padded to width cells:
 // gutter plus text for the buffer's visible lines, or the placeholder
 // while no buffer is available.
-func (m *model) contentCell(cr, width, avail int, buf *filebuffer.Buffer, failed bool) string {
+func (m *model) contentCell(cr, width, avail int, buf *filebuffer.Buffer, failed bool, curLine int64) string {
 	if buf == nil {
 		placeholder := "Loading…"
 		if failed {
@@ -142,9 +148,9 @@ func (m *model) contentCell(cr, width, avail int, buf *filebuffer.Buffer, failed
 	l := lines[cr]
 	gutter := fmt.Sprintf("%*d  ", buf.GutterWidth()-2, l.Number)
 	if len(gutter) > width {
-		return gutter[:width]
+		return m.theme.Gutter(gutter[:width])
 	}
-	return gutter + m.contentText(l, width-len(gutter))
+	return m.theme.Gutter(gutter) + m.contentText(l, width-len(gutter), l.Number == curLine)
 }
 
 // filenameRule renders the current file's escaped path embedded in a
@@ -160,15 +166,16 @@ func (m *model) filenameRule(width int) string {
 	}
 	clipped := clipCells(name, width-3)
 	rule := "─ " + clipped + " "
-	return rule + strings.Repeat("─", width-3-safepresentation.CellWidth(clipped))
+	return m.theme.FilenameRule(rule + strings.Repeat("─", width-3-safepresentation.CellWidth(clipped)))
 }
 
 // contentText renders one line's escaped cells into at most textW
 // terminal cells, wrapping each maximal run of highlighted cells in the
-// inverse-video style and padding the rest with blanks. Clipping never
-// splits a grapheme's cells: a cell that would cross the boundary ends
-// the row.
-func (m *model) contentText(l filebuffer.Line, textW int) string {
+// match style — the true inverse, additionally underlined when the line
+// is the current matched line — and padding the rest with blanks.
+// Clipping never splits a grapheme's cells: a cell that would cross the
+// boundary ends the row.
+func (m *model) contentText(l filebuffer.Line, textW int, cur bool) string {
 	var sb strings.Builder
 	var run strings.Builder
 	runHL := false
@@ -177,7 +184,11 @@ func (m *model) contentText(l filebuffer.Line, textW int) string {
 			return
 		}
 		if runHL {
-			sb.WriteString(m.theme.Inverse(run.String()))
+			if cur {
+				sb.WriteString(m.theme.CurrentMatch(run.String()))
+			} else {
+				sb.WriteString(m.theme.Match(run.String()))
+			}
 		} else {
 			sb.WriteString(run.String())
 		}

@@ -59,16 +59,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   Issue #4 surface: `ctrl+c`/`q` cancellation to 130, the
   `quitCmd`/`reapChild` cleanup boundary, `WithFailFunc`/
   `WithReapReport`, the `quitting` discard of late completions,
-  alt-screen views, `ErrInterrupted` → 130, and `writeFailureDiag` (the
-  single post-restoration stderr writer) → exit 2. See
-  [cancellation-cleanup.md](cancellation-cleanup.md).
+  alt-screen views, `ErrInterrupted` → 130, `writeFailureDiag` (the
+  single post-restoration stderr writer) → exit 2, and the Issue #7
+  `c` key toggling `m.theme` between the dark and light schemes. See
+  [cancellation-cleanup.md](cancellation-cleanup.md) and
+  [theme.md](theme.md).
 - `internal/app/browse.go` — the Issue #5 browse view: async
   `filebuffer.Load` commands gated by `WithLoadGate`, the
   `loading`/`bufs`/`failed` caches keyed by raw path, `fileLoadedMsg`,
   the full-width filename rule, the fixed-width file list with the
   current entry underlined, the right-justified gutter, inverse-video
-  match runs, and the "Loading…"/"(unreadable)" placeholders. See
-  [browse-tracer.md](browse-tracer.md).
+  match runs, and the "Loading…"/"(unreadable)" placeholders — all
+  styled through `internal/theme` since Issue #7 (base-wrapped frame,
+  true-inverse matches, underlined current match and current file). See
+  [browse-tracer.md](browse-tracer.md) and [theme.md](theme.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
@@ -81,9 +85,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 - `internal/viewport/viewport.go` — the minimal top-of-file vertical
   window seam (`Viewport`, `Visible`, `Top`); scrolling and reveal are
   later issues.
-- `internal/theme/theme.go` — the initial `Dark()` scheme (`Inverse`,
-  `Underline`) and `Plain()`, the no-style composition path for
-  sink-safety tests.
+- `internal/theme/theme.go` — the active scheme's style set: `Dark()`
+  (white on black, initially active), `Light()` (black on white), the
+  pure `Toggled` flip behind the `c` key, `Plain()` (the no-style
+  composition path for sink-safety tests), and the decorators `Base`,
+  `Gutter`, `Match` (true-inverse colours), `CurrentMatch` (inverse +
+  underline), `Indicator`, `FilenameRule`, `FileList`, `CurrentFile`
+  (base + underline), and `Overlay` (base colours inside a plain
+  single-line border). See [theme.md](theme.md).
 - `internal/safepresentation/safepresentation.go` — `EscapePath`,
   `MapContent`, `Mapped`/`Cell`/`CellsCovering` byte→cell maps.
 - `internal/safepresentation/diagnostic.go` — `EscapeDiagnostic`:

@@ -179,10 +179,16 @@ composition, the async load lifecycle, and sink safety:
   transitions to `stateBrowse`, issues the load command, and the view
   shows "Loading…" until the buffer arrives.
 - `TestLoadCompletionRendersContent` — `fileLoadedMsg` carries the
-  prepared buffer; content rows render with gutter and filename rule.
+  prepared buffer; content rows render with gutter and filename rule,
+  and the current matched line's match in the true inverse plus
+  underline.
 - `TestCurrentFileListEntryUnderlined`, `TestGutterRightJustified` —
   list order by raw path with the current entry underlined; the
   right-justified gutter plus two spaces.
+- `TestCTogglesColourScheme` (Issue #7) — `c` flips the composed
+  `View()` from the dark scheme's white-on-black base to light's
+  black-on-white and back; the current matched line's match stays
+  inverse and underlined in both.
 - `TestGatedLoadStaysResponsive` — `WithLoadGate` holds the load worker
   while keys and resizes are still handled.
 - `TestCtrlCDuringHeldLoadExits130`, `TestQOnBrowseExitsZero` —
@@ -247,6 +253,28 @@ only after the child is reaped:
   context still terminates/reaps the child, fires the reap report
   exactly once, and writes one sanitized `vrg:` line, exit 2.
 
+## internal/theme
+
+`theme_test.go` (external package `theme_test`; Issue #7):
+
+- `TestSchemeColourPairs` — `Dark()` is white on black (`37;40`),
+  `Light()` black on white (`30;47`), as `Base` SGR pairs.
+- `TestToggleFlipsSchemes` — `Toggled` flips dark↔light, is a pure
+  value transform (receiver unchanged, nothing persisted), and is a
+  no-op on `Plain()`.
+- `TestMatchIsTrueInverse` — `Match` renders the scheme's colours
+  swapped (dark match = light base pair and vice versa).
+- `TestCurrentMatchUnderlines` — `CurrentMatch` adds `;4` to the
+  inverse pair in both schemes.
+- `TestIndicatorIsInverse`, `TestCurrentFileUnderlined`,
+  `TestBaseColourStyles` — `Indicator` shares the match style;
+  `CurrentFile` is base + underline while `FileList`, `Gutter`, and
+  `FilenameRule` are plain base.
+- `TestOverlayBorderBaseColours` — `Overlay` frames rows in a plain
+  single-line border, all base colours, padding short rows.
+- `TestPlainNoStyle` — every `Plain()` decorator is the identity;
+  `Plain().Overlay` still draws the border without escapes.
+
 ## cmd/vrg (subprocess boundary)
 
 `main_test.go` builds the real binary once in `TestMain` and asserts
@@ -285,7 +313,8 @@ boundary tests:
   start-failure diagnostic and exit 2 with empty stdout and no TUI.
 - `TestDualPipeBackpressure` — fake `rg` writes ≈1.1 MiB to stderr
   interleaved with 18 match records; the final content frame shows all
-  18 recorded matches as inverse-video spans (no lost stream), the
+  18 recorded matches as true-inverse spans (the `30;47` pair, since
+  Issue #7; the current matched line's span also carries `;4`), the
   `VRG_TEST_HANDSHAKE` file exists (the child finished writing both
   pipes), and `q` exits 0.
 - `TestStderrCapturedWithoutBlocking` — stderr diagnostics with a

@@ -207,6 +207,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = 130
 			m.quitting = true
 			return m, m.quitCmd()
+		case msg.Text == "c":
+			// c toggles the colour scheme between dark and light for
+			// the session; nothing persists.
+			m.theme = m.theme.Toggled()
 		case msg.Text == "q" && m.state == stateBrowse:
 			// q in ordinary browsing exits with the fixed
 			// search-derived status through the same cleanup path.
@@ -246,7 +250,7 @@ func (m *model) View() tea.View {
 	if m.state == stateBrowse {
 		s = m.browseView()
 	}
-	v := tea.NewView(s)
+	v := tea.NewView(m.theme.Base(s))
 	v.AltScreen = true
 	return v
 }

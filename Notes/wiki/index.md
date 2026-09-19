@@ -41,6 +41,11 @@ Catalog of all wiki pages for the vrg project.
   routed through `internal/safepresentation`, and the extensible
   `sinktest` sink-safety table (no-style raw-output assertions plus the
   styled payload-after-ESC check)
+- [theme.md](theme.md) — Issue #7 theme module: the initially-dark and
+  light schemes, the session-only `c` toggle, true-inverse match
+  colours, current-match and current-file underlines, the indicator,
+  overlay, gutter, filename-rule, and file-list styles, and how the
+  base-wrapped frame consumes them
 
 ## Catalogs
 

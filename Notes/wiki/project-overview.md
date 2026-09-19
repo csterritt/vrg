@@ -13,8 +13,9 @@ current file's contents with matches highlighted.
 
 - Go (`go 1.27.1`), module path `vrg`
 - `github.com/jawher/mow.cli v1.2.0` for command-line parsing
-- Charm v2 stack pinned for the TUI: `charm.land/bubbletea/v2 v2.0.9`,
-  `charm.land/bubbles/v2 v2.2.1`, `charm.land/lipgloss/v2 v2.0.6`
+- `charm.land/bubbletea/v2 v2.0.9` for the TUI; Bubbles and Lip Gloss
+  are intentionally not dependencies — styling is vrg's own
+  `internal/theme`
 - ripgrep 15.x is the reference search child (spawned since Issue #3)
 
 ## Layout
@@ -25,10 +26,12 @@ Six internal packages mirror the PRD Module Design: `cli`,
 `searchindex` cover Issues #1–3 (the CLI contract and the record
 parser/navigation index); `app` carries Issues #3–5 (spawn/drain,
 searching screen, cancellation/cleanup, and the two-pane browse view);
-`filebuffer`, `viewport`, and `theme` gained their first Issue #5
-implementations (prepared file loading, the top-of-file window seam,
-and the initial Dark/Plain styles); `safepresentation` holds the Issue
-#5 escaping core.
+`filebuffer` and `viewport` gained their first Issue #5
+implementations (prepared file loading and the top-of-file window
+seam); `theme` holds the full Issue #7 style set (dark/light schemes,
+the `c` toggle, true-inverse matches, underlines, the bordered
+overlay); `safepresentation` holds the Issue #5 escaping core,
+generalized by Issue #6.
 
 See [source-code.md](source-code.md) for the file catalog and
 [unit-tests.md](unit-tests.md) for the test catalog.
