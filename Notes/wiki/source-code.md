@@ -10,8 +10,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   diagnostic + usage on stderr, exit 2, search → `app.Run` with the
   protected child argv and the invocation working directory. It also
   wires the `VRG_TEST_*` seam env vars (`VRG_TEST_GATE`,
-  `VRG_TEST_COLLECT_ACK`) into `app.Option`s — see
-  [search-collection.md](search-collection.md).
+  `VRG_TEST_COLLECT_ACK`, `VRG_TEST_REAP`, `VRG_TEST_FAIL`) into
+  `app.Option`s — see [search-collection.md](search-collection.md) and
+  [cancellation-cleanup.md](cancellation-cleanup.md).
 
 ## internal/cli
 
@@ -42,12 +43,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 - `internal/app/rg.go` — the child-process seam: `spawn` runs `rg` from
   `PATH` with `cmd.Dir` set to the invocation working directory and
   drains both stdout and stderr concurrently for the child's whole
-  lifetime; `Child`/`Result`/`StartFunc` are the boundary types.
+  lifetime; `Child`/`Result`/`StartFunc` are the boundary types, with
+  `Child.Terminate` and an idempotent `Wait` backing the cleanup path.
 - `internal/app/app.go` — the Bubble Tea model and `app.Run`: the
   "Searching…" state covering collection and post-exit index
   preparation, the `WithGate`/`WithCollectAck` test seams, the interim
-  `N files, M matched lines` summary with `q` → exit 0, and the
-  sanitized start-failure diagnostic with exit 2 before the TUI.
+  `N files, M matched lines` summary with `q` → exit 0, the sanitized
+  start-failure diagnostic with exit 2 before the TUI, and the Issue #4
+  surface: `ctrl+c`/`q` cancellation to 130, the `quitCmd`/`reapChild`
+  cleanup boundary, `WithFailFunc`/`WithReapReport`, the `quitting`
+  discard of late completions, alt-screen views, `ErrInterrupted` → 130,
+  and `writeFailureDiag` (the single post-restoration stderr writer) →
+  exit 2. See [cancellation-cleanup.md](cancellation-cleanup.md).
 - `internal/app/doc.go` — package comment.
 
 ## Package boundaries awaiting their issues

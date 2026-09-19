@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	charm.land/bubbletea/v2 v2.0.9
+	github.com/charmbracelet/x/term v0.2.2
 	github.com/creack/pty v1.1.21
 	github.com/jawher/mow.cli v1.2.0
 )
@@ -14,7 +15,6 @@ require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886 // indirect
 	github.com/charmbracelet/x/ansi v0.11.8 // indirect
 	github.com/charmbracelet/x/exp/golden v0.0.0-20250806222409-83e3a29d542f // indirect
-	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect

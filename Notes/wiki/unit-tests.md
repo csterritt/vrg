@@ -102,9 +102,8 @@ the scan (each declared flag recorded verbatim, help never forwarded).
   `TestCompletionTransitionsToSummary` — the model opens on
   "Searching…" and a completion message moves it to
   `N files, M matched lines`.
-- `TestQOnSummaryExitsZero` — `q` on the summary returns `tea.Quit` with
-  status 0; `TestQWhileSearchingStaysSearching` — `q` is inert while
-  searching (Issue #4 owns cancellation).
+- `TestQOnSummaryExitsZero` — `q` on the summary returns the quit
+  command with status 0.
 - `TestResizeDuringSearching` — `WindowSizeMsg` handled without blocking.
 - `TestGateHeldPreparationStaysSearching` — the gate holds index
   preparation after a completed `Wait`; the model stays searching until
@@ -124,6 +123,33 @@ scripts on `PATH`:
   buffered.
 - `TestSpawnMissingBinary` — rg absent from `PATH` is a start error
   naming `rg`.
+
+`cancel_test.go` (same package; Issue #4) covers the cancellation and
+cleanup contracts. `killChild` blocks `Wait` until `Terminate`, so a
+cleanup path that forgets to terminate hangs instead of passing;
+`runQuittingCmd` requires the exit command to produce `tea.QuitMsg`
+only after the child is reaped:
+
+- `TestQWhileSearchingCancels`, `TestCtrlCWhileSearchingCancels`,
+  `TestCtrlCOnSummaryCancels` — `q` while searching and `ctrl+c` in any
+  state begin the controlled exit, terminate/reap the still-running
+  child (reap report observed), and set status 130.
+- `TestEscWhileSearchingNoOp` — `Esc` while searching changes nothing
+  and returns no command.
+- `TestLateCompletionAfterCancelDiscarded`,
+  `TestQDuringGateHeldPreparationCancels` — a `searchDoneMsg` arriving
+  after cancellation (including the one a released gate produces) cannot
+  revive the summary; gate-held `q` is 130.
+- `TestOrdinaryQuitTerminatesRunningChild` — the summary `q` against a
+  still-running `killChild` proves ordinary exits terminate and reap.
+- `TestFailMsgTriggersCleanup` — `failMsg` records `failErr` and runs
+  the same cleanup.
+- `TestInitRunsFailureHook` — with `WithFailFunc` set, `Init` returns a
+  two-command batch (collection + hook); the hook's error surfaces as
+  `failMsg`.
+- `TestRunCleansUpOnProgramError` — `app.Run` under a pre-cancelled
+  context still terminates/reaps the child, fires the reap report
+  exactly once, and writes one sanitized `vrg:` line, exit 2.
 
 ## cmd/vrg (subprocess boundary)
 
@@ -171,3 +197,27 @@ boundary tests:
   `VRG_TEST_COLLECT_ACK` file proves rg exited and the stream was
   collected while the screen still shows only "Searching…"; removing the
   gate file produces the summary and `q` exits 0.
+
+`cancel_test.go` (Issue #4; `//go:build unix`) extends the harness:
+`startVrgTermPTY` opens the pty pair itself, keeps the slave fd, and
+captures `term.GetState` before launch so `assertTermiosRestored` can
+require the PTY input modes after exit to equal those before. The
+`blockedRG` fake rg writes a ready file, records its pid, then `exec
+sleep`s — only vrg's `Terminate` ends it. Assertions combine the exit
+code, the recorded pid's absence, the `VRG_TEST_REAP` side-channel line
+(vrg's own wait/reap proof), the display-restoration sequences
+(`\x1b[?1049l`, `\x1b[?25h`), and termios equality:
+
+- `TestCancelWhileSearchingKillsChild` (`q` and `ctrl+c` subtests) —
+  cancellation exits 130 with no summary screen, the blocked child gone
+  and reaped (`code=-1`), display and termios restored.
+- `TestQDuringGateHeldPreparationCancels` — `q` after the collect-ack
+  while the gate holds preparation exits 130; the released completion
+  never renders; the already-exited child reaps as `code=0`.
+- `TestOrdinaryQuitLeavesNoChild` — the summary `q` exits 0 with reap
+  evidence (`code=0`), restoration, and termios equality.
+- `TestControlledFailureCleanupExit2` — `VRG_TEST_FAIL` triggered after
+  the child's ready signal: exit 2, the sanitized
+  `vrg: injected test failure ^[[7m` diagnostic appears exactly once and
+  after the restoration sequence, child gone and reaped, termios
+  restored.

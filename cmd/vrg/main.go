@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -46,7 +47,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 // VRG_TEST_GATE=<file> holds index preparation while the file exists;
 // VRG_TEST_COLLECT_ACK=<file> records a line once the child's output has
 // been fully collected, so tests can observe that rg exited while
-// preparation is still held.
+// preparation is still held. VRG_TEST_REAP=<file> records the child's
+// reaped wait status once per process — the side channel proving vrg's
+// wait/reap path ran. VRG_TEST_FAIL=<file> injects a controlled failure
+// once the file exists.
 func testSeamOptions() []app.Option {
 	var opts []app.Option
 	if p := os.Getenv("VRG_TEST_COLLECT_ACK"); p != "" {
@@ -54,6 +58,17 @@ func testSeamOptions() []app.Option {
 	}
 	if p := os.Getenv("VRG_TEST_GATE"); p != "" {
 		opts = append(opts, app.WithGate(func() { waitFileGone(p) }))
+	}
+	if p := os.Getenv("VRG_TEST_REAP"); p != "" {
+		opts = append(opts, app.WithReapReport(func(res app.Result) {
+			appendLine(p, fmt.Sprintf("reaped code=%d err=%v\n", res.Code, res.Err))
+		}))
+	}
+	if p := os.Getenv("VRG_TEST_FAIL"); p != "" {
+		opts = append(opts, app.WithFailFunc(func() error {
+			waitFileExists(p)
+			return errors.New("injected test failure \x1b[7m")
+		}))
 	}
 	return opts
 }
@@ -71,6 +86,16 @@ func appendLine(path, line string) {
 func waitFileGone(path string) {
 	for {
 		if _, err := os.Stat(path); os.IsNotExist(err) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// waitFileExists polls until path exists.
+func waitFileExists(path string) {
+	for {
+		if _, err := os.Stat(path); err == nil {
 			return
 		}
 		time.Sleep(5 * time.Millisecond)

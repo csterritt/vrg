@@ -2,10 +2,12 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
@@ -40,6 +42,13 @@ type options struct {
 	gate func()
 	// collectAck, when set, runs once collection completes, before gate.
 	collectAck func()
+	// reap, when set, is called once per process with the child's reaped
+	// wait status — the side channel proving vrg's wait/reap path ran
+	// rather than inferring reaping from a missing pid.
+	reap func(Result)
+	// fail, when set, is the injectable controlled-failure hook: a
+	// non-nil return is a controlled application failure.
+	fail func() error
 }
 
 // WithGate holds index preparation until fn returns.
@@ -47,6 +56,13 @@ func WithGate(fn func()) Option { return func(o *options) { o.gate = fn } }
 
 // WithCollectAck runs fn once the child's output is fully collected.
 func WithCollectAck(fn func()) Option { return func(o *options) { o.collectAck = fn } }
+
+// WithReapReport calls fn once with the child's reaped wait status.
+func WithReapReport(fn func(Result)) Option { return func(o *options) { o.reap = fn } }
+
+// WithFailFunc installs the controlled-failure hook: a non-nil return
+// from fn fails the application under vrg's control.
+func WithFailFunc(fn func() error) Option { return func(o *options) { o.fail = fn } }
 
 type state int
 
@@ -66,6 +82,13 @@ type model struct {
 	width, height  int
 	files, matched int
 	status         int
+	// quitting marks that a controlled exit is underway; messages
+	// arriving after it — including late search completions — are
+	// discarded so they cannot revive the UI.
+	quitting bool
+	// failErr is a controlled application failure reported through the
+	// single post-restoration stderr writer in Run.
+	failErr error
 }
 
 func newModel(cfg Config, opts options, child Child) *model {
@@ -79,14 +102,19 @@ type searchDoneMsg struct {
 	idx *searchindex.Index
 }
 
-// Init starts collection: the command blocks on the child, runs the
+// failMsg carries a controlled application failure from the injected
+// failure hook into Update.
+type failMsg struct{ err error }
+
+// Init starts collection and, when the failure hook is installed, the
+// hook itself. The collection command blocks on the child, runs the
 // collection acknowledgement and the preparation gate, then builds the
 // index — all off the UI update path so the model stays responsive.
 func (m *model) Init() tea.Cmd {
 	child := m.child
 	opts := m.opts
 	dir := m.cfg.Dir
-	return func() tea.Msg {
+	collect := func() tea.Msg {
 		res := child.Wait()
 		if opts.collectAck != nil {
 			opts.collectAck()
@@ -96,9 +124,21 @@ func (m *model) Init() tea.Cmd {
 		}
 		return searchDoneMsg{res: res, idx: searchindex.Build(res.Stdout, dir)}
 	}
+	if opts.fail == nil {
+		return collect
+	}
+	fail := opts.fail
+	return tea.Batch(collect, func() tea.Msg {
+		return failMsg{err: fail()}
+	})
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.quitting {
+		// A controlled exit is underway: discard everything still in
+		// flight so late work cannot revive the UI.
+		return m, nil
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -108,15 +148,56 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, f := range msg.idx.Files {
 			m.matched += len(f.Stops)
 		}
+	case failMsg:
+		if msg.err == nil {
+			return m, nil
+		}
+		m.failErr = msg.err
+		m.quitting = true
+		return m, m.quitCmd()
 	case tea.KeyPressMsg:
-		// Cancellation and its statuses are Issue #4's; while searching,
-		// q is inert.
-		if m.state == stateSummary && msg.Text == "q" {
+		switch {
+		case msg.Keystroke() == "ctrl+c":
+			// ctrl+c has global precedence: cancellation in every state.
+			m.status = 130
+			m.quitting = true
+			return m, m.quitCmd()
+		case msg.Text == "q" && m.state == stateSearching:
+			// q while searching — including gate-held index
+			// preparation after rg has exited — is cancellation.
+			m.status = 130
+			m.quitting = true
+			return m, m.quitCmd()
+		case msg.Text == "q" && m.state == stateSummary:
 			m.status = 0
-			return m, tea.Quit
+			m.quitting = true
+			return m, m.quitCmd()
 		}
 	}
 	return m, nil
+}
+
+// quitCmd is the single cleanup path every controlled exit routes
+// through: terminate and reap the child, report the reaped status, then
+// quit so the program restores the terminal.
+func (m *model) quitCmd() tea.Cmd {
+	child, report := m.child, m.opts.reap
+	return func() tea.Msg {
+		reapChild(child, report)
+		return tea.QuitMsg{}
+	}
+}
+
+// reapChild terminates a still-running child and waits for it, ending
+// Issue #3's drainage promptly because termination closes its pipes.
+// Wait is idempotent, so running it again for an already-finished or
+// already-reaped child is harmless.
+func reapChild(c Child, report func(Result)) {
+	c.Terminate()
+	res := c.Wait()
+	if report != nil {
+		report(res)
+	}
 }
 
 func (m *model) View() tea.View {
@@ -126,13 +207,19 @@ func (m *model) View() tea.View {
 	} else {
 		s = "Searching…"
 	}
-	return tea.NewView(center(s, m.width, m.height))
+	v := tea.NewView(center(s, m.width, m.height))
+	v.AltScreen = true
+	return v
 }
 
 // Run is the whole search lifecycle: spawn the child, show "Searching…"
 // until the stream is collected and the index prepared, then the interim
 // summary. A start failure prints a sanitized diagnostic to cfg.Err and
-// returns exit 2 without entering the TUI.
+// returns exit 2 without entering the TUI. Every controlled exit —
+// ordinary, cancellation, or a controlled application failure —
+// terminates and reaps the child and restores the terminal; a controlled
+// failure additionally writes its sanitized diagnostic exactly once,
+// after restoration, through writeFailureDiag.
 func Run(ctx context.Context, cfg Config, opts ...Option) int {
 	errOut := cfg.Err
 	if errOut == nil {
@@ -151,16 +238,40 @@ func Run(ctx context.Context, cfg Config, opts ...Option) int {
 	for _, fn := range opts {
 		fn(&o)
 	}
+	if o.reap != nil {
+		// Both the model's quit command and the post-program safety net
+		// run the wait/reap path; the report must fire exactly once.
+		var once sync.Once
+		report := o.reap
+		o.reap = func(r Result) { once.Do(func() { report(r) }) }
+	}
 	m := newModel(cfg, o, child)
 	final, err := tea.NewProgram(m, tea.WithContext(ctx)).Run()
+	// Exits that bypass the model — interrupt, program error, a caught
+	// panic — still owe the child termination and reaping.
+	reapChild(child, o.reap)
 	if err != nil {
-		fmt.Fprintf(errOut, "vrg: %s\n", cli.Escape(err.Error()))
+		if errors.Is(err, tea.ErrInterrupted) {
+			return 130
+		}
+		writeFailureDiag(errOut, err)
 		return 2
 	}
 	if fm, ok := final.(*model); ok {
+		if fm.failErr != nil {
+			writeFailureDiag(errOut, fm.failErr)
+			return 2
+		}
 		return fm.status
 	}
 	return 2
+}
+
+// writeFailureDiag is the single post-restoration stderr writer: it
+// emits one sanitized controlled-failure diagnostic, and only runs after
+// the program has returned and the terminal is restored.
+func writeFailureDiag(w io.Writer, err error) {
+	fmt.Fprintf(w, "vrg: %s\n", cli.Escape(err.Error()))
 }
 
 // center pads s into a w×h field, centered horizontally and vertically.

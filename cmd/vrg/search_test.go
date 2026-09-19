@@ -58,8 +58,15 @@ func startVrgPTY(t *testing.T, dir string, env []string, args ...string) *ptySes
 		t.Fatalf("pty start: %v", err)
 	}
 	s := &ptySession{t: t, cmd: cmd, pt: pt, done: make(chan int, 1)}
+	s.watch()
+	return s
+}
+
+// watch starts the exit-code and output-drain goroutines for a session
+// whose command has already been started on its pty.
+func (s *ptySession) watch() {
 	go func() {
-		err := cmd.Wait()
+		err := s.cmd.Wait()
 		if err == nil {
 			s.done <- 0
 			return
@@ -73,7 +80,7 @@ func startVrgPTY(t *testing.T, dir string, env []string, args ...string) *ptySes
 	go func() {
 		buf := make([]byte, 4096)
 		for {
-			n, err := pt.Read(buf)
+			n, err := s.pt.Read(buf)
 			if n > 0 {
 				s.mu.Lock()
 				s.out.Write(buf[:n])
@@ -84,7 +91,6 @@ func startVrgPTY(t *testing.T, dir string, env []string, args ...string) *ptySes
 			}
 		}
 	}()
-	return s
 }
 
 func (s *ptySession) output() string {

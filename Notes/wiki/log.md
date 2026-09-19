@@ -71,3 +71,33 @@ records, and stream integrity; Module Design → SearchIndex / App),
 `internal/app/app.go`, `internal/app/rg.go`, `internal/app/app_test.go`,
 `internal/app/rg_test.go`, `internal/searchindex/record.go`,
 `internal/searchindex/index.go`, `internal/searchindex/index_test.go`.
+
+## [2026-09-16] ingest | Issue #4 cancellation, child cleanup, terminal restore
+
+Ingested the completed Issue #4 implementation: `ctrl+c` in any state
+and `q` while searching (including gate-held index preparation after rg
+has exited) begin a controlled exit at status 130; `Esc` while searching
+is a no-op; every controlled exit routes through `model.quitCmd` →
+`reapChild` (`Child.Terminate` + idempotent `Wait`) so the child is
+terminated and reaped before quit, with `app.Run` repeating the same
+cleanup after `program.Run` as a safety net for exits that bypass the
+model (`InterruptMsg` → 130, program errors → 2). The `quitting` flag
+discards late `searchDoneMsg`s so completions cannot revive the UI.
+Views set `AltScreen`, giving the leave-alt-screen/cursor-visible
+restoration sequence plus termios restoration on every controlled exit.
+The injectable `WithFailFunc` hook produces `failMsg`; `Run` reports it
+through `writeFailureDiag`, the single post-restoration stderr writer,
+exactly once, exit 2. New seams: `WithReapReport`/`VRG_TEST_REAP`
+(reaped wait-status side channel) and `WithFailFunc`/`VRG_TEST_FAIL`
+(trigger-file failure injection); `cmd/vrg/cancel_test.go` adds the
+termios-capturing PTY harness (`startVrgTermPTY`, `blockedRG` fake rg).
+Created [cancellation-cleanup](cancellation-cleanup.md); updated
+[search-collection](search-collection.md), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/issues/004-cancellation-child-cleanup-terminal-restore.md`,
+`Notes/tasks/004-cancellation-child-cleanup-terminal-restore.md`,
+`Notes/PRD-vrg.md` (Outcome and exit-status contract; Colours, overlays,
+and key precedence; Module Design → App; Testing Decisions),
+`cmd/vrg/main.go`, `cmd/vrg/cancel_test.go`, `cmd/vrg/search_test.go`,
+`internal/app/app.go`, `internal/app/rg.go`, `internal/app/app_test.go`,
+`internal/app/cancel_test.go`.

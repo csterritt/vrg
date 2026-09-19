@@ -20,6 +20,14 @@ Catalog of all wiki pages for the vrg project.
   spanning collection and index preparation, gate/collect-ack test
   seams, interim summary with `q` → exit 0, start-failure exit 2, and
   the SearchIndex record/merge/order/resolution contracts
+- [cancellation-cleanup.md](cancellation-cleanup.md) — Issue #4
+  cancellation and cleanup: `q`-while-searching and `ctrl+c` to exit
+  130 (including the gate-held post-exit window), the `quitCmd`/
+  `reapChild` terminate-and-reap boundary, `Terminate` + idempotent
+  `Wait`, `quitting` discard of late completions, alt-screen display
+  and PTY termios restoration, the `WithFailFunc` hook and the single
+  post-restoration `writeFailureDiag` → exit 2, and the
+  `VRG_TEST_REAP`/`VRG_TEST_FAIL` seams with the termios PTY harness
 
 ## Catalogs
 

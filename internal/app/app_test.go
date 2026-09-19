@@ -16,6 +16,8 @@ type fakeChild struct{ res Result }
 
 func (f fakeChild) Wait() Result { return f.res }
 
+func (f fakeChild) Terminate() {}
+
 // happyStream is a small valid ripgrep JSON stream: two files, three
 // matched lines.
 const happyStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
@@ -81,22 +83,6 @@ func TestQOnSummaryExitsZero(t *testing.T) {
 	}
 	if m.status != 0 {
 		t.Fatalf("status = %d, want 0", m.status)
-	}
-}
-
-// While searching, q is inert — cancellation and its 130 status belong to
-// Issue #4 — and the model stays in the searching state.
-func TestQWhileSearchingStaysSearching(t *testing.T) {
-	m := newTestModel(fakeChild{res: Result{Stdout: []byte(happyStream)}}, options{})
-	_, cmd := m.Update(tea.KeyPressMsg{Text: "q", Code: 'q'})
-	if cmd != nil {
-		t.Fatalf("q while searching returned a command; want no transition yet")
-	}
-	if m.state != stateSearching {
-		t.Fatalf("state = %v, want still searching", m.state)
-	}
-	if v := viewText(m); !strings.Contains(v, "Searching") {
-		t.Fatalf("view = %q, want it to keep saying Searching", v)
 	}
 }
 

@@ -40,8 +40,9 @@ drained), then the optional collect-acknowledgement and preparation gate,
 then `searchindex.Build`. Because the whole sequence is a single command,
 the model provably stays searching until the index is ready — even after
 rg itself has exited. Resize messages are ordinary updates and never
-block on collection. `q` is inert while searching (Issue #4 owns
-cancellation and its statuses).
+block on collection. `q` while searching — including that gate-held
+post-exit window — is Issue #4's cancellation, exiting 130; see
+[cancellation-cleanup.md](cancellation-cleanup.md).
 
 Two seams, delivered as `app.Option`s, support tests:
 
@@ -53,8 +54,9 @@ Two seams, delivered as `app.Option`s, support tests:
 holds preparation while the file exists (a polled watcher), and
 `VRG_TEST_COLLECT_ACK=<file>` appends a line when collection completes,
 so a test can observe "rg exited, stream collected, preparation still
-held". Issue #45 will move these env-var seams behind the `vrg_testhooks`
-build tag.
+held". Issue #4 added `VRG_TEST_REAP` and `VRG_TEST_FAIL` (see
+[cancellation-cleanup.md](cancellation-cleanup.md)). Issue #45 will move
+these env-var seams behind the `vrg_testhooks` build tag.
 
 ## Interim summary and start failure
 
