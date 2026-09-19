@@ -200,7 +200,7 @@ func TestHelpScrollsRenderedRows(t *testing.T) {
 
 	// The scrollable set is the complete wrapped table: scroll past
 	// the bottom and the view clamps on the last rows — the title row
-	// has left the frame, the final binding is in it.
+	// has left the frame, the final wrapped row is in it.
 	for i := 0; i < maxScroll+5; i++ {
 		m.Update(keyDown)
 	}
@@ -208,8 +208,9 @@ func TestHelpScrollsRenderedRows(t *testing.T) {
 		t.Fatalf("scroll clamped at %d, want %d", m.help.scroll, maxScroll)
 	}
 	v := viewText(m)
-	if !strings.Contains(v, "exit immediately") {
-		t.Fatalf("bottom of the scroll range missing the tail binding: %q", v)
+	last := m.helpRows()[len(m.helpRows())-1]
+	if !strings.Contains(v, strings.TrimSpace(last)) {
+		t.Fatalf("bottom of the scroll range missing the tail row %q: %q", last, v)
 	}
 	if strings.Contains(v, "Key bindings") {
 		t.Fatalf("scrolled-to-bottom frame still shows the title row: %q", v)
@@ -238,8 +239,9 @@ func TestHelpCtrlCExits130(t *testing.T) {
 // the border: every rendered row fits the terminal width and the whole
 // text survives across the wrapped rows.
 func TestHelpWrapsUnbrokenSubstitution(t *testing.T) {
+	prev := helpFooter
 	helpFooter = strings.Repeat("Z", 200)
-	t.Cleanup(func() { helpFooter = "" })
+	t.Cleanup(func() { helpFooter = prev })
 	m := helpBrowseModel(t)
 	m.theme = theme.Plain()
 	m.Update(keyH)

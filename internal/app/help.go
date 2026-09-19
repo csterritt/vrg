@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"vrg/internal/docs"
 	"vrg/internal/safepresentation"
 )
 
@@ -38,11 +39,12 @@ var helpBindings = []helpBinding{
 }
 
 // helpFooter is the help dialog's footer slot — the text rendered
-// under the binding table. Issue #34 fills it with the scale-and-limits
-// note; until then it is empty and renders nothing. It is substituted
-// text from the renderer's perspective, so the composition routes it
-// through the diagnostic escaper like every external string.
-var helpFooter string
+// under the binding table: Issue #34's scale-and-limits note rendered
+// from the shared docs source the README also renders, so neither
+// sink can drift from the other. It is substituted text from the
+// renderer's perspective, so the composition routes it through the
+// diagnostic escaper like every external string.
+var helpFooter = docs.Footer()
 
 // helpText composes the help dialog's body from the binding table: a
 // title row, one "keys  description" row per binding with the key sets

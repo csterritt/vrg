@@ -1279,3 +1279,51 @@ updated [source-code](source-code.md), [unit-tests](unit-tests.md),
 `Notes/PRD-vrg.md` (Layout and indicators), `internal/app/app.go`,
 `internal/app/browse.go`, `internal/app/toosmall_test.go`,
 `internal/app/hreveal_test.go`, `internal/app/popup_test.go`.
+## [2026-09-17] ingest | Issue #34 documentation — README, help footer, and the scale/memory limits
+
+Ingested Issue #34
+([issue](../issues/034-documentation-scale-and-memory-limits.md),
+[task](../tasks/034-documentation-scale-and-memory-limits.md)). The
+repository root gained `README.md` — the single user-facing
+documentation artifact — covering invocation and the help-only exit-0
+path (bare `vrg`, `-h`/`--help` on stdout, no search, no TUI) with its
+distinction from the TUI's `h`/`?` dialog, the flags-only `vrg -i`
+usage error at exit 2, the complete option table (local help options
+plus every allow-listed no-argument search flag), the binding table,
+all four exit statuses with their triggers, the ripgrep 15.x reference
+family with `--no-config`, and the scale/memory limits. New
+`internal/docs` package is the shared structured source both sinks
+render: `docs.Footer()` fills the help overlay's `helpFooter` slot with
+the scale-and-limits note, and `docs.Limits()` renders the README
+section verbatim — the synchronization tests assert the committed
+README carries it, so neither sink drifts. The scale examples
+(~10,000 matched files, ~100,000 matched lines, ~50 MB files) are
+documented as independent, not simultaneous guarantees; the 64 MiB
+record limit, the base64 `bytes` expansion caveat, the oversized-record
+diagnostic naming the path when recoverable, and the
+session-retention/no-eviction/no-aggregate-bound/no-OOM/no-cleanup
+limits all appear in both sinks. `sinksafety_test.go` gains the Issue
+#34 "help footer note" row — `footerFixtureView` substitutes each
+hostile fixture at the footer's runtime-substitution point and asserts
+the escaped bytes end the composed body — taking the table to ten
+rows. New tests: `internal/docs/docs_test.go` (README carries
+`Limits()`; `Footer()` carries every statement and item),
+`internal/app/readme_test.go` (every `helpBindings` row in the README;
+composed help body and README share all docs statements; exit-status
+rows cover 0/1/2/130 with triggers and agree with `DecideOutcome`),
+`internal/cli/readme_test.go` (every `optionDecls` spelling and
+description as a flag-table row; help-only path tokens; ripgrep 15.x
+and `--no-config`). `help_test.go`'s scroll and substitution fixtures
+now save/restore `helpFooter` and assert the wrapped tail row rather
+than the last binding. Created
+[documentation-limits](documentation-limits.md); updated
+[source-code](source-code.md), [unit-tests](unit-tests.md),
+[help-overlay](help-overlay.md),
+[safe-presentation](safe-presentation.md), and the index. Sources:
+`Notes/issues/034-documentation-scale-and-memory-limits.md`,
+`Notes/tasks/034-documentation-scale-and-memory-limits.md`,
+`Notes/PRD-vrg.md` (Resources and responsiveness, Out of Scope,
+Further Notes), `README.md`, `internal/docs/docs.go`,
+`internal/docs/docs_test.go`, `internal/app/help.go`,
+`internal/app/readme_test.go`, `internal/app/sinksafety_test.go`,
+`internal/app/help_test.go`, `internal/cli/readme_test.go`.

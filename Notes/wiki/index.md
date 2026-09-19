@@ -241,8 +241,8 @@ Catalog of all wiki pages for the vrg project.
   wrapped-and-scrollable rows including split unbroken strings,
   tiny-size clipping with no borderless fallback, the modal key
   routing and precedence stack, pop-up cancellation on open, the
-  `helpBindings` single binding-table data source, and the reserved
-  escaped `helpFooter` slot for Issue #34
+  `helpBindings` single binding-table data source, and the escaped
+  `helpFooter` slot Issue #34 fills with the scale-and-limits note
 - [overlay-precedence.md](overlay-precedence.md) — Issue #32: the
   composed key-precedence stack (`ctrl+c` over modal error over help
   over pop-up over base keys), error-suspends-help with retained
@@ -258,6 +258,15 @@ Catalog of all wiki pages for the vrg project.
   full cursor/anchor/viewport/modal-stack recovery at the final
   dimensions after in-gate resizes, and the pop-up timer running on
   with the pop-up never composited
+- [documentation-limits.md](documentation-limits.md) — Issue #34: the
+  root `README.md` as the single user-facing documentation artifact,
+  the `internal/docs` shared structured source rendering both the
+  README limits section and the help-overlay footer, the
+  synchronization tests asserting bindings/flags/exit-statuses/
+  scale/memory against `helpBindings`, `optionDecls`, and
+  `DecideOutcome`, the three independent scale examples with the
+  64 MiB/base64/session-retention limits, and the "help footer note"
+  sink-safety row
 
 ## Catalogs
 

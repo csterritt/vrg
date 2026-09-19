@@ -68,12 +68,15 @@ bindings" title row plus one `keys  desc` row per binding, the key
 sets padded to a column. Issue #34's documentation test iterates the
 same table so the README cannot drift from the routed keys.
 
-`helpFooter` is the reserved **footer slot** under the table — empty
-until Issue #34 fills it with the scale-and-limits note. It is
-substituted text from the renderer's perspective: `helpText` routes it
-through `safepresentation.EscapeDiagnostic`, so whatever fills the slot
-can never emit control bytes — the sink-safety table's "TUI help
-dialog" row drives the hostile fixture set through that substitution.
+`helpFooter` is the **footer slot** under the table — Issue #34 fills
+it with `docs.Footer()`'s scale-and-limits note, rendered from the
+shared `internal/docs` source the README also renders (see
+[documentation-limits.md](documentation-limits.md)). It is substituted
+text from the renderer's perspective: `helpText` routes it through
+`safepresentation.EscapeDiagnostic`, so whatever fills the slot can
+never emit control bytes — the sink-safety table's "TUI help dialog"
+and "help footer note" rows drive the hostile fixture set through that
+substitution point.
 
 ## Tests
 
@@ -87,5 +90,6 @@ bounds over the complete wrapped table, `ctrl+c` exiting 130, a
 25×8 clipped-but-bordered frame and its restoration on growth, the
 binding-table rendering iterating `helpBindings`, and pop-up
 cancellation with no return. `sinksafety_test.go` gains the "TUI help
-dialog" row driven through `helpFixtureView`. See
+dialog" row driven through `helpFixtureView`; Issue #34 adds the "help
+footer note" row through `footerFixtureView`. See
 [unit-tests.md](unit-tests.md).

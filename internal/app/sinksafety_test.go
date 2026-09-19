@@ -19,17 +19,18 @@ import (
 // sinkSafetySinks is the shared sink-safety table (Issue #6): one row
 // per output sink existing at this point — file-list entry, filename
 // rule, panel content, the Issue #9 error overlay, the Issue #15
-// file-change pop-up, the Issue #31 TUI help dialog, usage-error
-// stderr, and the Issue #1 generated command-line help on stdout (a
-// sink distinct from the TUI help dialog). Every row renders through
-// the no-style composition path so no escape byte may legitimately
-// appear, and the TUI rows repeat under the styled theme so a
-// fixture's payload can be checked against legitimate style sequences.
+// file-change pop-up, the Issue #31 TUI help dialog, the Issue #34
+// rendered help footer note (the generated-documentation row), usage-
+// error stderr, and the Issue #1 generated command-line help on
+// stdout (a sink distinct from the TUI help dialog). Every row renders
+// through the no-style composition path so no escape byte may
+// legitimately appear, and the TUI rows repeat under the styled theme
+// so a fixture's payload can be checked against legitimate style
+// sequences.
 //
-// Later issues that introduce sinks — generated documentation (#34)
-// — add rows here, or in their own package's test file via
-// sinktest.Run, reusing sinktest.Fixtures rather than duplicating
-// them.
+// Later issues that introduce sinks add rows here, or in their own
+// package's test file via sinktest.Run, reusing sinktest.Fixtures
+// rather than duplicating them.
 var sinkSafetySinks = []sinktest.Sink{
 	{
 		Name:         "file-list entry",
@@ -60,6 +61,11 @@ var sinkSafetySinks = []sinktest.Sink{
 		Name:         "TUI help dialog",
 		Render:       func(t *testing.T, fx sinktest.Fixture) string { return helpFixtureView(t, fx, theme.Plain()) },
 		RenderStyled: func(t *testing.T, fx sinktest.Fixture) string { return helpFixtureView(t, fx, theme.Dark()) },
+	},
+	{
+		Name:         "help footer note",
+		Render:       func(t *testing.T, fx sinktest.Fixture) string { return footerFixtureView(t, fx, theme.Plain()) },
+		RenderStyled: func(t *testing.T, fx sinktest.Fixture) string { return footerFixtureView(t, fx, theme.Dark()) },
 	},
 	{
 		Name:   "usage-error stderr",
@@ -192,8 +198,9 @@ func popupFixtureView(t *testing.T, fx sinktest.Fixture, th theme.Theme) string 
 // it.
 func helpFixtureView(t *testing.T, fx sinktest.Fixture, th theme.Theme) string {
 	t.Helper()
+	prev := helpFooter
 	helpFooter = string(fx.Bytes)
-	t.Cleanup(func() { helpFooter = "" })
+	t.Cleanup(func() { helpFooter = prev })
 	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
 	m.theme = th
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 50})
@@ -209,6 +216,44 @@ func helpFixtureView(t *testing.T, fx sinktest.Fixture, th theme.Theme) string {
 		}
 		if !strings.Contains(v, piece) {
 			t.Fatalf("help fixture %q did not reach the sink: %q missing from %q", fx.Bytes, piece, v)
+		}
+	}
+	return v
+}
+
+// footerFixtureView is the Issue #34 sink row: it substitutes the
+// fixture at the rendered help footer's runtime-substitution point —
+// the footer slot the composition routes through the diagnostic
+// escaper — and asserts the escaped pieces reached the footer region
+// of the composed body and the rendered frame.
+func footerFixtureView(t *testing.T, fx sinktest.Fixture, th theme.Theme) string {
+	t.Helper()
+	prev := helpFooter
+	helpFooter = string(fx.Bytes)
+	t.Cleanup(func() { helpFooter = prev })
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	m.theme = th
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 50})
+	m.Update(doneMsg())
+	m.Update(keyH)
+	if !m.helpOpen {
+		t.Fatal("help did not open")
+	}
+	// The footer's runtime-substitution point is the tail of the
+	// composed body: the escaped fixture must end it, not merely
+	// appear anywhere in the dialog.
+	body := m.help.text
+	esc := safepresentation.EscapeDiagnostic(string(fx.Bytes))
+	if !strings.HasSuffix(body, esc) {
+		t.Fatalf("footer fixture %q did not reach the footer: %q is not the tail of %q", fx.Bytes, esc, body)
+	}
+	v := viewText(m)
+	for _, piece := range strings.Split(esc, "\n") {
+		if piece == "" {
+			continue
+		}
+		if !strings.Contains(v, piece) {
+			t.Fatalf("footer fixture %q did not reach the frame: %q missing from %q", fx.Bytes, piece, v)
 		}
 	}
 	return v

@@ -61,6 +61,31 @@ every declared spelling reaches generated help;
 `TestScanRecordsEveryDeclaredFlag` asserts the shared declarations drive
 the scan (each declared flag recorded verbatim, help never forwarded).
 
+`readme_test.go` (same package; Issue #34) synchronizes the README
+with the shared option declarations and the help-only contract:
+
+- `TestReadmeFlagTable` — every `optionDecls` entry, the local help
+  option included, appears as a flag-table row in its exact
+  no-argument spellings with its declared description, so the
+  documentation cannot drift from parsing.
+- `TestReadmeHelpOnlyPath` — the help-only exit-0 path tokens: bare
+  `vrg` and `-h`/`--help` printing command-line help on stdout, the
+  distinction from the TUI's `h / ?` dialog, and the `vrg -i`
+  flags-only usage error at exit 2.
+- `TestReadmeRipgrepFamily` — the ripgrep 15.x reference family and
+  the `--no-config` statement that configuration files are never
+  honoured.
+
+## internal/docs
+
+`docs_test.go` (same package; Issue #34) pins the shared structured
+documentation source against both sinks:
+
+- `TestReadmeLimitsSection` — the committed README carries
+  `docs.Limits()`'s rendered scale-and-memory-limits section verbatim.
+- `TestFooterCarriesEveryStatement` — `docs.Footer()` contains every
+  `Statements` entry and `ScaleItems` item, so deleting one fails.
+
 ## internal/searchindex
 
 `index_test.go` (external package `searchindex_test`; Issue #3):
@@ -418,11 +443,12 @@ command after the load leaf — and `navSendsNoLoad` (in
 `popup_test.go`) asserts a crossing issued no `fileLoadedMsg` leaf.
 
 `sinksafety_test.go` (same package; Issue #6) hosts the shared
-sink-safety table `sinkSafetySinks` — nine rows over every sink
+sink-safety table `sinkSafetySinks` — ten rows over every sink
 existing at this point (file-list entry, filename rule, panel content,
 the Issue #9 error overlay, the Issue #15 file-change pop-up driven
 through `popupFixtureView`, the Issue #31 TUI help dialog driven
-through `helpFixtureView`, usage-error stderr, CLI-help stdout, and
+through `helpFixtureView`, the Issue #34 help footer note driven
+through `footerFixtureView`, usage-error stderr, CLI-help stdout, and
 the Issue #11 stderr replay) — and
 `TestSinkSafetyTable` runs `sinktest.Run` over it: each
 `<sink>/<fixture>` subtest asserts clean raw output on the no-style
@@ -432,7 +458,8 @@ unescaped ESC. Each row also proves the fixture reached the sink
 panel, escaped diagnostic pieces in the overlay frame, `EscapePath`
 operand in the stderr block); the help row substitutes the hostile
 bytes into the `helpFooter` slot the renderer routes through
-`EscapeDiagnostic`.
+`EscapeDiagnostic`, and the footer row asserts the escaped fixture
+ends the composed body — the footer's runtime-substitution point.
 
 `rg_test.go` (same package) exercises the real `spawn` against fake `rg`
 scripts on `PATH`:
@@ -1220,6 +1247,21 @@ shared `scrollBox`/`compositeBox` component:
   binding's `keys` and `desc` appears in the rendered dialog.
 - `TestHelpCancelsPopup` — a live file-change pop-up is cleared on
   open and never returns after help closes.
+
+`readme_test.go` (same package; Issue #34) synchronizes the README
+and the help footer with the binding table, the shared docs source,
+and the outcome function:
+
+- `TestReadmeListsEveryBinding` — every `helpBindings` row appears as
+  a README table row.
+- `TestHelpFooterSharesReadmeLimits` — every `docs.Statements` entry
+  and `docs.ScaleItems` item appears verbatim in the composed help
+  body and in the README, so neither sink can drift from the other.
+- `TestReadmeExitStatuses` — the README's exit-status rows cover 0,
+  1, 2, and 130 with their documented triggers (both exit-0 reasons,
+  the pre-TUI usage/root/start failures including `vrg -i`, and the
+  `q`/`ctrl+c` cancellation triggers), and `DecideOutcome` returns
+  the documented status for each search-derived condition.
 
 `precedence_test.go` (same package; Issue #32) pins the composed
 overlay-precedence stack through `Update` — the rig driving a browse

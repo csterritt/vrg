@@ -101,13 +101,16 @@ bytes, and an embedded filename newline — plus two shared assertions:
 as `<sink>/<fixture>` subtests; each row's `Render` returns the raw
 output of the real composition path and must fail when the fixture
 never reached the sink (a silent drop cannot masquerade as a pass). The
-current table lives in `internal/app/sinksafety_test.go` with nine
+current table lives in `internal/app/sinksafety_test.go` with ten
 rows — file-list entry, filename rule, panel content, the Issue #9
 error overlay, the Issue #15 file-change pop-up (see
 [file-change-popup.md](file-change-popup.md)), the Issue #31 TUI help
 dialog (`helpFixtureView` substitutes the fixture into the `helpFooter`
 slot the renderer routes through `EscapeDiagnostic` — see
-[help-overlay.md](help-overlay.md)), usage-error stderr,
+[help-overlay.md](help-overlay.md)), the Issue #34 help footer note
+(`footerFixtureView` substitutes the fixture at the footer's
+runtime-substitution point and asserts it ends the composed body — see
+[documentation-limits.md](documentation-limits.md)), usage-error stderr,
 CLI-help stdout, and the Issue #11
 stderr replay (a load-failure diagnostic embedding the fixture as a
 filename, collected and written through `replayDiags` — see
@@ -115,10 +118,10 @@ filename, collected and written through `replayDiags` — see
 
 **Later-sink ownership**: each issue that introduces a sink routes it
 through this utility and extends the table — Issue #9 (error overlay),
-Issue #11 (stderr replay), Issue #15 (pop-up), and Issue #31 (TUI help
-dialog) are landed; still to come: Issue #34 (generated
-documentation text) — reusing `sinktest.Fixtures` without duplicating
-them.
+Issue #11 (stderr replay), Issue #15 (pop-up), Issue #31 (TUI help
+dialog), and Issue #34 (the rendered help footer and any other
+generated text path accepting runtime strings) are landed — reusing
+`sinktest.Fixtures` without duplicating them.
 
 ## Regressions
 
@@ -134,5 +137,5 @@ See [unit-tests.md](unit-tests.md):
 `internal/safepresentation/diagnostic_test.go` covers the diagnostic
 rules (line boundaries, tab stops, caret/`\u`/`\xNN` forms, literal
 backslash, single-lined embedded filenames, no raw controls);
-`internal/app/sinksafety_test.go` hosts the five-row sink-safety table
+`internal/app/sinksafety_test.go` hosts the ten-row sink-safety table
 driven by `internal/safepresentation/sinktest`.

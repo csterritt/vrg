@@ -33,6 +33,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [cli-flags-child-argv.md](cli-flags-child-argv.md), and
   [safe-presentation.md](safe-presentation.md).
 
+## internal/docs
+
+- `internal/docs/docs.go` — Issue #34's shared structured
+  documentation source: `Statements` (the scale-independence, ~50 MB
+  assumption-with-base64-caveat, 64 MiB record-limit, and
+  session-retention/no-OOM/no-cleanup statements) and `ScaleItems`
+  (about 10,000 matched files; about 100,000 matched lines; individual
+  files around 50 MB), rendered by `docs.Footer()` into the help
+  overlay's footer paragraph and by `docs.Limits()` into the README's
+  scale-and-memory-limits section body, so neither sink can drift from
+  the other. The repository root's `README.md` is Issue #34's single
+  user-facing documentation artifact the synchronization tests pin.
+  See [documentation-limits.md](documentation-limits.md).
+
 ## internal/searchindex
 
 - `internal/searchindex/record.go` — the per-record JSON parser and the
@@ -248,8 +262,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   routed binding is rendered from (navigation, scrolling, panning, the
   list toggles, wrap, colour, reload, help, quit/cancel — the same
   table Issue #34's documentation tests iterate); `helpFooter`, the
-  reserved footer slot under the table (empty until Issue #34 fills it
-  with the scale-and-limits note), escaped through
+  footer slot under the table, now `docs.Footer()`'s scale-and-limits
+  note rendered from the shared `internal/docs` source (Issue #34),
+  escaped through
   `safepresentation.EscapeDiagnostic` by `helpText` so its substitution
   can never emit control bytes; and `openHelp` — the entry point that
   composes the body into `m.help` and clears `popupID`, so opening
