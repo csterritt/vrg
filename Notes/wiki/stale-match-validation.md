@@ -27,12 +27,13 @@ fallback target resolves at install through the same reveal intent).
 ## Validation — per-submatch, in search bytes
 
 `filebuffer.Decode` splits lines first, then runs `validateStop` for
-each index stop. A stop recording no submatches maps its prepared
-union coverage unchecked (the `mapRecorded` path), and a file whose
-raw bytes carry a UTF-16 or UTF-32 signature — `utf16Or32`, longer
-BOMs checked before overlapping shorter ones — skips validation
-entirely: those bytes are not the rg-line coordinate model, and
-Issue #30 owns the unsupported-encoding contract. Every other stop
+each index stop — though Issue #30's `detectEncoding` now runs
+**before** either: a file whose raw bytes carry a UTF-16 or UTF-32
+signature returns the line-free unsupported buffer described in
+[unsupported-encodings.md](unsupported-encodings.md) without ever
+reaching validation, because those bytes are not the rg-line
+coordinate model. A stop recording no submatches maps its prepared
+union coverage unchecked (the `mapRecorded` path). Every other stop
 checks each recorded submatch for:
 
 - **line existence** — the recorded line number must be inside the

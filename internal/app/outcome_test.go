@@ -94,6 +94,15 @@ var staleContent = []byte("stale changed content\n")
 // for every read — the Issue #29 outcome-matrix seam.
 func staleAllLoader([]byte) ([]byte, error) { return staleContent, nil }
 
+// utf16Content is the injected UTF-16 LE payload for the Issue #30
+// rows: its FF FE signature classifies every decoded buffer as
+// unsupported.
+var utf16Content = []byte(utf16LEContent)
+
+// unsupportedAllLoader is the injected loader returning the UTF-16
+// payload for every read — the Issue #30 outcome-matrix seam.
+func unsupportedAllLoader([]byte) ([]byte, error) { return utf16Content, nil }
+
 // outcomeCase is one row of the Issue #9 outcome matrix: the completed
 // search in — a process result and an event stream — and the expected
 // presentation, dismissal behavior, and fixed exit status out.
@@ -126,6 +135,15 @@ type outcomeCase struct {
 	// validation touches only presentation: the fixed status must
 	// survive all of it.
 	staleLoads []int
+
+	// unsupportedLoads lists index file positions whose loads detect
+	// an unsupported encoding — the Issue #30 rows. The current
+	// file's load command runs the injected BOM-payload loader; other
+	// positions are minted and completed by injected
+	// unsupported-decoded buffers. Encoding detection touches only
+	// presentation and diagnostics: the fixed status must survive
+	// all of it.
+	unsupportedLoads []int
 
 	// dismiss is the key pressed next — "q" or "esc" — asserted to
 	// dismiss the overlay (or to be a base-state no-op when no overlay
@@ -418,6 +436,19 @@ func TestOutcomeMatrix(t *testing.T) {
 			showsAfter: []string{"file changed since search"},
 			close:      "q", status: 0,
 		},
+		{
+			// Issue #30: every retained file opens with a UTF-16/32
+			// BOM — the panel presents only placeholders and the
+			// detections are collected diagnostics; the fixed status
+			// stays the search-derived 0.
+			name:   "all files unsupported with fixed status 0 still exits 0",
+			stream: happyStream, code: 0,
+			state: stateBrowse, shows: []string{"a.go"},
+			unsupportedLoads: []int{0, 1},
+			dismiss:          "esc", after: stateBrowse,
+			showsAfter: []string{"(unsupported encoding)"},
+			close:      "q", status: 0,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			res := Result{
@@ -432,6 +463,9 @@ func TestOutcomeMatrix(t *testing.T) {
 			}
 			if len(tc.staleLoads) > 0 {
 				opts.loader = staleAllLoader
+			}
+			if len(tc.unsupportedLoads) > 0 {
+				opts.loader = unsupportedAllLoader
 			}
 			m := newTestModel(fakeChild{res: res}, opts)
 			m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -491,6 +525,42 @@ func TestOutcomeMatrix(t *testing.T) {
 			}
 			if len(tc.staleLoads) > 0 && m.status != tc.status {
 				t.Fatalf("stale loads changed the fixed status to %d, want %d", m.status, tc.status)
+			}
+
+			// Issue #30 rows: mark the listed files' loads
+			// unsupported — the current file's through the
+			// transition's own load command under the injected BOM
+			// loader, the rest by minted completions carrying
+			// unsupported-decoded buffers — then prove the fixed
+			// status survived all of it.
+			for _, fi := range tc.unsupportedLoads {
+				p := m.idx.Files[fi].Path
+				if fi == m.curFile() {
+					msg, ok := fileLoadOf(loadCmd)
+					if !ok {
+						t.Fatal("the browse transition's load command produced no completion")
+					}
+					m.Update(msg)
+					continue
+				}
+				m.Update(fileLoadedMsg{path: p, req: mintRequest(m, p),
+					buf: filebuffer.Decode(utf16Content, m.idx.Files[fi].Stops)})
+			}
+			for _, fi := range tc.unsupportedLoads {
+				key := string(m.idx.Files[fi].Path)
+				if buf := m.bufs[key]; buf == nil || buf.Unsupported() == "" {
+					t.Fatalf("file %d did not install an unsupported buffer", fi)
+				}
+			}
+			if len(tc.unsupportedLoads) > 0 {
+				if m.status != tc.status {
+					t.Fatalf("unsupported loads changed the fixed status to %d, want %d",
+						m.status, tc.status)
+				}
+				if !m.overlayOpen || !strings.Contains(m.overlayText, "unsupported encoding") {
+					t.Fatalf("overlay open=%v text=%q, want the current file's encoding diagnostic shown",
+						m.overlayOpen, m.overlayText)
+				}
 			}
 
 			if tc.dismiss != "" {

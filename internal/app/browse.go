@@ -264,7 +264,7 @@ func (m *model) currentRows(path string) rowSource {
 		return rows
 	}
 	buf := m.bufs[path]
-	if buf == nil || r.Key() != m.layoutKey(path, buf) {
+	if buf == nil || buf.Unsupported() != "" || r.Key() != m.layoutKey(path, buf) {
 		return nil
 	}
 	return rows
@@ -283,12 +283,14 @@ type layoutReadyMsg struct {
 // the current layout parameters as a command — row-model construction
 // stays off the update path so input keeps flowing while it runs. It
 // returns nil when the installed model already matches (the fast path),
-// when an identical request is already in flight, or when no buffer is
-// cached yet. The completion carries its key, so a superseded or
-// out-of-order delivery is discarded rather than installed.
+// when an identical request is already in flight, when no buffer is
+// cached yet, or when the buffer is unsupported — an Issue #30
+// placeholder has no rows to prepare. The completion carries its key,
+// so a superseded or out-of-order delivery is discarded rather than
+// installed.
 func (m *model) requestLayout(path string) tea.Cmd {
 	buf := m.bufs[path]
-	if buf == nil {
+	if buf == nil || buf.Unsupported() != "" {
 		return nil
 	}
 	k := m.layoutKey(path, buf)
@@ -501,6 +503,14 @@ func loadDiag(path []byte, err error) string {
 	return "cannot read " + safepresentation.EscapePath(path) + ": " + safepresentation.EscapePath([]byte(reason))
 }
 
+// encodingDiag composes the single-line diagnostic for a file whose
+// BOM declares an encoding vrg does not present (Issue #30): the path
+// single-line-escaped so hostile name bytes can never forge a
+// diagnostic line boundary, and the detected encoding named.
+func encodingDiag(path []byte, enc string) string {
+	return "cannot display " + safepresentation.EscapePath(path) + ": unsupported encoding " + enc
+}
+
 // browseView composes the two-pane browse frame at the current
 // dimensions: the file list in raw-path order on the left, the filename
 // rule and file panel on the right, exactly height rows. Every sink —
@@ -524,13 +534,13 @@ func (m *model) browseView() string {
 	}
 
 	var rows rowSource
-	failed := false
+	placeholder := "Loading…"
 	curLine := int64(-1)
 	top := 0
 	off := 0
 	if len(files) > 0 {
 		key := string(files[cur].Path)
-		rows, failed = m.currentRows(key), m.failed[key]
+		rows, placeholder = m.currentRows(key), m.placeholder(key)
 		if rows != nil {
 			// The saved top is clamped on every state change; clamp
 			// again here so a stale entry can never blank the panel.
@@ -558,7 +568,7 @@ func (m *model) browseView() string {
 			sb.WriteString(m.listCell(listTop+r-1, listW))
 		}
 		if panelW > 0 {
-			sb.WriteString(m.contentCell(r-1, panelW, top, off, rows, failed, curLine))
+			sb.WriteString(m.contentCell(r-1, panelW, top, off, rows, placeholder, curLine))
 		}
 	}
 	return sb.String()
@@ -582,6 +592,26 @@ func (m *model) listCell(i, width int) string {
 	return entry + strings.Repeat(" ", width-safepresentation.CellWidth(clipped))
 }
 
+// placeholder is the panel's stand-in text while no row model is
+// installed for path: "Loading…" while a load is in flight or none
+// has settled, "(unreadable)" after a failed load (Issue #26), and
+// "(unsupported encoding)" while the cached buffer carries a
+// UTF-16/32 BOM (Issue #30). An in-flight load always reads
+// Loading… — the unsupported or failed buffer it replaces is never
+// presented mid-flight.
+func (m *model) placeholder(path string) string {
+	if _, ok := m.loading[path]; ok {
+		return "Loading…"
+	}
+	if m.failed[path] {
+		return "(unreadable)"
+	}
+	if buf := m.bufs[path]; buf != nil && buf.Unsupported() != "" {
+		return "(unsupported encoding)"
+	}
+	return "Loading…"
+}
+
 // contentCell renders file-panel content row cr padded to width cells:
 // gutter plus text for the prepared row at index top+cr — a wrapped
 // continuation row carries a blank gutter — or the placeholder while
@@ -592,12 +622,8 @@ func (m *model) listCell(i, width int) string {
 // and the reserved rightmost cell shows '*' on the current matched
 // line's row when a match is entirely hidden right — never
 // overwriting text. Wrap mode draws neither.
-func (m *model) contentCell(cr, width, top, off int, rows rowSource, failed bool, curLine int64) string {
+func (m *model) contentCell(cr, width, top, off int, rows rowSource, placeholder string, curLine int64) string {
 	if rows == nil {
-		placeholder := "Loading…"
-		if failed {
-			placeholder = "(unreadable)"
-		}
 		if cr == 0 {
 			return padTo(clipCells(placeholder, width), width)
 		}
@@ -653,8 +679,7 @@ const staleNote = "file changed since search"
 // "─ path ────". The buffer-status note slot sits inside the rule
 // after the path — "─ path note ────" — and the path left-truncates
 // with a leading … to make room for the note where possible
-// (Issue #24 provides the slot; Issues 26, 29, and 30 supply the
-// notes).
+// (Issue #24 provides the slot; Issue #29 supplies the note).
 func (m *model) filenameRule(width int) string {
 	name, note := "", ""
 	if m.idx != nil && len(m.idx.Files) > 0 {

@@ -224,6 +224,17 @@ Catalog of all wiki pages for the vrg project.
   search" filename-row note recomputed per reload, UTF-16/32
   exclusion, and the all-stale outcome-matrix row proving the fixed
   status unchanged
+- [unsupported-encodings.md](unsupported-encodings.md) — Issue #30:
+  `detectEncoding` classifying the four UTF-16/32 BOMs with the
+  longer-before-shorter overlap ordering (UTF-32 LE `FF FE 00 00`
+  before UTF-16 LE `FF FE`) and the UTF-8 BOM never misclassified,
+  the line-free buffer skipping stale validation entirely, the
+  "(unsupported encoding)" placeholder via the `placeholder(path)`
+  selector, the `cannot display …: unsupported encoding <name>`
+  diagnostic under the current/non-current notification split,
+  retained cursor stops and the unchanged `r` reload route, no
+  forced encoding flag in the child argv, and the all-unsupported
+  outcome-matrix row proving the fixed status unchanged
 
 ## Catalogs
 

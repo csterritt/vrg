@@ -30,8 +30,10 @@ replaces. The in-flight check still applies — a second `r`, like a
 re-entry crossing onto a path whose reload is pending, mints nothing:
 **dropped, not queued**, per the
 [one-load-per-path rule](async-load-isolation.md). The placeholder's
-change is the only completion signal — "Loading…" → content or
-"(unreadable)" — after which `r` starts a fresh load. `r` works with a
+change is the only completion signal — "Loading…" → content,
+"(unreadable)", or Issue #30's
+["(unsupported encoding)"](unsupported-encodings.md) — after which
+`r` starts a fresh load. `r` works with a
 one-stop index: with `n`/`p` strict no-ops there, it is the only
 retry route.
 

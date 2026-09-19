@@ -119,12 +119,11 @@ possible. When the note itself would overflow, the path yields its
 cells first and the note clips to whatever the slot leaves —
 nothing overflows the frame width.
 
-The slot is real but its content is synthetic for now:
-`m.notes[path]` is the per-file status string the tests inject.
-Issue #26 supplies the unreadable-state note, Issue #29 the
-stale/file-changed note, and Issue #30 the unsupported-encoding
-note — this issue provides only the composition seam they write
-into.
+The slot is real and Issue #29 is its only supplier so far:
+`m.notes[path]` carries the stale/file-changed note while the
+buffer's mark holds. Issue #26's "(unreadable)" and Issue #30's
+"(unsupported encoding)" are panel placeholders, not notes — this
+issue provides the composition seam the note writes into.
 
 ## Tests
 

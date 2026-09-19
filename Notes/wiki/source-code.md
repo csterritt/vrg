@@ -167,7 +167,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   also the stale-note supplier: `notes[key]` sets or clears
   `staleNote` from the installed buffer's `Stale()` mark — the
   failure branch deletes it — so the filename row's slot recomputes
-  on every load. See
+  on every load. Issue #30 adds the encoding detection: a success
+  whose buffer reports `Unsupported()` collects `encodingDiag` and
+  opens the overlay only when the loaded path is current — the
+  Issue #26 notification split reused — with no layout prepared for
+  the row-less placeholder. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
@@ -176,8 +180,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [stderr-replay.md](stderr-replay.md),
   [async-load-isolation.md](async-load-isolation.md),
   [read-failures.md](read-failures.md),
-  [explicit-reload.md](explicit-reload.md), and
-  [load-completion-reveal.md](load-completion-reveal.md).
+  [explicit-reload.md](explicit-reload.md),
+  [load-completion-reveal.md](load-completion-reveal.md), and
+  [unsupported-encodings.md](unsupported-encodings.md).
 - `internal/app/outcome.go` — Issue #9's pure outcome decision:
   `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
   `Integrity`, usable-results count, `RecordLoss`, caller `Warnings`)
@@ -296,8 +301,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   for the requested visible entry only, `browseView` scrolls the
   list window to keep the active entry visible, and `filenameRule`
   gains the `─ path note ────` status-note slot whose synthetic
-  `m.notes` string the path truncates around (Issues #26/#29/#30
-  supply the real notes). Issue #25 makes `startLoad` mint a
+  `m.notes` string the path truncates around (Issue #29 supplies
+  the real note). Issue #25 makes `startLoad` mint a
   `loadSeq` request identity recorded in `loading` per raw path —
   at most one in flight, re-entry dropped not queued — which
   `fileLoadedMsg{path, req, buf, err}` echoes back; the command now
@@ -323,7 +328,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   pending anchor, or the first-visit fallback against the freshly
   installed rows. Issue #29 supplies the slot's second note:
   `staleNote` — "file changed since search" — rides `m.notes` on
-  every display with no timer while the buffer's mark holds. See
+  every display with no timer while the buffer's mark holds. Issue
+  #30 adds the third placeholder: `placeholder(path)` selects
+  "Loading…" for an in-flight or unsettled load, "(unreadable)" for
+  a `failed` path, and "(unsupported encoding)" for a cached buffer
+  reporting `Unsupported()` — `contentCell` takes the selected
+  string, `requestLayout` returns nil for the row-less buffer,
+  `currentRows` rejects an unsupported buffer's model, and
+  `encodingDiag` composes the `cannot display <path>: unsupported
+  encoding <name>` diagnostic. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [read-failures.md](read-failures.md),
@@ -340,8 +353,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [hidden-content-indicators.md](hidden-content-indicators.md),
   [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
   [zero-width-markers.md](zero-width-markers.md),
-  [file-list-layout.md](file-list-layout.md), and
-  [async-load-isolation.md](async-load-isolation.md).
+  [file-list-layout.md](file-list-layout.md),
+  [async-load-isolation.md](async-load-isolation.md), and
+  [unsupported-encodings.md](unsupported-encodings.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
@@ -378,17 +392,26 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   recorded submatch checked for line existence, range validity, and
   recorded-bytes equality against `SearchBytes` — with dropped
   submatches marking `Buffer.Stale()`, surviving unions feeding
-  `Line.mapSpans` through `unionSubRanges`, `utf16Or32` excluding the
-  Issue #30 encodings, each stop's resolved reveal cell recorded on
-  the line (`target`/`hasTarget`), and `Buffer.StopTarget` surfacing
-  the three landings. See
+  `Line.mapSpans` through `unionSubRanges`, each stop's resolved
+  reveal cell recorded on the line (`target`/`hasTarget`), and
+  `Buffer.StopTarget` surfacing the three landings. Issue #30 makes
+  the buffer the unsupported-encoding oracle: `Decode` opens with
+  `detectEncoding` — the four-byte UTF-32 BOMs checked before the
+  overlapping two-byte UTF-16 ones so `FF FE 00 00` classifies as
+  UTF-32 LE, never swallowed by `FF FE` — and a detection returns
+  `Buffer{unsupported}` before line splitting and validation, so
+  the buffer carries no lines, highlights, or stale state;
+  `Buffer.Unsupported()` reports the encoding name ("UTF-16 LE",
+  "UTF-16 BE", "UTF-32 LE", "UTF-32 BE"), "" for presented text.
+  See
   [browse-tracer.md](browse-tracer.md),
   [wrap-mode.md](wrap-mode.md),
   [horizontal-panning.md](horizontal-panning.md),
   [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
   [line-structure.md](line-structure.md),
-  [zero-width-markers.md](zero-width-markers.md), and
-  [stale-match-validation.md](stale-match-validation.md).
+  [zero-width-markers.md](zero-width-markers.md),
+  [stale-match-validation.md](stale-match-validation.md), and
+  [unsupported-encodings.md](unsupported-encodings.md).
 - `internal/viewport/viewport.go` — `Viewport`, the file panel's
   vertical window (`Top`, `Scroll`, `Clamp`), the scroll-unit helpers
   `HalfPage` and `MaxTop` (the BOF/EOF clamp bound), and `Rows`, the

@@ -22,7 +22,10 @@
 // longer equal the recorded ones is dropped — the buffer reports
 // Stale — while survivors keep their highlights and each stale stop
 // keeps a landing, the first survivor's cell or the clamped recorded
-// start. Unsupported encodings are Issue #30's.
+// start. Issue #30 makes the buffer the unsupported-encoding oracle:
+// a file opening with a UTF-16 or UTF-32 byte-order mark decodes to a
+// line-free buffer reporting its encoding — no file text, no
+// highlights, no stale validation — the placeholder's whole content.
 package filebuffer
 
 import (
@@ -125,6 +128,12 @@ type Buffer struct {
 	// validation against the loaded bytes — Issue #29's "file changed
 	// since search" state the filename row notes.
 	stale bool
+	// unsupported is the detected BOM's encoding name — "UTF-16 LE",
+	// "UTF-16 BE", "UTF-32 LE", or "UTF-32 BE" — when the file opens
+	// with a UTF-16/32 signature (Issue #30): the buffer carries no
+	// lines and the app presents its "(unsupported encoding)"
+	// placeholder with the diagnostic naming it.
+	unsupported string
 }
 
 // Read loads path's raw bytes — the raw bytes are the filesystem key,
@@ -140,9 +149,15 @@ func Read(path []byte) ([]byte, error) {
 // recorded submatch against the loaded bytes — the decode/map phase
 // of Load, with no filesystem access. Surviving submatches map onto
 // display cells as the lines' highlights; dropped ones mark the
-// buffer stale. A file the UTF-16/32 signatures classify keeps the
-// unchecked mapping — Issue #30 owns that contract.
+// buffer stale. A file opening with a UTF-16/32 byte-order mark is
+// unsupported (Issue #30): the buffer decodes to no lines at all —
+// no file text, no highlights — and its raw bytes never enter
+// validation, because the recorded submatches index rg's transcoded
+// line view, which raw encoded bytes cannot byte-equal.
 func Decode(raw []byte, stops []searchindex.Stop) *Buffer {
+	if enc := detectEncoding(raw); enc != "" {
+		return &Buffer{unsupported: enc}
+	}
 	b := &Buffer{}
 	for start := 0; start < len(raw); {
 		end := start
@@ -155,31 +170,34 @@ func Decode(raw []byte, stops []searchindex.Stop) *Buffer {
 		b.lines = append(b.lines, makeLine(raw[start:end], int64(len(b.lines))+1))
 		start = end
 	}
-	if utf16Or32(raw) {
-		for _, st := range stops {
-			b.mapRecorded(st)
-		}
-		return b
-	}
 	for _, st := range stops {
 		b.validateStop(st)
 	}
 	return b
 }
 
-// utf16Or32 reports whether raw carries a UTF-16 or UTF-32 byte-order
-// mark — the unsupported encodings Issue #30 owns, whose raw bytes
-// Issue #29's per-submatch byte validation does not check.
-func utf16Or32(raw []byte) bool {
-	return bytes.HasPrefix(raw, []byte{0xff, 0xfe, 0x00, 0x00}) || // UTF-32 LE
-		bytes.HasPrefix(raw, []byte{0x00, 0x00, 0xfe, 0xff}) || // UTF-32 BE
-		bytes.HasPrefix(raw, []byte{0xff, 0xfe}) || // UTF-16 LE
-		bytes.HasPrefix(raw, []byte{0xfe, 0xff}) // UTF-16 BE
+// detectEncoding reports the encoding a leading UTF-16/32 byte-order
+// mark declares — the unsupported set Issue #30 owns — checking the
+// longer four-byte BOMs before the overlapping two-byte ones so
+// UTF-32 LE (FF FE 00 00) is never swallowed by UTF-16 LE (FF FE). A
+// leading UTF-8 BOM is a supported signature Issue #22 handles and is
+// never reported.
+func detectEncoding(raw []byte) string {
+	switch {
+	case bytes.HasPrefix(raw, []byte{0xff, 0xfe, 0x00, 0x00}):
+		return "UTF-32 LE"
+	case bytes.HasPrefix(raw, []byte{0x00, 0x00, 0xfe, 0xff}):
+		return "UTF-32 BE"
+	case bytes.HasPrefix(raw, []byte{0xff, 0xfe}):
+		return "UTF-16 LE"
+	case bytes.HasPrefix(raw, []byte{0xfe, 0xff}):
+		return "UTF-16 BE"
+	}
+	return ""
 }
 
 // mapRecorded maps a stop's prepared highlight coverage onto its line
-// unchecked — the UTF-16/32 path Issue #30 owns, and the
-// no-recorded-submatches case inside validation.
+// unchecked — the no-recorded-submatches case inside validation.
 func (b *Buffer) mapRecorded(st searchindex.Stop) {
 	if row := int(st.Number) - 1; row >= 0 && row < len(b.lines) {
 		b.lines[row].mapSpans(st.Highlights)
@@ -311,6 +329,14 @@ func (b *Buffer) Lines() []Line { return b.lines }
 // #29). The mark is recomputed on every load and clears only on fully
 // validating content.
 func (b *Buffer) Stale() bool { return b.stale }
+
+// Unsupported is the file's detected unsupported encoding — "UTF-16
+// LE", "UTF-16 BE", "UTF-32 LE", or "UTF-32 BE" when a UTF-16/32
+// byte-order mark opens it — or "" for a file presented as text. An
+// unsupported buffer carries no lines, highlights, or stale state:
+// the panel shows the "(unsupported encoding)" placeholder and the
+// explanatory diagnostic instead (Issue #30).
+func (b *Buffer) Unsupported() string { return b.unsupported }
 
 // StopTarget resolves a navigation stop to its reveal target under
 // the loaded content: the destination's source line number and the

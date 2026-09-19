@@ -347,6 +347,23 @@ helper — and `Buffer.StopTarget`'s three landings:
 - `TestStaleZeroWidthSurvives` — a recorded zero-width submatch
   validates trivially and keeps its marker.
 
+`encoding_test.go` (same external package; Issue #30) drives the
+UTF-16/32 BOM classification:
+
+- `TestUnsupportedBOMsClassified` — each of the four signatures
+  reports its `Unsupported()` name with no lines, no highlights, and
+  no stale state; a signature-only file still classifies, and a NUL
+  third byte does not promote UTF-16 LE to UTF-32 LE.
+- `TestUTF32LECheckedBeforeUTF16LE` — `FF FE 00 00` opens with UTF-16
+  LE's two-byte mark, so the longer BOM is checked first and wins.
+- `TestSupportedSignaturesNotUnsupported` — the UTF-8 BOM (decoding
+  normally, its mark invisible), plain text, the empty file, lone
+  `FF`/`FE` bytes, a truncated UTF-32 mark, and signature bytes away
+  from the start are never misclassified.
+- `TestUnsupportedSkipsStaleValidation` — a recorded transcoded
+  submatch that could never byte-equal a raw range leaves the
+  unsupported buffer clean and line-free: validation never ran.
+
 ## internal/app
 
 `app_test.go` (same package; Issues #3–5), driving `Update`/`View` and
@@ -530,7 +547,13 @@ return stale content, the current file's under `staleAllLoader` and the
 rest by injected `filebuffer.Decode(staleContent, stops)` buffers —
 plus the all-stale row: every retained stop validates stale, the
 filename row carries "file changed since search", and the fixed status
-stays 0 (→ 0).
+stays 0 (→ 0). Issue #30 adds the mirroring `unsupportedLoads` field —
+positions whose loads detect an unsupported encoding, the current
+file's under `unsupportedAllLoader` (an injected loader returning the
+UTF-16 LE payload for every read) and the rest by injected
+unsupported-decoded buffers — plus the all-unsupported row: every
+retained file shows only the placeholder, the current file's encoding
+diagnostic opens the overlay, and the fixed status stays 0 (→ 0).
 
 `scroll_test.go` (same package; Issue #12) covers manual vertical
 scrolling and the per-file viewport:
@@ -1127,6 +1150,33 @@ integration — the `staleIndex`/`staleFile`/`staleStop` helpers extend
 - `TestStaleMissingLineLandsOnLastLine` — a deleted trailing matched
   line lands at the last source line's start, revealed in view, with
   no invented highlight and the note showing.
+
+`encoding_test.go` (same package; Issue #30) drives the unsupported
+integration — the `encIndex`/`encFile` fixture pairs each file's raw
+BOM-marked bytes with the transcoded rg line and submatch a real
+search records for it:
+
+- `TestUnsupportedCurrentShowsOverlayAndPlaceholder` — crossing into
+  the UTF-16 LE file opens the encoding diagnostic's overlay, shows
+  "(unsupported encoding)" with no file text and no highlights while
+  the filename row keeps naming the path, and the file stays a
+  cursor stop `n` wraps out of.
+- `TestUnsupportedNonCurrentDiagnosticOnly` — a detection completing
+  for a non-current file collects the diagnostic with no overlay and
+  no frame change; visiting it later shows the cached placeholder
+  and collects nothing new.
+- `TestUnsupportedReloadPreservesPlaceholder` — `r` mints a reload
+  that reads "Loading…" in flight, then an unchanged file settles
+  back to the placeholder with a fresh overlay and a second
+  collected diagnostic.
+- `TestUnsupportedRunsNoStaleValidation` — the transcoded recorded
+  submatch never marks the buffer stale and the filename row carries
+  no "file changed since search" note.
+- `TestUnsupportedComposedViewAtConstrainedWidths` — a long escaped
+  path's unsupported state at 80/30/20 columns: the placeholder
+  (full at 80, its unclipped prefix at constrained widths), the
+  …-truncated path ending at the basename, no row overflowing, and
+  nonnegative layout dimensions.
 
 Since Issue #25, `injectLoad` (in `layout_test.go`) fills a
 fabricated completion with the live request's identity before

@@ -1125,3 +1125,48 @@ viewport, and logical anchors; the FileBuffer module contract),
 `internal/viewport/viewport.go`, `internal/app/app.go`,
 `internal/app/browse.go`, `internal/filebuffer/stale_test.go`,
 `internal/app/stale_test.go`, `internal/app/outcome_test.go`.
+
+## [2026-09-17] ingest | Issue #30 unsupported encodings — "(unsupported encoding)", BOM detection, and notification
+
+`internal/filebuffer` is now the unsupported-encoding oracle:
+`Decode` opens with `detectEncoding`, which checks the four-byte
+UTF-32 BOMs before the overlapping two-byte UTF-16 ones — UTF-32 LE's
+`FF FE 00 00` is never swallowed by `FF FE` — and a detection returns
+`Buffer{unsupported}` before line splitting and `validateStop`, so
+the buffer carries no lines, highlights, or stale state and the raw
+encoded bytes never enter Issue #29's per-submatch validation (the
+recorded offsets index rg's transcoded line view). The UTF-8 BOM stays
+a supported Issue #22 signature, never misclassified.
+`Buffer.Unsupported()` reports "UTF-16 LE" / "UTF-16 BE" /
+"UTF-32 LE" / "UTF-32 BE". In the app, `placeholder(path)` replaces
+the two-way failed boolean — "Loading…" in flight or unsettled,
+"(unreadable)" for a `failed` path, "(unsupported encoding)" for a
+cached unsupported buffer — `requestLayout` returns nil and
+`currentRows` rejects the row-less buffer, and `fileLoadedMsg`
+collects `encodingDiag` (`cannot display <path>: unsupported encoding
+<name>`) once per detection under the Issue #26 split: overlay only
+while the file is current, diagnostic-only otherwise. Unsupported
+files keep their cursor stops and ride the unchanged Issue #27 `r`
+route — "Loading…" then the placeholder with a fresh overlay and
+second diagnostic — and the `unsupportedLoads` outcome-matrix row
+under `unsupportedAllLoader` proves an all-unsupported index keeps
+the fixed status 0. rg's default BOM detection is untouched: the
+child argv gains no encoding flag, which is why the recorded offsets
+could never be raw-file highlights. `internal/filebuffer/
+encoding_test.go` adds the classification, ordering, non-misclassi-
+fication, and no-validation coverage; `internal/app/encoding_test.go`
+adds the current/non-current notification, placeholder, reload, and
+composed-view coverage. Created
+[unsupported-encodings](unsupported-encodings.md); updated
+[source-code](source-code.md), [unit-tests](unit-tests.md),
+[stale-match-validation](stale-match-validation.md),
+[file-list-layout](file-list-layout.md),
+[explicit-reload](explicit-reload.md), and the index. Sources:
+`Notes/issues/030-unsupported-encodings-utf16-utf32.md`,
+`Notes/tasks/030-unsupported-encodings-utf16-utf32.md`,
+`Notes/PRD-vrg.md` (Encodings and stale-content validation; File
+loading, cache, reload, and selection consistency; Invocation and
+child arguments; the FileBuffer module contract),
+`internal/filebuffer/filebuffer.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/filebuffer/encoding_test.go`,
+`internal/app/encoding_test.go`, `internal/app/outcome_test.go`.

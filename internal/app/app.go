@@ -197,8 +197,8 @@ type model struct {
 	// (Issue #24): shown at startup, hidden by left/tab, shown by
 	// right/shift+tab — a computed zero width never changes it.
 	// notes is the per-file buffer-status note the filename row's
-	// slot renders — Issue #24 provides the slot; Issues 26, 29, and
-	// 30 supply the texts.
+	// slot renders — Issue #24 provides the slot; Issue #29 supplies
+	// the text.
 	// wrap is the session's wrap mode (Issue #16): on initially,
 	// toggled by w between wrapped rows and run-off-edge clipping.
 	idx            *searchindex.Index
@@ -419,6 +419,20 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notes[key] = staleNote
 			} else {
 				delete(m.notes, key)
+			}
+			// A UTF-16/32 BOM marks the load unsupported (Issue #30):
+			// the panel keeps its "(unsupported encoding)" placeholder
+			// — no file text, no highlights — and the explanatory
+			// diagnostic is collected once per detection, modal only
+			// while the file is current — Issue #26's
+			// current/non-current distinction. No layout is prepared:
+			// the placeholder has no rows.
+			if enc := msg.buf.Unsupported(); enc != "" {
+				diag := encodingDiag(msg.path, enc)
+				m.collectDiags(diag)
+				if ck, ok := m.curKey(); ok && ck == key {
+					m.openOverlay(diag, false)
+				}
 			}
 			// Stage one of the two-stage completion is limited to
 			// filing the result — no row-based decision runs here:
