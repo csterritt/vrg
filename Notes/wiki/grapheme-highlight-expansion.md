@@ -13,8 +13,9 @@ bullets) and *Layout and indicators* (indicator visibility over
 actually painted match cells) in
 [`Notes/PRD-vrg.md`](../PRD-vrg.md); user story 72. Builds on
 [safe-presentation.md](safe-presentation.md) (`Mapped.Clusters` — the
-shared segmentation and cell-width policy — plus the Issue #43 `◌`
-fallback for standalone combining clusters),
+shared segmentation and cell-width policy) and
+[combining-cluster-fallback.md](combining-cluster-fallback.md) (the
+Issue #43 `◌` fallback for standalone combining clusters),
 [wrap-mode.md](wrap-mode.md) (cluster-boundary wrapping and the
 blank-cell rule for an unfit cluster),
 [horizontal-panning.md](horizontal-panning.md) (the `off` clip window),
@@ -66,7 +67,10 @@ bookkeeping.
   independent visible cell keeps the recorded Issue #43 fallback: `◌`
   (U+25CC) plus the original combining-mark bytes occupying exactly
   one cell whose byte mapping resolves to the source bytes, so the
-  highlight is never an inaccessible zero-cell span.
+  highlight is never an inaccessible zero-cell span — see
+  [combining-cluster-fallback.md](combining-cluster-fallback.md) for
+  the representation, the one-cell propagation, and the
+  constructed-not-measured normalization rule.
 - **Wide glyphs never split** — a match touching any byte of a
   two-cell cluster covers both cells; emoji ZWJ sequences are one
   cluster under the shared `rivo/uniseg` policy and expand the same
@@ -97,15 +101,19 @@ neither may carry the match style:
 partial-cluster snapping in every boundary position over decomposed
 `e\u0301` and wide `文`/`日` clusters, the combining-only match
 expanding to its base cluster, the standalone combining mark's `◌`
-fallback cell highlighted, the wide pair never split, and a
+fallback cell highlighted (Issue #43 extends this with the
+display-geometry and never-adjacent tables — see
+[combining-cluster-fallback.md](combining-cluster-fallback.md)), the
+wide pair never split, and a
 `👨‍👩‍👧` ZWJ sequence expanding as one cluster.
 
 `internal/app/grapheme_test.go` (new, same package) drives the
 rendering half: clip blanks unstyled at both clip edges (including a
 split tab expansion), the wrap-boundary filler blank unstyled while
 the wrapped cluster highlights whole on its own row, a combining-only
-match painting the whole é, the `◌` fallback cell highlighted, and a
-CJK match painting both cells.
+match painting the whole é, the `◌` fallback cell highlighted with
+the next cluster unstyled in the following cell (plus Issue #43's
+pan-and-clip coverage), and a CJK match painting both cells.
 
 `internal/viewport` gains `loadBufferStops` so indicator tests build
 rows through the real FileBuffer path, and `markRowOf` +

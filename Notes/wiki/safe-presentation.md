@@ -44,9 +44,15 @@ Three entry points cover the sink classes:
   Issue #21
   ([grapheme-highlight-expansion.md](grapheme-highlight-expansion.md))
   consumes the same records for highlight expansion — a partial-cluster
-  match covers its whole cluster — and for the standalone combining
-  cluster's Issue #43 `◌`-plus-marks one-cell fallback, so a highlight
-  is never an inaccessible zero-cell span. Issue #39
+  match covers its whole cluster. Issue #43
+  ([combining-cluster-fallback.md](combining-cluster-fallback.md))
+  gives a standalone combining cluster — one measuring width 0 — a
+  real one-cell display fallback: `◌` (U+25CC, `E2 97 8C`) plus the
+  cluster's original mark bytes, emitted as `unit("◌"+cl, 1, s, e)` —
+  one `Cell`, one `Cluster`, the cell's byte range still the source
+  bytes, and the width pinned to 1 rather than re-measured — so a
+  highlight is never an inaccessible zero-cell span and no following
+  cluster can overlap the cell. Issue #39
   ([unified-rendering.md](unified-rendering.md)) completes the model:
   `CellWidth` in `cellwidth.go` is the single ANSI-aware cell-width
   helper every display-geometry consumer routes through, and the file

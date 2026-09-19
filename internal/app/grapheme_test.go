@@ -125,7 +125,9 @@ func TestCombiningOnlyMatchPaintsWholeGlyph(t *testing.T) {
 
 // A standalone combining mark displays as the ◌ fallback cell, and a
 // match on it highlights that one visible cell — the highlight is
-// never zero cells.
+// never zero cells. The next cluster renders in the following cell,
+// unstyled and unshared: the styled run closes on the fallback and
+// 'x' resumes in the base colours.
 func TestStandaloneCombiningFallbackCellHighlighted(t *testing.T) {
 	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
 	idx := navIndex(t, []navFile{{
@@ -134,8 +136,46 @@ func TestStandaloneCombiningFallbackCellHighlighted(t *testing.T) {
 		stops:   []navStop{{line: 1, start: 0, end: 2}},
 	}})
 	finishLoad(t, m, startBrowse(t, m, idx))
-	if v := viewText(m); !strings.Contains(v, "\x1b[30;47;4m◌́") {
-		t.Fatalf("view = %q, want the ◌ fallback cell highlighted", v)
+	if v := viewText(m); !strings.Contains(v, "\x1b[30;47;4m◌́\x1b[37;40;24mx") {
+		t.Fatalf("view = %q, want the ◌́ fallback cell highlighted with x unstyled in the next cell", v)
+	}
+}
+
+// The fallback cell pans and clips like any other one-cell cluster
+// (Issue #43): one step of horizontal offset hides it whole — never
+// a partial cell — the next cluster's text shifts exactly one cell
+// left, and the now entirely hidden match upgrades the gutter mark
+// to '*'.
+func TestStandaloneCombiningFallbackPansAsOneCell(t *testing.T) {
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	idx := navIndex(t, []navFile{{
+		name:    "a.txt",
+		content: "\xcc\x81" + strings.Repeat("x", 60) + "\n",
+		stops:   []navStop{{line: 1, start: 0, end: 2}},
+	}})
+	key := flatIndicatorModel(t, m, idx, 3)
+	listW := m.listWidth()
+
+	// At offset 0 the fallback cell paints highlighted and the x run
+	// begins in the next cell.
+	row := frameRow(t, m, 1)[listW+1:]
+	if !strings.Contains(row, "\x1b[30;47;4m◌́\x1b[37;40;24mx") {
+		t.Fatalf("row = %q, want the ◌́ fallback highlighted with x in the next cell", row)
+	}
+
+	// One pan step hides the fallback's single cell entirely: no ◌
+	// remains in the frame, the x run starts at the window's first
+	// cell, and the hidden match stars the gutter.
+	panTo(t, m, key, 1)
+	row = frameRow(t, m, 1)[listW+1:]
+	if strings.Contains(row, "◌") {
+		t.Fatalf("row = %q still shows the fallback past its one cell", row)
+	}
+	if !strings.Contains(row, "\x1b[30;47m*\x1b[37;40;24m") {
+		t.Fatalf("row = %q, want the gutter star for the hidden-left match", row)
+	}
+	if !strings.HasSuffix(row, strings.Repeat("x", 40)+" ") {
+		t.Fatalf("row = %q, want the x run shifted to the window's first cell", row)
 	}
 }
 

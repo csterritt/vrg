@@ -628,6 +628,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `MapContent`, `Mapped`/`Cell`/`CellsCovering` byte→cell maps, and
   (Issue #16) `Cluster`/`Mapped.Clusters` — the shared grapheme
   segmentation — plus the structural eight-column tab expansion.
+  Issue #43's `MapContent` fallback emits a width-0 standalone
+  combining cluster as `unit("◌"+cl, 1, s, e)` — `◌` (U+25CC) plus
+  the original mark bytes in one constructed cell whose byte range is
+  still the cluster's source bytes. See
+  [combining-cluster-fallback.md](combining-cluster-fallback.md).
 - `internal/safepresentation/diagnostic.go` — `EscapeDiagnostic`:
   real line boundaries preserved (CRLF normalizes to LF), tabs expand
   to eight-column stops, other controls escaped; embedded external

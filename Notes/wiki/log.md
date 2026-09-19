@@ -1647,3 +1647,47 @@ index. Sources:
 `internal/app/browse.go`, `internal/app/admission_test.go`, PRD
 *File loading, cache, reload, and selection consistency* and
 *Navigation, viewport, and logical anchors*.
+## [2026-09-18] ingest | Issue #43 standalone combining clusters get a real one-cell display fallback
+
+A grapheme cluster with no base and no independent visible cell — one
+the shared `rivo/uniseg` policy measures at width 0 — now displays as
+a real one-cell fallback unit rather than only a widened cell
+annotation: `MapContent` emits `unit("◌"+cl, 1, s, e)` — the recorded
+Candidate-A representation in
+`Notes/decisions/043-combining-cluster-fallback-cell.md`: `◌`
+(U+25CC, `E2 97 8C`) followed by the
+cluster's original combining-mark bytes composing onto the
+dotted-circle carrier. The cell is constructed with its width pinned
+to 1 — never re-measured — so a width-library 0/>1 report or an
+inconsistent terminal cannot change the recorded geometry, and the
+cell position advances past it so the following cluster owns the next
+cell with no overlap and no shared cell. Only the display gains the
+cell: `Cell{Start, End}` remains the cluster's original source-byte
+range, so `CellsCovering`, highlight expansion, stale validation, and
+raw-byte coordinates are unaffected while wrapping, clipping,
+panning, and the Issue #39 renderer all count the cell like any
+other. The representation pre-landed inside `MapContent`; the issue's
+work pins the contract with missing proofs:
+`TestStandaloneCombiningFallbackCellGeometry` (display bytes,
+one-cell cluster, preserved source-byte mapping, next-cluster cell
+ownership — line-opening mark and two-mark cluster),
+`TestStandaloneCombiningFallbackHighlightNeverAdjacent` (a mid-line
+standalone mark highlights exactly `{3,4}` of `a^A◌́b`),
+`TestWrapCountsStandaloneCombiningFallbackCell` (extent and both row
+models count the cell), the strengthened
+`TestStandaloneCombiningFallbackCellHighlighted` (styled `◌́` closes
+before the unstyled `x`), and `TestStandaloneCombiningFallbackPansAsOneCell`
+(one pan step hides the cell whole and stars the gutter for the hidden
+match). Created
+[combining-cluster-fallback](combining-cluster-fallback.md); updated
+[safe-presentation](safe-presentation.md),
+[grapheme-highlight-expansion](grapheme-highlight-expansion.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/043-combining-cluster-fallback-cell.md`,
+`Notes/tasks/043-combining-cluster-fallback-cell.md`,
+`Notes/decisions/043-combining-cluster-fallback-cell.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation),
+`internal/safepresentation/safepresentation.go`,
+`internal/filebuffer/filebuffer_test.go`,
+`internal/viewport/wrap_test.go`, `internal/app/grapheme_test.go`.

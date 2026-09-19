@@ -77,6 +77,35 @@ func TestWrapKeepsClustersTogether(t *testing.T) {
 	}
 }
 
+// A standalone combining cluster's Issue #43 ◌-plus-marks fallback is
+// a real one-cell cluster in wrap math like any other: it fills a cell
+// of its row's width, the line's extent counts it, and the following
+// clusters lay out after it — never overlapping its cell.
+func TestWrapCountsStandaloneCombiningFallbackCell(t *testing.T) {
+	// "\xcc\x81xxxx" displays as ◌́xxxx — five one-cell clusters.
+	buf := loadBuffer(t, "\xcc\x81xxxx\n")
+	if l := buf.Lines()[0]; l.Extent() != 5 || len(l.Cells) != 5 {
+		t.Fatalf("extent %d cells %d, want 5 — the fallback is a real cell",
+			l.Extent(), len(l.Cells))
+	}
+	rows := viewport.Prepare(buf, viewport.Key{TextWidth: 3, Wrap: true})
+	want := []struct{ start, end int }{{0, 3}, {3, 5}}
+	if rows.Len() != len(want) {
+		t.Fatalf("Len = %d, want %d", rows.Len(), len(want))
+	}
+	for i, w := range want {
+		if r := rows.At(i); r.Start != w.start || r.End != w.end {
+			t.Fatalf("row %d covers cells [%d,%d), want [%d,%d)", i, r.Start, r.End, w.start, w.end)
+		}
+	}
+	// Run-off-edge mode is one row spanning the whole extent, the
+	// fallback's cell included.
+	flat := viewport.Prepare(buf, viewport.Key{TextWidth: 3, Wrap: false})
+	if r := flat.At(0); r.Start != 0 || r.End != 5 {
+		t.Fatalf("flat row covers cells [%d,%d), want [0,5)", r.Start, r.End)
+	}
+}
+
 // A tab's expansion is one cluster: it wraps whole, never splits
 // across rows, and its cells stay blank.
 func TestWrapTabIsOneCluster(t *testing.T) {

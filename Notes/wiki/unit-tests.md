@@ -336,6 +336,17 @@ the table driver.
   combining mark's cell is the Issue #43 `◌`-plus-marks form occupying
   exactly one cell, and a match on it highlights that cell — never a
   zero-cell highlight.
+- `TestStandaloneCombiningFallbackCellGeometry` — Issue #43: the
+  fallback is a real cell in the display geometry — the line's `Text`
+  gains the `E2 97 8C` bytes ahead of the mark bytes (`◌́x`,
+  `◌́̂y` for a two-mark cluster), the byte→cell map resolves the
+  cell to the cluster's original source bytes, the cluster records
+  `{0,1}` with the following cluster owning the next cell, and
+  `CellsCovering` maps the mark bytes to the fallback cell and the
+  next byte to the next cell.
+- `TestStandaloneCombiningFallbackHighlightNeverAdjacent` — a match on
+  a mid-line standalone mark (after a control byte) highlights exactly
+  the fallback cell `{3,4}` of `a^A◌́b` — never the adjacent cells.
 - `TestHighlightWideGlyphPairNeverSplit` — a match touching any byte
   range of `文` covers both cells `[2,4)` together.
 - `TestHighlightEmojiZWJCluster` — a partial-byte match inside
@@ -989,7 +1000,14 @@ half of grapheme-cluster highlight expansion under the styled scheme:
 - `TestCombiningOnlyMatchPaintsWholeGlyph` — a match on `U+0301`'s
   bytes alone styles the whole decomposed é.
 - `TestStandaloneCombiningFallbackCellHighlighted` — a standalone
-  combining mark renders the `◌` fallback cell highlighted.
+  combining mark renders the `◌` fallback cell highlighted, with the
+  styled run closing on it and `x` resuming unstyled in the next
+  cell — no shared cell.
+- `TestStandaloneCombiningFallbackPansAsOneCell` — Issue #43: one pan
+  step hides the fallback's single cell whole (no `◌` remains, never a
+  partial cell), the following text shifts exactly one cell left into
+  the window's first cell, and the entirely hidden match upgrades the
+  gutter mark to `*`.
 - `TestCJKMatchPaintsBothCells` — a `文` match paints both cells
   inside one inverse-styled run.
 - Issue #39's unified-rendering additions —
@@ -1532,6 +1550,10 @@ run-off-edge row models:
 - `TestWrapKeepsClustersTogether` — a regional-indicator flag pair
   stays within one row's span rather than splitting across the
   boundary.
+- `TestWrapCountsStandaloneCombiningFallbackCell` — Issue #43: a
+  standalone combining cluster's `◌` fallback counts as a real one-cell
+  cluster in the line's extent and in both row models — the wrap bands
+  lay out after it.
 - `TestWrapTabIsOneCluster` — a tab expansion wraps as a single
   unbreakable cluster.
 - `TestWrapRowsAlignToClusterBoundaries` — over a mixed wide/combining/

@@ -336,6 +336,13 @@ Catalog of all wiki pages for the vrg project.
   the load in flight — while an accepted `r` still mints fresh,
   shows "Loading…", and bumps the revision exactly once at
   completion, and navigation re-entry stays deliberately ungated
+- [combining-cluster-fallback.md](combining-cluster-fallback.md) —
+  Issue #43: the recorded Candidate-A `◌` (U+25CC, `E2 97 8C`) plus
+  original-mark-bytes fallback a width-0 cluster displays as one real
+  cell — `MapContent`'s `unit("◌"+cl, 1, s, e)` — the
+  constructed-not-measured normalization rule, the preserved
+  source-byte mapping, and the one-cell propagation through clusters,
+  wrapping, clipping, panning, highlight expansion, and the renderer
 
 ## Catalogs
 

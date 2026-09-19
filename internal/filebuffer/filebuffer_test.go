@@ -297,6 +297,109 @@ func TestHighlightStandaloneCombiningGetsFallbackCell(t *testing.T) {
 	}
 }
 
+// The fallback is a real cell in the display geometry, not only a
+// widened cluster annotation (Issue #43): the line's Text gains the
+// recorded U+25CC byte sequence (E2 97 8C) ahead of the cluster's
+// original mark bytes, the fallback unit is one cluster of exactly
+// one cell whatever the marks measure alone, the byte→cell map
+// resolves that cell to the cluster's original source bytes — the
+// inserted ◌ carries no source bytes of its own — and the cell
+// cursor advances past it so the next cluster owns the next cell
+// with no overlap and no shared cell.
+func TestStandaloneCombiningFallbackCellGeometry(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		text    string
+		cells   []struct {
+			text       string
+			start, end int
+		}
+		markBytes [2]int
+	}{
+		{
+			name:    "mark opens the line",
+			content: "\xcc\x81x\n",
+			text:    "◌́x",
+			cells: []struct {
+				text       string
+				start, end int
+			}{
+				{"◌́", 0, 2}, {"x", 2, 3},
+			},
+			markBytes: [2]int{0, 2},
+		},
+		{
+			name:    "two marks still one fallback cell",
+			content: "\xcc\x81\xcc\x82y\n",
+			text:    "◌́̂y",
+			cells: []struct {
+				text       string
+				start, end int
+			}{
+				{"◌́̂", 0, 4}, {"y", 4, 5},
+			},
+			markBytes: [2]int{0, 4},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b := load(t, writeFile(t, tc.content))
+			l := b.Lines()[0]
+			if l.Text != tc.text {
+				t.Fatalf("text = %q, want %q — the recorded ◌-plus-marks display bytes", l.Text, tc.text)
+			}
+			if len(l.Cells) != len(tc.cells) {
+				t.Fatalf("cells = %v, want %d cells", l.Cells, len(tc.cells))
+			}
+			for i, w := range tc.cells {
+				c := l.Cells[i]
+				if c.Text != w.text || c.Start != w.start || c.End != w.end {
+					t.Fatalf("cell %d = {%q %d %d}, want {%q %d %d} — source-byte mapping preserved",
+						i, c.Text, c.Start, c.End, w.text, w.start, w.end)
+				}
+			}
+			if len(l.Clusters) != len(l.Cells) {
+				t.Fatalf("clusters = %v, want one cluster per cell", l.Clusters)
+			}
+			for i, cl := range l.Clusters {
+				if cl.Start != i || cl.End != i+1 {
+					t.Fatalf("cluster %d = %v, want the one-cell unit {%d %d}", i, cl, i, i+1)
+				}
+			}
+			// Byte→cell resolves the mark's source bytes to the
+			// fallback cell and the following byte to the next cell.
+			if lo, hi, ok := l.CellsCovering(tc.markBytes[0], tc.markBytes[1]); !ok || lo != 0 || hi != 1 {
+				t.Fatalf("CellsCovering(%v) = (%d, %d, %v), want (0, 1) — the fallback cell",
+					tc.markBytes, lo, hi, ok)
+			}
+			last := tc.cells[len(tc.cells)-1]
+			if lo, hi, ok := l.CellsCovering(last.start, last.end); !ok || lo != len(l.Cells)-1 || hi != len(l.Cells) {
+				t.Fatalf("CellsCovering(%d, %d) = (%d, %d, %v), want the last cell only",
+					last.start, last.end, lo, hi, ok)
+			}
+		})
+	}
+}
+
+// A match covering a standalone combining cluster mid-line highlights
+// exactly the fallback cell — never the adjacent cells (Issue #43):
+// after a control byte the mark stands alone inside the line, and its
+// span covers its one cell only.
+func TestStandaloneCombiningFallbackHighlightNeverAdjacent(t *testing.T) {
+	// "a\x01\xcc\x81b" displays as a^A◌́b — five one-cell clusters
+	// with the fallback at cell 3; the match covers the mark's bytes.
+	b := load(t, writeFile(t, "a\x01\xcc\x81b\n"), stop(1, [2]int{2, 4}))
+	l := b.Lines()[0]
+	if l.Text != "a^A◌́b" || len(l.Cells) != 5 || l.Cells[3].Text != "◌́" {
+		t.Fatalf("text = %q cells = %v, want a^A◌́b with the fallback at cell 3", l.Text, l.Cells)
+	}
+	if len(l.Highlights) != 1 || l.Highlights[0].Start != 3 || l.Highlights[0].End != 4 {
+		t.Fatalf("highlights = %v, want [{3 4}] — exactly the fallback cell, nothing adjacent",
+			l.Highlights)
+	}
+}
+
 // A two-cell glyph is never split by a highlight boundary: a match
 // touching any of its bytes covers both cells together.
 func TestHighlightWideGlyphPairNeverSplit(t *testing.T) {

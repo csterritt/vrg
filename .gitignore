@@ -44,3 +44,8 @@ Notes/walkthroughs/040-04/code-walkthrough/vrg
 # are regenerated on every walkthrough run.
 Notes/walkthroughs/041-04/code-walkthrough/fixture/
 Notes/walkthroughs/041-04/code-walkthrough/vrg
+
+# Generated at run time by smoke.py; the fixture and the built binary
+# are regenerated on every walkthrough run.
+Notes/walkthroughs/043-05/code-walkthrough/fixture/
+Notes/walkthroughs/043-05/code-walkthrough/vrg
