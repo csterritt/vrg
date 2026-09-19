@@ -4,7 +4,6 @@ Parent issue: #22
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #6
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the structural line handling in `internal/filebuffer` to satisfy Task 
 
 ---
 
-### 3. Create the structural-line walkthrough
+### 3. Create the structural-line finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/022-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/022-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/022-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the FileBuffer structural tests, then run the manual cases: a CRLF file searching cleanly with no `^M` shown and highlights landing correctly, a standalone CR mid-line rendering as `^M`, the empty-file case using the fake-rg harness to emit a valid `begin`/`match`/`end`/`summary` stream for a zero-byte `a.txt` showing the empty panel and three-cell gutter, and a UTF-8 BOM file showing no visible BOM with its first-line match highlighted in the right place. Reference Issue #22 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 022-04 finished successfully at <time>` to `Notes/finish-markers/022-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/022-04/` directory if it does not already exist.
 
 ---

@@ -4,7 +4,6 @@ Parent issue: #5
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #3, #4
 **Acceptance criteria**: AC7–AC8 → Tasks 1–2; AC1–AC6, AC9 → Tasks 3–4
-**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,12 +55,12 @@ Implement the first FileBuffer path, a minimal Viewport and Theme seam, and the 
 
 ---
 
-### 5. Create the browse-tracer walkthrough
+### 5. Create the browse-tracer finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/005-06/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/005-06/finish-marker.md`.  
 **Depends on**: 4
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/005-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the escaping unit tests, FileBuffer tests, model tests including the gated load, rendering tests, and the sink-safety raw-output tests, then run the binary in a repository to show the file list, filename rule, gutter, and inverse-video matches, a resize, and `q` exiting 0. Include the hostile-fixture manual case: a filename containing a newline and an ESC byte with a matching line containing an OSC sequence, showing escaped forms in the list, rule, and content with the terminal title unchanged. Reference Issue #5 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 005-06 finished successfully at <time>` to `Notes/finish-markers/005-06/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/005-06/` directory if it does not already exist.
 
 ---

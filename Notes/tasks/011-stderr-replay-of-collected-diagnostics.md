@@ -4,7 +4,6 @@ Parent issue: #11
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #4, #6, #9
 **Acceptance criteria**: AC1–AC2, AC4–AC5 → Tasks 1–2; AC3, AC6 → Tasks 3–4
-**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,12 +55,12 @@ Implement the application-side acknowledgement side channel gated for tests only
 
 ---
 
-### 5. Create the stderr-replay walkthrough
+### 5. Create the stderr-replay finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/011-06/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/011-06/finish-marker.md`.  
 **Depends on**: 4
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/011-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the model collection and boundary tests and the PTY acknowledgement and ordering tests, then run the manual case: a fake rg emitting stderr "warn one" with a valid stream, browsing, `q`, and the shell showing "warn one" exactly once after the TUI closes. Reference Issue #11 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 011-06 finished successfully at <time>` to `Notes/finish-markers/011-06/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/011-06/` directory if it does not already exist.
 
 ---

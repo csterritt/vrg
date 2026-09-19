@@ -4,7 +4,6 @@ Parent issue: #3
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #2
 **Acceptance criteria**: AC2–AC3 → Tasks 1–2; AC1, AC4–AC8 → Tasks 3–4
-**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,12 +55,12 @@ Implement the spawn and collection path in `internal/app` and its narrow process
 
 ---
 
-### 5. Create the search-collection walkthrough
+### 5. Create the search-collection finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/003-06/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/003-06/finish-marker.md`.  
 **Depends on**: 4
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/003-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the focused SearchIndex and App model tests, the fake-rg argv and working-directory subprocess test, and the dual-pipe backpressure fixture, then run the binary in a real repository to show "Searching…" followed by the interim summary with `q` exiting 0, and an rg-free `PATH` invocation by explicit binary path showing the start-failure diagnostic and exit 2. Reference Issue #3 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 003-06 finished successfully at <time>` to `Notes/finish-markers/003-06/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/003-06/` directory if it does not already exist.
 
 ---

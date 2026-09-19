@@ -4,7 +4,6 @@ Parent issue: #38
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: none
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Fix every site in `internal/app/app.go` that recomputes `viewport.TextWidth(m.wi
 
 ---
 
-### 3. Create the viewport-width walkthrough
+### 3. Create the viewport-width finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/038-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/038-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/038-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the corrected horizontal tests, then run the issue's manual scenario: a search whose matches include lines longer than the text width with the file list visible → pan right with `>` and confirm content, indicators, and padding stay inside the panel boundary and never bleed under or past the file list; toggle the list with `left`/`right` and confirm panning and indicators re-measure against the new panel width. Capture commands, outputs, and exit statuses. Reference Issue #38 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 038-04 finished successfully at <time>` to `Notes/finish-markers/038-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/038-04/` directory if it does not already exist.
 
 ---

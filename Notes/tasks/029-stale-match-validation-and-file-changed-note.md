@@ -4,7 +4,6 @@ Parent issue: #29
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #22, #27, #28
 **Acceptance criteria**: AC1, AC5 → Tasks 1–2; AC2–AC4, AC6–AC7 → Tasks 3–4
-**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,12 +55,12 @@ Implement the stale note in the Issue #24 status slot with its reload recomputat
 
 ---
 
-### 5. Create the stale-validation walkthrough
+### 5. Create the stale-validation finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/029-06/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/029-06/finish-marker.md`.  
 **Depends on**: 4
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/029-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the FileBuffer validation and fallback tests and the App note and two-stage reveal tests, then run the manual cases: editing the matched word in a file to a same-length different word and entering it showing no highlight with the "file changed since search" note, deleting trailing matched lines landing on the last line without highlight, and reverting with `r` clearing the note. Reference Issue #29 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 029-06 finished successfully at <time>` to `Notes/finish-markers/029-06/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/029-06/` directory if it does not already exist.
 
 ---

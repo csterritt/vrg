@@ -4,7 +4,6 @@ Parent issue: #47
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: none
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Change the file-load diagnostic construction so `internal/app`'s `FileLoadComple
 
 ---
 
-### 3. Create the read-failure-diagnostic walkthrough
+### 3. Create the read-failure-diagnostic finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/047-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/047-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/047-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the single-line diagnostic tests, then run the issue's manual scenario entirely inside a disposable temporary directory: create files named with embedded newline, tab, invalid UTF-8, and ESC bytes, index each file, then deterministically remove or rename it before the gated read attempt so the real load fails → each failure surfaces as exactly one diagnostic line with the path escaped inline, in both the overlay and the exit stderr replay. If a permission-denial variant is also shown, install a cleanup trap that restores the mode and report an unsupported environment rather than passing when elevated privileges or ACLs permit the read. Capture cleanup evidence along with commands, outputs, and exit statuses. Reference Issue #47 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 047-04 finished successfully at <time>` to `Notes/finish-markers/047-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/047-04/` directory if it does not already exist.
 
 ---

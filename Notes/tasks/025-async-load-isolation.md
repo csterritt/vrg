@@ -4,7 +4,6 @@ Parent issue: #25
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #13, #16
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the keyed load machinery in `internal/app` to satisfy Task 1: path and
 
 ---
 
-### 3. Create the load-isolation walkthrough
+### 3. Create the load-isolation finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/025-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/025-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/025-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the gated model tests, then run the manual case: a very large first file A and small second file B, pressing `n` immediately at startup so B shows while A still loads, then `p` so A shows content only once loaded, never before. Reference Issue #25 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 025-04 finished successfully at <time>` to `Notes/finish-markers/025-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/025-04/` directory if it does not already exist.
 
 ---

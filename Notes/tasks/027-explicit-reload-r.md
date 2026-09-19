@@ -4,7 +4,6 @@ Parent issue: #27
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #26, #17
 **Acceptance criteria**: AC1–AC7 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -33,12 +32,12 @@ Implement `r` in `internal/app` to satisfy Task 1: the reload request with its d
 
 ---
 
-### 3. Create the reload walkthrough
+### 3. Create the reload finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/027-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/027-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/027-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the gated reload and revision-supersession tests, then run the manual cases: opening a file, scrolling, appending lines externally with the display unchanged, `r` showing new content at the same top position, deleting the file and pressing `r` for "(unreadable)", restoring it and pressing `r` for content again, and a single-match search reloading via `r`. Reference Issue #27 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 027-04 finished successfully at <time>` to `Notes/finish-markers/027-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/027-04/` directory if it does not already exist.
 
 ---

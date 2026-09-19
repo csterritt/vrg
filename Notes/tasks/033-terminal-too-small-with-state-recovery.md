@@ -4,7 +4,6 @@ Parent issue: #33
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #32, #24
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the too-small gate in `internal/app` to satisfy Task 1: the threshold 
 
 ---
 
-### 3. Create the too-small walkthrough
+### 3. Create the too-small finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/033-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/033-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/033-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the threshold, recovery, and exit-semantics model tests, then run the manual cases: opening help, scrolling it, shrinking to 15×2 showing "Terminal too small", enlarging with help reappearing at the same scroll, shrinking again and pressing `q` to exit. Reference Issue #33 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 033-04 finished successfully at <time>` to `Notes/finish-markers/033-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/033-04/` directory if it does not already exist.
 
 ---

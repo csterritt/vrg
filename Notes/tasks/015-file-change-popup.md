@@ -4,7 +4,6 @@ Parent issue: #15
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #6, #9, #13
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the file-change pop-up in `internal/app` to satisfy Task 1: instance-k
 
 ---
 
-### 3. Create the pop-up walkthrough
+### 3. Create the pop-up finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/015-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/015-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/015-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the instance-keyed model tests, then run the binary: `n` across a file boundary showing the centred pop-up and its ~1 s disappearance, a quick second `n` showing the new file's pop-up with the navigation still applied, a resize while shown re-centring it, and a hostile path rendering its escaped form. Reference Issue #15 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 015-04 finished successfully at <time>` to `Notes/finish-markers/015-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/015-04/` directory if it does not already exist.
 
 ---

@@ -4,7 +4,6 @@ Parent issue: #24
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #17
 **Acceptance criteria**: AC1–AC8 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the width formula with its recomputation triggers, grapheme-safe left 
 
 ---
 
-### 3. Create the file-list walkthrough
+### 3. Create the file-list finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/024-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/024-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/024-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the layout-function and anchor-relayout tests, then run the manual cases in an 80-column terminal with long paths: the list at most 32 columns with `…`-prefixed basenames, loading a file with five-digit line numbers narrowing the list, scrolling partway into a wrapped line and pressing `tab` then `shift+tab` with the same text remaining at the top, and shrinking to 30 columns showing a constrained but present list that widens back on enlargement. Reference Issue #24 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 024-04 finished successfully at <time>` to `Notes/finish-markers/024-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/024-04/` directory if it does not already exist.
 
 ---

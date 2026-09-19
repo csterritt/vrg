@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Canonical condition-driven fake-rg PTY smoke harness for vrg.
 
-Issue #50 made this script the canonical smoke harness. The Issue #35
-copy at Notes/walkthroughs/035-03/code-walkthrough/smoke.py is a frozen
-historical artifact of that issue's walkthrough and is not edited.
+Issue #50 made this script the canonical smoke harness.
 
 Contract (Issue #50): every key is sent only after the preceding
 expected UI state or output marker is observed in the PTY stream;

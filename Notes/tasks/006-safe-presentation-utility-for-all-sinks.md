@@ -4,7 +4,6 @@ Parent issue: #6
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #5
 **Acceptance criteria**: AC1–AC8 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Generalize the Issue #5 core into the single shared utility, unify the minimal I
 
 ---
 
-### 3. Create the safe-presentation walkthrough
+### 3. Create the safe-presentation finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/006-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/006-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/006-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the unit tests for each path and content rule, the diagnostic escaping tests, the shared sink-safety table across every existing sink including CLI-help stdout, and the regression runs of the unchanged Issue #5 cases and Issue #1 CLI output tests, plus the manual checks: the hostile filename and content fixture showing escaped forms with the terminal title unchanged, and a usage error with a control-byte path rendering escaped on stderr with exit 2. Reference Issue #6 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 006-04 finished successfully at <time>` to `Notes/finish-markers/006-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/006-04/` directory if it does not already exist.
 
 ---

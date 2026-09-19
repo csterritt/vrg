@@ -4,7 +4,6 @@ Parent issue: #23
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #20, #22
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the zero-width marker in `internal/filebuffer` and `internal/viewport`
 
 ---
 
-### 3. Create the marker walkthrough
+### 3. Create the finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/023-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/023-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/023-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the marker tests including the `hit\r\n` column-3 case and the marker-only-line extent, then run the manual cases: `vrg '^' file` showing an inverse cell at column 0 of each line including empty lines, `vrg '$' file` showing an inverse cell after each line's last character, `n` between them working, and run-off-edge panning past a marker setting the left `*`. Reference Issue #23 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 023-04 finished successfully at <time>` to `Notes/finish-markers/023-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/023-04/` directory if it does not already exist.
 
 ---

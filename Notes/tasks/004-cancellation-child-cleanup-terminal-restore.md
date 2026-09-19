@@ -4,7 +4,6 @@ Parent issue: #4
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #3
 **Acceptance criteria**: AC1–AC8 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the cancellation and cleanup paths in `internal/app` and the process b
 
 ---
 
-### 3. Create the cancellation walkthrough
+### 3. Create the cancellation finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/004-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/004-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/004-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the PTY harness tests: `q` and `ctrl+c` against a blocked fake rg with exit 130, reap evidence, the display-restoration sequence, and termios equality; `q` during gate-held index preparation; and the injected controlled failure with its exactly-once post-restoration diagnostic and exit 2. Include a manual long-search cancellation showing the returned prompt, exit status 130, no orphaned rg, and `stty -a` matching its pre-run state. Reference Issue #4 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 004-04 finished successfully at <time>` to `Notes/finish-markers/004-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/004-04/` directory if it does not already exist.
 
 ---

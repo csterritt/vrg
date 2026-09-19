@@ -4,7 +4,6 @@ Parent issue: #17
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #16
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2; AC6–AC11 → Tasks 3–4
-**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,12 +55,12 @@ Implement prepared-layout jobs completing via messages like file loads, keyed in
 
 ---
 
-### 5. Create the anchor-and-layout walkthrough
+### 5. Create the anchor-and-layout finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/017-06/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/017-06/finish-marker.md`.  
 **Depends on**: 4
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/017-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the anchor round-trip and EOF-clamp tests, the gated preparation and out-of-order isolation tests, and the cached-file stale-layout tests, then run the binary: scroll partway into a wrapped long line, narrow and widen the terminal with the same text staying at the top, press `w` twice with the same text, scroll to EOF then widen showing the top moving up and staying there, and resize a ~50 MB fixture repeatedly with `ctrl+c` mid-rewrap exiting promptly with 130. Reference Issue #17 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 017-06 finished successfully at <time>` to `Notes/finish-markers/017-06/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/017-06/` directory if it does not already exist.
 
 ---

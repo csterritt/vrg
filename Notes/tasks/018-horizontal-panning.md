@@ -4,7 +4,6 @@ Parent issue: #18
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #16, #17
 **Acceptance criteria**: AC1–AC9 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the pan units, the visible-lines extent clamp computed from the prepar
 
 ---
 
-### 3. Create the panning walkthrough
+### 3. Create the panning finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/018-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/018-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/018-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the pan-unit, extent, and re-clamp tests, then run the binary in run-off-edge mode: `.` and `>` shifting text left by one and ten columns, `]` by half the width, `,` at offset 0 doing nothing, `w` `w` keeping the offset, `n` into another file starting at offset 0, a half-clipped CJK glyph showing a blank rather than a broken glyph, panning to the maximum with the final cluster fully painted and further pans doing nothing, and scrolling into short lines re-clamping leftwards without restoration on return. Reference Issue #18 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 018-04 finished successfully at <time>` to `Notes/finish-markers/018-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/018-04/` directory if it does not already exist.
 
 ---

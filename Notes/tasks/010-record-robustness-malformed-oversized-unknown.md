@@ -4,7 +4,6 @@ Parent issue: #10
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #9
 **Acceptance criteria**: AC1, AC8, AC10 → Tasks 1–2; AC2–AC7, AC9 → Tasks 3–4
-**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,12 +55,12 @@ Implement the 64 MiB payload limit with an explicit bounded reader rather than a
 
 ---
 
-### 5. Create the record-robustness walkthrough
+### 5. Create the record-robustness finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/010-06/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/010-06/finish-marker.md`.  
 **Depends on**: 4
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/010-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the disposition matrix tests, the 64 MiB boundary and resynchronization tests, and the extended outcome matrix, then run the manual fake-rg stream from the issue: a valid `begin`, `match`, a garbage line, an unknown-type line, a valid `end`, and a `summary` with exit 0, showing the browse view, the overlay listing both skip counts, and `q` exiting 0. Reference Issue #10 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 010-06 finished successfully at <time>` to `Notes/finish-markers/010-06/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/010-06/` directory if it does not already exist.
 
 ---

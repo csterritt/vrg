@@ -4,7 +4,6 @@ Parent issue: #21
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #19, #20
 **Acceptance criteria**: AC1–AC4 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement cluster expansion in `internal/filebuffer` to satisfy Task 1: outward 
 
 ---
 
-### 3. Create the expansion walkthrough
+### 3. Create the expansion finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/021-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/021-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/021-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the expansion, fallback, and wrap-boundary rendering tests and the updated indicator tests, then run the manual cases: searching a file containing decomposed `e\u0301` for the combining mark bytes themselves (not precomposed `é`, which ripgrep will not match) so the whole `é` glyph is highlighted, a CJK search showing both cells highlighted, and a standalone combining mark at line start producing a visible highlighted fallback cell. Reference Issue #21 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 021-04 finished successfully at <time>` to `Notes/finish-markers/021-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/021-04/` directory if it does not already exist.
 
 ---

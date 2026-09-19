@@ -4,7 +4,6 @@ Parent issue: #9
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #8
 **Acceptance criteria**: AC3 → Tasks 1–2; AC1–AC2, AC4–AC10 → Tasks 3–4
-**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,12 +55,12 @@ Implement the pure outcome function of process result, integrity, usable-result 
 
 ---
 
-### 5. Create the outcome-matrix walkthrough
+### 5. Create the outcome-matrix finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/009-06/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/009-06/finish-marker.md`.  
 **Depends on**: 4
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/009-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the lifecycle matrix tests, the table-driven outcome matrix, the overlay key-routing and wrapping tests, and the PTY stderr-content fixture, then run manual fake-rg cases: two valid matches then exit 3 with stderr "boom" browsing with the overlay and exiting 2 after dismissal; exit 2 with no output naming the code; SIGKILL mid-stream naming the signal; and a "warn" stderr with a summary-only stream showing the warning overlay, the no-results screen, and exit 1. Reference Issue #9 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 009-06 finished successfully at <time>` to `Notes/finish-markers/009-06/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/009-06/` directory if it does not already exist.
 
 ---

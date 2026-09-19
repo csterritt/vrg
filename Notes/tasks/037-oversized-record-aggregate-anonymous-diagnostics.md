@@ -4,7 +4,6 @@ Parent issue: #37
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #36
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Extend the record-loss composition reworked by Issue #36 in `internal/app/app.go
 
 ---
 
-### 3. Create the oversized-diagnostics walkthrough
+### 3. Create the oversized-diagnostics finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/037-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/037-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/037-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the outcome tests, then run the issue's manual scenarios with the fake-rg harness: one oversized record with a recoverable path followed by valid records and `summary` → browse with an overlay containing both the aggregate count and the named-path line; and an oversized record hitting the limit before its path field → the aggregate present with no path line, never an empty or absent diagnostic. Capture commands, outputs, and exit statuses. Reference Issue #37 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 037-04 finished successfully at <time>` to `Notes/finish-markers/037-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/037-04/` directory if it does not already exist.
 
 ---

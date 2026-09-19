@@ -4,7 +4,6 @@ Parent issue: #34
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #10, #31
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Write the user-facing `README.md` at the repository root and the help overlay fo
 
 ---
 
-### 3. Create the documentation walkthrough
+### 3. Create the documentation finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/034-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/034-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/034-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the synchronization tests running green against the committed README, the help footer note rendering in the overlay, and the help-footer sink-safety row passing against Issue #6's hostile fixtures, then read through the README's scale, record-limit, memory, invocation, flag, binding, and exit-status sections against the implementation. Reference Issue #34 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 034-04 finished successfully at <time>` to `Notes/finish-markers/034-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/034-04/` directory if it does not already exist.
 
 ---

@@ -4,7 +4,6 @@ Parent issue: #31
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #6, #9, #15
 **Acceptance criteria**: AC1–AC8 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the help overlay in `internal/app` on the wrapped, scrollable overlay 
 
 ---
 
-### 3. Create the help-overlay walkthrough
+### 3. Create the help-overlay finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/031-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/031-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/031-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the help model tests, then run the manual cases: `?` opening the bordered help, `down` scrolling, `n` doing nothing to the file behind, `Esc` closing, shrinking to 25×8 showing clipped-but-present help, and enlarging restoring the normal layout, plus opening help from the no-results screen and closing back to it with `q` exiting 1. Reference Issue #31 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 031-04 finished successfully at <time>` to `Notes/finish-markers/031-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/031-04/` directory if it does not already exist.
 
 ---

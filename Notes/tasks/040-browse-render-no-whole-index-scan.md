@@ -4,7 +4,6 @@ Parent issue: #40
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #39 — this issue consumes #39's shared grapheme/cell helper and cluster-safe path geometry; landing it afterward prevents parallel rewrites of `renderBrowse`
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2; AC6 → Task 2 (the existing file-list behaviour tests and Issue #39's focused rendering regressions are the unchanged safety net)
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Restructure `internal/app/app.go` so immutable per-file groups, current-file ind
 
 ---
 
-### 3. Create the bounded-render walkthrough
+### 3. Create the bounded-render finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/040-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/040-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/040-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the cost-guard tests, then run the issue's manual scenario: generate a large result set (tens of thousands of matched lines across many files) and hold `n` or `down`, or resize repeatedly → navigation and repainting stay responsive with no per-keystroke stall growing with index size. Capture commands, outputs, and exit statuses. Reference Issue #40 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 040-04 finished successfully at <time>` to `Notes/finish-markers/040-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/040-04/` directory if it does not already exist.
 
 ---

@@ -4,7 +4,6 @@ Parent issue: #8
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #5, #6
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement only enough in `internal/searchindex` and `internal/app` to satisfy Ta
 
 ---
 
-### 3. Create the no-results walkthrough
+### 3. Create the no-results finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/008-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/008-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/008-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the SearchIndex exclusion tests and the App outcome tests, then run the binary manually: `vrg zzzznotfound .` showing "No results found" with `q` exiting 1, and a directory containing only a binary file with a match showing "No results found (1 binary files skipped)" with `q` exiting 1. Reference Issue #8 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 008-04 finished successfully at <time>` to `Notes/finish-markers/008-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/008-04/` directory if it does not already exist.
 
 ---

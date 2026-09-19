@@ -4,7 +4,6 @@ Parent issue: #43
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #39
 **Acceptance criteria**: AC1 → Task 1 (recorded decision) and Tasks 2–3; AC2–AC5 → Tasks 2–3; AC6 → Task 2
-**Manual verification**: Task 4 owns the issue's manual checks.
 
 ## Tasks
 
@@ -42,12 +41,12 @@ Implement the recorded fallback in `internal/filebuffer` so a standalone zero-wi
 
 ---
 
-### 4. Create the fallback-cell walkthrough
+### 4. Create the fallback-cell finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/043-05/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/043-05/finish-marker.md`.  
 **Depends on**: 3
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/043-05/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the fallback tests, then run the issue's manual scenario: view a file whose line begins with or contains a standalone combining mark with no base character → it occupies one visible cell showing the recorded fallback representation, the following character renders in the next cell with no overlap, and a match covering the mark highlights exactly that one cell. Capture commands, outputs, and exit statuses. Reference Issue #43 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 043-05 finished successfully at <time>` to `Notes/finish-markers/043-05/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/043-05/` directory if it does not already exist.
 
 ---

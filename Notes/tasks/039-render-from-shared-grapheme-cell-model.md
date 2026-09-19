@@ -4,7 +4,6 @@ Parent issue: #39
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #38
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Introduce one shared ANSI-aware cell-width helper implementing the existing `riv
 
 ---
 
-### 3. Create the unified-rendering walkthrough
+### 3. Create the unified-rendering finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/039-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/039-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/039-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the composed-view tests and the static guard, then run the issue's manual scenario: browse a file containing CJK text, a combining sequence such as `e` plus combining acute, and an emoji ZWJ sequence with a match overlapping them → each highlight covers the whole cluster at exactly its cell width, overlay text containing wide characters is sized and padded correctly, and nothing is clipped mid-cluster. Capture commands, outputs, and exit statuses. Reference Issue #39 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 039-04 finished successfully at <time>` to `Notes/finish-markers/039-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/039-04/` directory if it does not already exist.
 
 ---

@@ -4,7 +4,6 @@ Parent issue: #30
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #26, #27, #29
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the BOM detection with its overlap ordering in `internal/filebuffer`, 
 
 ---
 
-### 3. Create the unsupported-encoding walkthrough
+### 3. Create the unsupported-encoding finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/030-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/030-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/030-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the BOM detection tests including the overlap case, then run the manual route: creating a UTF-16 LE file with `printf '\xff\xfeh\0i\0\n\0'`, running `vrg hi .`, entering the file to show "(unsupported encoding)" with the overlay, dismissing it, pressing `r` for "Loading…" then the placeholder with a new overlay, dismissing again, and `q` exiting 0 with each encoding diagnostic on stderr. Reference Issue #30 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 030-04 finished successfully at <time>` to `Notes/finish-markers/030-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/030-04/` directory if it does not already exist.
 
 ---

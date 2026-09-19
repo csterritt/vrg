@@ -4,7 +4,6 @@ Parent issue: #42
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: none
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Restructure `handleReload` and `startLoad` in `internal/app/app.go` so the one-l
 
 ---
 
-### 3. Create the reload-admission walkthrough
+### 3. Create the reload-admission finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/042-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/042-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/042-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the admission tests, then run the issue's manual scenario: with a slow-loading file (test seam or genuinely large file), press `r` while the startup or navigation load is still in flight → nothing visible changes, and when the load completes the destination match is revealed per the normal rules — not anchor-preserved as if a reload had happened. Capture commands, outputs, and exit statuses. Reference Issue #42 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 042-04 finished successfully at <time>` to `Notes/finish-markers/042-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/042-04/` directory if it does not already exist.
 
 ---

@@ -4,7 +4,6 @@ Parent issue: #41
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: none — shared-file/harness ordering with #46 and #48 in `cmd/vrg`: never implement overlapping PTY or `outcome_test.go` work concurrently; whichever issue lands second adapts to the already-landed tests and helpers. If #48 has landed, use its acknowledgement harness with no fixed settling/inter-key delay and add any new key-sending helper to #48's matrix and every new acknowledgement hook it requires to #45's hook manifest; if #41 lands first, #46/#48 apply their reciprocal adaptation clauses
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Remove the head-plus-ellipsis-plus-tail compression in `renderOverlay` (`interna
 
 ---
 
-### 3. Create the full-scroll-overlay walkthrough
+### 3. Create the full-scroll-overlay finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/041-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/041-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/041-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the model-level complete-rows, clamp, and traversal tests plus the revised `TestStderrContentFixture`, then run the issue's manual scenario: a fatal outcome from a fake rg emitting stderr longer than the overlay's visible height → open the overlay and scroll from the first row to the last with repeated `up`/`down` (confirming `u`/`d`/page keys are ignored), verify every middle row is reachable with no ellipsis substituting for content, dismiss, and confirm scroll clamping at both ends. Capture commands, outputs, and exit statuses. Reference Issue #41 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 041-04 finished successfully at <time>` to `Notes/finish-markers/041-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/041-04/` directory if it does not already exist.
 
 ---

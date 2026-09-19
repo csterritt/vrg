@@ -4,7 +4,6 @@ Parent issue: #2
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #1
 **Acceptance criteria**: AC1 → RED 1 / GREEN 2; AC2 → RED 1 / GREEN 2; AC3 → RED 1 / GREEN 2; AC4 → RED 1 / GREEN 2; AC5 → RED 1 / GREEN 2; AC6 → RED 1 / GREEN 2; AC7 → RED 1 / GREEN 2; AC8 → RED 1 / GREEN 2; AC9 → RED 1 / GREEN 2; AC10 → RED 1 / GREEN 2; AC11 → RED 1 / GREEN 2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -42,12 +41,12 @@ Build child arguments exactly as `--json`, `--no-config`, ordered expanded user 
 
 ---
 
-### 3. Create the complete flag-parsing walkthrough
+### 3. Create the complete flag-parsing finish marker
 
-**Type**: CODE WALKTHROUGH
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/002-04/code-walkthrough` and demonstrates every Issue #2 manual verification class plus retained Issue #1 help regressions.
+**Type**: FINISH MARKER
+**Output**: Finish marker exists at `Notes/finish-markers/002-04/finish-marker.md`.
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/002-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate focused tests and exact child argv for every accepted flag, `-i -s -i`, `-isi`, mixed long/short aliases, and options interleaved with both operands; combined-short and cumulative `-u` acceptance/rejection boundaries; unsupported and argument-taking flags; all specified boolean assignment rejections and their positional forms after `--`; empty, literal `-`, dash-leading, and literal `--` patterns; and the mandatory internal flags/order. Capture bare, first-token, mixed-flag, combined, and later help proving one stdout copy, empty stderr, exit 0, and no child/TUI, alongside the flags-only missing-pattern exit-2 case. Show generated help containing every supported search flag from the shared declarations. Reference Issue #2 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 002-04 finished successfully at <time>` to `Notes/finish-markers/002-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/002-04/` directory if it does not already exist.
 
 ---

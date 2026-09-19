@@ -4,7 +4,6 @@ Parent issue: #14
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #13
 **Acceptance criteria**: AC1–AC4 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the reveal rules in `internal/viewport` and their App triggers to sati
 
 ---
 
-### 3. Create the reveal walkthrough
+### 3. Create the reveal finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/014-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/014-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/014-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the Viewport reveal tests for visible, hidden, BOF-clamped, and EOF-clamped targets and the App startup-reveal tests, then run the binary on a long file with matches at lines 5 and 200: `n` placing line 200 about a third down, `p` returning to line 5 near the top, and `n` between two on-screen matches not scrolling. Reference Issue #14 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 014-04 finished successfully at <time>` to `Notes/finish-markers/014-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/014-04/` directory if it does not already exist.
 
 ---

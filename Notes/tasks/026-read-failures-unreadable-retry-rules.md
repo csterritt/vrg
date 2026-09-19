@@ -4,7 +4,6 @@ Parent issue: #26
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #9, #11, #24, #25
 **Acceptance criteria**: AC1–AC3, AC7–AC8 → Tasks 1–2; AC4–AC6 → Tasks 3–4
-**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,12 +55,12 @@ Implement the deterministic re-entry sequence in `internal/app` to satisfy Task 
 
 ---
 
-### 5. Create the read-failure walkthrough
+### 5. Create the read-failure finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/026-06/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/026-06/finish-marker.md`.  
 **Depends on**: 4
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/026-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the injected-loader notification and outcome-row tests and the gated re-entry sequence tests, then, on an unprivileged shell, run the manual route against a disposable temporary fixture directory — never a repository file — by copying the two matched files into it, recording the original mode, and running every step under a shell trap that restores the original mode on exit or interruption: making the second matched file unreadable with `chmod 000`, startup showing file 1, `n` into file 2 showing the overlay and "(unreadable)", `Esc`, a same-file `n` with no new overlay, `p` `p` back into file 2 showing the overlay with "Loading…", dismissal, and `q` exiting 0 with the failures listed on stderr. Completing or interrupting the walkthrough must leave no file with altered permissions, and the injected-loader model tests remain the authoritative deterministic verification. Reference Issue #26 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 026-06 finished successfully at <time>` to `Notes/finish-markers/026-06/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/026-06/` directory if it does not already exist.
 
 ---

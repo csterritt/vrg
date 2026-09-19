@@ -5,7 +5,6 @@ Parent PRD: PRD-vrg.md
 **Blocked by issues**: none
 **Decision**: removal selected by the product owner on 2026-09-14; `charm.land/bubbles/v2` and `charm.land/lipgloss/v2` are not used and must not be retained
 **Acceptance criteria**: AC1 → Task 1; AC2 → Tasks 1–2; AC3–AC4 → Task 2; AC5 → Tasks 2, 3
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -29,12 +28,12 @@ Run `go mod tidy` and commit its complete manifest result. Confirm `charm.land/b
 
 ---
 
-### 3. Create the manifest-hygiene walkthrough
+### 3. Create the manifest-hygiene finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/049-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/049-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/049-04/code-walkthrough`, with the main file named `walkthrough.md`. A lightweight walkthrough suffices for this mechanical no-behaviour-change issue: record the selected removal decision; prove Bubbles and Lip Gloss are absent from `go.mod` and `go.sum`; capture empty `go mod tidy -diff` output; and record `go mod verify`, `go build ./...`, `go vet ./...`, and `go test ./...` results against the committed manifests. Reference Issue #49 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 049-04 finished successfully at <time>` to `Notes/finish-markers/049-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/049-04/` directory if it does not already exist.
 
 ---

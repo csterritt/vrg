@@ -4,7 +4,6 @@ Parent issue: #7
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #5
 **Acceptance criteria**: AC1–AC4 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement `internal/theme` and its wiring to satisfy Task 1: the toggle with no 
 
 ---
 
-### 3. Create the theme walkthrough
+### 3. Create the theme finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/007-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/007-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/007-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the Theme unit tests for both schemes and the App toggle test, then run the binary with a search invocation against a fixture with matches — for example `vrg func .` in a Go repository, as in Issue #5 — and press `c` to show the background and foreground swapping with matches still inverse and current-line matches underlined, and `c` again to return (bare `vrg` prints command-line help and exits, so it cannot demonstrate theme switching). Reference Issue #7 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 007-04 finished successfully at <time>` to `Notes/finish-markers/007-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/007-04/` directory if it does not already exist.
 
 ---

@@ -4,7 +4,6 @@ Parent issue: #32
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #15, #26, #31
 **Acceptance criteria**: AC1–AC7 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the precedence stack in `internal/app` to satisfy Task 1: `ctrl+c` ove
 
 ---
 
-### 3. Create the precedence walkthrough
+### 3. Create the precedence finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/032-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/032-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/032-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the suspension, append, and dismissal-outcome model tests, then run the manual cases: `Esc` with no overlay doing nothing, `q` with a browse error overlay closing it and a second `q` exiting with the fixed status, a fake rg exiting 3 with no output showing the fatal overlay where both `Esc` and `q` exit 2, and the gated error-while-help-open case restoring help at its scroll position. Reference Issue #32 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 032-04 finished successfully at <time>` to `Notes/finish-markers/032-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/032-04/` directory if it does not already exist.
 
 ---

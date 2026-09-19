@@ -4,7 +4,6 @@ Parent issue: #19
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #18
 **Acceptance criteria**: AC1–AC6 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the minimal horizontal reveal in `internal/viewport` and its App trigg
 
 ---
 
-### 3. Create the horizontal-reveal walkthrough
+### 3. Create the horizontal-reveal finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/019-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/019-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/019-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the reveal arithmetic tests including the clipped-blank and oversized-cluster cases, then run the binary in run-off-edge mode on a file with matches at columns 5 and 300: `n` to the far match scrolling right just enough to show its start at the right edge, `n` back scrolling left just enough, a visible match causing no movement, and a CJK match at column 300 showing both cells of its first glyph painted. Reference Issue #19 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 019-04 finished successfully at <time>` to `Notes/finish-markers/019-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/019-04/` directory if it does not already exist.
 
 ---

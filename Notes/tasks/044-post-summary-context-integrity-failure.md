@@ -4,7 +4,6 @@ Parent issue: #44
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #36
 **Acceptance criteria**: AC1–AC4 → Task 1
-**Manual verification**: Task 2 owns the issue's manual checks.
 
 ## Tasks
 
@@ -20,12 +19,12 @@ Begin only after Issue #36 is complete. Issue #36 owns removing the `context` ex
 
 ---
 
-### 2. Create the summary-is-final walkthrough
+### 2. Create the summary-is-final finish marker
 
-**Type**: CODE WALKTHROUGH
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/044-03/code-walkthrough`.
+**Type**: FINISH MARKER
+**Output**: Finish marker exists at `Notes/finish-markers/044-03/finish-marker.md`.
 **Depends on**: 1
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/044-03/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the corrected lifecycle matrix row owned by Issue #36 and Issue #44's focused structured-cause and outcome assertions, then run the issue's manual scenario: a fake rg emitting valid records, then `summary`, then a `context` record, exiting 0 → the outcome is treated as a stream-integrity failure (fatal path per the outcome matrix) whose diagnostic names the after-`summary` cause, not silently accepted. Capture commands, outputs, and exit statuses. Reference Issues #36 and #44 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 044-03 finished successfully at <time>` to `Notes/finish-markers/044-03/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/044-03/` directory if it does not already exist.
 
 ---

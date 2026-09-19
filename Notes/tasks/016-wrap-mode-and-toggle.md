@@ -4,7 +4,6 @@ Parent issue: #16
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #14
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the shared grapheme policy in `internal/filebuffer` with its cluster b
 
 ---
 
-### 3. Create the wrap-mode walkthrough
+### 3. Create the wrap-mode finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/016-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/016-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/016-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the wrap row-count, tab, reveal, and render-cost tests, then run the binary on a file with a 500-character line: wrapped rows with blank continuation gutters, `w` showing it as one clipped row, tabs aligned to eight-column stops, and a match near the end of the long line revealed on its own row after `n`. Reference Issue #16 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 016-04 finished successfully at <time>` to `Notes/finish-markers/016-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/016-04/` directory if it does not already exist.
 
 ---

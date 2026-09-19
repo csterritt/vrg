@@ -4,7 +4,6 @@ Parent issue: #13
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #7, #12
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the circular cursor in `internal/searchindex` and its App wiring to sa
 
 ---
 
-### 3. Create the navigation walkthrough
+### 3. Create the navigation finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/013-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/013-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/013-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the SearchIndex cursor tests and the App wiring tests, then run the binary with several matched files: `n` repeatedly moving the current-line underline through lines and across files with the list underline following, wrapping from the last stop to the first, `p` reversing, and a manual scroll followed by `n` continuing from the previous stop. Reference Issue #13 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 013-04 finished successfully at <time>` to `Notes/finish-markers/013-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/013-04/` directory if it does not already exist.
 
 ---

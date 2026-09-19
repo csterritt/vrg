@@ -4,7 +4,6 @@ Parent issue: #36
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: none
 **Acceptance criteria**: AC4–AC6 → Tasks 1–4; AC1–AC3, AC7–AC8 → Tasks 3–4; AC9 → Tasks 3–4; AC10 → Task 3
-**Manual verification**: Task 5 owns the issue's manual checks.
 
 ## Tasks
 
@@ -56,12 +55,12 @@ Rework `DecideOutcome` and `recordLossDiagnostics` in `internal/app/app.go`. Ext
 
 ---
 
-### 5. Create the integrity-diagnostics walkthrough
+### 5. Create the integrity-diagnostics finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/036-06/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/036-06/finish-marker.md`.  
 **Depends on**: 4
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/036-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the structured-cause and composed-diagnostic test suites, then run the issue's manual scenarios with the Issue #4 fake-rg harness: valid `begin`/`match`/`end` records terminating without `summary` and exiting 0 → the fatal overlay names the missing `summary` rather than `ripgrep exited with code 0`, dismissal exits 2, and the same diagnostic appears in stderr replay; repeat with a missing `end` for the only file, and with a damaged stream plus real child stderr showing all causes together. Capture every command, output, and exit status. Reference Issue #36 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 036-06 finished successfully at <time>` to `Notes/finish-markers/036-06/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/036-06/` directory if it does not already exist.
 
 ---

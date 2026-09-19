@@ -3,32 +3,31 @@
 Parent issue: #50
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #36, #37, #38, #39, #40, #41, #42, #43, #44, #45, #46, #47, #48, #49
-**Acceptance criteria**: AC5 → Tasks 1, 4; AC6 → Task 2; AC1, AC3–AC4 → Tasks 3–4; AC2, AC7 → Task 4; AC8 → Task 5
-**Manual verification**: Task 5 owns the issue's manual checks.
+**Acceptance criteria**: AC5 → Tasks 1, 4; AC6 → Task 2; AC1, AC3–AC4 → Tasks 3–4; AC2, AC7 → Task 4
 
 ## Tasks
 
 ### 1. Rename fixture-owned variables to `FAKE_RG_*`
 
 **Type**: REFACTOR  
-**Output**: `VRG_TEST_HANDSHAKE`, `VRG_TEST_READY`, `VRG_TEST_PID`, `VRG_TEST_ARGV`, and `VRG_TEST_CWD` are renamed to corresponding `FAKE_RG_*` names throughout the active PTY fixtures, the renamed fixtures drive the suite unchanged, and the naming contract is ready for Task 2's new canonical smoke harness; the frozen Issue #35 harness remains unchanged.  
+**Output**: `VRG_TEST_HANDSHAKE`, `VRG_TEST_READY`, `VRG_TEST_PID`, `VRG_TEST_ARGV`, and `VRG_TEST_CWD` are renamed to corresponding `FAKE_RG_*` names throughout the active PTY fixtures, the renamed fixtures drive the suite unchanged, and the naming contract is ready for Task 2's new canonical smoke harness.  
 **Depends on**: none
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md`.
 
-Begin only after Issues #36–#49 are complete — this is the closing pass over the composed post-audit implementation. Rename the fixture-owned fake-rg variables off the `VRG_TEST_` prefix in every active PTY fixture — `VRG_TEST_HANDSHAKE`, `VRG_TEST_READY`, `VRG_TEST_PID`, `VRG_TEST_ARGV`, and `VRG_TEST_CWD` become corresponding `FAKE_RG_*` names (for example `FAKE_RG_PID_FILE`) — in the fake-rg shell fixtures and the `cmd/vrg` test environment lists that set them. Names consumed by the tagged vrg acknowledgement seams stay `VRG_TEST_*` and remain in Issue #45's explicit hook manifest; only fake-rg-owned variables are renamed. Do not edit `Notes/walkthroughs/035-03/code-walkthrough/smoke.py`; Task 2 creates the canonical harness with the renamed variables. The existing uncached `cmd/vrg` suite is the unchanged behavioural safety net — run it before and after the rename.
+Begin only after Issues #36–#49 are complete — this is the closing pass over the composed post-audit implementation. Rename the fixture-owned fake-rg variables off the `VRG_TEST_` prefix in every active PTY fixture — `VRG_TEST_HANDSHAKE`, `VRG_TEST_READY`, `VRG_TEST_PID`, `VRG_TEST_ARGV`, and `VRG_TEST_CWD` become corresponding `FAKE_RG_*` names (for example `FAKE_RG_PID_FILE`) — in the fake-rg shell fixtures and the `cmd/vrg` test environment lists that set them. Names consumed by the tagged vrg acknowledgement seams stay `VRG_TEST_*` and remain in Issue #45's explicit hook manifest; only fake-rg-owned variables are renamed. The existing uncached `cmd/vrg` suite is the unchanged behavioural safety net — run it before and after the rename.
 
 ---
 
 ### 2. Make the smoke harness condition-driven
 
 **Type**: REFACTOR  
-**Output**: The canonical harness at `scripts/smoke.py` sends every key only after the preceding expected UI state or output marker is observed, drains on completion/EOF, uses bounded condition polls only for explicit conditions, and contains no `time.sleep` or other fixed settling delay used as a progress proxy — proven by a static/review assertion and a green run; the closed Issue #35 walkthrough artifact remains unchanged.  
+**Output**: The canonical harness at `scripts/smoke.py` sends every key only after the preceding expected UI state or output marker is observed, drains on completion/EOF, uses bounded condition polls only for explicit conditions, and contains no `time.sleep` or other fixed settling delay used as a progress proxy — proven by a static/review assertion and a green run.  
 **Depends on**: 1
 
 Before changing code, read and follow the coding standards in `Notes/skills/AGENTS.md`.
 
-Create the neutral canonical fake-rg PTY smoke harness at `scripts/smoke.py`, using the closed `Notes/walkthroughs/035-03/code-walkthrough/smoke.py` only as the behavioural starting point and leaving that Issue #35 file and its recorded transcript unchanged. In the new canonical harness, replace every fixed pre-key, inter-key, process-exit, and post-exit sleep with bounded waits for externally observable PTY output/state markers, process or pipe completion, and EOF; make draining completion/EOF-driven. A fake-child ready file may prove the fixture started, but it is not sufficient evidence that the app entered a state or processed a prior key — send every key only after the preceding expected UI state/output is observed. For cancellation, the fake rg fixture may receive the renamed `FAKE_RG_*` variables and expose its PID/process group while the parent harness externally observes that the process and process group are gone, PTY completion/EOF has occurred, and terminal state is restored. Add a static/review assertion that `scripts/smoke.py` contains no `time.sleep` call and no other fixed delay used as a progress proxy. Run the new harness against a locally built binary to prove it stays green; all Issue #50 commands and walkthrough evidence must identify `scripts/smoke.py` as canonical and describe the 035-03 copy as a frozen historical artifact, not rewrite it.
+Create the neutral canonical fake-rg PTY smoke harness at `scripts/smoke.py`. In the new canonical harness, replace every fixed pre-key, inter-key, process-exit, and post-exit sleep with bounded waits for externally observable PTY output/state markers, process or pipe completion, and EOF; make draining completion/EOF-driven. A fake-child ready file may prove the fixture started, but it is not sufficient evidence that the app entered a state or processed a prior key — send every key only after the preceding expected UI state/output is observed. For cancellation, the fake rg fixture may receive the renamed `FAKE_RG_*` variables and expose its PID/process group while the parent harness externally observes that the process and process group are gone, PTY completion/EOF has occurred, and terminal state is restored. Add a static/review assertion that `scripts/smoke.py` contains no `time.sleep` call and no other fixed delay used as a progress proxy. Run the new harness against a locally built binary to prove it stays green; all Issue #50 commands must identify `scripts/smoke.py` as canonical.
 
 ---
 
@@ -54,12 +53,12 @@ From a clean checkout with the documented prerequisites, run `scripts/verify.sh`
 
 ---
 
-### 5. Create the post-audit closing walkthrough
+### 5. Create the post-audit closing finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/050-01/code-walkthrough` recording every command, output, and exit status as the closing review evidence for the audit cycle.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/050-01/finish-marker.md`.  
 **Depends on**: 4
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/050-01/code-walkthrough` — the path is fixed by Issue #50, not derived from the task ordinal — with the main file named `walkthrough.md`. Record the complete closing pass: the clean-checkout `scripts/verify.sh` run with every gate's output and exit status, the explicit uncached and race PTY runs of the named tests, and the five smoke scenarios run via `scripts/smoke.py` against the untagged production binary — browse 0, no-results 1, fatal 2 under both `q` and `Esc` with the composed integrity/record-loss diagnostics, cancellation 130 with externally observed process-group termination, PTY EOF, and terminal restoration, and help-only 0 with exactly one help copy on stdout and no child — including evidence that the smoke environment uses only `FAKE_RG_*` fixture names and no `VRG_TEST_*` controls. Reference Issue #50 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 050-01 finished successfully at <time>` to `Notes/finish-markers/050-01/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/050-01/` directory if it does not already exist.
 
 ---

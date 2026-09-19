@@ -4,7 +4,6 @@ Parent issue: #45
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: none — must land before Issues #46 and #48, which consume this seam
 **Acceptance criteria**: AC1, AC4 → Tasks 1–2; AC2 → Tasks 1–2; AC3, AC5 → Task 2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Split `cmd/vrg/main.go`'s test seams behind two narrow build-constrained boundar
 
 ---
 
-### 3. Create the test-hook-topology walkthrough
+### 3. Create the test-hook-topology finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/045-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/045-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/045-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the boundary test and both build variants, then run the issue's manual scenario: build the production binary (`go build ./cmd/vrg`), set each name in the explicit vrg-consumed hook manifest, and show none alter behaviour and `strings` on the artifact finds none of the hook names; then build the tagged binary and exercise `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` to confirm the override reaches an actual `program.Run()` result branch. Capture commands, outputs, and exit statuses. Reference Issue #45 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 045-04 finished successfully at <time>` to `Notes/finish-markers/045-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/045-04/` directory if it does not already exist.
 
 ---

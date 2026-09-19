@@ -3,8 +3,7 @@
 Parent issue: #35
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #30, #33, #34
-**Acceptance criteria**: AC1–AC4 → Task 1; AC5 → Task 2
-**Manual verification**: Task 2 owns the issue's manual checks.
+**Acceptance criteria**: AC1–AC4 → Task 1
 
 ## Tasks
 
@@ -20,12 +19,12 @@ Begin only after Issues #30, #33, and #34 are complete — they are the dependen
 
 ---
 
-### 2. Create the final verification walkthrough
+### 2. Create the final verification finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/035-03/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/035-03/finish-marker.md`.  
 **Depends on**: 1
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/035-03/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate and record the complete closing pass: the clean-checkout `go build ./...`, `go vet ./...`, and `go test ./...` runs with their outputs, the explicitly executed PTY/subprocess tests, and the final binary's five smoke scenarios — a successful browse with `q` exiting 0, a no-results search exiting 1, a fatal fake-rg outcome with no usable results exiting 2 after dismissal with both `q` and `Esc`, cancellation while searching exiting 130 with the reaped child, restored terminal, and replayed diagnostics, and the help-only invocation printing one help copy to stdout with exit 0 and no child or TUI — capturing every command, its output, and its exit status as the review evidence for the whole task set. Reference Issue #35 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 035-03 finished successfully at <time>` to `Notes/finish-markers/035-03/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/035-03/` directory if it does not already exist.
 
 ---

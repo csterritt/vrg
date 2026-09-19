@@ -4,7 +4,6 @@ Parent issue: #12
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #5
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the Viewport scroll units and clamps over prepared row data, the per-f
 
 ---
 
-### 3. Create the scrolling walkthrough
+### 3. Create the scrolling finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/012-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/012-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/012-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the Viewport unit and clamp tests, the placeholder and render-cost tests, then run the binary on a long file showing `down`/`up`, `d`/`u`, and `pgdn`/`pgup` moving by the expected amounts, EOF stopping with the last row at the bottom, and `up` at the top doing nothing. Reference Issue #12 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 012-04 finished successfully at <time>` to `Notes/finish-markers/012-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/012-04/` directory if it does not already exist.
 
 ---

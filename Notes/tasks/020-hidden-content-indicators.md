@@ -4,7 +4,6 @@ Parent issue: #20
 Parent PRD: PRD-vrg.md
 **Blocked by issues**: #19
 **Acceptance criteria**: AC1–AC5 → Tasks 1–2
-**Manual verification**: Task 3 owns the issue's manual checks.
 
 ## Tasks
 
@@ -32,12 +31,12 @@ Implement the indicators in the rendering path to satisfy Task 1, deriving all v
 
 ---
 
-### 3. Create the indicator walkthrough
+### 3. Create the indicator finish marker
 
-**Type**: CODE WALKTHROUGH  
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/020-04/code-walkthrough`.  
+**Type**: FINISH MARKER  
+**Output**: Finish marker exists at `Notes/finish-markers/020-04/finish-marker.md`.  
 **Depends on**: 2
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/020-04/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the indicator rendering tests, then run the binary in run-off-edge mode on a file with several long matched lines: panning right showing `_` on lines with hidden text and `*` on lines whose match is fully hidden, a right `*` in the last column on the current matched line with a second match far right, a half-visible match producing no star for that side, and wrap mode showing no indicators or reserved column. Reference Issue #20 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 020-04 finished successfully at <time>` to `Notes/finish-markers/020-04/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/020-04/` directory if it does not already exist.
 
 ---

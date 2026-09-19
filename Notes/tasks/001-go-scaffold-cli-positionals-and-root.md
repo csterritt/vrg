@@ -5,7 +5,6 @@ Parent PRD: PRD-vrg.md
 **Blocked by issues**: none
 **Acceptance criteria**: AC1 → RED 3 / GREEN 4 (CONFIG 2 establishes the pin); AC2 → RED 3 / GREEN 4; AC3 → RED 3 / GREEN 4; AC4 → RED 3 / GREEN 4; AC5 → RED 3 / GREEN 4; AC6 → RED 3 / GREEN 4; AC7 → RED 3 / GREEN 4; AC8 → RED 3 / GREEN 4; AC9 → RED 3 / GREEN 4; AC10 → RED 3 / GREEN 4; AC11 → RED 3 / GREEN 4; AC12 → RED 3 / GREEN 4; AC13 → RED 3 / GREEN 4; AC14 → RED 3 / GREEN 4; AC15 → RED 3 / GREEN 4
 **Definition of done**: DoD decision gate (Issue #1 DoD item 1 — module path, six-package layout, Go version, all dependency pins including `mow.cli v1.2.0`, and the complete native-output prevention-or-containment strategy proven to cover every library emission point) → Task 1 records / Task 6 verifies, outside the AC map.
-**Manual verification**: Task 5 owns the issue's manual checks. Task 1 records the architecture decision before implementation; Task 6 verifies the result against it.
 
 ## Tasks
 
@@ -63,13 +62,13 @@ Apply the Task 1 output architecture completely rather than relying on `Continue
 
 ---
 
-### 5. Create the complete CLI-foundation walkthrough
+### 5. Create the complete CLI-foundation finish marker
 
-**Type**: CODE WALKTHROUGH
-**Output**: Showboat walkthrough exists at `Notes/walkthroughs/001-06/code-walkthrough` and records every Issue #1 manual verification class plus the focused output and executable-boundary suites.
+**Type**: FINISH MARKER
+**Output**: Finish marker exists at `Notes/finish-markers/001-06/finish-marker.md`.
 **Depends on**: 4
 
-Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exactly `Notes/walkthroughs/001-06/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate module verification, build, vet, focused CLI/output tests, and subprocess tests. Build the binary and capture stdout, stderr, and status separately for bare, first-token, later-token, combined, invalid-root-plus-help, missing-pattern, excess-operand, unsupported-option, invalid root classes, default/explicit/symlink/regular-file roots, `./-`, empty and literal `-` patterns, and help-like operands after `--`. Show that all help cases emit one help copy on stdout with empty stderr, no child/stub/TUI, and work with rg unavailable; show specific sanitized exit-2 diagnostics followed by the generated usage block on stderr, and hostile-control escaping for errors. Demonstrate that the help assignment spellings `--help=false` and `-h=false` before `--` do not show help (no help on stdout, not the help-only result), distinguishing them from real help requests without asserting the eventual exit code here. Record that the selected output strategy and explicit result dispatch match Task 1's decision. Reference Issue #1 and `Notes/PRD-vrg.md`, and store every generated artifact in the approved directory.
+Write `Task 001-06 finished successfully at <time>` to `Notes/finish-markers/001-06/finish-marker.md`, replacing `<time>` with the current UTC timestamp (for example, `date -u +"%Y-%m-%dT%H:%M:%SZ"`). Create the `Notes/finish-markers/001-06/` directory if it does not already exist.
 
 ---
 
