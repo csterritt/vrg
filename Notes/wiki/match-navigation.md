@@ -56,9 +56,13 @@ computes (the same number `UsableResults` reports) for the no-op rules.
   cursor, detects a strict no-op by comparing the cursor before and
   after, and on an actual transition applies Issue #14's destination
   reveal ([destination-reveal.md](destination-reveal.md)) before
-  returning `startLoad()` for the destination — only when the returned
-  `Move.FileChanged`, and deduplicated: a cached, in-flight, or failed
-  path issues no command. A same-file move returns nil and re-styles
+  returning `tea.Batch(startLoad(), startPopup())` for the destination —
+  only when the returned `Move.FileChanged`. The load leaf is
+  deduplicated: a cached, in-flight, or failed path contributes no load
+  command, so the Issue #15 file-change pop-up
+  ([file-change-popup.md](file-change-popup.md)) is then the only leaf —
+  it starts at selection on every crossing. A same-file move returns nil
+  and re-styles
   the current matched line plus reveals its target row; the
   stale-layout prepared-layout path is Issue #17's.
 - **Viewport handoff**: the departing file's viewport needs no explicit

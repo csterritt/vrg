@@ -1,1 +1,5 @@
 node_modules
+
+# Generated at run time by pty_popup.py; contains a filename with invalid
+# UTF-8 bytes, which jj cannot represent.
+Notes/walkthroughs/015-04/code-walkthrough/fixture/

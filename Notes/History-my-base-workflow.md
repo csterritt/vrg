@@ -158,3 +158,14 @@ Usage
  Input tokens: 68276 tokens
  Output tokens: 27191 tokens
  Cached input tokens: 2515840 tokens
+
+----
+Task 015-file-change-popup.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 135 messages
+ Input tokens: 155919 tokens
+ Output tokens: 69377 tokens
+ Cached input tokens: 14224875 tokens

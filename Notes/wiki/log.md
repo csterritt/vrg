@@ -477,3 +477,47 @@ load-completion reveal bullet; Testing Decisions → Viewport),
 `internal/app/browse.go`, `internal/app/app.go`,
 `internal/app/reveal_test.go`, `internal/app/nav_test.go`,
 `internal/app/scroll_test.go`.
+
+## [2026-09-17] ingest | Issue #15 file-change pop-up
+
+The centred path pop-up on `n`/`p` file crossings, implemented in
+`internal/app/popup.go` (`popupExpireMsg{id}`, `startPopup`,
+`compositePopup`, `leftTruncate`/`tailCells`) with `Update`/`View`
+wiring in `internal/app/app.go` (`popupID`/`popupSeq`, the
+stale-instance-rejecting expiry case, any-key dismissal before the key
+switch, pop-up composited under the error overlay) and `openOverlay`
+extracted in `internal/app/overlay.go` to clear the live pop-up on
+open-or-append. `navigate` in `internal/app/browse.go` now returns
+`tea.Batch(startLoad(), startPopup())` on `Move.FileChanged` — the
+pop-up starts at selection while the destination may still be loading,
+load completion never restarts it, and a cached/in-flight/failed
+destination contributes only the pop-up leaf. Contracts: fresh
+one-second instance per crossing, expiry dismisses only its own
+instance, any key dismisses and still performs its normal action,
+render-time centring and `…`-led left-truncation recomputed on resize
+without touching the timer, overlay cancellation with no return, and
+the single-line `EscapePath`-sanitized path added to the sink-safety
+table. New tests: `internal/app/popup_test.go` (selection-time start
+over "Loading…", centring, stale-instance rejection,
+dismissal-plus-action including `q`/`Esc`, resize recentring without
+restart, overlay cancellation, truncation, hostile path) under the
+`popupStubTicks` options seam with `leafMsgs`/`navLeafMsgs`/
+`deliverLoad` batch helpers; `sinksafety_test.go` gained the pop-up
+row via `popupFixtureView`; `browse_test.go`'s `finishLoad` unwraps
+`tea.BatchMsg` (`fileLoadOf`); the pre-#15 "cached file returns no
+command" assertions in `nav_test.go`/`reveal_test.go` became
+no-load-leaf checks (`navSendsNoLoad`). Created
+[file-change-popup](file-change-popup.md); updated
+[match-navigation](match-navigation.md),
+[error-overlay-and-outcomes](error-overlay-and-outcomes.md),
+[safe-presentation](safe-presentation.md), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/issues/015-file-change-popup.md`,
+`Notes/tasks/015-file-change-popup.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence — the pop-up
+bullet; File loading — selection-time-start bullet; user stories
+58–59), `internal/app/popup.go`, `internal/app/popup_test.go`,
+`internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/overlay.go`, `internal/app/sinksafety_test.go`,
+`internal/app/browse_test.go`, `internal/app/nav_test.go`,
+`internal/app/reveal_test.go`.

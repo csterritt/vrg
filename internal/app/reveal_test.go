@@ -140,7 +140,7 @@ func TestNoOpNavigationDoesNotReveal(t *testing.T) {
 // revealed position — not the pre-navigation scroll — is what a later
 // revisit resumes from.
 func TestMovingRevealReplacesSavedViewport(t *testing.T) {
-	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, popupStubTicks)
 	idx := navIndex(t, []navFile{
 		{name: "a.txt", content: numberedContent("a", 100), stops: []navStop{
 			{line: 5, start: 0, end: 1},
@@ -166,9 +166,7 @@ func TestMovingRevealReplacesSavedViewport(t *testing.T) {
 	}
 
 	finishLoad(t, m, navCmd(t, m, keyN)) // to b.txt
-	if _, cmd := m.Update(keyP); cmd != nil {
-		t.Fatal("return to a cached file returned a command, want none")
-	}
+	navSendsNoLoad(t, m, keyP)           // back to cached a.txt — pop-up only
 	// The revisit starts from the replaced viewport: row 59 is visible
 	// from top 52, so the no-scroll reveal keeps it.
 	if got := m.vps[keyA].Top(); got != 52 {
@@ -183,7 +181,7 @@ func TestMovingRevealReplacesSavedViewport(t *testing.T) {
 // the file: when the destination's target row is visible from the
 // saved position the reveal does not scroll.
 func TestRevisitRevealStartsFromSavedViewport(t *testing.T) {
-	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, popupStubTicks)
 	idx := navIndex(t, []navFile{
 		{name: "a.txt", content: numberedContent("a", 60), stops: []navStop{
 			{line: 5, start: 0, end: 1},
@@ -205,9 +203,7 @@ func TestRevisitRevealStartsFromSavedViewport(t *testing.T) {
 	}
 
 	finishLoad(t, m, navCmd(t, m, keyN)) // to b.txt, first visit
-	if _, cmd := m.Update(keyP); cmd != nil {
-		t.Fatal("return to a cached file returned a command, want none")
-	}
+	navSendsNoLoad(t, m, keyP)           // back to cached a.txt — pop-up only
 	// Back at a.txt's line-20 stop: starting from the saved top 10 the
 	// target row 19 is still visible, so the viewport stays — a
 	// top-of-file start would have left it at 0.
@@ -223,7 +219,7 @@ func TestRevisitRevealStartsFromSavedViewport(t *testing.T) {
 // not current — starts from the top of the file before the reveal: a
 // target hidden from top 0 lands at floor(h/3).
 func TestFirstVisitStartsFromTopThenReveal(t *testing.T) {
-	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, popupStubTicks)
 	idx := navIndex(t, []navFile{
 		{name: "a.txt", content: numberedContent("a", 60), stops: []navStop{{line: 1, start: 0, end: 1}}},
 		{name: "b.txt", content: numberedContent("b", 60), stops: []navStop{{line: 40, start: 0, end: 1}}},
@@ -238,8 +234,11 @@ func TestFirstVisitStartsFromTopThenReveal(t *testing.T) {
 	}
 	m.Update(fileLoadedMsg{path: idx.Files[1].Path, buf: buf})
 
-	if _, cmd := m.Update(keyN); cmd != nil {
-		t.Fatal("n to a cached file returned a command, want none")
+	// The crossing opens a pop-up, but the cached file issues no load.
+	for _, msg := range navLeafMsgs(t, m, keyN) {
+		if _, ok := msg.(fileLoadedMsg); ok {
+			t.Fatalf("n to a cached file issued a load: %#v", msg)
+		}
 	}
 	keyB := string(idx.Files[1].Path)
 	if got := m.vps[keyB].Top(); got != 32 {

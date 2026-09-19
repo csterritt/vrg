@@ -69,6 +69,23 @@ func wrapCells(s string, w int) []string {
 	return rows
 }
 
+// openOverlay opens the modal error overlay over the current state —
+// or appends a new diagnostic to it, preserving the reader's scroll
+// position, when it is already open (the PRD's new-errors-append
+// rule). Opening it cancels any file-change pop-up, which never
+// returns after the overlay closes.
+func (m *model) openOverlay(text string, dismissExits bool) {
+	if m.overlayOpen {
+		m.overlayText += "\n" + text
+	} else {
+		m.overlayText = text
+		m.overlayScroll = 0
+	}
+	m.overlayOpen = true
+	m.overlayExit = dismissExits
+	m.popupID = 0
+}
+
 // scrollOverlay moves the first-visible-row index by d, clamped to the
 // scrollable range of the complete wrapped diagnostic.
 func (m *model) scrollOverlay(d int) {

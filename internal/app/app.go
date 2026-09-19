@@ -60,6 +60,11 @@ type options struct {
 	// read — the hold proving "Loading…" spans the whole load: disk read
 	// plus decode and byte→cell mapping, all off the update path.
 	loadGate func()
+	// popupTimer, when set, builds each file-change pop-up's expiry
+	// command in place of the real one-second tick — model tests
+	// substitute an instantly resolving command so expiry is driven by
+	// injected popupExpireMsg values, never by real time.
+	popupTimer func(id int) tea.Cmd
 }
 
 // WithGate holds index preparation until fn returns.
@@ -155,6 +160,15 @@ type model struct {
 	overlayExit   bool
 	overlayText   string
 	overlayScroll int
+
+	// File-change pop-up (Issue #15). popupID is the live instance's
+	// identity — 0 means none is up; popupSeq mints each new ID so an
+	// expiry message matches exactly the instance it was minted for.
+	// The pop-up's content derives from the cursor and current
+	// terminal size at render time, so a resize recentres and
+	// re-truncates it without touching the instance or its timer.
+	popupID  int
+	popupSeq int
 }
 
 func newModel(cfg Config, opts options, child Child) *model {
@@ -264,9 +278,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = m.startLoad()
 		}
 		if len(outcome.Overlay) > 0 {
-			m.overlayOpen = true
-			m.overlayExit = outcome.DismissExits
-			m.overlayText = strings.Join(outcome.Overlay, "\n")
+			m.openOverlay(strings.Join(outcome.Overlay, "\n"), outcome.DismissExits)
 		}
 		return m, cmd
 	case stderrLineMsg:
@@ -308,8 +320,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.collectDiags("vrg: " + safepresentation.EscapePath([]byte(msg.err.Error())))
 		m.quitting = true
 		return m, m.quitCmd()
+	case popupExpireMsg:
+		// An expiry dismisses only the pop-up instance it was minted
+		// for; a stale instance's expiry is discarded.
+		if msg.id == m.popupID {
+			m.popupID = 0
+		}
 	case tea.KeyPressMsg:
 		key := msg.Keystroke()
+		// Any key press dismisses a file-change pop-up and still
+		// performs its normal action in the same update — the pop-up
+		// never delays navigation or quitting.
+		m.popupID = 0
 		switch {
 		case key == "ctrl+c":
 			// ctrl+c has global precedence: cancellation in every state.
@@ -448,6 +470,9 @@ func (m *model) View() tea.View {
 		// The fatal overlay has no underlying state: it floats over a
 		// blank frame.
 		s = ""
+	}
+	if m.popupID != 0 {
+		s = m.compositePopup(s)
 	}
 	if m.overlayOpen {
 		s = m.compositeOverlay(s)

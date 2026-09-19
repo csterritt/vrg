@@ -72,13 +72,35 @@ func startBrowse(t *testing.T, m *model, idx *searchindex.Index) tea.Cmd {
 }
 
 // finishLoad runs the load command and delivers its completion message.
+// A file-crossing navigation batches the pop-up's expiry command after
+// the load, so batches are unwrapped leaf by leaf until the load lands.
 func finishLoad(t *testing.T, m *model, cmd tea.Cmd) {
 	t.Helper()
-	msg, ok := cmd().(fileLoadedMsg)
-	if !ok {
-		t.Fatalf("load command produced %T, want fileLoadedMsg", msg)
+	if msg, ok := fileLoadOf(cmd); ok {
+		m.Update(msg)
+		return
 	}
-	m.Update(msg)
+	t.Fatalf("load command produced no fileLoadedMsg")
+}
+
+// fileLoadOf runs cmd — descending into batches — and returns the first
+// fileLoadedMsg a leaf produced. Navigation batches the load leaf
+// first, so a real pop-up timer leaf is never run.
+func fileLoadOf(cmd tea.Cmd) (fileLoadedMsg, bool) {
+	if cmd == nil {
+		return fileLoadedMsg{}, false
+	}
+	switch msg := cmd().(type) {
+	case fileLoadedMsg:
+		return msg, true
+	case tea.BatchMsg:
+		for _, leaf := range msg {
+			if m, ok := fileLoadOf(leaf); ok {
+				return m, true
+			}
+		}
+	}
+	return fileLoadedMsg{}, false
 }
 
 // escapedPath recomputes a file's escaped display path through the real

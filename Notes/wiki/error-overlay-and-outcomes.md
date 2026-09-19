@@ -116,7 +116,10 @@ scroll; `q`/`Esc` dismiss; every other key is ignored — including `c`,
 which cannot toggle the theme through the modal. Dismissal reveals the
 base state, except on `stateOverlayOnly` where `q` and `Esc` both exit
 with the fixed status — the one place `Esc` terminates. From base
-states `Esc` never exits.
+states `Esc` never exits. Since Issue #15, `openOverlay` is the single
+open-or-append entry point: it also clears any live file-change
+pop-up, which never returns after the overlay closes — see
+[file-change-popup.md](file-change-popup.md).
 
 ## Tests
 

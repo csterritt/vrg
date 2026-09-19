@@ -109,7 +109,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   startup-after-load reveal trigger. Issue #13 adds the `n`/`p` browse
   route to
   `navigate` and drops `model.cur`: the current file and current
-  matched line derive from the index's matched-line cursor. Issue #11 adds the session
+  matched line derive from the index's matched-line cursor. Issue #15
+  adds the `popupID`/`popupSeq` pop-up state, the `popupExpireMsg`
+  stale-instance-rejecting expiry case, any-key dismissal before the
+  key switch, `View` compositing the pop-up over the base frame and the
+  overlay over both, and the `options.popupTimer` test seam. Issue #11 adds the session
   diagnostic collection `model.diags`: `collectDiags` appends sanitized
   lines as `Update` processes `stderrLineMsg` (forwarded from
   `Child.Diags()` by a `prog.Send` goroutine in `Run`),
@@ -146,7 +150,19 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   grapheme-boundary `wrapCells` to the interior width (unbroken strings
   split mid-run), the complete wrapped row set scrolled by
   `up`/`down` clamped to `[0, rows − visible]`, and `compositeOverlay`
-  centering the single-line bordered box over the base frame.
+  centering the single-line bordered box over the base frame. Issue #15
+  adds `openOverlay` — the shared open-or-append entry point that also
+  clears any live file-change pop-up, which never returns after the
+  overlay closes.
+- `internal/app/popup.go` — Issue #15's file-change pop-up:
+  `popupExpireMsg{id}` and `startPopup` minting a fresh instance ID per
+  file crossing with a one-second `tea.Tick` expiry (or the
+  `options.popupTimer` test seam), and `compositePopup` — the
+  `theme.Overlay`-bordered box centred over the base frame carrying the
+  current file's `EscapePath`-sanitized path, left-truncated with a
+  leading `…` by `leftTruncate`/`tailCells` on whole grapheme clusters,
+  all recomputed from the live terminal size at every render. See
+  [file-change-popup.md](file-change-popup.md).
 - `internal/app/browse.go` — the Issue #5 browse view: async
   `filebuffer.Load` commands gated by `WithLoadGate`, the
   `loading`/`bufs`/`failed` caches keyed by raw path, `fileLoadedMsg`,
@@ -173,9 +189,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   starting-viewport sequence (saved `vps` top or first-visit top of
   file, then `Viewport.Reveal`, written back only on a move) — and wires
   it into `navigate`'s actual transitions and the
-  current-file `fileLoadedMsg` path in app.go. See
+  current-file `fileLoadedMsg` path in app.go. Issue #15 makes
+  `navigate` return `tea.Batch(m.startLoad(), m.startPopup())` on a
+  file change — the pop-up starts at selection while the destination
+  may still be loading, and load completion never restarts it. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
+  [file-change-popup.md](file-change-popup.md),
   [viewport-scrolling.md](viewport-scrolling.md),
   [match-navigation.md](match-navigation.md), and
   [destination-reveal.md](destination-reveal.md).

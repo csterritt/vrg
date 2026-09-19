@@ -51,14 +51,17 @@ func (m *model) curKey() (string, bool) {
 }
 
 // navigate moves the matched-line cursor one stop forward or back,
-// applies the destination reveal, and returns the destination file's
-// load command when the move crossed into a different file that is not
-// already cached, in flight, or failed. A strict no-op step — an empty
-// or single-stop index — is not a transition and triggers no reveal.
-// The departing file's viewport is already saved by scroll and reveal
-// write-through, so the destination's reveal starts from its saved
-// viewport or, on a first visit, the top of the file; an uncached
-// destination reveals when its load completes instead.
+// applies the destination reveal, and on a file change starts a fresh
+// file-change pop-up and returns it batched with the destination
+// file's load command when that file is not already cached, in flight,
+// or failed. A strict no-op step — an empty or single-stop index — is
+// not a transition and triggers no reveal or pop-up. The departing
+// file's viewport is already saved by scroll and reveal write-through,
+// so the destination's reveal starts from its saved viewport or, on a
+// first visit, the top of the file; an uncached destination reveals
+// when its load completes instead. The pop-up starts at selection —
+// while the destination may still be loading — and load completion
+// never restarts it.
 func (m *model) navigate(next bool) tea.Cmd {
 	if m.idx == nil {
 		return nil
@@ -77,7 +80,7 @@ func (m *model) navigate(next bool) tea.Cmd {
 	if !mv.FileChanged {
 		return nil
 	}
-	return m.startLoad()
+	return tea.Batch(m.startLoad(), m.startPopup())
 }
 
 // reveal applies the vertical destination-reveal rules to the current

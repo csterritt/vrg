@@ -292,10 +292,16 @@ composition, the async load lifecycle, and sink safety:
 - `TestLateLoadForOtherFileIgnored` — a completion for a non-current
   path cannot replace the visible panel.
 
+Since Issue #15 the helper `finishLoad` unwraps `tea.BatchMsg` via
+`fileLoadOf` — file-crossing navigation batches the pop-up's expiry
+command after the load leaf — and `navSendsNoLoad` (in
+`popup_test.go`) asserts a crossing issued no `fileLoadedMsg` leaf.
+
 `sinksafety_test.go` (same package; Issue #6) hosts the shared
-sink-safety table `sinkSafetySinks` — seven rows over every sink
+sink-safety table `sinkSafetySinks` — eight rows over every sink
 existing at this point (file-list entry, filename rule, panel content,
-the Issue #9 error overlay, usage-error stderr, CLI-help stdout, and
+the Issue #9 error overlay, the Issue #15 file-change pop-up driven
+through `popupFixtureView`, usage-error stderr, CLI-help stdout, and
 the Issue #11 stderr replay) — and
 `TestSinkSafetyTable` runs `sinktest.Run` over it: each
 `<sink>/<fixture>` subtest asserts clean raw output on the no-style
@@ -452,7 +458,8 @@ over multi-stop fixtures (`navIndex`, `navFile`/`navStop`):
   the top with its stop's match current-line styled.
 - `TestNavigationWrapsBothEnds` — `n` on the last stop wraps to the
   first and `p` on the first wraps to the last, across file boundaries,
-  with cached destinations issuing no command.
+  with cached destinations issuing no load leaf (the crossing's pop-up
+  command still issues — Issue #15).
 - `TestSingleStopIgnoresNavigation` — the one-stop index makes `n`/`p`
   strict no-ops: no command, no cursor movement, no frame change.
 - `TestManualScrollLeavesCursor` — scrolling does not move the cursor;
@@ -462,7 +469,8 @@ over multi-stop fixtures (`navIndex`, `navFile`/`navStop`):
   top survives a navigate-away-and-back as the reveal's starting point.
 - `TestNavigationWhileLoadInFlight` — the cursor keeps moving while a
   destination's load is in flight, and the in-flight load is not
-  reissued on return.
+  reissued on return; the crossings issue only the pop-up's expiry
+  leaf under the `popupStubTicks` seam.
 - `TestFileListHasNoDirectSelection` — enter/tab/arrows and other keys
   never move the cursor or change the current file: the file list is a
   passive overview.
@@ -513,6 +521,37 @@ mechanics:
   contract: one frame needn't show both ends).
 - `TestGeneratedProcessDiagnostics` — a failed process without stderr
   gets the generated line naming the exit code or the signal.
+
+`popup_test.go` (same package; Issue #15) covers the file-change
+pop-up, driving timers by injected `popupExpireMsg` instance IDs under
+the `popupStubTicks` seam — never by real time — with `leafMsgs`
+unwrapping navigation's `tea.BatchMsg` and `deliverLoad` feeding back
+only the load leaf:
+
+- `TestPopupStartsAtSelectionNotLoad` — the crossing's command carries
+  the destination load plus the first instance's expiry; the box shows
+  the escaped path over "Loading…", and load completion neither
+  dismisses nor restarts the instance.
+- `TestPopupCentredOnFrame` — the bordered box centres on the current
+  size at render.
+- `TestPopupStaleExpiryCannotDismissNewer` — a second crossing mints a
+  second ID even to a cached file; the first instance's expiry is
+  discarded, only the live instance's own expiry dismisses it.
+- `TestPopupKeyDismissesAndActs` — `down` dismisses and scrolls, `q`
+  dismisses and still quits, in the same update.
+- `TestPopupEscDismissesOnly` — `Esc` in browsing dismisses the pop-up
+  and does nothing else.
+- `TestPopupRecentresOnResizeWithoutRestart` — grow and shrink
+  recentre/re-truncate the same live instance, which still answers its
+  own expiry — the timer never restarted.
+- `TestPopupCancelledByErrorOverlay` — `openOverlay` clears the live
+  instance and the pop-up never returns after the overlay is dismissed
+  (Issue #26 owns which diagnostics open the overlay).
+- `TestPopupLeftTruncatesLongPath` — an over-wide path renders as a
+  leading `…` plus the basename tail inside the frame width.
+- `TestPopupEscapesHostilePath` — control bytes and an embedded
+  newline in the raw path render as the single-line escaped form; the
+  frame keeps its row count.
 
 ## internal/viewport
 

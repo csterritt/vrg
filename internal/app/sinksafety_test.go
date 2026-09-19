@@ -26,10 +26,10 @@ import (
 // the styled theme so a fixture's payload can be checked against
 // legitimate style sequences.
 //
-// Later issues that introduce sinks — stderr replay (#11), the pop-up
-// (#15), the TUI help dialog (#31), generated documentation (#34) — add
-// rows here, or in their own package's test file via sinktest.Run,
-// reusing sinktest.Fixtures rather than duplicating them.
+// Later issues that introduce sinks — the TUI help dialog (#31),
+// generated documentation (#34) — add rows here, or in their own
+// package's test file via sinktest.Run, reusing sinktest.Fixtures
+// rather than duplicating them.
 var sinkSafetySinks = []sinktest.Sink{
 	{
 		Name:         "file-list entry",
@@ -50,6 +50,11 @@ var sinkSafetySinks = []sinktest.Sink{
 		Name:         "error overlay",
 		Render:       func(t *testing.T, fx sinktest.Fixture) string { return overlayFixtureView(t, fx, theme.Plain()) },
 		RenderStyled: func(t *testing.T, fx sinktest.Fixture) string { return overlayFixtureView(t, fx, theme.Dark()) },
+	},
+	{
+		Name:         "file-change pop-up",
+		Render:       func(t *testing.T, fx sinktest.Fixture) string { return popupFixtureView(t, fx, theme.Plain()) },
+		RenderStyled: func(t *testing.T, fx sinktest.Fixture) string { return popupFixtureView(t, fx, theme.Dark()) },
 	},
 	{
 		Name:   "usage-error stderr",
@@ -150,6 +155,29 @@ func contentFixtureForms(fx sinktest.Fixture) []string {
 		want = append(want, s.String())
 	}
 	return want
+}
+
+// popupFixtureView drives the fixture bytes through the file-change
+// pop-up's real composition path — a two-file index whose second file
+// carries the fixture name, an n across the boundary — and returns the
+// rendered frame, failing when the escaped path never reached it.
+func popupFixtureView(t *testing.T, fx sinktest.Fixture, th theme.Theme) string {
+	t.Helper()
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, popupStubTicks)
+	m.theme = th
+	idx := browseIndex(t, []fixtureFile{
+		{name: "aa-first.txt", content: "x\n", line: 1, start: 0, end: 1},
+		{name: "zz-" + string(fx.Bytes), content: "y\n", line: 1, start: 0, end: 1},
+	})
+	cmd := startBrowse(t, m, idx)
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 50})
+	finishLoad(t, m, cmd)
+	navLeafMsgs(t, m, keyN) // cross into the fixture-named file: pop-up up
+	v := viewText(m)
+	if want := safepresentation.EscapePath([]byte("./zz-" + string(fx.Bytes))); !strings.Contains(v, want) {
+		t.Fatalf("path fixture %q did not reach the pop-up: %q missing from %q", fx.Bytes, want, v)
+	}
+	return v
 }
 
 // usageErrorStderr drives the fixture as the root operand through

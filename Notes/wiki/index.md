@@ -92,6 +92,12 @@ Catalog of all wiki pages for the vrg project.
   precedence, saved-viewport versus first-visit starting points, and
   the moving/no-scroll saved-state rules at navigation and
   startup-after-load
+- [file-change-popup.md](file-change-popup.md) — Issue #15: the
+  selection-time centred path pop-up on `n`/`p` file crossings, the
+  instance-keyed one-second expiry with stale-instance rejection,
+  dismiss-plus-normal-action key routing, render-time centring and
+  left-truncation on resize without timer restart, error-overlay
+  cancellation with no return, and the sanitized single-line path sink
 
 ## Catalogs
 

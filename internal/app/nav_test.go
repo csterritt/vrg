@@ -177,7 +177,7 @@ func TestNCrossingFileBoundarySwitchesPanel(t *testing.T) {
 // n on the last stop wraps to the first; p on the first wraps to the
 // last — circular in both directions across file boundaries.
 func TestNavigationWrapsBothEnds(t *testing.T) {
-	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, popupStubTicks)
 	idx := navIndex(t, navFiles)
 	cmd := startBrowse(t, m, idx)
 	finishLoad(t, m, cmd)
@@ -185,11 +185,10 @@ func TestNavigationWrapsBothEnds(t *testing.T) {
 	m.Update(keyN)                       // a.txt line 8
 	finishLoad(t, m, navCmd(t, m, keyN)) // b.txt line 2
 
-	// The last stop's n wraps to the first: a cached file issues no
-	// command and the list underline returns to a.txt.
-	if _, cmd := m.Update(keyN); cmd != nil {
-		t.Fatal("wrap to a cached file returned a command, want none")
-	}
+	// The last stop's n wraps to the first: the cached file issues no
+	// load — only the crossing's pop-up — and the list underline
+	// returns to a.txt.
+	navSendsNoLoad(t, m, keyN)
 	v := viewText(m)
 	wantUnderlinedEntry(t, m, idx.Files[0])
 	wantCurrentMatch(t, v, "aaa3")
@@ -197,10 +196,9 @@ func TestNavigationWrapsBothEnds(t *testing.T) {
 		t.Fatalf("first content row = %q, want a.txt's first line", row)
 	}
 
-	// p on the first stop wraps back to the last — b.txt line 2.
-	if _, cmd := m.Update(keyP); cmd != nil {
-		t.Fatal("wrap-back to a cached file returned a command, want none")
-	}
+	// p on the first stop wraps back to the last — b.txt line 2: the
+	// cached file issues no load, only the crossing's pop-up.
+	navSendsNoLoad(t, m, keyP)
 	v = viewText(m)
 	wantUnderlinedEntry(t, m, idx.Files[1])
 	wantCurrentMatch(t, v, "bbb2")
@@ -292,7 +290,7 @@ func TestManualScrollLeavesCursor(t *testing.T) {
 // line 5 its target row stays visible from there, so the reveal does
 // not scroll (Issue #14).
 func TestCrossFileRestoresDepartingViewport(t *testing.T) {
-	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, popupStubTicks)
 	m.theme = theme.Plain()
 	idx := navIndex(t, []navFile{
 		{name: "a.txt", content: numberedContent("a", 60), stops: []navStop{{line: 5, start: 0, end: 1}}},
@@ -305,10 +303,8 @@ func TestCrossFileRestoresDepartingViewport(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		m.Update(keyDown)
 	}
-	finishLoad(t, m, navCmd(t, m, keyN))      // to b.txt
-	if _, cmd := m.Update(keyP); cmd != nil { // back to a.txt
-		t.Fatal("return to a cached file returned a command, want none")
-	}
+	finishLoad(t, m, navCmd(t, m, keyN)) // to b.txt
+	navSendsNoLoad(t, m, keyP)           // back to cached a.txt — pop-up only
 	if got := m.vps[keyA].Top(); got != 3 {
 		t.Fatalf("revisited a.txt top = %d, want the saved 3", got)
 	}
@@ -330,7 +326,7 @@ func numberedContent(name string, n int) string {
 // the cursor keeps moving and an already-requested load is not
 // reissued.
 func TestNavigationWhileLoadInFlight(t *testing.T) {
-	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
+	m := newTestModel(fakeChild{res: Result{Code: 0}}, popupStubTicks)
 	idx := navIndex(t, navFiles)
 	cmd := startBrowse(t, m, idx)
 	finishLoad(t, m, cmd)
@@ -339,17 +335,22 @@ func TestNavigationWhileLoadInFlight(t *testing.T) {
 	_ = navCmd(t, m, keyN) // b.txt's load stays in flight
 
 	// n again wraps to a.txt's first stop — the cursor moved even
-	// though b.txt never finished loading.
-	if _, cmd := m.Update(keyN); cmd != nil {
-		t.Fatal("wrap to a cached file returned a command, want none")
+	// though b.txt never finished loading. The crossing opens a
+	// pop-up, but no load is issued for the cached file.
+	for _, msg := range navLeafMsgs(t, m, keyN) {
+		if _, ok := msg.(fileLoadedMsg); ok {
+			t.Fatalf("wrap to a cached file issued a load: %#v", msg)
+		}
 	}
 	wantUnderlinedEntry(t, m, idx.Files[0])
 	wantCurrentMatch(t, viewText(m), "aaa3")
 
 	// p returns to b.txt's stop; its in-flight load is deduplicated —
-	// no second command is issued.
-	if _, cmd := m.Update(keyP); cmd != nil {
-		t.Fatal("p to an in-flight load reissued it, want deduplication")
+	// the crossing issues only the pop-up's expiry command.
+	for _, msg := range navLeafMsgs(t, m, keyP) {
+		if _, ok := msg.(fileLoadedMsg); ok {
+			t.Fatalf("p to an in-flight load reissued it: %#v", msg)
+		}
 	}
 	wantUnderlinedEntry(t, m, idx.Files[1])
 }
