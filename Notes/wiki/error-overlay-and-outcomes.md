@@ -28,9 +28,10 @@ interleaved files pair independently:
 Plus the stream-shape rules: a file still open at stream end fails
 integrity and is retained with `Incomplete` set; a missing summary
 fails the stream; and a trailing unterminated fragment goes through
-`Index.FeedTail` — a double disposition of `KindMalformed` (Issue #10
-owns the count) plus a broken-stream mark. Malformed and unknown records
-carry no lifecycle meaning by themselves.
+`Index.FeedTail` — a double disposition of `KindMalformed` plus a
+broken-stream mark (Issue #10 counts it in `Index.Malformed`; see
+[record-robustness.md](record-robustness.md)). Malformed and unknown
+records carry no lifecycle meaning by themselves.
 
 Two retention subtleties: an orphaned match does not "open" the file —
 a later `end` for it is still orphaned — and binary exclusion takes
@@ -50,21 +51,34 @@ complete stream under a fatal exit still validates.
 
 `internal/app`'s `DecideOutcome` is a pure function of `OutcomeInput` —
 the child's `Result` (stdout already consumed into the index), the
-`searchindex.Integrity`, the usable-results count, Issue #10's
-`RecordLoss` counts (unused until then), and caller-composed
-`Warnings`. It returns the initial `presentation`, the escaped overlay
-lines, whether dismissal exits, and the fixed `Status`. The matrix:
+`searchindex.Integrity`, the usable-results count, the `RecordLoss`
+counts, and caller-composed `Warnings`. It returns the initial
+`presentation`, the escaped overlay lines, whether dismissal exits, and
+the fixed `Status`. The matrix:
 
 | Process | Stream | Usable results | Diagnostics | Presentation | Status |
 | --- | --- | --- | --- | --- | --- |
 | 0/1 | complete | > 0 | none | browse | 0 |
 | 0/1 | complete | > 0 | any | browse + warning overlay | 0 |
 | 0/1 | complete | 0 | none | no-results | 1 |
-| 0/1 | complete | 0 | any | no-results + warning overlay | 1 |
+| 0/1 | complete | 0 | warnings only | no-results + warning overlay | 1 |
+| 0/1 | complete | 0 | record loss (Issue #10) | overlay only | 2 |
 | fatal (code ∉ {0,1} or signal) | any | > 0 | — | browse + error overlay | 2 |
 | fatal | any | 0 | — | overlay only | 2 |
 | any | integrity failure | > 0 | — | browse + error overlay | 2 |
 | any | integrity failure | 0 | — | overlay only | 2 |
+
+Issue #10 adds the record-loss inputs and rows: on a complete rg-0/1
+stream, skipped (malformed/oversized) records with zero usable results
+are **fatal** — the record-loss overlay-only row, exiting 2 on `q` or
+`Esc` — while the same loss with usable results browses under the
+overlay at exit 0. Usable results are assessed after all filtering, so
+a skipped record plus a binary exclusion leaving zero retained stops
+takes the record-loss fatal row, not the no-results row. Unknown-type
+counts remain warnings that never independently change the status —
+with zero results the warning overlay still precedes the no-results
+screen at exit 1. See
+[record-robustness.md](record-robustness.md).
 
 The anomalous rg-1-with-retained-results case browses and exits 0.
 `status` is decided once at `searchDoneMsg` — later keys can never

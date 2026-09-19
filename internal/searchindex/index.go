@@ -57,6 +57,22 @@ type Index struct {
 	// BinaryExcluded counts the distinct files dropped because an end
 	// record reported a non-null binary_offset for them.
 	BinaryExcluded int
+	// Malformed counts records skipped as malformed: invalid JSON,
+	// invalid base64, a missing or non-string type field, a known event
+	// violating the per-record schema matrix, or a trailing
+	// unterminated fragment.
+	Malformed int
+	// Unknown counts records whose string type is outside the five
+	// known events — the separate skip count reported as "N
+	// unrecognised record types skipped".
+	Unknown int
+	// Oversized counts records discarded for exceeding the
+	// MaxRecordBytes payload limit. OversizedPaths holds the recovered
+	// raw path of each oversized record whose type and data.path were
+	// parsed before the limit — best-effort, one entry per named
+	// record — so diagnostics can name the lost file.
+	Oversized      int
+	OversizedPaths [][]byte
 	acc            map[string]*fileAcc
 	excluded       map[string]struct{}
 	// Lifecycle validation state: open holds the decoded raw path bytes
@@ -81,18 +97,33 @@ type fileAcc struct {
 func New() *Index { return &Index{} }
 
 // Build feeds every newline-delimited record in stream and prepares the
-// index against workdir. A trailing unterminated fragment goes through
-// FeedTail, not Feed.
+// index against workdir. A record longer than MaxRecordBytes is
+// consumed and discarded through its next newline — counted oversized,
+// never parsed — and parsing resynchronizes on the following record. A
+// trailing unterminated fragment goes through FeedTail, not Feed; an
+// oversized one takes both dispositions: counted oversized and, for its
+// missing termination, counted malformed with the stream incomplete.
 func Build(stream []byte, workdir string) *Index {
 	ix := New()
 	for len(stream) > 0 {
-		if i := bytes.IndexByte(stream, '\n'); i >= 0 {
-			ix.Feed(stream[:i])
-			stream = stream[i+1:]
-		} else {
+		i := bytes.IndexByte(stream, '\n')
+		if i < 0 {
+			// The trailing unterminated fragment: malformed and
+			// incomplete — and counted oversized too when it also
+			// exceeds the payload limit.
+			if len(stream) > MaxRecordBytes {
+				ix.feedOversized(stream)
+			}
 			ix.FeedTail(stream)
-			stream = nil
+			break
 		}
+		rec := stream[:i]
+		stream = stream[i+1:]
+		if len(rec) > MaxRecordBytes {
+			ix.feedOversized(rec)
+			continue
+		}
+		ix.Feed(rec)
 	}
 	ix.Prepare(workdir)
 	return ix
@@ -110,9 +141,19 @@ func Build(stream []byte, workdir string) *Index {
 // retained with incomplete metadata unless the path is binary-excluded,
 // an orphaned or duplicated begin/end simply marks the stream broken,
 // and nothing after the summary is dispatched. Malformed and unknown
-// records carry no lifecycle; counting them is Issue #10's.
+// records carry no lifecycle; they are counted in Malformed and Unknown
+// by the record's own classification, unqualified by position — so a
+// malformed or unknown record after the summary still counts while its
+// position separately fails integrity, and a safely skipped match
+// record leaves otherwise intact lifecycle metadata complete.
 func (ix *Index) Feed(raw []byte) Kind {
 	rec := ParseRecord(raw)
+	switch rec.Kind {
+	case KindMalformed:
+		ix.Malformed++
+	case KindUnknown:
+		ix.Unknown++
+	}
 	if ix.sawSummary {
 		// The summary is final: any record after it — except context,
 		// which the Issue #9 matrix keeps lifecycle-neutral in every
@@ -171,10 +212,11 @@ func (ix *Index) Feed(raw []byte) Kind {
 
 // FeedTail consumes the stream's trailing fragment — the bytes after
 // the last newline that no newline terminated. Its disposition is
-// double: the fragment is classified malformed (Issue #10 owns the
-// count) and the stream is marked incomplete.
+// double: the fragment is counted malformed and the stream is marked
+// incomplete.
 func (ix *Index) FeedTail(raw []byte) Kind {
 	ix.broken = true
+	ix.Malformed++
 	return KindMalformed
 }
 

@@ -2,10 +2,13 @@ package app
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"vrg/internal/searchindex"
 )
 
 // missingSummaryStream closes its one file but never terminates the
@@ -28,6 +31,52 @@ const orphanEndStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
 // orphanEndOnlyStream is an integrity failure with nothing retained:
 // the stream's only file event is an end for a path that never opened.
 const orphanEndOnlyStream = `{"type":"end","data":{"path":{"text":"./stray.go"},"binary_offset":null,"stats":{}}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// unknownOnlyStream is a complete stream whose only oddity is an
+// unrecognized record type — a warning diagnostic, never a failure.
+const unknownOnlyStream = `{"type":"weird","data":{"x":1}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// malformedResultsStream keeps usable results beside one skipped
+// garbage record: browse with the record-loss overlay, exit 0.
+const malformedResultsStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+not json at all
+{"type":"end","data":{"path":{"text":"./a.go"},"binary_offset":null,"stats":{}}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// malformedOnlyStream is a complete stream that lost its only record to
+// skipping: no usable results, so record loss is fatal.
+const malformedOnlyStream = `not json at all
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// skippedThenBinaryStream loses one record to skipping and its only
+// retained file to binary exclusion: usable results are assessed after
+// all filtering, so zero retained stops is the record-loss fatal row,
+// not the no-results row.
+const skippedThenBinaryStream = `{"type":"begin","data":{"path":{"text":"./b.bin"}}}
+{"type":"match","data":{"path":{"text":"./b.bin"},"lines":{"text":"x y\n"},"line_number":1,"absolute_offset":0,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}
+{"type":"end","data":{"path":{"text":"./b.bin"},"binary_offset":1,"stats":{}}}
+not json either
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// missingEndStream retains its match while the file's end never
+// arrived: incomplete metadata is an integrity failure, so retained
+// results still browse under the overlay at exit 2.
+const missingEndStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// missingEndEmptyStream is the same integrity failure with nothing
+// retained: the overlay alone, exiting on dismissal.
+const missingEndEmptyStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
 {"type":"summary","data":{"elapsed_total":{},"stats":{}}}
 `
 
@@ -212,6 +261,68 @@ func TestOutcomeMatrix(t *testing.T) {
 			close:      "q", status: 1,
 		},
 		{
+			// Unknown-type warnings never change the exit status,
+			// even with zero results: the warning overlay precedes
+			// the no-results screen, where q exits 1.
+			name:   "unknown types with zero results warn to no results",
+			stream: unknownOnlyStream, code: 0,
+			state: stateNoResults, overlay: true,
+			shows:   []string{"1 unrecognised record types skipped"},
+			dismiss: "esc", after: stateNoResults,
+			showsAfter: []string{"No results found"},
+			close:      "q", status: 1,
+		},
+		{
+			name:   "malformed skipped with usable results browses under overlay",
+			stream: malformedResultsStream, code: 0,
+			state: stateBrowse, overlay: true,
+			shows:   []string{"1 malformed record skipped", "a.go"},
+			dismiss: "esc", after: stateBrowse,
+			showsAfter: []string{"a.go"},
+			close:      "q", status: 0,
+		},
+		{
+			name:   "malformed skipped with zero usable results exits on q",
+			stream: malformedOnlyStream, code: 0,
+			state: stateOverlayOnly, overlay: true,
+			shows:   []string{"1 malformed record skipped"},
+			omits:   []string{"No results found"},
+			dismiss: "q", after: stateGone, status: 2,
+		},
+		{
+			name:   "malformed skipped with zero usable results exits on Esc",
+			stream: malformedOnlyStream, code: 0,
+			state: stateOverlayOnly, overlay: true,
+			shows:   []string{"1 malformed record skipped"},
+			dismiss: "esc", after: stateGone, status: 2,
+		},
+		{
+			// A skipped record plus a binary exclusion leaves zero
+			// retained stops — assessed after all filtering, so the
+			// record-loss fatal row applies, not the no-results row.
+			name:   "skipped record plus binary exclusion is fatal",
+			stream: skippedThenBinaryStream, code: 0,
+			state: stateOverlayOnly, overlay: true,
+			shows:   []string{"1 malformed record skipped"},
+			dismiss: "q", after: stateGone, status: 2,
+		},
+		{
+			name:   "missing end with retained matches browses under overlay",
+			stream: missingEndStream, code: 0,
+			state: stateBrowse, overlay: true,
+			shows:   []string{"incomplete", "a.go"},
+			dismiss: "esc", after: stateBrowse,
+			showsAfter: []string{"a.go"},
+			close:      "q", status: 2,
+		},
+		{
+			name:   "missing end with no matches is fatal",
+			stream: missingEndEmptyStream, code: 0,
+			state: stateOverlayOnly, overlay: true,
+			shows:   []string{"incomplete"},
+			dismiss: "q", after: stateGone, status: 2,
+		},
+		{
 			name:   "ctrl+c after completion in browse exits 130",
 			stream: happyStream, code: 0,
 			state: stateBrowse,
@@ -268,6 +379,37 @@ func TestOutcomeMatrix(t *testing.T) {
 				t.Fatalf("status = %d, want %d", m.status, tc.status)
 			}
 		})
+	}
+}
+
+// TestRecordLossDiagnostics pins the composed overlay lines for the
+// record-loss counters: the malformed and oversized counts, plus one
+// sanitized "oversized record skipped for <path>" line per recovered
+// path — the only evidence of a file whose every record was discarded.
+func TestRecordLossDiagnostics(t *testing.T) {
+	out := DecideOutcome(OutcomeInput{
+		Result:    Result{Code: 0},
+		Integrity: searchindex.Integrity{Complete: true},
+		Usable:    3,
+		RecordLoss: RecordLoss{
+			Malformed: 2,
+			Oversized: 1,
+			Paths:     [][]byte{[]byte("big\t.txt")},
+		},
+		Warnings: []string{"1 unrecognised record types skipped"},
+	})
+	want := []string{
+		"2 malformed records skipped",
+		"1 oversized record skipped",
+		`oversized record skipped for big\t.txt`,
+		"1 unrecognised record types skipped",
+	}
+	if !slices.Equal(out.Overlay, want) {
+		t.Fatalf("Overlay = %q, want %q", out.Overlay, want)
+	}
+	if out.Presentation != presentBrowse || out.Status != 0 {
+		t.Fatalf("record loss with usable results = (%v, %d), want browse + exit 0",
+			out.Presentation, out.Status)
 	}
 }
 

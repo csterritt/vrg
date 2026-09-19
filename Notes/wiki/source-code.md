@@ -51,9 +51,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   matches, post-summary records, the unterminated tail), binary-
   exclusion precedence over orphan retention, `File.Incomplete` for
   partially-lifecycled files, and `Integrity().Complete` — stream
-  integrity assessed separately from process success. See
-  [no-results-screen.md](no-results-screen.md) and
-  [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md).
+  integrity assessed separately from process success. Issue #10 added
+  the skip counters `Malformed`/`Unknown` — classified per record,
+  unqualified by position — and `Build`'s bounded scan that discards
+  records over `MaxRecordBytes` through their next newline. See
+  [no-results-screen.md](no-results-screen.md),
+  [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md), and
+  [record-robustness.md](record-robustness.md).
+- `internal/searchindex/oversized.go` — Issue #10's `MaxRecordBytes`
+  (64 MiB payload limit) and the oversized-record accounting:
+  `feedOversized` counts the record, recovers its path best-effort for
+  diagnostics via `recoverOversizedPath` — a bounded `json.Decoder`
+  token pass over the first `MaxRecordBytes` for `type` and
+  `data.path` — and flags an after-`summary` arrival as an integrity
+  failure. See [record-robustness.md](record-robustness.md).
 - `internal/searchindex/doc.go` — package comment.
 
 ## internal/app
@@ -77,20 +88,28 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `writeFailureDiag` (the single post-restoration stderr writer) →
   exit 2, and the Issue #7 `c` key toggling `m.theme` between the dark
   and light schemes. The search-derived `status` is fixed at
-  completion; only `ctrl+c` overrides it to 130. See
+  completion; only `ctrl+c` overrides it to 130. Issue #10's
+  `recordWarnings` composes the "N unrecognised record types skipped"
+  warning from the index's `Unknown` count. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
-  [no-results-screen.md](no-results-screen.md), and
-  [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md).
+  [no-results-screen.md](no-results-screen.md),
+  [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md), and
+  [record-robustness.md](record-robustness.md).
 - `internal/app/outcome.go` — Issue #9's pure outcome decision:
   `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
-  `Integrity`, usable-results count, reserved `RecordLoss`, caller
-  `Warnings`) to the presentation, the escaped overlay lines, the
-  dismiss-exits flag, and the fixed status — the whole PRD outcome
-  table. `outcomeDiagnostics` composes the overlay lines in the
-  universal order — captured stderr or a generated code-or-signal line
-  for a silent failed process, then the integrity note, then warnings —
-  all through `safepresentation.EscapeDiagnostic`.
+  `Integrity`, usable-results count, `RecordLoss`, caller `Warnings`)
+  to the presentation, the escaped overlay lines, the dismiss-exits
+  flag, and the fixed status — the whole PRD outcome table. Issue #10
+  filled `RecordLoss` (`Malformed`, `Oversized`, the recoverable
+  `Paths`) and added its row: a complete stream with skipped records
+  and zero usable results — assessed after all filtering — is the
+  fatal overlay-only outcome. `outcomeDiagnostics` composes the overlay
+  lines in the universal order — captured stderr or a generated
+  code-or-signal line for a silent failed process, then the integrity
+  note, then `recordLossLines` (the malformed/oversized counts plus
+  "oversized record skipped for \<path\>" lines), then warnings — all
+  through `safepresentation.EscapeDiagnostic`/`EscapePath`.
 - `internal/app/overlay.go` — Issue #9's modal error overlay:
   grapheme-boundary `wrapCells` to the interior width (unbroken strings
   split mid-run), the complete wrapped row set scrolled by

@@ -202,6 +202,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Result:    msg.res,
 			Integrity: msg.idx.Integrity(),
 			Usable:    msg.idx.UsableResults(),
+			RecordLoss: RecordLoss{
+				Malformed: msg.idx.Malformed,
+				Oversized: msg.idx.Oversized,
+				Paths:     msg.idx.OversizedPaths,
+			},
+			Warnings: recordWarnings(msg.idx),
 		})
 		// The search-derived status is fixed once searching completes;
 		// only ctrl+c overrides it afterwards.
@@ -287,6 +293,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// recordWarnings composes the caller's warning diagnostics from the
+// index's counts: the unknown event-type tally is a warning — it never
+// independently changes the exit status.
+func recordWarnings(ix *searchindex.Index) []string {
+	if ix.Unknown > 0 {
+		return []string{fmt.Sprintf("%d unrecognised record types skipped", ix.Unknown)}
+	}
+	return nil
 }
 
 // quitCmd is the single cleanup path every controlled exit routes

@@ -272,3 +272,41 @@ exit-status contract; Colours, overlays, and key precedence),
 `internal/app/outcome_test.go`, `internal/app/overlay_test.go`,
 `internal/app/sinksafety_test.go`, `cmd/vrg/outcome_test.go`,
 `cmd/vrg/search_test.go`.
+
+## [2026-09-16] ingest | Issue #10 record robustness — malformed, oversized, unknown
+
+Ingested Issue #10 ([issue](../issues/010-record-robustness-malformed-oversized-unknown.md),
+[task](../tasks/010-record-robustness-malformed-oversized-unknown.md)).
+`internal/searchindex` gained the deterministic skip counters —
+`Index.Malformed` and `Index.Unknown` classified per record and
+unqualified by position (a malformed or unknown record after `summary`
+counts *and* fails integrity; a skipped match never breaks intact
+lifecycle metadata) — plus `oversized.go`: `MaxRecordBytes` (64 MiB
+excluding the newline), `Build`'s bounded scan discarding an oversized
+record through its next newline and resynchronizing on the following
+one, `feedOversized`/`recoverOversizedPath` counting separately with
+best-effort `type`+`data.path` recovery into `OversizedPaths`, and the
+unterminated oversized tail's triple disposition (oversized + malformed
++ incomplete). `internal/app` filled `RecordLoss` (`Malformed`,
+`Oversized`, `Paths`), added the fatal record-loss row to
+`DecideOutcome` — complete stream, records skipped, zero usable results
+assessed after all filtering → overlay-only exit 2 — and
+`recordLossLines`/`recordWarnings` compose the count, per-path, and
+"N unrecognised record types skipped" diagnostics. New tests:
+`disposition_test.go` (schema-matrix and lifecycle-matrix disposition
+tables plus both composite rows), `oversized_test.go` (boundary,
+resync, named/anonymous paths, absent oversized-only file, triple
+disposition, unknown-not-summary), and six new outcome-matrix rows.
+Created [record-robustness](record-robustness.md); updated
+[search-collection](search-collection.md),
+[error-overlay-and-outcomes](error-overlay-and-outcomes.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/010-record-robustness-malformed-oversized-unknown.md`,
+`Notes/tasks/010-record-robustness-malformed-oversized-unknown.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity;
+Outcome and exit-status contract; Resources and responsiveness),
+`internal/searchindex/index.go`, `internal/searchindex/oversized.go`,
+`internal/searchindex/disposition_test.go`,
+`internal/searchindex/oversized_test.go`, `internal/app/app.go`,
+`internal/app/outcome.go`, `internal/app/outcome_test.go`.

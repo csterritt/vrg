@@ -58,6 +58,13 @@ Catalog of all wiki pages for the vrg project.
   error overlay's keys/wrapping/scrolling/dismissal, stderr
   classification with generated code-or-signal diagnostics, and the
   fixed-status rule with the `ctrl+c` → 130 override
+- [record-robustness.md](record-robustness.md) — Issue #10: the
+  deterministic malformed/integrity/unknown disposition matrices with
+  their two composite rows, the 64 MiB `MaxRecordBytes` limit with
+  discard-and-resynchronize and best-effort oversized-path recovery,
+  the triple-disposition unterminated oversized tail, missing-`end`
+  retention, and the record-loss outcome rows with usable results
+  assessed after all filtering
 
 ## Catalogs
 

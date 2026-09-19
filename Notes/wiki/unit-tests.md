@@ -88,8 +88,8 @@ the scan (each declared flag recorded verbatim, help never forwarded).
   `KindUnknown`.
 - `TestMalformedRecordsSkipped` — invalid JSON/base64, missing or
   non-string `type`, missing/mistyped required fields, and out-of-range
-  values all classify `KindMalformed` and contribute nothing (counting
-  lands with Issue #10).
+  values all classify `KindMalformed` and contribute nothing (Issue #10
+  counts them).
 - `TestSubmatchRangeBoundaries` — ranges may touch the ends of the
   decoded line; zero-width matches are in range.
 
@@ -124,6 +124,45 @@ through the real stream entry point:
 - `TestTrailingUnterminatedRecordDisposition` — `FeedTail` returns
   `KindMalformed` and marks the stream incomplete without indexing the
   fragment.
+
+`disposition_test.go` (external package `searchindex_test`; Issue #10)
+makes malformed versus integrity failure deterministic categories —
+one fixture per matrix row, asserting `Index.Malformed`, `Index.Unknown`,
+and `Integrity().Complete` together:
+
+- `TestSchemaMatrixDispositions` — every Issue #3 per-record schema row
+  (each missing/wrongly-typed required field, every invalid range,
+  invalid JSON/base64, missing or non-string `type`) embedded between
+  two valid `match` records inside a valid lifecycle: each is counted
+  malformed, never dispatched, and the surrounding stops are still
+  indexed — the resynchronization assertion. Lifecycle-neutral rows
+  keep their own dispositions: a `data`-less `context` is valid, and an
+  unrecognized string `type` counts unknown, never malformed.
+- `TestLifecycleMatrixDispositions` — every Issue #9 integrity row
+  (duplicate/orphaned `begin`/`end`, `match` after `end`, second
+  `summary`, records after `summary`, missing `end`, missing summary)
+  fails integrity without inflating the malformed count; an unknown
+  type after `summary` counts unknown *and* fails integrity.
+- `TestUnterminatedTailIsMalformedAndIncomplete` and
+  `TestMalformedAfterSummaryIsMalformedAndIncomplete` — the two
+  composite rows, each asserting both counters.
+
+`oversized_test.go` (same external package; Issue #10) covers the
+64 MiB contract:
+
+- `TestOversizedBoundary` — exactly `MaxRecordBytes` accepted, one byte
+  over discarded through its newline with resynchronization proved by
+  the following records.
+- `TestOversizedRecordPathDiagnostics` — a path-first oversized `match`
+  lands its path in `OversizedPaths` while the oversized-only file is
+  absent from the file list; a path-after-the-limit record is counted
+  anonymously.
+- `TestOversizedUnterminatedTailTripleDisposition` — the oversized
+  unterminated tail asserts all three dispositions: oversized count,
+  malformed count, incomplete stream.
+- `TestUnknownTypeCannotSubstituteForSummary` — a stream ending on an
+  unknown record without a `summary` fails integrity while counting
+  unknown, not malformed.
 
 ## internal/safepresentation
 
@@ -318,7 +357,13 @@ without usable results (both `q` and `Esc` dismissal keys), missing
 summary and orphaned end integrity failures, warning stderr over browse
 and over no-results, the all-binary warning with its skip count,
 `Esc` never exiting a base state, and `ctrl+c` → 130 from browse,
-no-results, and the open overlay.
+no-results, and the open overlay. Issue #10 extends the same table:
+unknown-type warnings with zero results (warning overlay → no-results →
+1), malformed records skipped with usable results (browse + overlay →
+0), malformed loss with zero usable results (`q` and `Esc` → 2), a
+skipped record plus binary exclusion leaving zero retained stops (→ 2,
+assessed after all filtering), and missing `end` with and without
+retained matches (browse + overlay → 2 and overlay-only → 2).
 
 `overlay_test.go` (same package; Issue #9) covers the modal overlay's
 mechanics:

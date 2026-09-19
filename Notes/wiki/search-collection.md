@@ -112,8 +112,10 @@ retained stops after filtering — see
 [no-results-screen.md](no-results-screen.md). Issue #9 landed the
 lifecycle/integrity accounting — begin/end pairing, summary
 completeness, and `Index.Integrity()` — see
-[error-overlay-and-outcomes.md](error-overlay-and-outcomes.md);
-skip/oversize counting is Issue #10's.
+[error-overlay-and-outcomes.md](error-overlay-and-outcomes.md); the
+malformed/oversized/unknown skip counts and the 64 MiB record limit
+landed with Issue #10 — see
+[record-robustness.md](record-robustness.md).
 
 ## Tests
 

@@ -29,18 +29,27 @@ type OutcomeInput struct {
 	Integrity searchindex.Integrity
 	Usable    int
 	// RecordLoss holds Issue #10's skipped-record counts — malformed and
-	// oversized records — unused by the decision until that issue
-	// extends the outcome matrix.
+	// oversized records — plus the recoverable oversized-record paths.
 	RecordLoss RecordLoss
 	// Warnings are nonfatal diagnostic lines composed by the caller,
-	// appended after the process and stream-integrity components.
+	// appended after the process, stream-integrity, and record-loss
+	// components.
 	Warnings []string
 }
 
-// RecordLoss counts records dropped before they could be validated;
-// Issue #10 fills it.
+// RecordLoss counts records dropped before they could be indexed:
+// malformed records and records over the payload limit. Paths holds the
+// raw path bytes of each oversized record whose type and data.path were
+// recovered before the limit — best-effort, one entry per named record.
 type RecordLoss struct {
 	Malformed, Oversized int
+	Paths                [][]byte
+}
+
+// lost reports whether any record was skipped: record loss makes a
+// resultless complete stream fatal.
+func (rl RecordLoss) lost() bool {
+	return rl.Malformed+rl.Oversized > 0
 }
 
 // Outcome is the decided search outcome: the initial presentation, the
@@ -77,6 +86,13 @@ func DecideOutcome(in OutcomeInput) Outcome {
 		return Outcome{Presentation: presentBrowse, Overlay: overlay, Status: 2}
 	case fatal:
 		return Outcome{Presentation: presentOverlayOnly, Overlay: overlay, DismissExits: true, Status: 2}
+	case in.RecordLoss.lost() && in.Usable == 0:
+		// rg 0/1, complete stream, records skipped, nothing usable:
+		// the error overlay explains the record loss and its
+		// dismissal exits 2. Usable is assessed after all filtering,
+		// so a skipped record plus a binary exclusion lands here
+		// rather than on the no-results row.
+		return Outcome{Presentation: presentOverlayOnly, Overlay: overlay, DismissExits: true, Status: 2}
 	case in.Usable > 0:
 		return Outcome{Presentation: presentBrowse, Overlay: overlay, Status: 0}
 	default:
@@ -88,7 +104,8 @@ func DecideOutcome(in OutcomeInput) Outcome {
 // the universal component order: the process component — the child's
 // captured stderr, or a generated line naming the exit code or signal
 // when a failed child left none — then a stream-integrity note when the
-// stream was not whole, then the caller's warnings. It returns nil when
+// stream was not whole, then the record-loss counts and recoverable
+// oversized paths, then the caller's warnings. It returns nil when
 // there is nothing to report, meaning no overlay opens.
 func outcomeDiagnostics(in OutcomeInput) []string {
 	var lines []string
@@ -101,7 +118,36 @@ func outcomeDiagnostics(in OutcomeInput) []string {
 	if !in.Integrity.Complete {
 		lines = append(lines, "ripgrep event stream incomplete")
 	}
+	lines = append(lines, recordLossLines(in.RecordLoss)...)
 	return append(lines, in.Warnings...)
+}
+
+// recordLossLines composes the skipped-record diagnostics: the
+// malformed and oversized counts, plus one "oversized record skipped
+// for <path>" line per recovered path — the only evidence of a file
+// whose every record was discarded.
+func recordLossLines(rl RecordLoss) []string {
+	var lines []string
+	if rl.Malformed > 0 {
+		lines = append(lines, fmt.Sprintf("%d malformed %s skipped",
+			rl.Malformed, pluralize(rl.Malformed, "record", "records")))
+	}
+	if rl.Oversized > 0 {
+		lines = append(lines, fmt.Sprintf("%d oversized %s skipped",
+			rl.Oversized, pluralize(rl.Oversized, "record", "records")))
+	}
+	for _, p := range rl.Paths {
+		lines = append(lines, "oversized record skipped for "+safepresentation.EscapePath(p))
+	}
+	return lines
+}
+
+// pluralize picks the singular or plural noun for a count.
+func pluralize(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // failedProcessLine is the generated diagnostic for a failed child that
