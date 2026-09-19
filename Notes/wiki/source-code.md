@@ -6,9 +6,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 
 - `cmd/vrg/main.go` — thin process boundary. `run` calls `cli.Parse` with
   `os.Stat` injected and maps the explicit result kind to stream/status:
-  help → exit 0 (help already on stdout), search → escaped stub line
-  (`search stub: argv=rg …`, the exact protected child argv), exit 0,
-  usage error → sanitized diagnostic on stderr, exit 2.
+  help → exit 0 (help already on stdout), usage error → sanitized
+  diagnostic + usage on stderr, exit 2, search → `app.Run` with the
+  protected child argv and the invocation working directory. It also
+  wires the `VRG_TEST_*` seam env vars (`VRG_TEST_GATE`,
+  `VRG_TEST_COLLECT_ACK`) into `app.Option`s — see
+  [search-collection.md](search-collection.md).
 
 ## internal/cli
 
@@ -22,16 +25,37 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [cli-foundation.md](cli-foundation.md) and
   [cli-flags-child-argv.md](cli-flags-child-argv.md).
 
+## internal/searchindex
+
+- `internal/searchindex/record.go` — the per-record JSON parser and the
+  Issue #3 schema matrix: `Kind` classification (`begin`/`match`/`end`/
+  `summary`/`context`/`KindUnknown`/`KindMalformed`), `text`/base64
+  `bytes` decoding, required-field and range validation.
+- `internal/searchindex/index.go` — the navigation index: `Index.Feed` /
+  `Prepare` / `Build`, same-path/same-line `Stop` merging, submatch
+  `(start, end)` ordering, union `Highlights`, unsigned raw-path ordering,
+  and working-directory path resolution without canonicalization.
+- `internal/searchindex/doc.go` — package comment.
+
+## internal/app
+
+- `internal/app/rg.go` — the child-process seam: `spawn` runs `rg` from
+  `PATH` with `cmd.Dir` set to the invocation working directory and
+  drains both stdout and stderr concurrently for the child's whole
+  lifetime; `Child`/`Result`/`StartFunc` are the boundary types.
+- `internal/app/app.go` — the Bubble Tea model and `app.Run`: the
+  "Searching…" state covering collection and post-exit index
+  preparation, the `WithGate`/`WithCollectAck` test seams, the interim
+  `N files, M matched lines` summary with `q` → exit 0, and the
+  sanitized start-failure diagnostic with exit 2 before the TUI.
+- `internal/app/doc.go` — package comment.
+
 ## Package boundaries awaiting their issues
 
 Each is a documented empty package mirroring PRD Module Design:
 
-- `internal/searchindex` — parsed result data, stream integrity,
-  exclusions, circular matched-line cursor.
 - `internal/filebuffer` — per-file loading/classification into safe
   display-ready lines and validated highlights.
 - `internal/viewport` — logical reading position and rendered-row
   visibility.
 - `internal/theme` — active colour scheme and styles.
-- `internal/app` — lifecycle/input/async/overlay/cleanup coordination
-  (Bubble Tea model).

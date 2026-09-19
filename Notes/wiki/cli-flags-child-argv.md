@@ -102,8 +102,10 @@ argument vector (the `rg` program name itself is the caller's):
 ```
 
 Contradictory flags are forwarded without normalization — ripgrep
-resolves interactions. The `cmd/vrg` stub prints it as
-`search stub: argv=rg …` until Issue #3 wires the real child spawn.
+resolves interactions. Since Issue #3 the vector is spawned for real:
+`cmd/vrg` passes it to `app.Run`, which runs `rg` with it from the
+invocation working directory — see
+[search-collection.md](search-collection.md).
 
 ## Help precedence (unchanged from Issue #1)
 
@@ -122,5 +124,6 @@ See [unit-tests.md](unit-tests.md): `TestSearchFlagsForwarded`,
 `TestOptionAssignmentFormsRejected`,
 `TestAssignmentSpellingsAfterTerminator`, `TestFlagsOnlyMissingPattern`,
 `TestGeneratedHelpListsSearchFlags`, `TestHelpRendersEveryDeclaredOption`,
-`TestScanRecordsEveryDeclaredFlag`, `TestChildArgvBoundary`, plus the
-extended Issue #1 help/error tables.
+`TestScanRecordsEveryDeclaredFlag`, plus the extended Issue #1
+help/error tables; the exact spawned argv is asserted end-to-end by
+`TestChildArgvAndWorkdir` in `cmd/vrg/search_test.go` (Issue #3).

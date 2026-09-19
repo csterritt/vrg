@@ -39,3 +39,35 @@ prints `search stub: argv=rg …`. Created
 `internal/cli/cli.go`, `internal/cli/cli_test.go`,
 `internal/cli/internal_test.go`, `cmd/vrg/main.go`,
 `cmd/vrg/main_test.go`.
+
+## [2026-09-16] ingest | Issue #3 spawn rg, collect results, searching screen
+
+Ingested the completed Issue #3 implementation: `cmd/vrg` now hands the
+protected `ChildArgs` vector and the invocation working directory to
+`app.Run`; `internal/app` spawns `rg` from `PATH` with `cmd.Dir` set to
+that directory, drains both stdout and stderr concurrently for the whole
+child lifetime, and runs collection plus index preparation as a single
+command off the Bubble Tea update path; the model holds "Searching…"
+until the index is ready (the `WithGate`/`WithCollectAck` seams, wired in
+`main` from `VRG_TEST_GATE`/`VRG_TEST_COLLECT_ACK`, let tests hold
+preparation after rg exits), then shows the interim
+`N files, M matched lines` summary where `q` exits 0; start failure is
+detected before the TUI with a sanitized diagnostic and exit 2.
+`internal/searchindex` gained the per-record parser (`text`/base64
+`bytes` decoding, the five known events plus `KindUnknown`/
+`KindMalformed`, the required-field/range schema matrix) and the index
+itself (same-path/same-line `Stop` merging, `(start, end)` submatch
+order, union `Highlights`, unsigned raw-path ordering, working-directory
+resolution without canonicalization). The `cmd/vrg` stub line is gone.
+Created [search-collection](search-collection.md); updated
+[cli-flags-child-argv](cli-flags-child-argv.md),
+[project-overview](project-overview.md), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/issues/003-spawn-rg-collect-results-searching-screen.md`,
+`Notes/tasks/003-spawn-rg-collect-results-searching-screen.md`,
+`Notes/PRD-vrg.md` (Invocation and child arguments; Result index,
+records, and stream integrity; Module Design → SearchIndex / App),
+`cmd/vrg/main.go`, `cmd/vrg/main_test.go`, `cmd/vrg/search_test.go`,
+`internal/app/app.go`, `internal/app/rg.go`, `internal/app/app_test.go`,
+`internal/app/rg_test.go`, `internal/searchindex/record.go`,
+`internal/searchindex/index.go`, `internal/searchindex/index_test.go`.

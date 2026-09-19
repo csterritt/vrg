@@ -13,7 +13,9 @@ CLI*, *Outcome and exit-status contract*, *Testing Decisions → CLI*.
 `cli.Parse(args, out, env)` returns a `cli.Result` with an explicit
 `Kind`: `KindHelp`, `KindSearch`, or `KindUsageError`. Callers never see
 library types. `cmd/vrg` is a thin boundary that maps kinds to streams and
-statuses: help → stdout, exit 0; search → escaped stub, exit 0; usage
+statuses: help → stdout, exit 0; search → `app.Run` driving the real
+rg spawn and TUI (Issue #3, see
+[search-collection.md](search-collection.md)); usage
 error → sanitized single-line diagnostic **followed by the generated
 usage block** (`cli.HelpText()`) on stderr, exit 2 — matching standard
 mow.cli behavior of printing usage after an error, with only module text
@@ -59,7 +61,7 @@ child argv — see [cli-flags-child-argv.md](cli-flags-child-argv.md).
 - Bare `vrg`, `-h`/`--help` in any pre-`--` position, and combined shorts
   containing `h` (`-ih`, `-hi`) produce the help-only result: one help
   copy on stdout, exit 0, empty stderr, no root validation, no child, no
-  TUI, no stub — even when rg is absent.
+  TUI — even when rg is absent.
 - Help wins over missing-pattern, excess-operand, unsupported-option, and
   invalid-root conditions.
 - Help content: `Usage: vrg [OPTIONS] PATTERN [ROOT]`, the required
@@ -93,9 +95,9 @@ child argv — see [cli-flags-child-argv.md](cli-flags-child-argv.md).
 `cli.Escape` is the interim single-line escaper (Issue #6 generalizes):
 `\\` doubles, `\n`/`\r`/`\t` become escape spellings, other C0 controls
 and DEL use caret notation (`ESC` → `^[`), C1 controls use `\u` escapes,
-invalid UTF-8 bytes use `\xNN`. It covers usage diagnostics and the
-success stub's per-element argv escaping; generated help contains only
-fixed text.
+invalid UTF-8 bytes use `\xNN`. It covers usage diagnostics and, since
+Issue #3, the start-failure diagnostic (`vrg: cannot start ripgrep: …`);
+generated help contains only fixed text.
 
 ## Tests consumed by later tasks
 
