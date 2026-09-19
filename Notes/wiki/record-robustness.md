@@ -34,7 +34,11 @@ specified by the matrices, not judged by the implementation:
   a malformed record after a valid `summary` is counted malformed *and*
   flagged as an after-summary integrity failure. Validation runs before
   the post-summary check, so after-`summary` positioning never
-  suppresses malformed accounting.
+  suppresses malformed accounting. Since Issue #36 these dual
+  dispositions are dual **diagnostics** too: the post-summary record
+  contributes `CauseAfterSummary` alongside its own malformed,
+  oversized, or unknown accounting — see
+  [integrity-diagnostics.md](integrity-diagnostics.md).
 - **Unknown type** — a string `type` outside the five known events is
   `KindUnknown`, counted separately in `Index.Unknown` and reported as
   "N unrecognised record types skipped". The count is unqualified by
@@ -82,7 +86,8 @@ termination, and the incomplete-stream integrity failure.
 carries `Malformed`, `Oversized`, and the recoverable `Paths`) and the
 caller's `Warnings` — `recordWarnings` composes the "N unrecognised
 record types skipped" line. `outcomeDiagnostics` inserts the
-record-loss lines between the integrity note and the warnings. The new
+record-loss lines between the per-cause integrity lines and the
+warnings. The new
 matrix rows:
 
 | Condition | Presentation | Dismissal | Exit |

@@ -275,6 +275,17 @@ Catalog of all wiki pages for the vrg project.
   no-results 1, fatal 2 via `q` and `Esc`, cancellation 130 with the
   child gone and reaped, help-only 0 with the sentinel rg never
   invoked) — all green with no regressions
+- [integrity-diagnostics.md](integrity-diagnostics.md) — Issue #36:
+  the structured `Integrity.Causes` model (one `Cause{Kind, Path}` per
+  offending physical record) with its stable per-kind diagnostic text,
+  the one-cause precedence (extra-summary over after-summary,
+  post-summary lifecycle suppression including the removed `context`
+  exemption, the tail resolved at `Integrity()` time), detection-order
+  plus end-of-stream ordering by unsigned raw-path bytes, uncapped
+  deterministic multiplicity, `EscapePath` escaping, dual
+  representation of post-summary record loss, and the universal
+  process → integrity → record-loss → warning composition shared by
+  overlay and replay with no status line for 0/1 exits
 
 ## Catalogs
 

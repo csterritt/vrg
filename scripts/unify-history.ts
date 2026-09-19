@@ -86,6 +86,31 @@ async function getRemoteCommits(): Promise<CommitEntry[]> {
   return parseJjLog(output);
 }
 
+// jj refuses to snapshot files over its max size and reports them as:
+//   Warning: Refused to snapshot some files:
+//     path/to/file: 6.9MiB (7214709 bytes); the maximum size allowed is 1.0MiB (1048576 bytes)
+async function getRefusedSnapshotPaths(): Promise<string[]> {
+  const { stdout, stderr } = await execFileP("jj", ["st"], { cwd: ROOT });
+  const paths: string[] = [];
+  for (const line of `${stderr}\n${stdout}`.split("\n")) {
+    const match = line.match(/^\s+(.+): \S+ \(\d+ bytes\); the maximum size allowed is/);
+    if (match) paths.push(match[1]!);
+  }
+  return paths;
+}
+
+// Delete files jj refuses to snapshot until `jj st` reports none.
+async function removeOversizedFiles(): Promise<void> {
+  for (;;) {
+    const paths = await getRefusedSnapshotPaths();
+    if (paths.length === 0) return;
+    for (const path of paths) {
+      log(`Removing file refused by jj snapshot: ${path}`);
+      await run("rm", ["-rf", join(ROOT, path)]);
+    }
+  }
+}
+
 // remoteCommits is oldest-first; drop everything before the first commit whose
 // change id or description contains START_MATCH.
 function remoteCommitsFromMatch(remoteCommits: CommitEntry[]): CommitEntry[] {
@@ -117,6 +142,7 @@ async function printDryRunPlan(): Promise<void> {
     log(`  ssh ${REMOTE_HOST} '${REMOTE_PATH_PREFIX} && cd ${REMOTE_DIR} && jj edit ${commit.changeId}'`);
     log(`  jj new ${BRANCH}`);
     log("  bash scripts/pull-up-new.sh");
+    log("  <delete files jj refuses to snapshot, then re-check jj st>");
     log(`  jj describe -m "${commit.description}"`);
     log(`  jj bookmark set ${BRANCH} -r @`);
   }
@@ -156,6 +182,8 @@ async function main(): Promise<void> {
 
     log("Running: scripts/pull-up-new.sh");
     await runInteractive("bash", ["scripts/pull-up-new.sh"]);
+
+    await removeOversizedFiles();
 
     log(`Running: jj describe -m "${target.description}"`);
     await run("jj", ["describe", "-m", target.description]);

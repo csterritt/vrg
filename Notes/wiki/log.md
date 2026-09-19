@@ -1360,3 +1360,46 @@ Sources: `Notes/issues/035-final-integration-verification.md`,
 (Testing Decisions), the clean-checkout gate and test output, and
 `Notes/walkthroughs/035-03/code-walkthrough/` (`walkthrough.md`,
 `smoke.py`, `vrg`).
+## [2026-09-17] ingest | Issue #36 stream-integrity fatal diagnostics — structured causes and universal composition
+
+Ingested Issue #36
+([issue](../issues/036-stream-integrity-fatal-diagnostics.md),
+[task](../tasks/036-stream-integrity-fatal-diagnostics.md)).
+`searchindex.Integrity` gains `Causes []Cause` — one
+`Cause{Kind, Path}` per offending physical record across eight
+`CauseKind`s — recorded at the Issue #9 violation sites under the
+one-cause precedence: a second `summary` is `CauseExtraSummary` alone,
+every other post-summary record is `CauseAfterSummary` with all
+lifecycle dispatch suppressed (the Issue #9 `context` exemption is
+removed and its lifecycle row corrected; Issue #44 layers dedicated
+coverage on top), and the trailing unterminated fragment resolves at
+`Integrity()` time to `CauseAfterSummary` post-summary else
+`CauseUnterminated`. `Integrity()` emits mid-stream causes in
+detection order, then missing `end`s sorted by unsigned raw path
+bytes, missing summary, and the tail cause — uncapped, deterministic.
+`internal/app/outcome.go`'s `tailDiags` renders one stable
+`integrityLine` per cause (`EscapePath`-escaped) in the universal
+composition `processDiags` → integrity causes → `recordLossLines`
+(malformed aggregate, oversized aggregate, per-path details) →
+warnings, shared verbatim by the overlay and `collectSearchDiags`'s
+replay path; generated process lines still require a failed process
+with no stderr and never appear for 0/1 exits. New coverage:
+`lifecycle_test.go` asserts each row's `wantCause` list through
+`checkCauses` plus the independent counters and gains the ordering,
+multiplicity, post-summary, and corrected-context rows;
+`outcome_test.go`'s `TestIntegrityDiagnostics` asserts complete
+ordered overlay **and** collected line lists per fixture, with
+`TestIntegrityDiagnosticsDeterministic` pinning rebuild order.
+Created [integrity-diagnostics](integrity-diagnostics.md); updated
+[error-overlay-and-outcomes](error-overlay-and-outcomes.md),
+[record-robustness](record-robustness.md),
+[stderr-replay](stderr-replay.md), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/issues/036-stream-integrity-fatal-diagnostics.md`,
+`Notes/issues/044-post-summary-context-integrity-failure.md`,
+`Notes/tasks/036-stream-integrity-fatal-diagnostics.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity;
+Outcome and exit-status contract), `internal/searchindex/index.go`,
+`internal/searchindex/oversized.go`,
+`internal/searchindex/lifecycle_test.go`, `internal/app/outcome.go`,
+`internal/app/outcome_test.go`.

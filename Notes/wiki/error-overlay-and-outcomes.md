@@ -22,7 +22,7 @@ interleaved files pair independently:
 | `begin(P)` | P not open → P opens | P already open, or P is binary-excluded (exclusion is terminal) |
 | `match(P)` | P open → indexes under P | P not open → **retained** under P with `File.Incomplete` set; P excluded → dropped, file stays excluded |
 | `end(P)` | P open → P closes; non-null `binary_offset` excludes P | P not open → orphaned/duplicate end |
-| `context(P)` | ignored in every position | — (Issue #36 removes the post-summary exemption; Issue #44 makes it fail) |
+| `context(P)` | ignored before `summary` | after `summary` → record after summary (Issue #36 removed the exemption; Issue #44 adds dedicated coverage) |
 | `summary` | exactly one, as the final record | a second `summary`, or any other record after it, fails the stream |
 
 Plus the stream-shape rules: a file still open at stream end fails
@@ -39,13 +39,21 @@ precedence over orphan retention, so a match after a binary-excluding
 `end` is dropped and the file stays excluded. A well-formed `binary_offset`
 is exclusion evidence even on an orphaned `end`: the retained matches
 drop with it. Post-summary records are never dispatched — a match after
-`summary` does not index.
+`summary` does not index — and each one is itself a `CauseAfterSummary`
+violation, a second `summary` being the sole `CauseExtraSummary`.
 
-`Index.Integrity().Complete` reports the result once feeding finishes:
-the summary closed the stream, no violation occurred, and no begun file
-was left open. It is assessed **separately from the child's process
-result** — rg exiting 0 over a broken stream is still a failure, and a
-complete stream under a fatal exit still validates.
+`Index.Integrity()` reports the result once feeding finishes:
+`Complete` means the summary closed the stream, no violation occurred,
+and no begun file was left open; Issue #36's `Causes` carries one
+structured `Cause{Kind, Path}` per offending physical record —
+mid-stream violations in detection order, then missing `end`s ordered
+by unsigned raw path bytes, missing summary, and the tail cause. The
+list is uncapped and deterministic; the per-kind diagnostic text,
+precedence, and ordering rules live in
+[integrity-diagnostics.md](integrity-diagnostics.md). Integrity is
+assessed **separately from the child's process result** — rg exiting 0
+over a broken stream is still a failure, and a complete stream under a
+fatal exit still validates.
 
 ## The outcome decision
 
@@ -97,9 +105,12 @@ Captured stderr is diagnostic **regardless of exit code**: on a 0/1
 exit it opens a warning overlay, on a fatal outcome it is the process
 component of the error overlay. When a failed process left no stderr, a
 generated line names the exit code (`ripgrep exited with code 3`) or
-the wait error's signal (`ripgrep died: signal: killed`). Component
-order is process, then a stream-integrity note when the stream was not
-whole, then caller warnings. Every line is escaped through
+the wait error's signal (`ripgrep died: signal: killed`) — and only
+then: a 0/1 exit never produces a process-status line. Component order
+is process, then one line per structured stream-integrity cause (Issue
+#36), then the record-loss components, then caller warnings — see
+[integrity-diagnostics.md](integrity-diagnostics.md) for the per-cause
+text, precedence, and ordering. Every line is escaped through
 `safepresentation.EscapeDiagnostic` before it is stored, so hostile
 bytes can never execute on the terminal — the sink-safety table drives
 the hostile fixture set through the overlay's real composition path.
@@ -142,9 +153,12 @@ scroll — in [overlay-precedence.md](overlay-precedence.md).
 
 See [unit-tests.md](unit-tests.md):
 `internal/searchindex/lifecycle_test.go` is the full transition matrix
-plus the `FeedTail` double disposition; `internal/app/outcome_test.go`
+plus the `FeedTail` double disposition, each row also asserting the
+structured cause list; `internal/app/outcome_test.go`
 is the single table-driven outcome matrix asserting initial
-presentation, dismissal key, post-dismissal state, and final status;
+presentation, dismissal key, post-dismissal state, and final status,
+plus `TestIntegrityDiagnostics`' complete ordered overlay/replay line
+lists;
 `internal/app/overlay_test.go` covers key routing, scroll clamping,
 unbroken-string wrapping within the border, the complete-diagnostic
 contract, and generated diagnostics; `sinksafety_test.go` gains the

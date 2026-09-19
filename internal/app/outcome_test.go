@@ -81,6 +81,168 @@ const missingEndEmptyStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}
 {"type":"summary","data":{"elapsed_total":{},"stats":{}}}
 `
 
+// duplicateBeginStream repeats a begin for the open file — a
+// mid-stream lifecycle violation with usable results retained.
+const duplicateBeginStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./a.go"},"binary_offset":null,"stats":{}}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// orphanMatchStream is a match for a path that never opened — retained
+// with incomplete metadata.
+const orphanMatchStream = `{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// matchAfterEndStream is a match arriving after its file's end —
+// retained with incomplete metadata like any orphaned match.
+const matchAfterEndStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./a.go"},"binary_offset":null,"stats":{}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":9,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// matchAfterBinaryEndStream is a match arriving after a binary-
+// excluding end: the orphaned-match cause under the binary-exclusion
+// precedence, the late match not retained.
+const matchAfterBinaryEndStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./a.go"},"binary_offset":3,"stats":{}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":9,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// duplicateEndStream closes its file twice — the second end is
+// orphaned.
+const duplicateEndStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"end","data":{"path":{"text":"./a.go"},"binary_offset":null,"stats":{}}}
+{"type":"end","data":{"path":{"text":"./a.go"},"binary_offset":null,"stats":{}}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// secondSummaryStream terminates twice — the second summary's sole
+// cause is the extra summary, not a record after summary.
+const secondSummaryStream = `{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// matchAfterSummaryStream is a record arriving after the summary —
+// never dispatched to the lifecycle parsers.
+const matchAfterSummaryStream = `{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+`
+
+// beginAfterSummaryStream is a post-summary begin: it cannot open the
+// file, so no missing-end cause can ever name it.
+const beginAfterSummaryStream = `{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+{"type":"begin","data":{"path":{"text":"./q.go"}}}
+`
+
+// contextAfterSummaryStream is a post-summary context record — an
+// integrity failure like any other record after the summary since
+// Issue #36 removed the exemption.
+const contextAfterSummaryStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./a.go"},"binary_offset":null,"stats":{}}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+{"type":"context","data":{"path":{"text":"./a.go"},"lines":{"text":"nearby\n"},"line_number":1,"absolute_offset":0,"submatches":[]}}
+`
+
+// malformedAfterSummaryStream is the dual-representation row: the
+// garbage record after the summary is both the after-summary integrity
+// cause and a malformed record in the count.
+const malformedAfterSummaryStream = `{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+not json at all
+`
+
+// unknownAfterSummaryStream is the same dual representation for an
+// unknown-type record: the after-summary cause plus the unrecognised
+// record-type warning.
+const unknownAfterSummaryStream = `{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+{"type":"frobnicate","data":{"x":1}}
+`
+
+// postSummaryTailStream ends in an unterminated fragment after a valid
+// summary: post-summary precedence gives the fragment the after-
+// summary cause — not a second unterminated-final-record cause —
+// while the missing termination still counts malformed.
+const postSummaryTailStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./a.go"},"binary_offset":null,"stats":{}}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+{"type":"match","data":{"path":{"text":"./b.go"},"lines":{"text":"beta\n"},"line_number":1,"absolute_offset":0,"submatches":[{"match":{"text":"beta"},"start":0,"end":4}]}}`
+
+// unterminatedTailStream ends in an unterminated fragment with no
+// valid summary: the fragment is the unterminated final record —
+// reported after the missing summary in the mandated end-of-stream
+// order — and still counts malformed.
+const unterminatedTailStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./a.go"},"binary_offset":null,"stats":{}}}
+{"type":"summ`
+
+// repeatedViolationsStream repeats one orphaned match once per
+// physical record — uncapped, unaggregated, undeduplicated.
+const repeatedViolationsStream = `{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":4,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":7,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// twoOpenFilesStream leaves two files open at stream end: their
+// missing-end causes order by unsigned raw-path bytes — the \xff.bin
+// begin arrived first yet its cause sorts last.
+const twoOpenFilesStream = `{"type":"begin","data":{"path":{"bytes":"/y5iaW4="}}}
+{"type":"begin","data":{"path":{"text":"a.go"}}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// hostilePathStream leaves open a file whose raw path bytes carry a
+// newline: the missing-end diagnostic shows it only through the
+// EscapePath single-line escape, which can never forge a paragraph
+// break.
+const hostilePathStream = `{"type":"begin","data":{"path":{"text":"bad\nname.txt"}}}
+{"type":"match","data":{"path":{"text":"bad\nname.txt"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// allComponentsStream exercises every diagnostic component on one
+// fatal stream: real child stderr, an after-summary integrity cause, a
+// malformed record, and an unknown-type warning.
+const allComponentsStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./a.go"},"binary_offset":null,"stats":{}}}
+not json at all
+{"type":"frobnicate","data":{"x":1}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+{"type":"end","data":{"path":{"text":"./stray.go"},"binary_offset":null,"stats":{}}}
+`
+
+// nonFatalComponentsStream is the same coverage on a complete stream:
+// the warning components keep their relative order — stderr, then
+// record loss, then the unknown-type warning.
+const nonFatalComponentsStream = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./a.go"},"binary_offset":null,"stats":{}}}
+not json at all
+{"type":"frobnicate","data":{"x":1}}
+{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// oversizedAfterSummaryStream is the post-summary oversized row: one
+// physical record carrying both the after-summary integrity cause and
+// the oversized record-loss representation — aggregate plus the
+// recovered per-path detail.
+func oversizedAfterSummaryStream() string {
+	return `{"type":"summary","data":{"elapsed_total":{},"stats":{}}}` + "\n" +
+		`{"type":"match","data":{"path":{"text":"q.txt"},"lines":{"text":"` +
+		strings.Repeat("a", searchindex.MaxRecordBytes) +
+		`"},"line_number":1,"submatches":[{"match":{"text":"a"},"start":0,"end":1}]}}` + "\n"
+}
+
 // stateGone marks an outcome-matrix step whose key exits outright: the
 // fatal overlay-only presentation has no underlying state to reveal.
 const stateGone = state(-1)
@@ -257,7 +419,7 @@ func TestOutcomeMatrix(t *testing.T) {
 			name:   "missing summary with valid matches is fatal",
 			stream: missingSummaryStream, code: 0,
 			state: stateBrowse, overlay: true,
-			shows:   []string{"incomplete"},
+			shows:   []string{"missing summary record"},
 			dismiss: "esc", after: stateBrowse,
 			showsAfter: []string{"a.go"},
 			close:      "q", status: 2,
@@ -266,7 +428,7 @@ func TestOutcomeMatrix(t *testing.T) {
 			name:   "orphaned end with valid matches is fatal",
 			stream: orphanEndStream, code: 0,
 			state: stateBrowse, overlay: true,
-			shows:   []string{"incomplete"},
+			shows:   []string{"orphaned end for ./stray.go"},
 			dismiss: "q", after: stateBrowse,
 			close: "q", status: 2,
 		},
@@ -274,7 +436,7 @@ func TestOutcomeMatrix(t *testing.T) {
 			name:   "integrity failure without usable results",
 			stream: orphanEndOnlyStream, code: 0,
 			state: stateOverlayOnly, overlay: true,
-			shows:   []string{"incomplete"},
+			shows:   []string{"orphaned end for ./stray.go"},
 			dismiss: "esc", after: stateGone, status: 2,
 		},
 		{
@@ -354,7 +516,7 @@ func TestOutcomeMatrix(t *testing.T) {
 			name:   "missing end with retained matches browses under overlay",
 			stream: missingEndStream, code: 0,
 			state: stateBrowse, overlay: true,
-			shows:   []string{"incomplete", "a.go"},
+			shows:   []string{"missing end for ./a.go", "a.go"},
 			dismiss: "esc", after: stateBrowse,
 			showsAfter: []string{"a.go"},
 			close:      "q", status: 2,
@@ -363,7 +525,7 @@ func TestOutcomeMatrix(t *testing.T) {
 			name:   "missing end with no matches is fatal",
 			stream: missingEndEmptyStream, code: 0,
 			state: stateOverlayOnly, overlay: true,
-			shows:   []string{"incomplete"},
+			shows:   []string{"missing end for ./a.go"},
 			dismiss: "q", after: stateGone, status: 2,
 		},
 		{
@@ -417,7 +579,7 @@ func TestOutcomeMatrix(t *testing.T) {
 			name:   "all loads fail with fixed status 2 still exits 2",
 			stream: missingEndStream, code: 0,
 			state: stateBrowse, overlay: true,
-			shows:     []string{"incomplete", "a.go"},
+			shows:     []string{"missing end for ./a.go", "a.go"},
 			failLoads: []int{0},
 			dismiss:   "esc", after: stateBrowse,
 			showsAfter: []string{"(unreadable)"},
@@ -620,6 +782,274 @@ func TestRecordLossDiagnostics(t *testing.T) {
 	if out.Presentation != presentBrowse || out.Status != 0 {
 		t.Fatalf("record loss with usable results = (%v, %d), want browse + exit 0",
 			out.Presentation, out.Status)
+	}
+}
+
+// integrityDiagCase is one composed-diagnostic row (Issue #36): the
+// finished search in, and the complete ordered diagnostic line slice
+// out — asserted identically against the overlay text and the session
+// collection replayed to stderr, so a dropped, reordered, or
+// rephrased component fails the test.
+type integrityDiagCase struct {
+	name   string
+	stream string
+	code   int    // rg's exit code; -1 with err models signal death
+	err    error  // the wait error
+	stderr string // captured stderr diagnostics
+	want   []string
+}
+
+// TestIntegrityDiagnostics pins the complete composed diagnostic for
+// every Issue #36 integrity cause and every overlap: each cause's
+// stable user-facing line, the one-cause-per-physical-record
+// precedence, the uncapped multiplicity, the dual representation of
+// post-summary record loss, the unsigned raw-path ordering of missing
+// ends, EscapePath escaping, the universal component order, and the
+// absence of a process-status line for a 0/1 exit.
+func TestIntegrityDiagnostics(t *testing.T) {
+	errKilled := errors.New("signal: killed")
+	for _, tc := range []integrityDiagCase{
+		{
+			name:   "duplicate begin names the open path",
+			stream: duplicateBeginStream, code: 0,
+			want: []string{"duplicate begin for ./a.go"},
+		},
+		{
+			name:   "orphaned match names the never-opened path",
+			stream: orphanMatchStream, code: 0,
+			want: []string{"orphaned match for ./a.go"},
+		},
+		{
+			name:   "match after end is the orphaned match",
+			stream: matchAfterEndStream, code: 0,
+			want: []string{"orphaned match for ./a.go"},
+		},
+		{
+			name:   "match after binary end is the orphaned match",
+			stream: matchAfterBinaryEndStream, code: 0,
+			want: []string{"orphaned match for ./a.go"},
+		},
+		{
+			name:   "orphaned end names the never-opened path",
+			stream: orphanEndOnlyStream, code: 0,
+			want: []string{"orphaned end for ./stray.go"},
+		},
+		{
+			name:   "duplicate end is the orphaned end",
+			stream: duplicateEndStream, code: 0,
+			want: []string{"orphaned end for ./a.go"},
+		},
+		{
+			name:   "missing end names the still-open path",
+			stream: missingEndStream, code: 0,
+			want: []string{"missing end for ./a.go"},
+		},
+		{
+			// The missing summary is the explanation — never a
+			// manufactured process-status line for a 0 exit.
+			name:   "missing summary names itself, not an exit code",
+			stream: missingSummaryStream, code: 0,
+			want: []string{"missing summary record"},
+		},
+		{
+			// An exit-1 child leaves no process line either.
+			name:   "exit 1 emits no process-status line",
+			stream: orphanEndOnlyStream, code: 1,
+			want: []string{"orphaned end for ./stray.go"},
+		},
+		{
+			// The second summary's sole integrity line is the extra
+			// summary — never a record after summary.
+			name:   "second summary reports only the extra summary",
+			stream: secondSummaryStream, code: 0,
+			want: []string{"extra summary record"},
+		},
+		{
+			name:   "match after summary reports only its position",
+			stream: matchAfterSummaryStream, code: 0,
+			want: []string{"record after summary"},
+		},
+		{
+			name:   "context after summary reports only its position",
+			stream: contextAfterSummaryStream, code: 0,
+			want: []string{"record after summary"},
+		},
+		{
+			// The post-summary begin cannot open q.go, so no
+			// end-of-stream missing end names it: the sole line is
+			// the record's position.
+			name:   "post-summary begin cannot open the file",
+			stream: beginAfterSummaryStream, code: 0,
+			want: []string{"record after summary"},
+		},
+		{
+			// Dual representation: the post-summary fragment is the
+			// after-summary cause and still counts malformed — never
+			// a second unterminated-final-record cause.
+			name:   "post-summary tail is after-summary plus malformed",
+			stream: postSummaryTailStream, code: 0,
+			want: []string{"record after summary", "1 malformed record skipped"},
+		},
+		{
+			// The same fragment without a summary is the
+			// unterminated final record, listed after the missing
+			// summary in the mandated end-of-stream order.
+			name:   "unterminated tail follows the missing summary",
+			stream: unterminatedTailStream, code: 0,
+			want: []string{
+				"missing summary record",
+				"unterminated final record",
+				"1 malformed record skipped",
+			},
+		},
+		{
+			// Dual representation for a post-summary malformed
+			// record: position cause and count both remain.
+			name:   "post-summary malformed keeps both representations",
+			stream: malformedAfterSummaryStream, code: 0,
+			want: []string{"record after summary", "1 malformed record skipped"},
+		},
+		{
+			// Dual representation for a post-summary oversized
+			// record: the after-summary cause plus the oversized
+			// aggregate and the recovered per-path detail.
+			name:   "post-summary oversized keeps both representations",
+			stream: oversizedAfterSummaryStream(), code: 0,
+			want: []string{
+				"record after summary",
+				"1 oversized record skipped",
+				"oversized record skipped for q.txt",
+			},
+		},
+		{
+			// Dual representation for a post-summary unknown-type
+			// record: the after-summary cause plus the
+			// unrecognised-type warning in the warning slot.
+			name:   "post-summary unknown keeps both representations",
+			stream: unknownAfterSummaryStream, code: 0,
+			want: []string{
+				"record after summary",
+				"1 unrecognised record types skipped",
+			},
+		},
+		{
+			// Universal order on a fatal stream: the child's real
+			// stderr precedes the integrity causes — neither
+			// suppresses the other.
+			name:   "stderr precedes integrity causes",
+			stream: duplicateBeginStream, code: 0, stderr: "boom\n",
+			want: []string{"boom", "duplicate begin for ./a.go"},
+		},
+		{
+			// A failed child with stderr: the real stderr, never a
+			// generated process line, then the integrity causes.
+			name:   "fatal exit with stderr reports both",
+			stream: missingSummaryStream, code: 3, stderr: "boom\n",
+			want: []string{"boom", "missing summary record"},
+		},
+		{
+			// A failed child without stderr owes the generated
+			// exit-code line before the integrity causes.
+			name:   "fatal exit without stderr generates the code line",
+			stream: missingSummaryStream, code: 3,
+			want: []string{"ripgrep exited with code 3", "missing summary record"},
+		},
+		{
+			// Signal death names the signal, then the integrity
+			// causes.
+			name:   "signal death names the signal then the causes",
+			stream: missingSummaryStream, code: -1, err: errKilled,
+			want: []string{"ripgrep died: signal: killed", "missing summary record"},
+		},
+		{
+			// Every component on one fatal stream, universal order:
+			// process, integrity, record loss, unknown-type warning.
+			name:   "all components compose in universal order",
+			stream: allComponentsStream, code: 0, stderr: "warn\n",
+			want: []string{
+				"warn",
+				"record after summary",
+				"1 malformed record skipped",
+				"1 unrecognised record types skipped",
+			},
+		},
+		{
+			// The non-fatal composition keeps the same relative
+			// order with the integrity component absent.
+			name:   "non-fatal components keep the universal order",
+			stream: nonFatalComponentsStream, code: 0, stderr: "warn\n",
+			want: []string{
+				"warn",
+				"1 malformed record skipped",
+				"1 unrecognised record types skipped",
+			},
+		},
+		{
+			// One line per offending record, uncapped: three
+			// identical orphaned matches, three identical lines.
+			name:   "repeated violations emit one line each",
+			stream: repeatedViolationsStream, code: 0,
+			want: []string{
+				"orphaned match for ./a.go",
+				"orphaned match for ./a.go",
+				"orphaned match for ./a.go",
+			},
+		},
+		{
+			// Missing ends order by unsigned raw-path bytes: 0xff
+			// sorts after 'a' regardless of arrival order.
+			name:   "missing ends order by unsigned raw-path bytes",
+			stream: twoOpenFilesStream, code: 0,
+			want: []string{
+				"missing end for a.go",
+				`missing end for \xff.bin`,
+			},
+		},
+		{
+			// A newline in the raw path is EscapePath-escaped: the
+			// diagnostic stays one line and cannot forge a break.
+			name:   "embedded path escapes through EscapePath",
+			stream: hostilePathStream, code: 0,
+			want: []string{`missing end for bad\nname.txt`},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := Result{
+				Stdout: []byte(tc.stream),
+				Stderr: []byte(tc.stderr),
+				Code:   tc.code,
+				Err:    tc.err,
+			}
+			m := newTestModel(fakeChild{res: res}, options{})
+			m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+			m.Update(runCollectCmd(t, m))
+			if !m.overlayOpen {
+				t.Fatal("the composed diagnostic did not open the overlay")
+			}
+			if got := m.overlay.text; got != strings.Join(tc.want, "\n") {
+				t.Fatalf("overlay text = %q, want %q", got, strings.Join(tc.want, "\n"))
+			}
+			// The same composed lines — same text, same order —
+			// are what the post-restoration stderr replay emits.
+			assertReplayLines(t, m.diags, tc.want)
+		})
+	}
+}
+
+// TestIntegrityDiagnosticsDeterministic proves the missing-end
+// ordering survives repeated builds: the map-iteration order of
+// still-open files can never leak into the composed diagnostic.
+func TestIntegrityDiagnosticsDeterministic(t *testing.T) {
+	var first []string
+	for i := 0; i < 8; i++ {
+		res := Result{Stdout: []byte(twoOpenFilesStream), Code: 0}
+		m := newTestModel(fakeChild{res: res}, options{})
+		m.Update(runCollectCmd(t, m))
+		if first == nil {
+			first = slices.Clone(m.diags)
+			continue
+		}
+		assertReplayLines(t, m.diags, first)
 	}
 }
 

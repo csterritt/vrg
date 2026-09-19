@@ -69,10 +69,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   integrity assessed separately from process success. Issue #10 added
   the skip counters `Malformed`/`Unknown` — classified per record,
   unqualified by position — and `Build`'s bounded scan that discards
-  records over `MaxRecordBytes` through their next newline. See
+  records over `MaxRecordBytes` through their next newline. Issue #36
+  added the structured `Integrity.Causes` list — one `Cause{Kind, Path}`
+  per offending physical record under the one-cause precedence
+  (extra-summary over after-summary, after-summary over lifecycle
+  dispatch, the tail resolved at `Integrity()` time), mid-stream causes
+  in detection order then missing `end`s sorted by unsigned raw path
+  bytes, missing summary, and the tail cause — uncapped and
+  deterministic. See
   [no-results-screen.md](no-results-screen.md),
-  [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md), and
-  [record-robustness.md](record-robustness.md).
+  [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md),
+  [record-robustness.md](record-robustness.md), and
+  [integrity-diagnostics.md](integrity-diagnostics.md).
 - `internal/searchindex/cursor.go` — Issue #13's circular matched-line
   cursor: `Cursor{File, Stop}` positions, `Index.Cursor()` reporting
   the position (absent on an empty index), `Next`/`Prev` stepping one
@@ -86,8 +94,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `feedOversized` counts the record, recovers its path best-effort for
   diagnostics via `recoverOversizedPath` — a bounded `json.Decoder`
   token pass over the first `MaxRecordBytes` for `type` and
-  `data.path` — and flags an after-`summary` arrival as an integrity
-  failure. See [record-robustness.md](record-robustness.md).
+  `data.path` — and, for a newline-terminated record only, records the
+  `CauseAfterSummary` violation on an after-`summary` arrival (Issue
+  #36; an oversized tail's cause resolves in `Integrity()` under
+  after-summary precedence). See
+  [record-robustness.md](record-robustness.md).
 - `internal/searchindex/doc.go` — package comment.
 
 ## internal/app
@@ -234,9 +245,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   and zero usable results — assessed after all filtering — is the
   fatal overlay-only outcome. `outcomeDiagnostics` composes the overlay
   lines in the universal order — captured stderr or a generated
-  code-or-signal line for a silent failed process, then the integrity
-  note, then `recordLossLines` (the malformed/oversized counts plus
-  "oversized record skipped for \<path\>" lines), then warnings — all
+  code-or-signal line for a silent failed process (never for a 0/1
+  exit), then one `integrityLine` per structured `Integrity.Causes`
+  entry — Issue #36's stable per-kind text, paths through
+  `EscapePath` — then `recordLossLines` (the malformed/oversized counts
+  plus "oversized record skipped for \<path\>" lines), then warnings —
+  all
   through `safepresentation.EscapeDiagnostic`/`EscapePath`. Issue #11
   split the composition into `processDiags` (the process component) and
   `tailDiags` (integrity + record loss + warnings) so the session

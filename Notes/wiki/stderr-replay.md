@@ -34,7 +34,9 @@ any overlay ever displayed them. Producers:
   collected while the child still runs, ahead of any exit decision.
 - `searchDoneMsg` — `collectSearchDiags` collects the completion
   components in outcome order: the generated process line when a failed
-  child left no stderr, then the integrity/record-loss/warning tail.
+  child left no stderr, then `tailDiags`'s
+  integrity-cause/record-loss/warning tail — the same lines the overlay
+  shows ([integrity-diagnostics.md](integrity-diagnostics.md)).
   Captured stderr is **not** re-collected here when the child has
   incremental diagnostics — it already arrived as `stderrLineMsg`s — so
   the two routes stay exactly-once; a `Child` with a nil `Diags()`

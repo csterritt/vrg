@@ -103,10 +103,10 @@ func DecideOutcome(in OutcomeInput) Outcome {
 // outcomeDiagnostics composes the escaped lines an overlay shows, in
 // the universal component order: the process component — the child's
 // captured stderr, or a generated line naming the exit code or signal
-// when a failed child left none — then a stream-integrity note when the
-// stream was not whole, then the record-loss counts and recoverable
-// oversized paths, then the caller's warnings. It returns nil when
-// there is nothing to report, meaning no overlay opens.
+// when a failed child left none — then one line per stream-integrity
+// cause, then the record-loss counts and recoverable oversized paths,
+// then the caller's warnings. It returns nil when there is nothing to
+// report, meaning no overlay opens.
 func outcomeDiagnostics(in OutcomeInput) []string {
 	lines := processDiags(in.Result)
 	return append(lines, tailDiags(in)...)
@@ -125,15 +125,41 @@ func processDiags(res Result) []string {
 	return nil
 }
 
-// tailDiags composes the post-process diagnostic components: stream
-// integrity, record loss, and the caller's warnings.
+// tailDiags composes the post-process diagnostic components: the
+// stream-integrity cause lines, record loss, and the caller's
+// warnings.
 func tailDiags(in OutcomeInput) []string {
 	var lines []string
-	if !in.Integrity.Complete {
-		lines = append(lines, "ripgrep event stream incomplete")
+	for _, c := range in.Integrity.Causes {
+		lines = append(lines, integrityLine(c))
 	}
 	lines = append(lines, recordLossLines(in.RecordLoss)...)
 	return append(lines, in.Warnings...)
+}
+
+// integrityLine is the stable user-facing text of one structured
+// integrity cause (Issue #36): a cause naming a file embeds the
+// path's EscapePath-escaped single-line form so a path newline can
+// never forge a diagnostic break.
+func integrityLine(c searchindex.Cause) string {
+	switch c.Kind {
+	case searchindex.CauseDuplicateBegin:
+		return "duplicate begin for " + safepresentation.EscapePath(c.Path)
+	case searchindex.CauseOrphanedMatch:
+		return "orphaned match for " + safepresentation.EscapePath(c.Path)
+	case searchindex.CauseOrphanedEnd:
+		return "orphaned end for " + safepresentation.EscapePath(c.Path)
+	case searchindex.CauseMissingEnd:
+		return "missing end for " + safepresentation.EscapePath(c.Path)
+	case searchindex.CauseMissingSummary:
+		return "missing summary record"
+	case searchindex.CauseExtraSummary:
+		return "extra summary record"
+	case searchindex.CauseAfterSummary:
+		return "record after summary"
+	default:
+		return "unterminated final record"
+	}
 }
 
 // recordLossLines composes the skipped-record diagnostics: the

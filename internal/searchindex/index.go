@@ -39,13 +39,62 @@ type File struct {
 	Incomplete bool
 }
 
+// CauseKind identifies the class of one stream-integrity violation
+// (Issue #36): which row of the Issue #9 lifecycle matrix the
+// offending physical record failed.
+type CauseKind int
+
+const (
+	// CauseDuplicateBegin is a begin for a path already open, or for a
+	// path whose lifecycle already ended in binary exclusion — either
+	// way the path cannot be begun again.
+	CauseDuplicateBegin CauseKind = iota
+	// CauseOrphanedMatch is a match for a path that is not open:
+	// never opened, already ended, or terminally binary-excluded.
+	CauseOrphanedMatch
+	// CauseOrphanedEnd is an end for a path that is not open —
+	// orphaned or duplicated.
+	CauseOrphanedEnd
+	// CauseMissingEnd is a file still open when the stream ends.
+	CauseMissingEnd
+	// CauseMissingSummary is a stream that ended without its summary.
+	CauseMissingSummary
+	// CauseExtraSummary is a second summary record.
+	CauseExtraSummary
+	// CauseAfterSummary is any record other than a second summary
+	// arriving after the stream's summary — including context, a
+	// malformed or unknown-type record, an oversized record, or the
+	// trailing unterminated fragment.
+	CauseAfterSummary
+	// CauseUnterminated is the trailing unterminated fragment when no
+	// valid summary placed it under after-summary precedence.
+	CauseUnterminated
+)
+
+// Cause is one structured stream-integrity violation: the stable kind
+// of failure plus the raw path bytes the offending record named where
+// the kind's diagnostic names one (nil otherwise). Each physical
+// record contributes at most one cause, chosen by the most-specific
+// applicable rule — the precedence Issue #36 pins.
+type Cause struct {
+	Kind CauseKind
+	Path []byte
+}
+
 // Integrity is the stream's lifecycle-validation result, assessed
 // separately from the child's process result: a complete stream held
 // exactly one summary as its final newline-terminated record, every
 // begun file was closed by its end, no record followed the summary, and
-// no record was orphaned, duplicated, or left unterminated.
+// no record was orphaned, duplicated, or left unterminated. Causes
+// carries one structured record per offending physical record:
+// mid-stream violations in detection order, then the end-of-stream
+// causes — missing end for each still-open file ordered by unsigned
+// raw-path bytes, then missing summary, then the unterminated tail.
+// The list is deliberately uncapped: repeated identical violations
+// produce one cause each, never aggregation or deduplication.
 type Integrity struct {
 	Complete bool
+	Causes   []Cause
 }
 
 // Index accumulates stream records and prepares them into the navigation
@@ -85,10 +134,15 @@ type Index struct {
 	// final record arrived; broken accumulates every violation of the
 	// Issue #9 transition matrix — a duplicate or excluded-path begin,
 	// an orphaned match or end, a record after the summary, or an
-	// unterminated tail.
+	// unterminated tail. causes is the structured form of the same
+	// violations in detection order (Issue #36); tail records that the
+	// stream ended in an unterminated fragment, whose end-of-stream
+	// cause Integrity derives under the after-summary precedence.
 	open       map[string]struct{}
 	sawSummary bool
 	broken     bool
+	causes     []Cause
+	tail       bool
 }
 
 // fileAcc is the per-path accumulation of stops before preparation.
@@ -117,7 +171,7 @@ func Build(stream []byte, workdir string) *Index {
 			// incomplete — and counted oversized too when it also
 			// exceeds the payload limit.
 			if len(stream) > MaxRecordBytes {
-				ix.feedOversized(stream)
+				ix.feedOversized(stream, false)
 			}
 			ix.FeedTail(stream)
 			break
@@ -125,7 +179,7 @@ func Build(stream []byte, workdir string) *Index {
 		rec := stream[:i]
 		stream = stream[i+1:]
 		if len(rec) > MaxRecordBytes {
-			ix.feedOversized(rec)
+			ix.feedOversized(rec, true)
 			continue
 		}
 		ix.Feed(rec)
@@ -160,12 +214,15 @@ func (ix *Index) Feed(raw []byte) Kind {
 		ix.Unknown++
 	}
 	if ix.sawSummary {
-		// The summary is final: any record after it — except context,
-		// which the Issue #9 matrix keeps lifecycle-neutral in every
-		// position — is an integrity failure and never dispatched.
-		// Issue #36 removes the context exemption.
-		if rec.Kind != KindContext {
-			ix.broken = true
+		// The summary is final: a second summary is the extra-summary
+		// failure; every other record — context included, its Issue
+		// #9 exemption removed by Issue #36 — is a record after the
+		// summary. Neither is dispatched to a lifecycle parser, so a
+		// post-summary record can never open a file or orphan one.
+		if rec.Kind == KindSummary {
+			ix.recordCause(Cause{Kind: CauseExtraSummary})
+		} else {
+			ix.recordCause(Cause{Kind: CauseAfterSummary})
 		}
 		return rec.Kind
 	}
@@ -175,9 +232,9 @@ func (ix *Index) Feed(raw []byte) Kind {
 		switch {
 		case ix.isExcluded(key):
 			// Binary exclusion is terminal: the path cannot reopen.
-			ix.broken = true
+			ix.recordCause(Cause{Kind: CauseDuplicateBegin, Path: rec.Path})
 		case ix.isOpen(key):
-			ix.broken = true
+			ix.recordCause(Cause{Kind: CauseDuplicateBegin, Path: rec.Path})
 		default:
 			if ix.open == nil {
 				ix.open = make(map[string]struct{})
@@ -186,12 +243,12 @@ func (ix *Index) Feed(raw []byte) Kind {
 		}
 	case KindMatch:
 		if ix.isExcluded(key) {
-			ix.broken = true
+			ix.recordCause(Cause{Kind: CauseOrphanedMatch, Path: rec.Path})
 			return rec.Kind
 		}
 		fa := ix.fileAccFor(key, rec.Path)
 		if !ix.isOpen(key) {
-			ix.broken = true
+			ix.recordCause(Cause{Kind: CauseOrphanedMatch, Path: rec.Path})
 			fa.incomplete = true
 		}
 		st := fa.stops[rec.LineNumber]
@@ -207,7 +264,7 @@ func (ix *Index) Feed(raw []byte) Kind {
 		if ix.isOpen(key) {
 			delete(ix.open, key)
 		} else {
-			ix.broken = true
+			ix.recordCause(Cause{Kind: CauseOrphanedEnd, Path: rec.Path})
 		}
 	case KindSummary:
 		ix.sawSummary = true
@@ -215,12 +272,24 @@ func (ix *Index) Feed(raw []byte) Kind {
 	return rec.Kind
 }
 
+// recordCause notes one lifecycle violation: the stream is broken and
+// the structured cause joins the detection-order list Integrity
+// reports.
+func (ix *Index) recordCause(c Cause) {
+	ix.broken = true
+	ix.causes = append(ix.causes, c)
+}
+
 // FeedTail consumes the stream's trailing fragment — the bytes after
 // the last newline that no newline terminated. Its disposition is
 // double: the fragment is counted malformed and the stream is marked
-// incomplete.
+// incomplete. Its integrity cause is resolved at Integrity time under
+// the after-summary precedence: the fragment is a record after the
+// summary when a valid summary preceded it, else the unterminated
+// final record — never both.
 func (ix *Index) FeedTail(raw []byte) Kind {
 	ix.broken = true
+	ix.tail = true
 	ix.Malformed++
 	return KindMalformed
 }
@@ -230,10 +299,38 @@ func (ix *Index) FeedTail(raw []byte) Kind {
 // and no violation — orphaned, duplicated, post-summary, or
 // unterminated — occurred and no begun file was left open. It is
 // meaningful once feeding is complete, independently of the child's
-// exit status.
+// exit status. Causes appends the end-of-stream violations after the
+// detection-order mid-stream causes: missing end for each still-open
+// file ordered by unsigned raw-path bytes, then missing summary, then
+// the tail fragment's cause.
 func (ix *Index) Integrity() Integrity {
+	causes := make([]Cause, 0, len(ix.causes)+len(ix.open)+2)
+	for _, c := range ix.causes {
+		causes = append(causes, Cause{Kind: c.Kind, Path: slices.Clone(c.Path)})
+	}
+	if len(ix.open) > 0 {
+		paths := make([][]byte, 0, len(ix.open))
+		for p := range ix.open {
+			paths = append(paths, []byte(p))
+		}
+		slices.SortFunc(paths, bytes.Compare)
+		for _, p := range paths {
+			causes = append(causes, Cause{Kind: CauseMissingEnd, Path: p})
+		}
+	}
+	if !ix.sawSummary {
+		causes = append(causes, Cause{Kind: CauseMissingSummary})
+	}
+	if ix.tail {
+		kind := CauseUnterminated
+		if ix.sawSummary {
+			kind = CauseAfterSummary
+		}
+		causes = append(causes, Cause{Kind: kind})
+	}
 	return Integrity{
 		Complete: ix.sawSummary && !ix.broken && len(ix.open) == 0,
+		Causes:   causes,
 	}
 }
 

@@ -18,15 +18,17 @@ const MaxRecordBytes = 64 << 20
 // The record's path is recovered on a best-effort basis for the
 // "oversized record skipped for <path>" diagnostic; when the byte limit
 // was hit before type and data.path were parsed, the record is counted
-// anonymously. Arriving after the summary, the record's position is
-// still an after-summary integrity failure.
-func (ix *Index) feedOversized(rec []byte) {
+// anonymously. A newline-terminated oversized record arriving after the
+// summary carries the after-summary integrity cause; the unterminated
+// tail's cause belongs to FeedTail so the one fragment contributes one
+// cause.
+func (ix *Index) feedOversized(rec []byte, terminated bool) {
 	ix.Oversized++
 	if p, ok := recoverOversizedPath(rec); ok {
 		ix.OversizedPaths = append(ix.OversizedPaths, p)
 	}
-	if ix.sawSummary {
-		ix.broken = true
+	if terminated && ix.sawSummary {
+		ix.recordCause(Cause{Kind: CauseAfterSummary})
 	}
 }
 

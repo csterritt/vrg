@@ -140,12 +140,22 @@ through the real stream entry point:
   excluded-path begins, valid and orphaned matches (retained with
   `File.Incomplete`), the binary-exclusion precedence over orphan
   retention, valid/orphaned/duplicate/binary ends, lifecycle-neutral
-  `context` in both positions, files still open at stream end, the
+  `context` before `summary`, files still open at stream end, the
   summary-only zero-result stream, missing/second/post-summary records,
   the unterminated tail, `text`/`bytes` path-identity agreement, and
   independently tracked interleaved open files. Each row asserts
-  `Integrity().Complete`, the retained files with their incomplete
-  flags and stop lines, `BinaryExcluded`, and `UsableResults()`.
+  `Integrity().Complete`, the ordered `Integrity().Causes` list through
+  `checkCauses` (Issue #36: kinds and raw paths, one per offending
+  physical record), the retained files with their incomplete
+  flags and stop lines, `BinaryExcluded`, `UsableResults()`, and the
+  independent `Malformed`/`Unknown`/`Oversized`/`OversizedPaths`
+  counters. Issue #36's rows cover the corrected
+  context-after-`summary` failure, post-summary `begin`/`end` and the
+  cannot-reopen precedence, post-summary malformed/unknown/oversized
+  dual representation, uncapped one-cause-per-violation multiplicity,
+  missing-`end` ordering by unsigned raw-path bytes, mid-stream
+  detection order ahead of the end-of-stream causes, and the empty
+  stream.
 - `TestTrailingUnterminatedRecordDisposition` — `FeedTail` returns
   `KindMalformed` and marks the stream incomplete without indexing the
   fragment.
@@ -583,6 +593,17 @@ UTF-16 LE payload for every read) and the rest by injected
 unsupported-decoded buffers — plus the all-unsupported row: every
 retained file shows only the placeholder, the current file's encoding
 diagnostic opens the overlay, and the fixed status stays 0 (→ 0).
+Issue #36 adds `TestIntegrityDiagnostics`: one fixture per integrity
+cause and composition rule, each asserting the **complete ordered**
+overlay line list and the identical collected-diagnostics list — every
+cause's stable text, `EscapePath`-escaped hostile paths, uncapped
+one-line-per-violation multiplicity, missing-`end`s ordered by
+unsigned raw-path bytes, the dual representation of post-summary
+malformed/oversized/unknown records, captured-stderr and generated
+process lines (including the no-status-line rule for 0/1 exits), and
+the universal process → integrity → record-loss → warning order —
+plus `TestIntegrityDiagnosticsDeterministic`, which rebuilds the same
+damaged stream repeatedly to pin the deterministic cause ordering.
 
 `scroll_test.go` (same package; Issue #12) covers manual vertical
 scrolling and the per-file viewport:
