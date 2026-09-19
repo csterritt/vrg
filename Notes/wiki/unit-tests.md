@@ -604,6 +604,19 @@ process lines (including the no-status-line rule for 0/1 exits), and
 the universal process → integrity → record-loss → warning order —
 plus `TestIntegrityDiagnosticsDeterministic`, which rebuilds the same
 damaged stream repeatedly to pin the deterministic cause ordering.
+Issue #37 adds the oversized-diagnostics coverage: outcome-matrix rows
+for the anonymous oversized record — fatal (overlay-only, exactly `1
+oversized record skipped`, exit 2) and non-fatal (browse under the
+overlay, exit 0) — plus the named-record row;
+`TestOversizedAggregateDiagnostics` pins the composition at the
+`DecideOutcome` level (singular/plural aggregates, anonymous counts,
+per-raw-path deduplication, first-occurrence ordering); and
+`TestOversizedDiagnostics` feeds real oversized streams — built by the
+`oversizedRecordNamed`/`oversizedRecordAnonymous` fixture helpers —
+through the collection command, asserting the complete ordered overlay
+and collected-replay line lists for the named, anonymous, plural,
+duplicate-path, mixed-recoverability, and aggregates-before-details
+cases.
 
 `scroll_test.go` (same package; Issue #12) covers manual vertical
 scrolling and the per-file viewport:

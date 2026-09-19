@@ -286,6 +286,14 @@ Catalog of all wiki pages for the vrg project.
   representation of post-summary record loss, and the universal
   process → integrity → record-loss → warning composition shared by
   overlay and replay with no status line for 0/1 exits
+- [oversized-diagnostics.md](oversized-diagnostics.md) — Issue #37:
+  the always-emitted pluralized oversized aggregate (`1 oversized
+  record skipped` / `N oversized records skipped`) regardless of path
+  recovery, per-path details deduplicated by raw path in
+  first-occurrence order beneath the aggregate, the anonymous-record
+  guarantees (fatal overlay never empty at exit 2; visible overlay
+  plus stderr replay at exit 0), mixed-recoverability totals, and the
+  component's slot in the universal order
 
 ## Catalogs
 

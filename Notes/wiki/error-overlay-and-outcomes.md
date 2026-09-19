@@ -110,7 +110,10 @@ then: a 0/1 exit never produces a process-status line. Component order
 is process, then one line per structured stream-integrity cause (Issue
 #36), then the record-loss components, then caller warnings — see
 [integrity-diagnostics.md](integrity-diagnostics.md) for the per-cause
-text, precedence, and ordering. Every line is escaped through
+text, precedence, and ordering, and
+[oversized-diagnostics.md](oversized-diagnostics.md) for Issue #37's
+always-emitted oversized aggregate and raw-path-deduplicated details.
+Every line is escaped through
 `safepresentation.EscapeDiagnostic` before it is stored, so hostile
 bytes can never execute on the terminal — the sink-safety table drives
 the hostile fixture set through the overlay's real composition path.

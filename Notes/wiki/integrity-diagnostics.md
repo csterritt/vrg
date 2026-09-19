@@ -81,7 +81,10 @@ fixed order — `processDiags` then `tailDiags`:
    order.
 3. **Record loss** — the malformed aggregate, the oversized aggregate,
    then one `oversized record skipped for <path>` line per recovered
-   path (Issue #37 refines the oversized aggregates).
+   path. Issue #37 pins the oversized half: the pluralized aggregate is
+   always emitted (an anonymous record is never invisible) and the
+   details are deduplicated by raw path in first-occurrence order — see
+   [oversized-diagnostics.md](oversized-diagnostics.md).
 4. **Warnings** — caller-composed lines such as "N unrecognised record
    types skipped".
 

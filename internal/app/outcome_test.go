@@ -232,15 +232,102 @@ not json at all
 {"type":"summary","data":{"elapsed_total":{},"stats":{}}}
 `
 
+// oversizedRecordNamed builds an oversized match record whose type and
+// data.path parse before the byte limit — the recoverable-path case
+// whose detail line can name the lost file.
+func oversizedRecordNamed(path string) string {
+	return `{"type":"match","data":{"path":{"text":"` + path + `"},"lines":{"text":"` +
+		strings.Repeat("a", searchindex.MaxRecordBytes) +
+		`"},"line_number":1,"submatches":[{"match":{"text":"a"},"start":0,"end":1}]}}`
+}
+
+// oversizedRecordAnonymous builds an oversized match record whose
+// giant lines value precedes data.path, so the byte limit hits before
+// the path field is ever parsed — the anonymous case only the
+// aggregate count can report.
+func oversizedRecordAnonymous() string {
+	return `{"type":"match","data":{"lines":{"text":"` +
+		strings.Repeat("a", searchindex.MaxRecordBytes) +
+		`"},"path":{"text":"late.txt"},"line_number":1,"submatches":[{"match":{"text":"a"},"start":0,"end":1}]}}`
+}
+
 // oversizedAfterSummaryStream is the post-summary oversized row: one
 // physical record carrying both the after-summary integrity cause and
 // the oversized record-loss representation — aggregate plus the
 // recovered per-path detail.
 func oversizedAfterSummaryStream() string {
 	return `{"type":"summary","data":{"elapsed_total":{},"stats":{}}}` + "\n" +
-		`{"type":"match","data":{"path":{"text":"q.txt"},"lines":{"text":"` +
-		strings.Repeat("a", searchindex.MaxRecordBytes) +
-		`"},"line_number":1,"submatches":[{"match":{"text":"a"},"start":0,"end":1}]}}` + "\n"
+		oversizedRecordNamed("q.txt") + "\n"
+}
+
+// usableFileRecords is one ordinary file's begin/match/end triplet —
+// the retained results keeping an oversized record's loss nonfatal.
+const usableFileRecords = `{"type":"begin","data":{"path":{"text":"./a.go"}}}
+{"type":"match","data":{"path":{"text":"./a.go"},"lines":{"text":"alpha\n"},"line_number":2,"absolute_offset":0,"submatches":[{"match":{"text":"alpha"},"start":0,"end":5}]}}
+{"type":"end","data":{"path":{"text":"./a.go"},"binary_offset":null,"stats":{}}}
+`
+
+// streamSummary is the summary record terminating a complete stream.
+const streamSummary = `{"type":"summary","data":{"elapsed_total":{},"stats":{}}}
+`
+
+// anonOversizedOnlyStream loses its only record to the size limit
+// before data.path was parsed: record loss with zero usable results
+// and no recoverable path — the fatal overlay's whole record-loss
+// content is the aggregate.
+func anonOversizedOnlyStream() string {
+	return oversizedRecordAnonymous() + "\n" + streamSummary
+}
+
+// anonOversizedResultsStream keeps usable results beside the anonymous
+// oversized record: the loss surfaces in the overlay and the replay
+// rather than passing silently.
+func anonOversizedResultsStream() string {
+	return usableFileRecords + oversizedRecordAnonymous() + "\n" + streamSummary
+}
+
+// namedOversizedResultsStream drops one oversized record with a
+// recoverable path beside usable results.
+func namedOversizedResultsStream() string {
+	return usableFileRecords + oversizedRecordNamed("big.txt") + "\n" + streamSummary
+}
+
+// twoNamedOversizedStream drops two oversized records naming different
+// recoverable paths beside usable results.
+func twoNamedOversizedStream() string {
+	return usableFileRecords +
+		oversizedRecordNamed("big.txt") + "\n" +
+		oversizedRecordNamed("other.txt") + "\n" + streamSummary
+}
+
+// dupPathOversizedStream drops two oversized records naming the same
+// recoverable path: the aggregate counts both records while the
+// per-path detail names the path once.
+func dupPathOversizedStream() string {
+	return usableFileRecords +
+		oversizedRecordNamed("big.txt") + "\n" +
+		oversizedRecordNamed("big.txt") + "\n" + streamSummary
+}
+
+// mixedOversizedStream mixes recoverable and anonymous oversized
+// records: the aggregate counts all four while only the two distinct
+// recoverable paths are named, in first-occurrence order.
+func mixedOversizedStream() string {
+	return usableFileRecords +
+		oversizedRecordNamed("big.txt") + "\n" +
+		oversizedRecordAnonymous() + "\n" +
+		oversizedRecordNamed("big.txt") + "\n" +
+		oversizedRecordNamed("other.txt") + "\n" + streamSummary
+}
+
+// malformedPlusOversizedStream mixes a malformed record with named and
+// anonymous oversized records: the malformed aggregate precedes the
+// oversized aggregate, which precedes the per-path details — the
+// record-loss component's internal order.
+func malformedPlusOversizedStream() string {
+	return usableFileRecords + "not json at all\n" +
+		oversizedRecordNamed("big.txt") + "\n" +
+		oversizedRecordAnonymous() + "\n" + streamSummary
 }
 
 // stateGone marks an outcome-matrix step whose key exits outright: the
@@ -513,6 +600,44 @@ func TestOutcomeMatrix(t *testing.T) {
 			dismiss: "q", after: stateGone, status: 2,
 		},
 		{
+			// Issue #37: an oversized record whose path never
+			// parsed is the stream's only content — zero usable
+			// results makes the record loss fatal, and the
+			// aggregate is the fatal overlay's whole content,
+			// never an empty overlay.
+			name:   "anonymous oversized with no usable results is fatal",
+			stream: anonOversizedOnlyStream(), code: 0,
+			state: stateOverlayOnly, overlay: true,
+			shows:   []string{"1 oversized record skipped"},
+			omits:   []string{"oversized record skipped for", "No results found"},
+			dismiss: "q", after: stateGone, status: 2,
+		},
+		{
+			// Issue #37: the same anonymous record beside usable
+			// results surfaces in a visible overlay — the loss
+			// never passes silently.
+			name:   "anonymous oversized with usable results browses",
+			stream: anonOversizedResultsStream(), code: 0,
+			state: stateBrowse, overlay: true,
+			shows:   []string{"1 oversized record skipped", "a.go"},
+			omits:   []string{"oversized record skipped for"},
+			dismiss: "esc", after: stateBrowse,
+			showsAfter: []string{"a.go"},
+			close:      "q", status: 0,
+		},
+		{
+			// A recoverable oversized record is named once
+			// beneath the aggregate.
+			name:   "named oversized with usable results browses",
+			stream: namedOversizedResultsStream(), code: 0,
+			state: stateBrowse, overlay: true,
+			shows: []string{"1 oversized record skipped",
+				"oversized record skipped for big.txt", "a.go"},
+			dismiss: "esc", after: stateBrowse,
+			showsAfter: []string{"a.go"},
+			close:      "q", status: 0,
+		},
+		{
 			name:   "missing end with retained matches browses under overlay",
 			stream: missingEndStream, code: 0,
 			state: stateBrowse, overlay: true,
@@ -782,6 +907,169 @@ func TestRecordLossDiagnostics(t *testing.T) {
 	if out.Presentation != presentBrowse || out.Status != 0 {
 		t.Fatalf("record loss with usable results = (%v, %d), want browse + exit 0",
 			out.Presentation, out.Status)
+	}
+}
+
+// TestOversizedAggregateDiagnostics pins the oversized record-loss
+// composition at the DecideOutcome level: the pluralized aggregate is
+// always emitted — anonymous records included — and each distinct raw
+// path is named once beneath it in first-occurrence order, never once
+// per record.
+func TestOversizedAggregateDiagnostics(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		count int
+		paths [][]byte
+		want  []string
+	}{
+		{"one anonymous record", 1, nil,
+			[]string{"1 oversized record skipped"}},
+		{"one named record", 1, [][]byte{[]byte("big.txt")},
+			[]string{"1 oversized record skipped",
+				"oversized record skipped for big.txt"}},
+		{"two anonymous records", 2, nil,
+			[]string{"2 oversized records skipped"}},
+		{"two records two paths", 2,
+			[][]byte{[]byte("big.txt"), []byte("other.txt")},
+			[]string{"2 oversized records skipped",
+				"oversized record skipped for big.txt",
+				"oversized record skipped for other.txt"}},
+		{"two records one path", 2,
+			[][]byte{[]byte("big.txt"), []byte("big.txt")},
+			[]string{"2 oversized records skipped",
+				"oversized record skipped for big.txt"}},
+		{"repeats keep first-occurrence order", 3,
+			[][]byte{[]byte("b.txt"), []byte("a.txt"), []byte("b.txt")},
+			[]string{"3 oversized records skipped",
+				"oversized record skipped for b.txt",
+				"oversized record skipped for a.txt"}},
+		{"escapable path deduplicates by raw bytes", 2,
+			[][]byte{[]byte("big\t.txt"), []byte("big\t.txt")},
+			[]string{"2 oversized records skipped",
+				`oversized record skipped for big\t.txt`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := DecideOutcome(OutcomeInput{
+				Result:    Result{Code: 0},
+				Integrity: searchindex.Integrity{Complete: true},
+				Usable:    3,
+				RecordLoss: RecordLoss{
+					Oversized: tc.count,
+					Paths:     tc.paths,
+				},
+			})
+			if !slices.Equal(out.Overlay, tc.want) {
+				t.Fatalf("Overlay = %q, want %q", out.Overlay, tc.want)
+			}
+		})
+	}
+}
+
+// oversizedDiagCase is one Issue #37 oversized-diagnostics row: the
+// stream in — built lazily so the table never holds several
+// 64 MiB-class fixtures at once — and the complete ordered diagnostic
+// line slice out.
+type oversizedDiagCase struct {
+	name   string
+	stream func() string
+	want   []string
+}
+
+// TestOversizedDiagnostics pins the Issue #37 oversized component of
+// the composed diagnostic, asserted identically against the overlay
+// text and the session collection replayed to stderr: the
+// always-emitted pluralized aggregate, one detail line per distinct
+// raw recoverable path appended after it in first-occurrence order,
+// the anonymous record never invisible, and the component's slot in
+// the universal order.
+func TestOversizedDiagnostics(t *testing.T) {
+	for _, tc := range []oversizedDiagCase{
+		{
+			// One recoverable oversized record: the singular
+			// aggregate, then the named path.
+			name:   "one named oversized record",
+			stream: namedOversizedResultsStream,
+			want: []string{
+				"1 oversized record skipped",
+				"oversized record skipped for big.txt",
+			},
+		},
+		{
+			// The anonymous record emits the aggregate alone —
+			// the only evidence of the loss.
+			name:   "anonymous oversized emits the aggregate alone",
+			stream: anonOversizedResultsStream,
+			want:   []string{"1 oversized record skipped"},
+		},
+		{
+			// The fatal case's overlay is exactly the aggregate
+			// — never empty.
+			name:   "anonymous oversized alone is exactly the aggregate",
+			stream: anonOversizedOnlyStream,
+			want:   []string{"1 oversized record skipped"},
+		},
+		{
+			// Two records, two distinct recoverable paths: the
+			// plural aggregate, then each path once.
+			name:   "two named oversized records",
+			stream: twoNamedOversizedStream,
+			want: []string{
+				"2 oversized records skipped",
+				"oversized record skipped for big.txt",
+				"oversized record skipped for other.txt",
+			},
+		},
+		{
+			// Two oversized records naming the same path: the
+			// aggregate counts both while the detail names the
+			// path once.
+			name:   "same path deduplicates the detail",
+			stream: dupPathOversizedStream,
+			want: []string{
+				"2 oversized records skipped",
+				"oversized record skipped for big.txt",
+			},
+		},
+		{
+			// Mixed recoverability: the aggregate counts all
+			// four records while only the distinct recoverable
+			// paths appear, in first-occurrence order.
+			name:   "mixed recoverability counts every record",
+			stream: mixedOversizedStream,
+			want: []string{
+				"4 oversized records skipped",
+				"oversized record skipped for big.txt",
+				"oversized record skipped for other.txt",
+			},
+		},
+		{
+			// The record-loss component's internal order: the
+			// malformed aggregate, the oversized aggregate,
+			// then the per-path details.
+			name:   "aggregates precede the per-path details",
+			stream: malformedPlusOversizedStream,
+			want: []string{
+				"1 malformed record skipped",
+				"2 oversized records skipped",
+				"oversized record skipped for big.txt",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := Result{Stdout: []byte(tc.stream()), Code: 0}
+			m := newTestModel(fakeChild{res: res}, options{})
+			m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+			m.Update(runCollectCmd(t, m))
+			if !m.overlayOpen {
+				t.Fatal("the composed diagnostic did not open the overlay")
+			}
+			if got := m.overlay.text; got != strings.Join(tc.want, "\n") {
+				t.Fatalf("overlay text = %q, want %q", got, strings.Join(tc.want, "\n"))
+			}
+			// The same composed lines — same text, same order —
+			// are what the post-restoration stderr replay emits.
+			assertReplayLines(t, m.diags, tc.want)
+		})
 	}
 }
 

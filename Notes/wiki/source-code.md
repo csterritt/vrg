@@ -249,7 +249,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   exit), then one `integrityLine` per structured `Integrity.Causes`
   entry — Issue #36's stable per-kind text, paths through
   `EscapePath` — then `recordLossLines` (the malformed/oversized counts
-  plus "oversized record skipped for \<path\>" lines), then warnings —
+  plus "oversized record skipped for \<path\>" lines — Issue #37
+  deduplicates those details by raw path in first-occurrence order and
+  pins the aggregate as always emitted so an anonymous oversized record
+  is never invisible), then warnings —
   all
   through `safepresentation.EscapeDiagnostic`/`EscapePath`. Issue #11
   split the composition into `processDiags` (the process component) and

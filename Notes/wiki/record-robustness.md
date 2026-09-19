@@ -73,7 +73,13 @@ to `Index.OversizedPaths`, reported as "oversized record skipped for
 \<sanitized path\>" in addition to the count. A record whose limit was
 hit before `data.path` is counted anonymously. A file whose only
 records were oversized is absent from the file list, so this diagnostic
-is the user's only evidence of the loss.
+is the user's only evidence of the loss. Issue #37 completes the
+composition: the pluralized aggregate (`1 oversized record skipped` /
+`N oversized records skipped`) is emitted whenever the count is
+positive — an anonymous record is never invisible — and the per-path
+details are deduplicated by raw path in first-occurrence order, one
+line per distinct path beneath the aggregate. See
+[oversized-diagnostics.md](oversized-diagnostics.md).
 
 The trailing-unterminated rule carries no oversized exception: an
 oversized final record without a newline takes **all three**

@@ -400,3 +400,14 @@ Usage
  Input tokens: 115241 tokens
  Output tokens: 50247 tokens
  Cached input tokens: 11087360 tokens
+
+----
+Task 037-oversized-record-aggregate-anonymous-diagnostics.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 97 messages
+ Input tokens: 141839 tokens
+ Output tokens: 48468 tokens
+ Cached input tokens: 9382912 tokens

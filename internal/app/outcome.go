@@ -40,7 +40,9 @@ type OutcomeInput struct {
 // RecordLoss counts records dropped before they could be indexed:
 // malformed records and records over the payload limit. Paths holds the
 // raw path bytes of each oversized record whose type and data.path were
-// recovered before the limit — best-effort, one entry per named record.
+// recovered before the limit — best-effort, one entry per named record,
+// duplicates included; the composed diagnostic names each distinct raw
+// path once.
 type RecordLoss struct {
 	Malformed, Oversized int
 	Paths                [][]byte
@@ -163,9 +165,13 @@ func integrityLine(c searchindex.Cause) string {
 }
 
 // recordLossLines composes the skipped-record diagnostics: the
-// malformed and oversized counts, plus one "oversized record skipped
-// for <path>" line per recovered path — the only evidence of a file
-// whose every record was discarded.
+// malformed and oversized aggregates — the oversized one emitted
+// whenever its count is positive so an anonymous oversized record is
+// never invisible — then one "oversized record skipped for <path>"
+// line per distinct raw recovered path in first-occurrence order, the
+// only evidence of a file whose every record was discarded. The
+// aggregate counts records; the details name paths, so several
+// oversized records naming one path still produce one detail.
 func recordLossLines(rl RecordLoss) []string {
 	var lines []string
 	if rl.Malformed > 0 {
@@ -176,7 +182,13 @@ func recordLossLines(rl RecordLoss) []string {
 		lines = append(lines, fmt.Sprintf("%d oversized %s skipped",
 			rl.Oversized, pluralize(rl.Oversized, "record", "records")))
 	}
+	seen := map[string]struct{}{}
 	for _, p := range rl.Paths {
+		key := string(p)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
 		lines = append(lines, "oversized record skipped for "+safepresentation.EscapePath(p))
 	}
 	return lines

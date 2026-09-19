@@ -1403,3 +1403,44 @@ Outcome and exit-status contract), `internal/searchindex/index.go`,
 `internal/searchindex/oversized.go`,
 `internal/searchindex/lifecycle_test.go`, `internal/app/outcome.go`,
 `internal/app/outcome_test.go`.
+## [2026-09-18] ingest | Issue #37 oversized-record diagnostics — always-emitted aggregate, deduplicated per-path details
+
+Ingested Issue #37
+([issue](../issues/037-oversized-record-aggregate-anonymous-diagnostics.md),
+[task](../tasks/037-oversized-record-aggregate-anonymous-diagnostics.md)).
+`internal/app/outcome.go`'s `recordLossLines` now pins the oversized
+component of the record-loss diagnostic: the pluralized per-record
+aggregate — exactly `1 oversized record skipped` or `N oversized
+records skipped` — is emitted whenever `Index.Oversized` is positive,
+regardless of path recovery, so an anonymous oversized record (the
+64 MiB limit hit before `type`/`data.path` parsed) can never produce
+an empty or absent diagnostic; the `oversized record skipped for
+<sanitized path>` details follow the aggregate one line per **distinct
+raw path** from `Index.OversizedPaths`, deduplicated in
+first-occurrence order while the aggregate still counts every record.
+The anonymous guarantees: zero usable results yields the fatal
+overlay-only outcome containing exactly the aggregate (exit 2), and
+usable results yields browse under the visible overlay with the
+aggregate replayed to stderr (exit 0). The component keeps its slot in
+Issue #36's universal order — malformed aggregate, oversized
+aggregate, per-path details — between the integrity causes and the
+warnings. New coverage in `internal/app/outcome_test.go`: outcome-
+matrix rows for the anonymous fatal and anonymous/named non-fatal
+cases, `TestOversizedAggregateDiagnostics` at the `DecideOutcome`
+level, and `TestOversizedDiagnostics` driving real oversized streams
+(named, anonymous, plural, duplicate-path, mixed-recoverability, and
+the malformed→oversized→details order) through the collection command
+against both the overlay text and the replayed line list; the
+`oversizedRecordNamed`/`oversizedRecordAnonymous` helpers build the
+64 MiB-class fixtures. Created
+[oversized-diagnostics](oversized-diagnostics.md); updated
+[record-robustness](record-robustness.md),
+[integrity-diagnostics](integrity-diagnostics.md),
+[error-overlay-and-outcomes](error-overlay-and-outcomes.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/037-oversized-record-aggregate-anonymous-diagnostics.md`,
+`Notes/tasks/037-oversized-record-aggregate-anonymous-diagnostics.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity;
+Resources and responsiveness), `internal/app/outcome.go`,
+`internal/app/outcome_test.go`.
