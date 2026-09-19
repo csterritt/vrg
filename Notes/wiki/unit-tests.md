@@ -456,16 +456,45 @@ over multi-stop fixtures (`navIndex`, `navFile`/`navStop`):
 - `TestSingleStopIgnoresNavigation` — the one-stop index makes `n`/`p`
   strict no-ops: no command, no cursor movement, no frame change.
 - `TestManualScrollLeavesCursor` — scrolling does not move the cursor;
-  `n` continues from the previously selected stop and leaves the
-  scrolled viewport in place.
+  `n` continues from the previously selected stop, then Issue #14's
+  reveal moves the viewport to the now-hidden target row.
 - `TestCrossFileRestoresDepartingViewport` — a scrolled file's saved
-  top survives a navigate-away-and-back.
+  top survives a navigate-away-and-back as the reveal's starting point.
 - `TestNavigationWhileLoadInFlight` — the cursor keeps moving while a
   destination's load is in flight, and the in-flight load is not
   reissued on return.
 - `TestFileListHasNoDirectSelection` — enter/tab/arrows and other keys
   never move the cursor or change the current file: the file list is a
   passive overview.
+
+`reveal_test.go` (same package; Issue #14) covers the vertical
+destination reveal over the `longFile`/`navIndex` fixtures — a 160×24
+window (content height 23, so one-third placement is content row 7) on
+the plain theme:
+
+- `TestStartupRevealPlacesHiddenTarget` — once the startup file loads,
+  a hidden first-stop target lands at `floor(h/3)`: top = 199 − 7 = 192
+  for the line-200 stop.
+- `TestStartupRevealVisibleTargetStaysTop` — a first stop visible from
+  top 0 does not scroll and records no saved viewport state.
+- `TestNavigationRevealHiddenThenBOF` — `n` to the hidden line-200 stop
+  reveals it a third down; `p` back to line 5 clamps to top 0 — BOF
+  content beats one-third placement.
+- `TestNavBetweenVisibleTargetsNoScroll` — `n` between two on-screen
+  stops moves only the cursor; the top and rendered rows are unchanged.
+- `TestNoOpNavigationDoesNotReveal` — a one-stop index's `n`/`p` is not
+  a transition: no reveal, so the manually scrolled viewport stays put.
+- `TestMovingRevealReplacesSavedViewport` — a reveal that moves the
+  viewport overwrites the saved top, and the later leave-and-revisit
+  resumes from the revealed position.
+- `TestRevisitRevealStartsFromSavedViewport` — a revisit's reveal starts
+  from the saved top: the target row still visible from it means no
+  scroll (a top-of-file start would have differed).
+- `TestFirstVisitStartsFromTopThenReveal` — a cached-but-never-visited
+  file's reveal starts from the top: a hidden target lands at row 7.
+- `TestNavToUncachedFileRevealsOnLoad` — navigating into an uncached
+  file issues the load; the reveal lands when it completes for the
+  now-current file.
 
 `overlay_test.go` (same package; Issue #9) covers the modal overlay's
 mechanics:
@@ -503,6 +532,30 @@ mechanics:
 - `TestPrepareRows` — `Prepare` maps each source line to one rendered
   row in file order with the buffer's gutter width; a nil buffer gives
   an empty model.
+
+`reveal_test.go` (external package; Issue #14) covers destination
+reveal over real prepared buffers:
+
+- `TestStopTargetIsFirstSubmatchStartCell` — the display target's cell
+  is the first submatch's *start cell* through the byte→cell map, not
+  its byte offset (an ESC byte widens to two cells), and the earliest
+  of several submatches supplies it.
+- `TestStopTargetZeroWidthLandsPastLastCell` — a zero-width position at
+  end of line targets the marker cell one past the last cell.
+- `TestTargetRow` — the rendered row containing the target is the
+  destination line's own row in the unwrapped panel, clamped to the
+  prepared rows (line 0, past EOF, empty model).
+- `TestRevealVisibleTargetNoScroll` — a target row anywhere in
+  `[top, top + height)` — edges included — leaves the top and reports
+  no move.
+- `TestRevealHiddenTargetOneThird` — a hidden target lands at row
+  `floor(h/3)`: top = target − `h/3`, from below and from above.
+- `TestRevealBOFEOFClamps` — near BOF the target lands higher than the
+  third (top clamps to 0); near EOF it lands lower (top clamps to
+  `MaxTop`), including a file barely taller than the viewport.
+- `TestRevealStartsFromCurrentTop` — the reveal is relative to the
+  viewport's current top: the same target moves a first-visit top of 0
+  it is hidden from but stays put when visible from a saved top.
 
 ## internal/theme
 

@@ -45,10 +45,11 @@ height changes, and `MaxTop(rows, height)` is the largest valid top:
 
 - `model.vps map[string]viewport.Viewport` is the **per-file saved
   vertical state**, keyed by raw path like the other browse caches.
-  Scrolling writes through to it on every keypress, so a file revisited
-  later through Issue #13's `n`/`p` navigation starts from its last
-  position — the handoff needs no explicit save — and a never-visited
-  file's zero value starts at the top. `Update` re-clamps
+  Scrolling writes through to it on every keypress, and Issue #14's
+  moving reveals replace it too, so a file revisited later through
+  Issue #13's `n`/`p` navigation starts the destination reveal from its
+  last position — the handoff needs no explicit save — and a
+  never-visited file's zero value starts at the top. `Update` re-clamps
   every prepared file's saved viewport on `WindowSizeMsg` and re-clamps a
   file's saved entry when its load completes.
 - Scroll keys are browse-state only (`isScrollKey` in `scrollBy`), so the

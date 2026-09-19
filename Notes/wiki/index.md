@@ -86,6 +86,12 @@ Catalog of all wiki pages for the vrg project.
   line), the cursor-derived current file with its load request and
   saved-viewport handoff, the list underline following selection,
   scroll-independent navigation, and the passive file list
+- [destination-reveal.md](destination-reveal.md) — Issue #14: the
+  display target as the first submatch's start cell, rendered-row
+  reveal, visible-target no-scroll, one-third placement with BOF/EOF
+  precedence, saved-viewport versus first-visit starting points, and
+  the moving/no-scroll saved-state rules at navigation and
+  startup-after-load
 
 ## Catalogs
 

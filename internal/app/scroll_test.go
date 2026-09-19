@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"vrg/internal/filebuffer"
+	"vrg/internal/searchindex"
 	"vrg/internal/theme"
 )
 
@@ -177,12 +178,14 @@ func TestScrollKeysNoOpOnPlaceholders(t *testing.T) {
 
 // Vertical viewport state is per file: scrolling file A is recorded
 // under A's raw path and survives a leave-and-revisit, while file B
-// keeps its own state.
+// keeps its own state. A's stop sits at line 5 so the revisit's
+// destination reveal finds its target row visible from the saved top
+// and leaves it (Issue #14).
 func TestViewportStateSavedPerFile(t *testing.T) {
 	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
 	m.theme = theme.Plain() // unstyled: matched text stays contiguous
 	idx := browseIndex(t, []fixtureFile{
-		numberedFile("a.txt", 60),
+		{name: "a.txt", content: numberedContent("a.txt", 60), line: 5, start: 0, end: 1},
 		numberedFile("b.txt", 60),
 	})
 	cmd := startBrowse(t, m, idx)
@@ -233,6 +236,17 @@ func (c *countingRows) GutterWidth() int { return 3 }
 func (c *countingRows) At(i int) filebuffer.Line {
 	c.queries = append(c.queries, i)
 	return filebuffer.Line{Number: int64(i + 1)}
+}
+
+func (c *countingRows) TargetRow(st searchindex.Stop) int {
+	row := int(st.Number) - 1
+	if row < 0 {
+		row = 0
+	}
+	if row >= c.n {
+		row = c.n - 1
+	}
+	return row
 }
 
 // A frame render queries the row provider only for the visible row

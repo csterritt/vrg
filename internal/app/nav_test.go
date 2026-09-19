@@ -279,20 +279,23 @@ func TestManualScrollLeavesCursor(t *testing.T) {
 	if cur, _ := m.idx.Cursor(); cur.Stop != 1 {
 		t.Fatalf("n after scrolling selected stop %d, want 1 (line 40)", cur.Stop)
 	}
-	// Destination reveal is Issue #14's: the viewport stays where the
-	// user scrolled.
-	if got := m.vps[key].Top(); got != 5 {
-		t.Fatalf("n changed the viewport top to %d, want the scrolled 5", got)
+	// Issue #14's destination reveal then applies: line 40's row is
+	// hidden from the scrolled top, so the viewport moves to place it
+	// at floor(content height / 3) — 39 − 7 = 32.
+	if got := m.vps[key].Top(); got != 32 {
+		t.Fatalf("n to the hidden line 40 gave top %d, want 32", got)
 	}
 }
 
 // Departing a file saves its viewport: navigating away and back resumes
-// the saved top rather than restarting from the top of the file.
+// the saved top as the reveal's starting point — and with the stop at
+// line 5 its target row stays visible from there, so the reveal does
+// not scroll (Issue #14).
 func TestCrossFileRestoresDepartingViewport(t *testing.T) {
 	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
 	m.theme = theme.Plain()
 	idx := navIndex(t, []navFile{
-		{name: "a.txt", content: numberedContent("a", 60), stops: []navStop{{line: 1, start: 0, end: 1}}},
+		{name: "a.txt", content: numberedContent("a", 60), stops: []navStop{{line: 5, start: 0, end: 1}}},
 		{name: "b.txt", content: numberedContent("b", 60), stops: []navStop{{line: 1, start: 0, end: 1}}},
 	})
 	cmd := startBrowse(t, m, idx)

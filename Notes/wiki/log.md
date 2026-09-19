@@ -432,3 +432,48 @@ reload — navigation-active-while-loading bullet),
 `internal/searchindex/index.go`, `internal/app/app.go`,
 `internal/app/browse.go`, `internal/app/nav_test.go`,
 `internal/app/scroll_test.go`.
+## [2026-09-17] ingest | Issue #14 vertical destination reveal
+
+Ingested Issue #14 ([issue](../issues/014-vertical-destination-reveal.md),
+[task](../tasks/014-vertical-destination-reveal.md)).
+`internal/viewport` gained `reveal.go`: `Target{Line, Cell}` — the
+display target as the start cell of the first submatch on the
+destination line, not a source-line ordinal — resolved by
+`Rows.StopTarget` through the line's byte→cell map (escaped bytes widen,
+so the cell is not the byte offset; a no-cell submatch lands on the
+marker cell one past the last), `Rows.TargetRow` mapping the target to
+its rendered row (one row per source line until Issue #16's wrap), and
+`Viewport.Reveal` — visible-target no-scroll, else top =
+`row − floor(h/3)` clamped to `[0, MaxTop]` so BOF/EOF content beats
+one-third placement, reporting whether the viewport moved.
+`internal/app` extended `rowSource` with `TargetRow`, added
+`model.reveal` — saved `vps` top or first-visit top-of-file as the
+start, written back only on a move — and wired it into `navigate` on
+every actual cursor transition (strict no-ops detected by cursor
+comparison trigger none) and into `fileLoadedMsg` when the completed
+path is current — the startup-after-load trigger, always revealing the
+latest cursor target. Issue #19 owns horizontal reveal and Issue #28
+the two-stage prepared-layout commit. New tests:
+`internal/viewport/reveal_test.go` (start-cell identification through
+escapes, zero-width marker cell, target-row clamps, visible no-scroll,
+one-third both directions, BOF/EOF precedence, saved-vs-first-visit
+start) and `internal/app/reveal_test.go` (startup reveal after load,
+visible-target stays top with no state recorded, n/p round trip with
+BOF clamp, no-scroll between on-screen stops, no reveal on no-op, moving
+reveal replacing saved state, saved-start revisit, cached first visit,
+reveal on load completion); Issue #12/#13 tests updated where they
+encoded the pre-reveal contract. Created
+[destination-reveal](destination-reveal.md); updated
+[match-navigation](match-navigation.md),
+[viewport-scrolling](viewport-scrolling.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/014-vertical-destination-reveal.md`,
+`Notes/tasks/014-vertical-destination-reveal.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors —
+target-row, placement, and file-change bullets; File loading —
+load-completion reveal bullet; Testing Decisions → Viewport),
+`internal/viewport/reveal.go`, `internal/viewport/reveal_test.go`,
+`internal/app/browse.go`, `internal/app/app.go`,
+`internal/app/reveal_test.go`, `internal/app/nav_test.go`,
+`internal/app/scroll_test.go`.

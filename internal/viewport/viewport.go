@@ -5,8 +5,10 @@
 // (one rendered row, half page, full page), clamping to valid content
 // with no avoidable blank rows below EOF, and the prepared rendered-row
 // model a frame render slices instead of rescanning the buffer.
-// Destination reveal, wrap, logical anchors, and horizontal state
-// arrive in later issues.
+// Issue #14 adds vertical destination reveal: the display-target
+// identification, visible-target no-scroll, and one-third placement
+// with BOF/EOF precedence in reveal.go. Wrap, logical anchors, and
+// horizontal state arrive in later issues.
 package viewport
 
 import "vrg/internal/filebuffer"

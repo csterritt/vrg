@@ -147,3 +147,14 @@ Usage
  Input tokens: 704659 tokens
  Output tokens: 56466 tokens
  Cached input tokens: 7287359 tokens
+
+----
+Task 014-vertical-destination-reveal.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 33 messages
+ Input tokens: 68276 tokens
+ Output tokens: 27191 tokens
+ Cached input tokens: 2515840 tokens

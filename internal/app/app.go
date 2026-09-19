@@ -130,8 +130,10 @@ type model struct {
 	// records read failures, all keyed by the raw path bytes — never by
 	// an escaped display form.
 	// vps is the saved vertical viewport per file keyed by raw path:
-	// scrolling writes through to it, so a file revisited later starts
-	// from its last position. rows caches each loaded file's prepared
+	// scrolling writes through to it, and a destination reveal that
+	// moves the viewport replaces it (Issue #14), so a file revisited
+	// later starts from its last position. rows caches each loaded
+	// file's prepared
 	// rendered-row model — built when its load completes — which the
 	// frame render slices instead of rescanning the buffer.
 	idx     *searchindex.Index
@@ -287,6 +289,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if vp, ok := m.vps[key]; ok {
 				vp.Clamp(m.rows[key].Len(), m.contentRows())
 				m.vps[key] = vp
+			}
+			// A load completing for the current file runs the
+			// file-change reveal sequence against the latest cursor
+			// target — covering the startup file's first visit.
+			if ck, ok := m.curKey(); ok && ck == key {
+				m.reveal()
 			}
 		}
 	case failMsg:

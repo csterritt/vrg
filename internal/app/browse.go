@@ -23,6 +23,9 @@ type rowSource interface {
 	Len() int
 	At(i int) filebuffer.Line
 	GutterWidth() int
+	// TargetRow is the rendered row holding the navigation stop's
+	// display target — the row a destination reveal must show.
+	TargetRow(st searchindex.Stop) int
 }
 
 // curFile is the cursor's current file index — the current file derives
@@ -47,27 +50,62 @@ func (m *model) curKey() (string, bool) {
 	return string(m.idx.Files[m.curFile()].Path), true
 }
 
-// navigate moves the matched-line cursor one stop forward or back and
-// returns the destination file's load command when the move crossed
-// into a different file that is not already cached, in flight, or
-// failed. A same-file move only re-styles the current matched line —
-// destination reveal is Issue #14's — and needs no command. The
-// departing file's viewport is already saved by scroll write-through,
-// so the destination resumes from its saved viewport or the top.
+// navigate moves the matched-line cursor one stop forward or back,
+// applies the destination reveal, and returns the destination file's
+// load command when the move crossed into a different file that is not
+// already cached, in flight, or failed. A strict no-op step — an empty
+// or single-stop index — is not a transition and triggers no reveal.
+// The departing file's viewport is already saved by scroll and reveal
+// write-through, so the destination's reveal starts from its saved
+// viewport or, on a first visit, the top of the file; an uncached
+// destination reveals when its load completes instead.
 func (m *model) navigate(next bool) tea.Cmd {
 	if m.idx == nil {
 		return nil
 	}
+	from, _ := m.idx.Cursor()
 	var mv searchindex.Move
 	if next {
 		mv = m.idx.Next()
 	} else {
 		mv = m.idx.Prev()
 	}
+	if cur, _ := m.idx.Cursor(); cur == from {
+		return nil
+	}
+	m.reveal()
 	if !mv.FileChanged {
 		return nil
 	}
 	return m.startLoad()
+}
+
+// reveal applies the vertical destination-reveal rules to the current
+// file's viewport: starting from its saved per-file top — or the top
+// of the file on a first visit — the rendered row holding the
+// destination's display target is left in place when already visible
+// and otherwise moved to floor(content height / 3), clamped to valid
+// tops. A reveal that moves the viewport replaces the saved vertical
+// state; a no-scroll reveal leaves it. While the panel shows a
+// placeholder there is no row model and the reveal is a no-op.
+func (m *model) reveal() {
+	ck, ok := m.curKey()
+	if !ok {
+		return
+	}
+	rows := m.rows[ck]
+	h := m.contentRows()
+	if rows == nil || h < 1 {
+		return
+	}
+	cur, ok := m.idx.Cursor()
+	if !ok {
+		return
+	}
+	vp := m.vps[ck]
+	if vp.Reveal(rows.TargetRow(m.idx.Files[cur.File].Stops[cur.Stop]), rows.Len(), h) {
+		m.vps[ck] = vp
+	}
 }
 
 // contentRows is the file panel's content height: the frame height

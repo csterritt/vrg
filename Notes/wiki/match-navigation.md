@@ -53,20 +53,23 @@ computes (the same number `UsableResults` reports) for the no-op rules.
 - `n`/`p` are browse-state keys (`m.state == stateBrowse` in the key
   switch, after the overlay's precedence and `ctrl+c`'s global
   override) routed to `model.navigate(next bool)`. `navigate` steps the
-  cursor and, only when the returned `Move.FileChanged`, returns
-  `startLoad()` for the destination — which deduplicates: a cached,
-  in-flight, or failed path issues no command. A same-file move returns
-  nil and only re-styles the current matched line — destination reveal
-  is Issue #14's, and the stale-layout prepared-layout path is Issue
-  #17's, so a file change is an immediate panel switch.
+  cursor, detects a strict no-op by comparing the cursor before and
+  after, and on an actual transition applies Issue #14's destination
+  reveal ([destination-reveal.md](destination-reveal.md)) before
+  returning `startLoad()` for the destination — only when the returned
+  `Move.FileChanged`, and deduplicated: a cached, in-flight, or failed
+  path issues no command. A same-file move returns nil and re-styles
+  the current matched line plus reveals its target row; the
+  stale-layout prepared-layout path is Issue #17's.
 - **Viewport handoff**: the departing file's viewport needs no explicit
-  save — scrolling already writes through to `model.vps` — so the
-  destination resumes from its saved `vps` entry or, for a first visit
-  (including the startup file), the zero-value top of the file. While a
-  destination file is uncached the panel switches to its "Loading…"
-  placeholder immediately and navigation stays live: the cursor keeps
-  moving under an in-flight load, and a second request for the same
-  path is dropped by `startLoad`'s dedup.
+  save — scrolling and moving reveals already write through to
+  `model.vps` — so the destination's reveal starts from its saved `vps`
+  entry or, for a first visit (including the startup file), the
+  zero-value top of the file. While a destination file is uncached the
+  panel switches to its "Loading…" placeholder immediately and
+  navigation stays live: the cursor keeps moving under an in-flight
+  load, a second request for the same path is dropped by `startLoad`'s
+  dedup, and the reveal lands when the load completes.
 - **Manual scrolling leaves the cursor unchanged**: `scrollBy` writes
   only `m.vps`, so `n` after any amount of scrolling continues from the
   last selected stop (Issue #12's contract, now load-bearing).
@@ -91,7 +94,9 @@ cross-file `n` switching the panel — list underline and filename rule
 move, the uncached load is requested, the completed file starts from
 the top — circular wrap at both ends, the single-stop strict no-op (no
 command, no frame change), scrolling leaving the cursor on its stop so
-`n` continues from it, the departing file's saved viewport surviving a
-leave-and-revisit, navigation under an in-flight load with dedup, and
-the passive file list ignoring selection-shaped keys. See
+`n` continues from it and Issue #14's reveal moves the viewport to the
+destination's target row, the departing file's saved viewport surviving
+a leave-and-revisit as the reveal's starting point, navigation under an
+in-flight load with dedup, and the passive file list ignoring
+selection-shaped keys. See
 [unit-tests.md](unit-tests.md).

@@ -104,7 +104,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   warning from the index's `Unknown` count. Issue #12 adds the browse
   scroll-key route (`stateBrowse` + `isScrollKey` → `scrollBy`), the
   per-file `vps`/`rows` maps, saved-viewport re-clamping on resize and
-  on load completion. Issue #13 adds the `n`/`p` browse route to
+  on load completion. Issue #14's `fileLoadedMsg` path also runs
+  `model.reveal` when the completed path is the current file — the
+  startup-after-load reveal trigger. Issue #13 adds the `n`/`p` browse
+  route to
   `navigate` and drops `model.cur`: the current file and current
   matched line derive from the index's matched-line cursor. Issue #11 adds the session
   diagnostic collection `model.diags`: `collectDiags` appends sanitized
@@ -165,11 +168,17 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   cursor-derived `curLine` driving `CurrentMatch`, and `navigate` —
   `n`/`p` step the index cursor and issue `startLoad` for the
   destination only on `Move.FileChanged`, with the departing file's
-  viewport already saved by scroll write-through. See
+  viewport already saved by scroll write-through. Issue #14 extends
+  `rowSource` with `TargetRow`, adds `model.reveal` — the
+  starting-viewport sequence (saved `vps` top or first-visit top of
+  file, then `Viewport.Reveal`, written back only on a move) — and wires
+  it into `navigate`'s actual transitions and the
+  current-file `fileLoadedMsg` path in app.go. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
-  [viewport-scrolling.md](viewport-scrolling.md), and
-  [match-navigation.md](match-navigation.md).
+  [viewport-scrolling.md](viewport-scrolling.md),
+  [match-navigation.md](match-navigation.md), and
+  [destination-reveal.md](destination-reveal.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
@@ -183,9 +192,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   vertical window (`Top`, `Scroll`, `Clamp`), the scroll-unit helpers
   `HalfPage` and `MaxTop` (the BOF/EOF clamp bound), and `Rows`, the
   prepared rendered-row model built by `Prepare` that the frame render
-  slices. Destination reveal, wrap, logical anchors, and horizontal
-  state are later issues. See
-  [viewport-scrolling.md](viewport-scrolling.md).
+  slices. Wrap, logical anchors, and horizontal state are later issues.
+  See [viewport-scrolling.md](viewport-scrolling.md).
+- `internal/viewport/reveal.go` — Issue #14's vertical destination
+  reveal: `Target{Line, Cell}` (the display target — the first
+  submatch's start cell), `Rows.StopTarget` (stop → target through the
+  byte→cell map, with the zero-width marker-cell fallback),
+  `Rows.TargetRow` (target → rendered row), and `Viewport.Reveal`
+  (visible-target no-scroll, else top = `row − floor(h/3)` clamped to
+  `[0, MaxTop]`, reporting whether the viewport moved). See
+  [destination-reveal.md](destination-reveal.md).
 - `internal/theme/theme.go` — the active scheme's style set: `Dark()`
   (white on black, initially active), `Light()` (black on white), the
   pure `Toggled` flip behind the `c` key, `Plain()` (the no-style
