@@ -227,11 +227,13 @@ func TestFirstVisitStartsFromTopThenReveal(t *testing.T) {
 	wide(t, m, idx)
 
 	// b.txt's buffer lands while it is not current: it is cached but
-	// never visited, so no reveal has been applied for it.
+	// never visited, so no reveal has been applied for it. Its request
+	// was minted as an earlier entry would have minted it.
 	buf, err := filebuffer.Load(idx.Files[1].Path, idx.Files[1].Stops)
 	if err != nil {
 		t.Fatal(err)
 	}
+	mintRequest(m, idx.Files[1].Path)
 	injectLoad(t, m, fileLoadedMsg{path: idx.Files[1].Path, buf: buf})
 
 	// The crossing opens a pop-up, but the cached file issues no load.

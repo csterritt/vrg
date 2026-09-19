@@ -177,6 +177,13 @@ Catalog of all wiki pages for the vrg project.
   filename-rule status-note slot (synthetic until Issues #26/#29/#30
   supply notes), anchor preservation through every relayout, and the
   visible-window-only render-cost guard
+- [async-load-isolation.md](async-load-isolation.md) — Issue #25:
+  navigation during held loads, `(raw path, request identity)`-keyed
+  `fileLoadedMsg` completions with per-path cache/status updates and
+  panel isolation, the dropped-not-queued one-load-per-path rule,
+  session-long buffer retention, post-cancellation rejection, the
+  filebuffer `Read`/`Decode` split, and the separately gated
+  decode/map phase with its actionable-input list
 
 ## Catalogs
 

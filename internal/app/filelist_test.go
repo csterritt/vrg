@@ -450,7 +450,8 @@ func TestAnchorSurvivesGutterGrowth(t *testing.T) {
 	}
 
 	// The file grows to five-digit line numbers on disk; the reload's
-	// completion arrives and its freshly keyed layout installs.
+	// completion arrives and its freshly keyed layout installs. The
+	// request is minted the way Issue #27's reload will mint it.
 	big := strings.Repeat("x", 200) + "\n" + numberedContent("pad", 19999)
 	if err := os.WriteFile(string(idx.Files[0].Path), []byte(big), 0o644); err != nil {
 		t.Fatal(err)
@@ -462,6 +463,7 @@ func TestAnchorSurvivesGutterGrowth(t *testing.T) {
 	if buf.GutterWidth() != 7 {
 		t.Fatalf("gutter = %d, want 7 for a five-digit file", buf.GutterWidth())
 	}
+	mintRequest(m, idx.Files[0].Path)
 	injectLoad(t, m, fileLoadedMsg{path: idx.Files[0].Path, buf: buf})
 
 	if got := m.listWidth(); got != 9 {

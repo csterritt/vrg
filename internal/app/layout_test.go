@@ -53,9 +53,13 @@ func gateOpts(h *heldLayouts) options {
 }
 
 // injectLoad feeds a fileLoadedMsg through Update and delivers the
-// layout completion its preparation request produced.
+// layout completion its preparation request produced. The fabricated
+// completion stands in for the live request's answer, so it carries
+// that request's identity — a message for a path with no request in
+// flight is discarded exactly like a stale completion (Issue #25).
 func injectLoad(t *testing.T, m *model, msg fileLoadedMsg) {
 	t.Helper()
+	msg.req = reqOf(m, msg.path)
 	_, cmd := m.Update(msg)
 	deliverLayout(t, m, cmd)
 }
@@ -425,12 +429,13 @@ func TestStaleRevisionCompletionDiscarded(t *testing.T) {
 	installed := m.rows[keyA]
 
 	// A second load of the same path bumps the revision; the request
-	// it issues is keyed by revision 2.
+	// it issues is keyed by revision 2. The request is minted the way
+	// Issue #27's reload will mint it.
 	buf, err := filebuffer.Load(idx.Files[0].Path, idx.Files[0].Stops)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, lc := m.Update(fileLoadedMsg{path: idx.Files[0].Path, buf: buf})
+	_, lc := m.Update(fileLoadedMsg{path: idx.Files[0].Path, req: mintRequest(m, idx.Files[0].Path), buf: buf})
 	if m.revs[keyA] != 2 {
 		t.Fatalf("revision = %d after reload, want 2", m.revs[keyA])
 	}

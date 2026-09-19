@@ -855,6 +855,49 @@ grapheme, and wrap suites move their panel-row slicing to
 fixture target since the wider text panel leaves a shallow one
 inside the initial window.
 
+`loadiso_test.go` (same package; Issue #25) drives the keyed
+load-isolation contracts through gated workers — `heldLoads` holds
+every load and counts entries; `heldFirstLoad` holds only the slow
+file's; `reqOf`/`mintRequest` read and mint request identities:
+
+- `TestNavigationRemainsActiveWhileLoadHeld` — `n` moves past the
+  held load at once (cursor, filename rule, pop-up, destination's
+  own request), placeholder scrolling keeps the viewport at top 0,
+  `w`/`c`/resize apply, and A's later completion caches without
+  disturbing B's panel.
+- `TestLateCompletionCachesOnlyItsOwnPath` — A→B→C with A's load
+  held: A's completion landing while C is current caches A (even its
+  layout installs invisibly) and leaves C's panel, cursor, and
+  viewport untouched.
+- `TestReentryDuringLoadStartsNothing` — `p` back onto a still-held
+  path mints no second request: the crossing batch is only the
+  pop-up leaf, the live identity is unchanged, and settlement
+  leaves nothing queued.
+- `TestCachedRevisitIssuesNoLoad` — a revisited file serves the
+  retained buffer with no `fileLoadedMsg` leaf.
+- `TestUnrequestedCompletionDropped` — a completion naming a path
+  with no request in flight is discarded: no cache, no failure
+  state, no diagnostic, no panel change, no issued work.
+- `TestStaleCompletionDroppedWhileLoadInFlight` — a completion not
+  carrying the live request's identity leaves the request pending
+  and the placeholder up; the real answer still lands on release.
+- `TestSettledCompletionDropped` — a duplicate completion after
+  settlement replaces nothing: buffer, revision, layout, and panel
+  all stay put.
+- `TestPostCancellationCompletionDiscarded` — success and failure
+  completions released after `ctrl+c` mutate nothing.
+- `TestGatedDecodeMapKeepsInputsResponsive` — with `decodeGate`
+  holding the phase after `Read`, `n`/`p` navigate, `w`/`c` toggle,
+  resize applies, and `ctrl+c` exits 130 without waiting; the
+  released completions land on the cancelled UI as non-events.
+
+Since Issue #25, `injectLoad` (in `layout_test.go`) fills a
+fabricated completion with the live request's identity before
+feeding `Update` — a message for a path with no request in flight
+is discarded exactly like a stale one — and the
+replay/sink-safety/reveal/scroll/popup fabrications mint requests
+with `mintRequest`, the same way Issue #27's reload will mint them.
+
 ## internal/viewport
 
 `viewport_test.go` (external package `viewport_test`; Issue #12):

@@ -55,6 +55,9 @@ keys.
 `Load(path []byte, stops []searchindex.Stop) (*Buffer, error)` performs
 the whole load — disk read plus decode/map — so a completion message
 carries a prepared buffer and the update path does no full-file work.
+[Issue #25](async-load-isolation.md) has since split the phases into
+`Read` and `Decode` (`Load` composes them) so the load command can gate
+the decode/map phase separately from the read.
 The raw path bytes are the filesystem key. Line splitting counts LF and
 CRLF as terminators (never displayed, retained in `Line.Raw`), a missing
 final newline still yields the last line, a trailing newline does not
@@ -95,19 +98,23 @@ the current file's load command. Since Issue #13 the current file
 derives from the index's matched-line cursor (`model.curFile()`), and
 `n`/`p` navigation crosses into other files through `model.navigate` —
 see [match-navigation.md](match-navigation.md). The model keeps
-`loading` (in-flight),
+`loading` (in-flight request identity per path since Issue #25),
 `bufs` (prepared buffers), and `failed` (read failures), all keyed by
 raw path bytes; `startLoad` drops repeated requests for a path already
-loading rather than queueing them, and the load command runs the whole
-read-plus-decode/map under the optional `loadGate` before returning
-`fileLoadedMsg{path, buf, err}`. A completion for a non-current path
+loading rather than queueing them, and the load command runs the read
+under the optional `loadGate`, then `decodeGate`, then the decode/map
+before returning `fileLoadedMsg{path, req, buf, err}` — Issue #25's
+keyed-identity completion a path with no matching live request
+discards untouched. A completion for a non-current path
 updates only its cache slot — it cannot replace the visible panel — and
 the `quitting` discard drops completions that land after cancellation.
 `q` in browse exits with the fixed status 0 through the Issue #4
 `quitCmd` cleanup; `ctrl+c` still exits 130; resize and stray keys are
 handled while a load is gate-held. `VRG_TEST_LOAD_GATE=<file>` in
-`cmd/vrg` wires the seam (see
+`cmd/vrg` wires the whole-load seam (see
 [cancellation-cleanup.md](cancellation-cleanup.md) for the seam family).
+See [async-load-isolation.md](async-load-isolation.md) for the full
+keyed-completion, one-load-per-path, and decode/map-gate contracts.
 
 ## Layout
 
@@ -164,5 +171,7 @@ gutter width, escaped content, and cell-mapped highlights;
 `internal/app/browse_test.go` covers the browse transition, the
 placeholder, gated-load responsiveness, the underline/gutter/rule
 rendering, exit paths, late-load isolation, and the hostile-fixture
-raw-output checks; `cmd/vrg/search_test.go` now proves record survival
-at the PTY boundary through inverse-video span counts.
+raw-output checks; `internal/app/loadiso_test.go` (Issue #25) covers
+the keyed-completion, one-load-per-path, cache-retention, and
+decode/map-gate contracts; `cmd/vrg/search_test.go` now proves record
+survival at the PTY boundary through inverse-video span counts.

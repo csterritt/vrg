@@ -421,7 +421,9 @@ func TestHostileFixtureRawOutput(t *testing.T) {
 }
 
 // A load completion for a path that is not current never replaces the
-// visible panel.
+// visible panel: it updates only its own cache — here b.go's request
+// was minted as an earlier visit would have minted it, and its answer
+// lands while a.go is current.
 func TestLateLoadForOtherFileIgnored(t *testing.T) {
 	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
 	idx := browseIndex(t, browseFiles)
@@ -430,6 +432,7 @@ func TestLateLoadForOtherFileIgnored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	mintRequest(m, idx.Files[1].Path)
 	injectLoad(t, m, fileLoadedMsg{path: idx.Files[1].Path, buf: buf})
 	if v := viewText(m); !strings.Contains(v, "Loading…") {
 		t.Fatalf("view = %q, want Loading… — a foreign completion must not settle the current file", v)

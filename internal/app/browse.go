@@ -380,41 +380,55 @@ func (m *model) scrollBy(key string) {
 	m.vps[ck] = vp
 }
 
-// fileLoadedMsg delivers the prepared buffer — or the read error — for
-// one requested path. The command performed the read plus decode and
-// byte→cell mapping off the update path, so Update only files the
-// result; it never does full-file work itself.
+// fileLoadedMsg answers one requested load, keyed by the raw path and
+// the request's identity: a message whose pair does not match a live
+// request is discarded, so stale, forged, or superseded completions
+// can never touch the cache or the visible panel (Issue #25). The
+// command performed the read plus decode and byte→cell mapping off the
+// update path, so Update only files the result; it never does
+// full-file work itself.
 type fileLoadedMsg struct {
 	path []byte
+	req  int
 	buf  *filebuffer.Buffer
 	err  error
 }
 
 // startLoad issues the current file's load command, or nil when the path
 // is already loaded, already in flight, or already failed — a repeated
-// request is dropped, never queued. The command runs the whole load
-// under the test gate so "Loading…" provably spans disk read plus
-// decode/map, then returns the prepared buffer keyed by raw path.
+// request is dropped, never queued, and there is no load cancellation.
+// Each issued load mints a request identity under the raw path that its
+// completion must echo back. The command runs the read under the test
+// gate and the decode/map phase under its own gate so "Loading…"
+// provably spans both, all off the update path.
 func (m *model) startLoad() tea.Cmd {
 	if m.idx == nil || len(m.idx.Files) == 0 {
 		return nil
 	}
 	f := m.idx.Files[m.curFile()]
 	key := string(f.Path)
-	if m.loading[key] || m.failed[key] {
+	if _, ok := m.loading[key]; ok || m.failed[key] {
 		return nil
 	}
 	if _, ok := m.bufs[key]; ok {
 		return nil
 	}
-	m.loading[key] = true
-	path, stops, gate := f.Path, f.Stops, m.opts.loadGate
+	m.loadSeq++
+	m.loading[key] = m.loadSeq
+	path, stops := f.Path, f.Stops
+	req, gate, decode := m.loadSeq, m.opts.loadGate, m.opts.decodeGate
 	return func() tea.Msg {
 		if gate != nil {
 			gate()
 		}
-		buf, err := filebuffer.Load(path, stops)
-		return fileLoadedMsg{path: path, buf: buf, err: err}
+		raw, err := filebuffer.Read(path)
+		if err != nil {
+			return fileLoadedMsg{path: path, req: req, err: err}
+		}
+		if decode != nil {
+			decode()
+		}
+		return fileLoadedMsg{path: path, req: req, buf: filebuffer.Decode(raw, stops)}
 	}
 }
 

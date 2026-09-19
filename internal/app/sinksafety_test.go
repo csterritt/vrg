@@ -218,7 +218,7 @@ func cliHelpStdout(t *testing.T, fx sinktest.Fixture) string {
 func replayFixtureOutput(t *testing.T, fx sinktest.Fixture) string {
 	t.Helper()
 	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
-	m.Update(fileLoadedMsg{path: fx.Bytes, err: errFixtureRead})
+	m.Update(fileLoadedMsg{path: fx.Bytes, req: mintRequest(m, fx.Bytes), err: errFixtureRead})
 	var buf bytes.Buffer
 	replayDiags(&buf, m.diags)
 	out := buf.String()

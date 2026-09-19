@@ -164,7 +164,7 @@ func TestScrollKeysNoOpOnPlaceholders(t *testing.T) {
 		t.Fatalf("view changed under scroll keys on Loading…: %q", v)
 	}
 
-	m.Update(fileLoadedMsg{path: idx.Files[0].Path, err: errors.New("denied")})
+	m.Update(fileLoadedMsg{path: idx.Files[0].Path, req: reqOf(m, idx.Files[0].Path), err: errors.New("denied")})
 	unreadable := viewText(m)
 	for _, k := range []tea.KeyPressMsg{keyDown, keyD, keyPgDn} {
 		m.Update(k)

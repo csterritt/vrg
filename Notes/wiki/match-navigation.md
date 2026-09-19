@@ -74,6 +74,9 @@ computes (the same number `UsableResults` reports) for the no-op rules.
   navigation stays live: the cursor keeps moving under an in-flight
   load, a second request for the same path is dropped by `startLoad`'s
   dedup, and the reveal lands when the load completes.
+  [Issue #25](async-load-isolation.md) has since keyed each completion
+  by raw path plus request identity, so a late answer updates only its
+  own path's cache — never the file the cursor has since moved to.
 - **Manual scrolling leaves the cursor unchanged**: `scrollBy` writes
   only `m.vps`, so `n` after any amount of scrolling continues from the
   last selected stop (Issue #12's contract, now load-bearing).

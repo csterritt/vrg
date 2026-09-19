@@ -374,7 +374,7 @@ func TestPopupCancelledByErrorOverlay(t *testing.T) {
 
 	// The destination's read fails — its placeholder is diagnostic
 	// state only — then an error overlay arrives over it.
-	m.Update(fileLoadedMsg{path: idx.Files[1].Path, err: errors.New("denied")})
+	m.Update(fileLoadedMsg{path: idx.Files[1].Path, req: reqOf(m, idx.Files[1].Path), err: errors.New("denied")})
 	m.openOverlay(loadDiag(idx.Files[1].Path, errors.New("denied")), false)
 	if !m.overlayOpen {
 		t.Fatal("the error overlay did not open")

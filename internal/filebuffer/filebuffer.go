@@ -108,17 +108,19 @@ type Buffer struct {
 	lines []Line
 }
 
-// Load reads path — the raw bytes are the filesystem key, never the
-// escaped display form — splits the content into source lines, maps each
-// line's content through the safe-presentation core, and maps each
-// stop's recorded byte-range highlights onto display cells. All reading,
-// decoding, and mapping happens here so the caller's completion message
-// carries a prepared buffer and its update path does no full-file work.
-func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
-	raw, err := os.ReadFile(string(path))
-	if err != nil {
-		return nil, err
-	}
+// Read loads path's raw bytes — the raw bytes are the filesystem key,
+// never the escaped display form. It is the disk phase of Load, split
+// out so the caller can pace or hold the boundary between the read and
+// the decode/map phase.
+func Read(path []byte) ([]byte, error) {
+	return os.ReadFile(string(path))
+}
+
+// Decode splits raw content into source lines, maps each line's
+// content through the safe-presentation core, and maps each stop's
+// recorded byte-range highlights onto display cells — the decode/map
+// phase of Load, with no filesystem access.
+func Decode(raw []byte, stops []searchindex.Stop) *Buffer {
 	byLine := make(map[int64][]searchindex.Span)
 	for _, st := range stops {
 		byLine[st.Number] = append(byLine[st.Number], st.Highlights...)
@@ -135,7 +137,18 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		b.lines = append(b.lines, makeLine(raw[start:end], int64(len(b.lines))+1, byLine))
 		start = end
 	}
-	return b, nil
+	return b
+}
+
+// Load reads path and decodes the result — Read plus Decode in one
+// call, so the caller's completion message carries a prepared buffer
+// and its update path does no full-file work.
+func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
+	raw, err := Read(path)
+	if err != nil {
+		return nil, err
+	}
+	return Decode(raw, stops), nil
 }
 
 // LineCount is the number of source lines: an empty file has zero, a

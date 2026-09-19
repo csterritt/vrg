@@ -139,13 +139,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   program returns and the child is reaped, `replayDiags` writes the
   collection to stderr exactly once, in order — the common
   post-restoration writer that also replaced the controlled-failure
-  direct write. See
+  direct write. Issue #25 turns `loading` into a path→request-identity
+  map fed by `loadSeq`: `fileLoadedMsg` gains a `req` field its
+  issuing command echoes back, and `Update` applies a completion only
+  when the `(path, req)` pair matches a live request — unrequested,
+  stale, forged, and already-settled completions are discarded
+  untouched — while `options.decodeGate` (`WithDecodeGate`) joins
+  `loadGate` as the seam holding the decode/map phase alone. See
   [cancellation-cleanup.md](cancellation-cleanup.md),
   [theme.md](theme.md),
   [no-results-screen.md](no-results-screen.md),
   [error-overlay-and-outcomes.md](error-overlay-and-outcomes.md),
-  [record-robustness.md](record-robustness.md), and
-  [stderr-replay.md](stderr-replay.md).
+  [record-robustness.md](record-robustness.md),
+  [stderr-replay.md](stderr-replay.md), and
+  [async-load-isolation.md](async-load-isolation.md).
 - `internal/app/outcome.go` — Issue #9's pure outcome decision:
   `DecideOutcome` maps `OutcomeInput` (process `Result`, stream
   `Integrity`, usable-results count, `RecordLoss`, caller `Warnings`)
@@ -182,7 +189,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   all recomputed from the live terminal size at every render. See
   [file-change-popup.md](file-change-popup.md).
 - `internal/app/browse.go` — the Issue #5 browse view: async
-  `filebuffer.Load` commands gated by `WithLoadGate`, the
+  `filebuffer` load commands gated by `WithLoadGate`, the
   `loading`/`bufs`/`failed` caches keyed by raw path, `fileLoadedMsg`,
   the full-width filename rule, the fixed-width file list with the
   current entry underlined, the right-justified gutter, inverse-video
@@ -265,7 +272,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   list window to keep the active entry visible, and `filenameRule`
   gains the `─ path note ────` status-note slot whose synthetic
   `m.notes` string the path truncates around (Issues #26/#29/#30
-  supply the real notes). See
+  supply the real notes). Issue #25 makes `startLoad` mint a
+  `loadSeq` request identity recorded in `loading` per raw path —
+  at most one in flight, re-entry dropped not queued — which
+  `fileLoadedMsg{path, req, buf, err}` echoes back; the command now
+  runs `filebuffer.Read` under `loadGate`, then `decodeGate`, then
+  `filebuffer.Decode`, so the read and the decode/map phase gate
+  separately and the completion still carries a fully prepared
+  buffer. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [file-change-popup.md](file-change-popup.md),
@@ -278,15 +292,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [horizontal-reveal.md](horizontal-reveal.md),
   [hidden-content-indicators.md](hidden-content-indicators.md),
   [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
-  [zero-width-markers.md](zero-width-markers.md), and
-  [file-list-layout.md](file-list-layout.md).
+  [zero-width-markers.md](zero-width-markers.md),
+  [file-list-layout.md](file-list-layout.md), and
+  [async-load-isolation.md](async-load-isolation.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation
 
-- `internal/filebuffer/filebuffer.go` — `Load` reads the file by raw
-  path bytes, splits LF/CRLF, maps each line through
-  `safepresentation.MapContent`, and produces `Buffer`/`Line` records
+- `internal/filebuffer/filebuffer.go` — `Read` reads the file by raw
+  path bytes, `Decode` splits LF/CRLF and maps each line through
+  `safepresentation.MapContent` (Issue #25 split the phases so the
+  load command gates the read and the decode/map separately), and
+  `Load` composes them; together they produce `Buffer`/`Line` records
   with `GutterWidth`, source `Raw` bytes, `Highlights` mapped to
   display cells, and (Issue #16) `Clusters` — the shared
   grapheme-cluster segmentation Viewport wraps from. Issue #18 adds

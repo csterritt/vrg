@@ -18,3 +18,9 @@ Notes/walkthroughs/018-04/code-walkthrough/__pycache__/
 
 # Built at run time by the Issue #24 walkthrough.
 Notes/walkthroughs/024-04/code-walkthrough/vrg
+
+# Generated at run time by pty_loadiso.py; the ~90 MB fixture, the
+# built binary, and the gate file are regenerated on every run.
+Notes/walkthroughs/025-04/code-walkthrough/fixture/
+Notes/walkthroughs/025-04/code-walkthrough/vrg
+Notes/walkthroughs/025-04/code-walkthrough/gate

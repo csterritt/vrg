@@ -912,3 +912,44 @@ index. Sources:
 `internal/app/indicators_test.go`, `internal/app/hreveal_test.go`,
 `internal/app/grapheme_test.go`, `internal/app/wrap_test.go`,
 `internal/app/browse_test.go`.
+
+## [2026-09-17] ingest | Issue #25 async load isolation — keyed completions, one load per path
+
+Issue #25 keys load completions by raw path plus request identity.
+`model.loading` is now `map[string]int` fed by `loadSeq`;
+`fileLoadedMsg{path, req, buf, err}` echoes the minted identity and
+`Update` applies a completion only when the pair matches a live
+request — unrequested, stale, forged, and duplicate completions are
+discarded without touching cache, failure state, diagnostics, or
+panel. A valid completion updates only its own path's slot; the panel
+changes only when that path is current at arrival time (A→B→C leaves
+C's panel untouched while A caches). `startLoad` drops — never queues
+— re-entry into a loading/cached/failed path: at most one load in
+flight per raw path, and successful buffers stay in `bufs` for the
+session with no eviction. `internal/filebuffer` split into `Read` +
+`Decode` (`Load` composes them); the load command runs `loadGate`,
+then `Read`, then the new `decodeGate` (`WithDecodeGate`), then
+`Decode`, so the decode/map phase gates separately while `ctrl+c`,
+`n`/`p`, `w`, `c`, and resize stay actionable. Post-cancellation
+completions remain dead via the Issue #4 `quitting` discard.
+`internal/app/loadiso_test.go` covers held-load navigation, A→B→C
+isolation, dropped re-entry, cached revisit,
+unrequested/stale/settled rejection, post-cancellation discard, and
+gated decode/map responsiveness; `injectLoad` fills fabricated
+completions with the live request identity and the other
+fabrications mint requests via `mintRequest`. Created
+[async-load-isolation](async-load-isolation.md); updated
+[browse-tracer](browse-tracer.md),
+[match-navigation](match-navigation.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/025-async-load-isolation.md`,
+`Notes/tasks/025-async-load-isolation.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency), `internal/app/app.go`, `internal/app/browse.go`,
+`internal/filebuffer/filebuffer.go`,
+`internal/app/loadiso_test.go`, `internal/app/layout_test.go`,
+`internal/app/browse_test.go`, `internal/app/filelist_test.go`,
+`internal/app/reveal_test.go`, `internal/app/scroll_test.go`,
+`internal/app/popup_test.go`, `internal/app/replay_test.go`,
+`internal/app/sinksafety_test.go`.

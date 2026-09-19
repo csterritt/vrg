@@ -60,6 +60,11 @@ type options struct {
 	// read — the hold proving "Loading…" spans the whole load: disk read
 	// plus decode and byte→cell mapping, all off the update path.
 	loadGate func()
+	// decodeGate, when set, runs inside each file-load command after
+	// the read and before the decode/map phase — the hold proving that
+	// phase is separately off the update path and input stays
+	// actionable while it pends (Issue #25).
+	decodeGate func()
 	// popupTimer, when set, builds each file-change pop-up's expiry
 	// command in place of the real one-second tick — model tests
 	// substitute an instantly resolving command so expiry is driven by
@@ -95,6 +100,10 @@ func WithDiagAck(fn func()) Option { return func(o *options) { o.diagAck = fn } 
 // WithLoadGate holds each file load — read and decode/map together —
 // until fn returns.
 func WithLoadGate(fn func()) Option { return func(o *options) { o.loadGate = fn } }
+
+// WithDecodeGate holds each load's decode/map phase — after the read
+// and before the buffer is built — until fn returns.
+func WithDecodeGate(fn func()) Option { return func(o *options) { o.decodeGate = fn } }
 
 // WithLayoutGate holds each layout preparation until fn returns.
 func WithLayoutGate(fn func()) Option { return func(o *options) { o.layoutGate = fn } }
@@ -146,10 +155,12 @@ type model struct {
 	// Browse state. idx is the prepared search index; the current file
 	// and current matched line derive from its circular matched-line
 	// cursor (Issue #13): n advances, p retreats, both wrap, and manual
-	// scrolling never moves it. Files load asynchronously: loading marks
-	// the in-flight raw paths, bufs caches prepared buffers, and failed
-	// records read failures, all keyed by the raw path bytes — never by
-	// an escaped display form.
+	// scrolling never moves it. Files load asynchronously: loading
+	// records the in-flight request's identity per raw path — minted
+	// from loadSeq, at most one per path — so a completion updates
+	// only the request it answers (Issue #25); bufs caches prepared
+	// buffers for the session, and failed records read failures, all
+	// keyed by the raw path bytes — never by an escaped display form.
 	// vps is the saved vertical viewport per file keyed by raw path:
 	// scrolling writes through to it, and a destination reveal that
 	// moves the viewport replaces it (Issue #14), so a file revisited
@@ -175,7 +186,8 @@ type model struct {
 	// wrap is the session's wrap mode (Issue #16): on initially,
 	// toggled by w between wrapped rows and run-off-edge clipping.
 	idx            *searchindex.Index
-	loading        map[string]bool
+	loading        map[string]int
+	loadSeq        int
 	bufs           map[string]*filebuffer.Buffer
 	failed         map[string]bool
 	vps            map[string]viewport.Viewport
@@ -217,7 +229,7 @@ func newModel(cfg Config, opts options, child Child) *model {
 		opts:           opts,
 		child:          child,
 		state:          stateSearching,
-		loading:        map[string]bool{},
+		loading:        map[string]int{},
 		bufs:           map[string]*filebuffer.Buffer{},
 		failed:         map[string]bool{},
 		vps:            map[string]viewport.Viewport{},
@@ -347,6 +359,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.collectDiags(splitDiagnostic([]byte(msg.text))...)
 	case fileLoadedMsg:
 		key := string(msg.path)
+		if req, ok := m.loading[key]; !ok || req != msg.req {
+			// Not a live request's answer — an unrequested, stale, or
+			// already-settled completion: discard it without touching
+			// the cache, the failure record, or the diagnostics.
+			return m, nil
+		}
 		delete(m.loading, key)
 		if msg.err != nil {
 			m.failed[key] = true

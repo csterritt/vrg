@@ -268,3 +268,14 @@ Usage
  Input tokens: 124363 tokens
  Output tokens: 49545 tokens
  Cached input tokens: 8120832 tokens
+
+----
+Task 025-async-load-isolation.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 112 messages
+ Input tokens: 122991 tokens
+ Output tokens: 37291 tokens
+ Cached input tokens: 9191936 tokens

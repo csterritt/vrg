@@ -47,9 +47,10 @@ func TestReplayCollectsEveryDiagInOrder(t *testing.T) {
 	}
 
 	// Two diagnostics that never reach the display: load failures
-	// collected without an overlay.
-	m.Update(fileLoadedMsg{path: []byte("./b.go"), err: errors.New("b broke")})
-	m.Update(fileLoadedMsg{path: []byte("./c.go"), err: errors.New("c broke")})
+	// collected without an overlay. Each failure answers an in-flight
+	// request — minted here as a visit would have minted it.
+	m.Update(fileLoadedMsg{path: []byte("./b.go"), req: mintRequest(m, []byte("./b.go")), err: errors.New("b broke")})
+	m.Update(fileLoadedMsg{path: []byte("./c.go"), req: mintRequest(m, []byte("./c.go")), err: errors.New("c broke")})
 	m.Update(keyEsc) // dismiss the overlay; the collection is unaffected
 	if v := viewText(m); strings.Contains(v, "broke") {
 		t.Fatalf("view = %q — a never-displayed diagnostic leaked into the frame", v)
@@ -223,6 +224,7 @@ func TestReplayEscapesEmbeddedFilename(t *testing.T) {
 	m := newTestModel(fakeChild{res: Result{Code: 0}}, options{})
 	m.Update(fileLoadedMsg{
 		path: []byte("bad\nname\x1b.txt"),
+		req:  mintRequest(m, []byte("bad\nname\x1b.txt")),
 		err:  errors.New("no such file or directory"),
 	})
 	want := `cannot read bad\nname^[.txt: no such file or directory`
