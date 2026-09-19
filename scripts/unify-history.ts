@@ -12,6 +12,12 @@ const REMOTE_PATH_PREFIX = "export PATH=/home/linuxbrew/.linuxbrew/bin:$PATH";
 const JJ_TEMPLATE =
   'change_id.short() ++ "\\t" ++ if(empty, "EMPTY", "nonempty") ++ "\\t" ++ description.trim() ++ "\\n"';
 const DRY_RUN = Bun.argv.includes("--dry-run");
+const BRANCH = Bun.argv.slice(2).find((arg) => !arg.startsWith("--"));
+
+if (!BRANCH) {
+  console.error("Usage: bun scripts/unify-history.ts <local-branch> [--dry-run]");
+  process.exit(1);
+}
 
 interface CommitEntry {
   changeId: string;
@@ -58,7 +64,15 @@ function parseJjLog(output: string): CommitEntry[] {
 }
 
 async function getLocalCommits(): Promise<CommitEntry[]> {
-  const output = await run("jj", ["log", "--no-graph", "--reversed", "-T", JJ_TEMPLATE]);
+  const output = await run("jj", [
+    "log",
+    "--no-graph",
+    "--reversed",
+    "-r",
+    `::${BRANCH}`,
+    "-T",
+    JJ_TEMPLATE,
+  ]);
   return parseJjLog(output);
 }
 
@@ -73,19 +87,20 @@ async function printDryRunPlan(): Promise<void> {
   const localCommits = await getLocalCommits();
   const remoteCommits = await getRemoteCommits();
   const localDescriptions = new Set(localCommits.map((c) => c.description));
-  log(`Local: ${localCommits.length} commits, remote: ${remoteCommits.length} commits.`);
+  log(`Local branch '${BRANCH}': ${localCommits.length} commits, remote: ${remoteCommits.length} commits.`);
   const missing = remoteCommits.filter((c) => !localDescriptions.has(c.description));
   if (missing.length === 0) {
-    log("All remote descriptions are present locally. Nothing to do.");
+    log("All remote descriptions are present on the local branch. Nothing to do.");
     return;
   }
-  log(`Would apply ${missing.length} remote commit(s):`);
+  log(`Would apply ${missing.length} remote commit(s) to '${BRANCH}':`);
   for (const commit of missing) {
     log(`${commit.changeId}: ${commit.description}`);
     log(`  ssh ${REMOTE_HOST} '${REMOTE_PATH_PREFIX} && cd ${REMOTE_DIR} && jj edit ${commit.changeId}'`);
+    // log(`  jj new ${BRANCH}`);
     log("  bash scripts/pull-up-new.sh");
     log(`  jj describe -m "${commit.description}"`);
-    log("  jj new");
+    log(`  jj bookmark set ${BRANCH} -r @`);
   }
 }
 
@@ -99,14 +114,14 @@ async function main(): Promise<void> {
     const localCommits = await getLocalCommits();
     const remoteCommits = await getRemoteCommits();
     const localDescriptions = new Set(localCommits.map((c) => c.description));
-    log(`Local: ${localCommits.length} commits, remote: ${remoteCommits.length} commits.`);
+    log(`Local branch '${BRANCH}': ${localCommits.length} commits, remote: ${remoteCommits.length} commits.`);
 
     // remoteCommits is oldest-first (reversed); find the first whose description
-    // is not yet present on the local machine.
+    // is not yet present on the local branch.
     const target = remoteCommits.find((c) => !localDescriptions.has(c.description));
 
     if (!target) {
-      log("All remote descriptions are present locally. Done.");
+      log(`All remote descriptions are present on '${BRANCH}'. Done.`);
       return;
     }
 
@@ -118,14 +133,17 @@ async function main(): Promise<void> {
       `${REMOTE_PATH_PREFIX} && cd ${REMOTE_DIR} && jj edit ${target.changeId}`,
     ]);
 
+    log(`Running: jj new ${BRANCH}`);
+    await run("jj", ["new", BRANCH]);
+
     log("Running: scripts/pull-up-new.sh");
     await runInteractive("bash", ["scripts/pull-up-new.sh"]);
 
     log(`Running: jj describe -m "${target.description}"`);
     await run("jj", ["describe", "-m", target.description]);
 
-    log("Running: jj new");
-    await run("jj", ["new"]);
+    log(`Running: jj bookmark set ${BRANCH} -r @`);
+    await run("jj", ["bookmark", "set", BRANCH, "-r", "@"]);
 
     log("Iteration complete.");
   }
