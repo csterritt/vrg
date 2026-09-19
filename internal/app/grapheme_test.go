@@ -40,7 +40,7 @@ func TestClipBlanksNeverPaintMatchCells(t *testing.T) {
 	// At offset 0 the right-edge clip of line 1's 文 already renders
 	// its one in-window cell as an unstyled blank — then the current
 	// line's right star (the match is entirely hidden right).
-	row1 := frameRow(t, m, 1)[listW:]
+	row1 := frameRow(t, m, 1)[listW+1:]
 	if !strings.Contains(row1, strings.Repeat("x", 39)+" ") ||
 		!strings.Contains(row1, "\x1b[30;47m*\x1b[37;40;24m") {
 		t.Fatalf("right-edge clip row = %q, want an unstyled blank cell then the star", row1)
@@ -58,12 +58,12 @@ func TestClipBlanksNeverPaintMatchCells(t *testing.T) {
 	// Line 2's clip blank sits unstyled inside the x run: the match
 	// is entirely hidden left, so the gutter stars but no cell is
 	// inverse.
-	if row := frameRow(t, m, 2)[listW:]; !strings.Contains(row, " "+strings.Repeat("x", 39)) {
+	if row := frameRow(t, m, 2)[listW+1:]; !strings.Contains(row, " "+strings.Repeat("x", 39)) {
 		t.Fatalf("left-edge clip row = %q, want an unstyled clip blank then the x run", row)
 	}
 	// Line 3's tab expansion contributes five clip blanks, all
 	// unstyled — a split cluster's clipped portion never styles.
-	if row := frameRow(t, m, 3)[listW:]; !strings.Contains(row, "     "+strings.Repeat("x", 35)) {
+	if row := frameRow(t, m, 3)[listW+1:]; !strings.Contains(row, "     "+strings.Repeat("x", 35)) {
 		t.Fatalf("tab-expansion clip row = %q, want five unstyled clip blanks then the x run", row)
 	}
 }
@@ -90,7 +90,7 @@ func TestWrapBoundaryBlankIsNotAMatchCell(t *testing.T) {
 
 	// Row 1 ends at the wrap boundary: the x run plus one filler
 	// blank — no inverse style at all on the row.
-	row1 := frameRow(t, m, 1)[listW:]
+	row1 := frameRow(t, m, 1)[listW+1:]
 	if !strings.Contains(row1, strings.Repeat("x", 40)+" ") {
 		t.Fatalf("wrap row 1 = %q, want the x run then an unstyled filler blank", row1)
 	}

@@ -464,7 +464,7 @@ func TestAnchorSurvivesGutterGrowth(t *testing.T) {
 		t.Fatalf("gutter = %d, want 7 for a five-digit file", buf.GutterWidth())
 	}
 	mintRequest(m, idx.Files[0].Path)
-	injectLoad(t, m, fileLoadedMsg{path: idx.Files[0].Path, buf: buf})
+	injectLoad(t, m, fileLoadedMsg{path: idx.Files[0].Path, buf: buf, reload: true})
 
 	if got := m.listWidth(); got != 9 {
 		t.Fatalf("list width = %d after the gutter grew, want 9", got)

@@ -75,7 +75,10 @@ func frameWidthFor(m *model, path string, tw int) int {
 // frameWidthForG is frameWidthFor with the gutter given explicitly —
 // for sizing a frame before the file's buffer exists. Text width
 // grows monotonically with frame width under the Issue #24 formula,
-// so the first hit is the tightest frame reaching tw.
+// so the first hit is the tightest frame reaching tw. The one-cell
+// separator between the list and the panel is subtracted too (Issue
+// #38): text width is terminal − list − separator − gutter −
+// reserved indicator.
 func frameWidthForG(m *model, gutter, tw int) int {
 	ind := viewport.ReservedIndicator(m.wrap)
 	for w := tw + gutter + ind; ; w++ {
@@ -83,7 +86,7 @@ func frameWidthForG(m *model, gutter, tw int) int {
 		if !m.listVisible {
 			lw = 0
 		}
-		if w-lw-gutter-ind == tw {
+		if w-lw-1-gutter-ind == tw {
 			return w
 		}
 	}

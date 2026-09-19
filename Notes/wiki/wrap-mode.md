@@ -84,7 +84,8 @@ layout the key describes:
 - `model.revs` is the per-path content revision: it bumps on every
   successful `fileLoadedMsg`, so a reload's row model never aliases the
   old content's.
-- `textWidth(gutter)` = frame width − file-list width − gutter −
+- `textWidth(gutter)` = frame width − file-list width − the one-cell
+  list/panel separator ([Issue #38](panel-text-width.md)) − gutter −
   `ReservedIndicator(wrap)`; all wrapping, clipping, and reveal math
   uses it.
 - Issue #17 replaced the synchronous `rebuildRows` with

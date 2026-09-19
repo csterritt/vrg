@@ -280,7 +280,7 @@ func TestUnreadableComposedViewAtConstrainedWidths(t *testing.T) {
 				t.Fatalf("width %d: row %d is %d cells — overflow: %q", w, r, cw, frameRow(t, m, r))
 			}
 		}
-		if m.listWidth() < 0 || w-m.listWidth() < 0 {
+		if m.listWidth() < 0 || w-m.listWidth()-1 < 0 {
 			t.Fatalf("width %d: negative layout dimension: list %d", w, m.listWidth())
 		}
 	}

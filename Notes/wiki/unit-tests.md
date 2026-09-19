@@ -1360,6 +1360,47 @@ sizes and messages and capture the issued commands:
   permanently (absent after recovery) while a live instance reappears
   on growth; the box never renders on the too-small screen.
 
+`reveal_horizontal_test.go` (same package; Issue #38) drives the
+panel-derived text-width contracts through `Update`/`View`. The
+`textWidthFor` helper mirrors the production chain — terminal width
+minus `listWidthFor(gutter)`, the one-cell separator, the gutter,
+and `ReservedIndicator(wrap)` — so a regression that omits the
+list, separator, gutter, or indicator term fails the dependent
+assertions:
+
+- `TestPanelDerivedTextWidth` — the installed layout key's
+  `TextWidth` equals the panel-derived width under a visible list.
+- `TestSameFileRevealUsesPanelDerivedTextWidth` — a same-file `n`
+  step reveals to `off = start + w − textWidth` at the
+  panel-derived width.
+- `TestListHiddenHorizontalReveal` — hiding the list re-keys the
+  layout at the wider width (separator still subtracted) and the
+  reveal follows it.
+- `TestWrapModeZeroReservedIndicator` — the wrap-mode key reserves
+  no indicator column; toggling to run-off-edge narrows the text
+  width by exactly one cell.
+- `TestResizeRemeasuresTextWidth` — a terminal resize re-keys the
+  layout at the new width and the reveal uses it.
+- `TestCacheHitRevealUsesInstalledTextWidth` — a navigation landing
+  on a file whose installed layout still matches the live key
+  issues no redundant request and reveals at the installed
+  `TextWidth`.
+- `TestComposedViewRowsFitTerminal` — no composed row exceeds the
+  terminal width, the separator cell at column `listW` is blank,
+  the last text-area cell holds content, and the reserved `*` lands
+  at `width − 1` on a hidden-right-match row while staying blank on
+  an ordinary row.
+
+The width-sensitive suites were re-based on the corrected geometry:
+`layout_test.go`'s `frameWidthForG` solves for the frame width as
+`tw + lw + 1 + gutter + ind` (which also re-derives every
+`frameWidthFor`-sized loadreveal expectation); the wrap, panning,
+indicator, grapheme, and hreveal suites slice panel rows starting
+at `listW + 1` (one cell past the separator) rather than `listW`;
+and `filelist_test.go`'s `TestAnchorSurvivesGutterGrowth` marks its
+injected completion `reload: true` so it exercises the
+anchor-preserving reload path rather than the destination reveal.
+
 ## internal/viewport
 
 `viewport_test.go` (external package `viewport_test`; Issue #12):

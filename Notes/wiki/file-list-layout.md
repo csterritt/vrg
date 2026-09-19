@@ -46,9 +46,10 @@ final clamp returns 0 rather than a negative width.
 `listWidth()` supplies the current file's gutter via
 `gutterWidth()` — the installed row model's, else the cached
 buffer's, else 3 — so the list always matches the gutter a rendered
-frame would show. `textWidth(gutter)` subtracts list, gutter, and
-reserved widths from the terminal width and clamps to zero, so no
-dimension ever goes negative.
+frame would show. `textWidth(gutter)` subtracts list, separator
+(since [Issue #38](panel-text-width.md)), gutter, and reserved
+widths from the terminal width and clamps to zero, so no dimension
+ever goes negative.
 
 `m.listWBase` holds the longest sanitized path width, computed once
 at `searchDoneMsg` from `escapePath` output — frame rendering never
@@ -168,4 +169,6 @@ tests, since `…`'s three bytes occupy one cell. Existing
 width-sensitive tests moved to `m.listWidth()` and `frameWidthForG`
 (gutter-explicit frame sizing under the new formula), and the
 panning/indicator/grapheme/wrap suites slice panel rows by cells
-rather than bytes.
+rather than bytes — since
+[Issue #38](panel-text-width.md) starting at `listW + 1`, one cell
+past the rendered separator.

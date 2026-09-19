@@ -328,7 +328,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   file change — the pop-up starts at selection while the destination
   may still be loading, and load completion never restarts it. Issue
   #16 makes the file panel wrap-aware: `listWidth`/`textWidth` compute
-  the text band (panel − list − gutter − `ReservedIndicator`),
+  the text band (panel − list − separator − gutter −
+  `ReservedIndicator`),
   `prepareRows`/`rebuildRows` build and swap the keyed
   `viewport.Rows` models, `rowSource.At` now returns a `viewport.Row`,
   `contentCell` blanks continuation gutters and pads the reserved
@@ -418,7 +419,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   encoding <name>` diagnostic. Issue #33 makes `requestLayout` return
   nil while the too-small gate is up — no ordinary layout is prepared
   at pathological dimensions; the resize lifting the gate re-requests
-  at the final size. See
+  at the final size. Issue #38 derives the text band from the actual
+  content panel: `browseView` sets `panelW` to
+  `width − listW − 1`, always writes the one-cell separator between
+  the list cell and `contentCell` (a dead column while the list is
+  hidden), and `textWidth` subtracts the separator along with the
+  list, gutter, and reserved indicator so the layout key's
+  `TextWidth` — the width every wrap, clip, pan, and reveal measures
+  against — matches the painted panel. See
   [browse-tracer.md](browse-tracer.md), [theme.md](theme.md),
   [stderr-replay.md](stderr-replay.md),
   [read-failures.md](read-failures.md),
@@ -437,8 +445,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [zero-width-markers.md](zero-width-markers.md),
   [file-list-layout.md](file-list-layout.md),
   [async-load-isolation.md](async-load-isolation.md),
-  [unsupported-encodings.md](unsupported-encodings.md), and
-  [terminal-too-small.md](terminal-too-small.md).
+  [unsupported-encodings.md](unsupported-encodings.md),
+  [terminal-too-small.md](terminal-too-small.md), and
+  [panel-text-width.md](panel-text-width.md).
 - `internal/app/doc.go` — package comment.
 
 ## internal/filebuffer, internal/viewport, internal/theme, internal/safepresentation

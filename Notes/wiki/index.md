@@ -294,6 +294,14 @@ Catalog of all wiki pages for the vrg project.
   guarantees (fatal overlay never empty at exit 2; visible overlay
   plus stderr replay at exit 0), mixed-recoverability totals, and the
   component's slot in the universal order
+- [panel-text-width.md](panel-text-width.md) — Issue #38: the
+  terminal → panel → text width chain (panel =
+  `width − listWidth − 1`, text = panel − gutter − reserved
+  indicator), the one-cell separator column rendered even while the
+  list is hidden, the layout key's `TextWidth` as the single width
+  every wrap/clip/pan/reveal/indicator measures against, and the
+  install paths (load, resize, wrap toggle, list hide/show,
+  navigation) that re-key it
 
 ## Catalogs
 

@@ -50,7 +50,7 @@ func TestSameFileNavTriggersHorizontalReveal(t *testing.T) {
 		t.Fatalf("n to the far match: off = %d, want 261", got)
 	}
 	want := "2_ " + strings.Repeat("b", textW-1) + "t" + " "
-	if row := dropCells(frameRow(t, m, 2), listW); row != want {
+	if row := dropCells(frameRow(t, m, 2), listW+1); row != want {
 		t.Fatalf("far-match row = %q, want the match start at the right edge: %q", row, want)
 	}
 
@@ -61,7 +61,7 @@ func TestSameFileNavTriggersHorizontalReveal(t *testing.T) {
 		t.Fatalf("n to a visible match moved off to %d, want 261", got)
 	}
 	want = "3_ " + strings.Repeat("c", 9) + "tre" + strings.Repeat(" ", textW-12) + " "
-	if row := dropCells(frameRow(t, m, 3), listW); row != want {
+	if row := dropCells(frameRow(t, m, 3), listW+1); row != want {
 		t.Fatalf("visible-match row = %q, want %q", row, want)
 	}
 
@@ -72,7 +72,7 @@ func TestSameFileNavTriggersHorizontalReveal(t *testing.T) {
 		t.Fatalf("n wrapping to the near match: off = %d, want 5", got)
 	}
 	want = "1_ " + "one" + strings.Repeat(" ", textW-3) + " "
-	if row := dropCells(frameRow(t, m, 1), listW); row != want {
+	if row := dropCells(frameRow(t, m, 1), listW+1); row != want {
 		t.Fatalf("near-match row = %q, want %q", row, want)
 	}
 }
@@ -104,7 +104,7 @@ func TestStartupRevealAppliesHorizontalReveal(t *testing.T) {
 		t.Fatalf("startup reveal: off = %d, want 261 = 300 + 1 − 40", got)
 	}
 	want := "1_ " + strings.Repeat("b", textW-1) + "t" + " "
-	if row := dropCells(frameRow(t, m, 1), m.listWidth()); row != want {
+	if row := dropCells(frameRow(t, m, 1), m.listWidth()+1); row != want {
 		t.Fatalf("startup row = %q, want the match start at the right edge: %q", row, want)
 	}
 }
@@ -179,7 +179,7 @@ func TestHorizontalRevealPaintsWideClusterAtRightEdge(t *testing.T) {
 		t.Fatalf("off = %d, want 260 = 298 + 2 − 40", got)
 	}
 	want := "1_ " + strings.Repeat("x", 38) + "文" + " "
-	if row := dropCells(frameRow(t, m, 1), m.listWidth()); row != want {
+	if row := dropCells(frameRow(t, m, 1), m.listWidth()+1); row != want {
 		t.Fatalf("row = %q, want both cells of 文 at the right edge: %q", row, want)
 	}
 }
@@ -208,7 +208,7 @@ func TestHorizontalRevealClippedBlankCountsHidden(t *testing.T) {
 		t.Fatalf("off = %d, want 1 = 39 + 2 − 40", got)
 	}
 	want := "1_ " + strings.Repeat("x", 38) + "文" + " "
-	if row := dropCells(frameRow(t, m, 1), m.listWidth()); row != want {
+	if row := dropCells(frameRow(t, m, 1), m.listWidth()+1); row != want {
 		t.Fatalf("row = %q, want the fully painted 文 at the right edge: %q", row, want)
 	}
 }
@@ -256,7 +256,7 @@ func TestHorizontalRevealUnpaintableClusterFallback(t *testing.T) {
 	// cell — so the current line earns the reserved-column '*', and
 	// the a–b cells hidden left show '_'.
 	want := "1_ " + strings.Repeat(" ", 5) + "*"
-	if row := dropCells(frameRow(t, m, 1), m.listWidth()); row != want {
+	if row := dropCells(frameRow(t, m, 1), m.listWidth()+1); row != want {
 		t.Fatalf("row = %q, want the tab window all blank: %q", row, want)
 	}
 

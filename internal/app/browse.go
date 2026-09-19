@@ -219,12 +219,14 @@ func (m *model) gutterWidth() int {
 // textWidth is a buffer's file-panel text width: the panel width minus
 // the line-number gutter and the reserved right-indicator column —
 // zero while wrapping, one in run-off-edge mode where Issue #20's
-// right-edge star draws. The list width is computed for that buffer's
-// own gutter so a key minted for any path is self-consistent. All
-// wrapping, clipping, and reveal math uses this width, and the clamp
-// keeps pathological dimensions nonnegative.
+// right-edge star draws. The panel width is the terminal width minus
+// the list width minus the one-cell separator between them (Issue
+// #38), and the list width is computed for that buffer's own gutter
+// so a key minted for any path is self-consistent. All wrapping,
+// clipping, and reveal math uses this width, and the clamp keeps
+// pathological dimensions nonnegative.
 func (m *model) textWidth(gutter int) int {
-	w := m.width - m.listWidthFor(gutter) - gutter - viewport.ReservedIndicator(m.wrap)
+	w := m.width - m.listWidthFor(gutter) - 1 - gutter - viewport.ReservedIndicator(m.wrap)
 	if w < 0 {
 		return 0
 	}
@@ -528,7 +530,9 @@ func (m *model) browseView() string {
 	}
 	files := m.idx.Files
 	listW := m.listWidth()
-	panelW := w - listW
+	// The panel sits one separator cell right of the list (Issue
+	// #38): panel width is terminal − list − 1.
+	panelW := w - listW - 1
 
 	// The list scrolls to keep the current entry visible; it shares the
 	// h-1 rows below the filename rule with the file panel.
@@ -572,6 +576,10 @@ func (m *model) browseView() string {
 		if listW > 0 {
 			sb.WriteString(m.listCell(listTop+r-1, listW))
 		}
+		// The one-cell separator between the list and the panel is
+		// always present (Issue #38) — a blank column while the list
+		// is hidden too.
+		sb.WriteByte(' ')
 		if panelW > 0 {
 			sb.WriteString(m.contentCell(r-1, panelW, top, off, rows, placeholder, curLine))
 		}

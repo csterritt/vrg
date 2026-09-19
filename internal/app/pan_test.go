@@ -91,7 +91,7 @@ func TestPanKeysShiftText(t *testing.T) {
 		if got := m.vps[key].Off(); got != step.off {
 			t.Fatalf("%s: off = %d, want %d", step.name, got, step.off)
 		}
-		if row := dropCells(frameRow(t, m, 1), listW); row != want(step.off) {
+		if row := dropCells(frameRow(t, m, 1), listW+1); row != want(step.off) {
 			t.Fatalf("%s: row = %q, want %q", step.name, row, want(step.off))
 		}
 	}
@@ -178,7 +178,7 @@ func TestPanOffsetSurvivesWrapToggle(t *testing.T) {
 	}
 	listW := m.listWidth()
 	textW := flatTextW(t, m, 3)
-	if row := dropCells(frameRow(t, m, 1), listW); row != "1* "+line[20:20+textW]+" " {
+	if row := dropCells(frameRow(t, m, 1), listW+1); row != "1* "+line[20:20+textW]+" " {
 		t.Fatalf("row after w w = %q, want the text from cell 20", row)
 	}
 }
@@ -214,7 +214,7 @@ func TestPanResetsOnFileChange(t *testing.T) {
 	if got := m.vps[keyB].Off(); got != 0 {
 		t.Fatalf("file B off = %d on arrival, want 0", got)
 	}
-	if row := dropCells(frameRow(t, m, 1), m.listWidth()); !strings.HasPrefix(row, "1  B-head ") {
+	if row := dropCells(frameRow(t, m, 1), m.listWidth()+1); !strings.HasPrefix(row, "1  B-head ") {
 		t.Fatalf("file B row = %q, want it from the left edge", row)
 	}
 
@@ -224,7 +224,7 @@ func TestPanResetsOnFileChange(t *testing.T) {
 	if got := m.vps[keyA].Off(); got != 0 {
 		t.Fatalf("revisited file A off = %d, want the reset 0", got)
 	}
-	if row := dropCells(frameRow(t, m, 1), m.listWidth()); !strings.HasPrefix(row, "1  A-head ") {
+	if row := dropCells(frameRow(t, m, 1), m.listWidth()+1); !strings.HasPrefix(row, "1  A-head ") {
 		t.Fatalf("file A row = %q, want it from the left edge", row)
 	}
 }
@@ -255,7 +255,7 @@ func TestPanClippedClusterRendersBlank(t *testing.T) {
 		t.Fatalf("off = %d, want 3", got)
 	}
 	want := "1*  " + strings.Repeat("c", textW-1) + " "
-	if row := dropCells(frameRow(t, m, 1), m.listWidth()); row != want {
+	if row := dropCells(frameRow(t, m, 1), m.listWidth()+1); row != want {
 		t.Fatalf("row = %q, want a blank cell where 文's second half was clipped, then c's: %q", row, want)
 	}
 	if row := frameRow(t, m, 1); strings.Contains(row, "文") {
@@ -290,7 +290,7 @@ func TestPanMaximumPaintsFinalCluster(t *testing.T) {
 	// The final cluster paints both its cells: the row starts with the
 	// whole 文, then blanks — no split glyph, no blank-only text area.
 	want := "1* " + "文" + strings.Repeat(" ", textW-2) + " "
-	if row := dropCells(frameRow(t, m, 1), m.listWidth()); row != want {
+	if row := dropCells(frameRow(t, m, 1), m.listWidth()+1); row != want {
 		t.Fatalf("row at the maximum = %q, want the fully painted 文 then blanks: %q", row, want)
 	}
 	before := viewText(m)
@@ -338,7 +338,7 @@ func TestScrollReclampsOffsetLeftwards(t *testing.T) {
 	if got := m.vps[key].Off(); got != 2 {
 		t.Fatalf("off after scrolling back = %d, want the clamped 2", got)
 	}
-	if row := dropCells(frameRow(t, m, 1), m.listWidth()); row != " 1* "+line[2:2+textW]+" " {
+	if row := dropCells(frameRow(t, m, 1), m.listWidth()+1); row != " 1* "+line[2:2+textW]+" " {
 		t.Fatalf("row after returning = %q, want the long line from cell 2", row)
 	}
 }

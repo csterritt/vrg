@@ -25,7 +25,7 @@ func TestWrapOnByDefaultBlankContinuationGutters(t *testing.T) {
 	finishLoad(t, m, cmd)
 
 	listW := m.listWidth()
-	textW := 80 - listW - 3 // panel minus the one-digit gutter
+	textW := 80 - listW - 1 - 3 // panel minus the separator and the one-digit gutter
 	if textW >= 200 {
 		t.Fatalf("fixture line must exceed the text width %d", textW)
 	}
@@ -41,7 +41,7 @@ func TestWrapOnByDefaultBlankContinuationGutters(t *testing.T) {
 	}
 	// Row 2 continues the same line: a blank gutter the gutter's width,
 	// then the next band aligned with the first row's text column.
-	if row := frameRow(t, m, 2); clipCells(row, listW+3+textW) != strings.Repeat(" ", listW+3)+strings.Repeat("x", textW) {
+	if row := frameRow(t, m, 2); clipCells(row, listW+1+3+textW) != strings.Repeat(" ", listW+1+3)+strings.Repeat("x", textW) {
 		t.Fatalf("continuation row = %q, want a %d-cell blank gutter then text", row, 3)
 	}
 }
@@ -75,8 +75,8 @@ func TestWTogglesWrapMode(t *testing.T) {
 	}
 	// The clipped row shows the first text-width cells and leaves the
 	// reserved rightmost indicator column blank.
-	textW := 80 - listW - 3 - 1
-	if row := frameRow(t, m, 1); dropCells(row, listW) != "1  "+strings.Repeat("x", textW)+" " {
+	textW := 80 - listW - 1 - 3 - 1
+	if row := frameRow(t, m, 1); dropCells(row, listW+1) != "1  "+strings.Repeat("x", textW)+" " {
 		t.Fatalf("run-off-edge row = %q, want %d clipped cells then a blank reserved column", row, textW)
 	}
 	// The next row is the second line immediately — no spillover.
@@ -113,7 +113,7 @@ func TestRevealMatchDeepInWrappedLine(t *testing.T) {
 
 	key := string(idx.Files[1].Path)
 	listW := m.listWidth()
-	textW := 80 - listW - 4 // b.txt has 31 lines → two-digit gutter + 2
+	textW := 80 - listW - 1 - 4 // separator + two-digit gutter + 2
 	targetRow := 2000 / textW
 	wantTop := targetRow - contentRows24/3
 	if wantTop <= 0 {
@@ -163,7 +163,7 @@ func TestResizeRebuildsRowModel(t *testing.T) {
 	_, rc := m.Update(tea.WindowSizeMsg{Width: 70, Height: 24})
 	deliverLayout(t, m, rc)
 	listW := m.listWidth()
-	textW := 70 - listW - 3
+	textW := 70 - listW - 1 - 3
 	if textW < 1 || textW >= 200 {
 		t.Skipf("fixture path leaves a degenerate text width %d", textW)
 	}

@@ -129,6 +129,9 @@ The frame is exactly `height` rows:
   width; the current entry is underlined and the list scrolls to keep
   it visible. Issue #24 owns the real formula (40% cap, minimum text
   width, `…` left-truncation) and the hide/show keys.
+- A **one-cell separator** — a literal blank column — sits between
+  the list and the panel, always present even while the list is
+  hidden ([Issue #38](panel-text-width.md)).
 - The **file panel** shows a right-justified line-number gutter
   (`GutterWidth` digits + two spaces) followed by escaped content cells
   clipped to the text width without splitting a grapheme; matched cell

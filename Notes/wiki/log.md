@@ -1444,3 +1444,53 @@ index. Sources:
 `Notes/PRD-vrg.md` (Result index, records, and stream integrity;
 Resources and responsiveness), `internal/app/outcome.go`,
 `internal/app/outcome_test.go`.
+
+## [2026-09-18] ingest | Issue #38 panel-derived viewport text width — the separator cell and the width chain
+
+Ingested Issue #38
+([issue](../issues/038-viewport-content-panel-width.md),
+[task](../tasks/038-viewport-content-panel-width.md)).
+`internal/app/browse.go` now derives the panel's text band from the
+actual content panel instead of a raw terminal-derived width:
+`browseView` computes `panelW` as `width − listW − 1` and renders a
+literal one-cell separator between the list cell and `contentCell`
+on every row — a dead blank column while the list is hidden — and
+`textWidth(gutter)` subtracts the separator along with the list,
+gutter, and `ReservedIndicator` widths. Because `textWidth` is the
+only producer of the layout key's `TextWidth`, every width-sensitive
+behavior — wrap row counts, run-off-edge clipping, pan extents and
+units, the minimal horizontal reveal, and the hidden-content
+indicators' painted-cell visibility — measures against the width the
+panel really paints, and the keyed install path (a completion
+installs only while its key still equals the live `layoutKey`)
+makes list hide/show, resize, wrap toggle, and gutter-growing loads
+re-prepare at the corrected width with logical-anchor preservation.
+New coverage in `internal/app/reveal_horizontal_test.go` (same
+package): the `textWidthFor` helper mirrors the production chain,
+`TestPanelDerivedTextWidth` pins the installed key's `TextWidth`,
+the same-file/hidden-list/wrap/resize/cache-hit reveal tests drive
+`off = start + w − textWidth` through each re-keying path, and
+`TestComposedViewRowsFitTerminal` asserts the composed row's
+cell-level bounds — blank separator at column `listW`, content in
+the last text-area cell, the reserved `*` at `width − 1`. The
+pre-existing panning, reveal, indicator, grapheme, wrap, and layout
+suites were re-based on the corrected geometry:
+`frameWidthForG` solves frame width as `tw + lw + 1 + gutter + ind`
+and every panel-row slice starts at `listW + 1`;
+`filelist_test.go`'s `TestAnchorSurvivesGutterGrowth` marks its
+injected completion `reload: true` so it exercises the
+anchor-preserving reload path rather than the destination reveal.
+Created [panel-text-width](panel-text-width.md); updated
+[file-list-layout](file-list-layout.md),
+[browse-tracer](browse-tracer.md), [wrap-mode](wrap-mode.md),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/038-viewport-content-panel-width.md`,
+`Notes/tasks/038-viewport-content-panel-width.md`,
+`internal/app/browse.go`,
+`internal/app/reveal_horizontal_test.go`,
+`internal/app/layout_test.go`, `internal/app/wrap_test.go`,
+`internal/app/hreveal_test.go`, `internal/app/indicators_test.go`,
+`internal/app/pan_test.go`, `internal/app/grapheme_test.go`,
+`internal/app/encoding_test.go`, `internal/app/readfail_test.go`,
+`internal/app/filelist_test.go`.
