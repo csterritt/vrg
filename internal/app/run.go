@@ -55,7 +55,9 @@ type Env struct {
 // ordinary, cancelled, or a controlled application failure — terminates
 // and reaps a still-running child after the program has restored the
 // terminal, and only then replays the session's collected diagnostics
-// to stderr.
+// to stderr. A returned final model that is absent or the wrong type is
+// itself a controlled application failure: the replay names the
+// condition and the exit is 2 rather than a silent zero.
 func Run(argv []string, env Env) int {
 	stderr := env.Stderr
 	if stderr == nil {
@@ -89,25 +91,34 @@ func Run(argv []string, env Env) int {
 	proc.Terminate()
 	_ = proc.Wait()
 
-	// Replay boundary: a controlled failure's diagnostic enters the
-	// session collection here rather than through a separate direct
-	// write, then the single post-restoration writer emits every
-	// collected diagnostic to stderr exactly once, in collection order.
-	if err != nil && !errors.Is(err, tea.ErrInterrupted) {
-		m.diags.add("vrg: " + safepresentation.EscapePath([]byte(err.Error())))
+	// Replay boundary, one ordered sequence for every Run() return
+	// shape: the session diagnostics the shared collection retained —
+	// m.diags survives independently of the final-model assertion — then
+	// a diagnostic naming an absent or wrong-type final model, then the
+	// runtime error. Both post-run diagnostics enter the same collection
+	// rather than a separate direct write, so the single
+	// post-restoration writer emits each exactly once, in order. An
+	// interrupted run is an ordinary cancellation: no failure
+	// diagnostics apply.
+	interrupted := errors.Is(err, tea.ErrInterrupted)
+	fm, usable := final.(Model)
+	if !interrupted {
+		if !usable {
+			m.diags.add("vrg: program ended without a usable final model")
+		}
+		if err != nil {
+			m.diags.add("vrg: " + safepresentation.EscapePath([]byte(err.Error())))
+		}
 	}
 	m.diags.replay(stderr)
 
 	switch {
-	case errors.Is(err, tea.ErrInterrupted):
+	case interrupted:
 		return 130
-	case err != nil:
+	case err != nil || !usable:
 		return 2
 	}
-	if fm, ok := final.(Model); ok {
-		return fm.status
-	}
-	return 0
+	return fm.status
 }
 
 // runProgram drives the Bubble Tea program for the model. With the
@@ -143,9 +154,12 @@ func runProgram(m Model, env Env) (tea.Model, error) {
 		return r.model, r.err
 	case <-env.Fail:
 		prog.Kill()
-		<-out // Run must have fully returned — and restored the terminal —
-		// before the failure is reported.
-		return nil, controlledFailure(env.FailDiagnostic)
+		// Run must have fully returned — and restored the terminal —
+		// before the failure is reported. Its last model is a real
+		// Model, so the shutdown sequence does not mistake a killed run
+		// for an absent final model.
+		r := <-out
+		return r.model, controlledFailure(env.FailDiagnostic)
 	}
 }
 

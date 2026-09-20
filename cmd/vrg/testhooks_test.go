@@ -190,8 +190,9 @@ func TestTaggedRunnerInjectsErrorOverValidModel(t *testing.T) {
 
 // A nil or wrong-type final model replaces the real one at the return
 // site: with the error left nil, the run's exit reflects the injected
-// model, not the real model's status-2 — today the dropped status
-// yields 0. Issue 46 redefines the invalid-model outcome; the seam
+// model, not the real model's status-2 — Issue 46 makes the unusable
+// model itself a controlled failure (exit 2 with a diagnostic; the
+// ordered-replay contract lives in runerror_test.go). The seam
 // assertion is that the injected tuple, not the real model, reaches
 // the post-Run() branch.
 func TestTaggedRunnerInjectsFinalModel(t *testing.T) {
@@ -202,8 +203,8 @@ func TestTaggedRunnerInjectsFinalModel(t *testing.T) {
 		wantCode int
 	}{
 		{"valid final model keeps the real status", "valid", 2},
-		{"nil final model", "nil", 0},
-		{"invalid final model", "invalid", 0},
+		{"nil final model", "nil", 2},
+		{"invalid final model", "invalid", 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()

@@ -441,8 +441,9 @@ func TestLateCompletionAfterCancelDiscarded(t *testing.T) {
 }
 
 // A controlled application failure after the child started terminates
-// and reaps it, writes a sanitized diagnostic to stderr exactly once,
-// and exits 2.
+// and reaps it and exits 2; a nil final model alongside the error adds
+// the invalid-final-model diagnostic ahead of the sanitized failure
+// line, each written exactly once.
 func TestControlledFailureCleansUp(t *testing.T) {
 	child := &fakeChild{
 		stdout:     strings.NewReader(""),
@@ -463,15 +464,76 @@ func TestControlledFailureCleansUp(t *testing.T) {
 	}
 	requireClosed(t, child.terminated, "child termination")
 	requireClosed(t, child.waited, "child reap")
-	diag := strings.TrimSuffix(stderr.String(), "\n")
-	if !strings.HasPrefix(diag, "vrg: ") {
-		t.Fatalf("stderr = %q, want a vrg: diagnostic", stderr.String())
+	want := "vrg: program ended without a usable final model\n" +
+		`vrg: boom ^[[31m\nsecond line` + "\n"
+	if got := stderr.String(); got != want {
+		t.Fatalf("stderr = %q, want %q: invalid-model diagnostic then the failure line", got, want)
 	}
-	if strings.Count(diag, "boom") != 1 || strings.Contains(diag, "\n") {
-		t.Fatalf("diagnostic not written exactly once as a single line: %q", stderr.String())
+	if n := strings.Count(stderr.String(), "boom"); n != 1 {
+		t.Fatalf("failure diagnostic count = %d, want exactly once: %q", n, stderr.String())
 	}
-	if strings.ContainsAny(diag, "\x1b\x9b") || !strings.Contains(diag, "^[") {
+	if strings.ContainsAny(stderr.String(), "\x1b\x9b") {
 		t.Fatalf("diagnostic is not sanitized: %q", stderr.String())
+	}
+}
+
+// otherModel is a valid tea.Model that is not an app Model, so the
+// final-model type assertion fails on it.
+type otherModel struct{}
+
+func (otherModel) Init() tea.Cmd                       { return nil }
+func (otherModel) Update(tea.Msg) (tea.Model, tea.Cmd) { return nil, nil }
+func (otherModel) View() tea.View                      { return tea.View{} }
+
+// Every unusable final-model shape is a controlled application failure:
+// collected diagnostics still replay, a diagnostic names the
+// invalid-final-model condition ahead of any runtime error, and the
+// exit is 2 — never a silent or zero exit.
+func TestUnusableFinalModelExitsTwo(t *testing.T) {
+	runErr := errors.New("boom")
+	for _, tc := range []struct {
+		name  string
+		final tea.Model
+		err   error
+		want  string
+	}{
+		{"nil model, nil error", nil, nil,
+			"vrg: program ended without a usable final model\n"},
+		{"wrong-type model, nil error", otherModel{}, nil,
+			"vrg: program ended without a usable final model\n"},
+		{"nil model with error", nil, runErr,
+			"vrg: program ended without a usable final model\nvrg: boom\n"},
+		{"wrong-type model with error", otherModel{}, runErr,
+			"vrg: program ended without a usable final model\nvrg: boom\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			child := &fakeChild{
+				stdout:     strings.NewReader(""),
+				stderr:     strings.NewReader(""),
+				waited:     make(chan struct{}),
+				terminated: make(chan struct{}),
+			}
+			var stderr bytes.Buffer
+			code := Run([]string{"--json", "--no-config", "--", "foo", "."}, Env{
+				Start:  func(argv []string, workdir string) (Child, error) { return child, nil },
+				Stderr: &stderr,
+				Program: func(m Model) (tea.Model, error) {
+					// A diagnostic collected into the session
+					// collection before the return must replay even
+					// though the returned model is unusable.
+					feedStderr(t, m, "early warn\n")
+					return tc.final, tc.err
+				},
+			})
+			if code != 2 {
+				t.Fatalf("Run exit = %d, want 2", code)
+			}
+			requireClosed(t, child.terminated, "child termination")
+			requireClosed(t, child.waited, "child reap")
+			if got := stderr.String(); got != "early warn\n"+tc.want {
+				t.Fatalf("stderr = %q, want %q", got, "early warn\n"+tc.want)
+			}
+		})
 	}
 }
 
