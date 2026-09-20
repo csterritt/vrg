@@ -78,15 +78,17 @@ type Model struct {
 
 	// Browse state: the raw-path-ordered file list, the matched-line
 	// cursor, per-path prepared buffers keyed by raw path bytes, and the
-	// load bookkeeping that keeps one load in flight per path.
+	// load bookkeeping that keeps one load in flight per path. vps holds
+	// each visited file's saved vertical viewport under the same key, so
+	// a revisited file resumes from its saved top row.
 	files   [][]byte
 	fileIdx map[string]int
 	cursor  int
-	buffers map[string]*filebuffer.Buffer
+	buffers map[string]rowSource
 	loading map[string]bool
 	failed  map[string]bool
 	listTop int
-	vp      viewport.Viewport
+	vps     map[string]*viewport.Viewport
 	theme   theme.Theme
 }
 
@@ -102,9 +104,10 @@ func New(child Child, workdir string) Model {
 		ctx:     ctx,
 		cancel:  cancel,
 		diags:   &diagnostics{},
-		buffers: make(map[string]*filebuffer.Buffer),
+		buffers: make(map[string]rowSource),
 		loading: make(map[string]bool),
 		failed:  make(map[string]bool),
+		vps:     make(map[string]*viewport.Viewport),
 		theme:   theme.Styled(),
 	}
 }
@@ -130,6 +133,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		// Re-clamp every loaded file's saved viewport: a shorter panel
+		// may leave avoidable blank rows below EOF at the old top.
+		for key, buf := range m.buffers {
+			m.viewportFor(key).SetExtent(buf.LineCount(), m.contentHeight())
+		}
 		if m.overlay != nil {
 			if max := m.overlay.maxScroll(m.width, m.height); m.overlay.scroll > max {
 				m.overlay.scroll = max
@@ -193,6 +201,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.buffers[key] = msg.buf
 			delete(m.failed, key)
+			// The prepared row data arrives with the buffer; the file's
+			// saved viewport is clamped to its extent here and on resize.
+			m.viewportFor(key).SetExtent(msg.buf.LineCount(), m.contentHeight())
 		}
 	case tea.KeyPressMsg:
 		if m.state == stateCancelled {
@@ -215,6 +226,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			if m.state == stateBrowse {
 				m.theme = m.theme.Toggle()
+			}
+		case "up", "down", "u", "d", "pgup", "pgdown":
+			if m.state == stateBrowse {
+				m.scrollCurrent(msg.String())
 			}
 		}
 	}
@@ -278,7 +293,7 @@ func stopsForPath(index *searchindex.Index, path []byte) []searchindex.Stop {
 // read error.
 type loadResult struct {
 	path []byte
-	buf  *filebuffer.Buffer
+	buf  rowSource
 	err  error
 }
 
@@ -299,6 +314,72 @@ func loadCmd(ctx context.Context, gate <-chan struct{}, stop searchindex.Stop, s
 		buf, err := filebuffer.Load(resolved, stops)
 		return loadResult{path: path, buf: buf, err: err}
 	}
+}
+
+// scrollCurrent applies a vertical scroll key to the current file's
+// saved viewport. On a "Loading…" or "(unreadable)" placeholder — no
+// loaded buffer — scrolling is a no-op.
+func (m Model) scrollCurrent(key string) {
+	path := m.curKey()
+	if m.buffers[path] == nil {
+		return
+	}
+	vp := m.viewportFor(path)
+	switch key {
+	case "up":
+		vp.Up()
+	case "down":
+		vp.Down()
+	case "u":
+		vp.HalfUp()
+	case "d":
+		vp.HalfDown()
+	case "pgup":
+		vp.PageUp()
+	case "pgdown":
+		vp.PageDown()
+	}
+}
+
+// viewportFor returns the file's saved vertical viewport, creating it
+// on first visit so a later revisit resumes from the saved top row.
+func (m Model) viewportFor(key string) *viewport.Viewport {
+	v := m.vps[key]
+	if v == nil {
+		v = &viewport.Viewport{}
+		m.vps[key] = v
+	}
+	return v
+}
+
+// curKey is the per-file map key of the current stop's raw path, or ""
+// when the index has no stops.
+func (m Model) curKey() string {
+	stops := m.index.Stops()
+	if len(stops) == 0 {
+		return ""
+	}
+	return string(stops[m.cursor].Path)
+}
+
+// termSize returns the terminal dimensions, defaulting to 80x24 before
+// the first WindowSizeMsg arrives.
+func (m Model) termSize() (w, h int) {
+	w, h = m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	return w, h
+}
+
+// contentHeight is the file panel's scrollable height in rendered rows:
+// the panel height minus the filename row.
+func (m Model) contentHeight() int {
+	_, h := m.termSize()
+	return h - 1
 }
 
 // cancelRun terminates the child, releases any gate-held collection,

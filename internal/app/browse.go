@@ -10,17 +10,27 @@ import (
 	"vrg/internal/safepresentation"
 )
 
+// rowSource is the prepared rendered-row provider the file panel
+// renders. While the panel is unwrapped, rendered row i is source line
+// i. Prepared row data is built when a load completes — the Buffer
+// travels inside the load message — so a frame queries the provider for
+// the visible row range only, never scanning the whole buffer.
+type rowSource interface {
+	// LineCount is the rendered row count.
+	LineCount() int
+	// GutterWidth is the line-number gutter width in cells.
+	GutterWidth() int
+	// Cells returns the display cells of rendered row i.
+	Cells(i int) []safepresentation.Cell
+	// Highlights returns the inverse-video spans of rendered row i.
+	Highlights(i int) []filebuffer.Span
+}
+
 // browseScreen composes the two-pane browse view: the raw-path-ordered
 // file list on the left and the current file's panel on the right —
 // filename rule, then guttered content rows or the load placeholder.
 func (m Model) browseScreen() string {
-	w, h := m.width, m.height
-	if w <= 0 {
-		w = 80
-	}
-	if h <= 0 {
-		h = 24
-	}
+	w, h := m.termSize()
 	names := make([]string, len(m.files))
 	for i, f := range m.files {
 		names[i] = safepresentation.EscapePath(f)
@@ -114,8 +124,8 @@ func (m Model) panelRow(r int, curPath []byte, names []string, curIdx, panelW, c
 		return m.theme.FilenameRule(filenameRule(name, panelW))
 	}
 	key := string(curPath)
-	buf := m.buffers[key]
-	if buf == nil {
+	src := m.buffers[key]
+	if src == nil {
 		if r == 1 {
 			text := "Loading…"
 			if m.failed[key] {
@@ -125,17 +135,30 @@ func (m Model) panelRow(r int, curPath []byte, names []string, curIdx, panelW, c
 		}
 		return padCells("", panelW)
 	}
-	m.vp.SetExtent(buf.LineCount(), contentH)
-	lineIdx := m.vp.Top() + r - 1
-	if lineIdx >= buf.LineCount() {
+	// The stored extent is maintained on load and on resize; the painted
+	// top is clamped here as well so a stale extent cannot paint
+	// avoidable blank rows below EOF. View must not mutate the saved
+	// state, so this clamp stays local to the frame.
+	top := 0
+	if vp := m.vps[key]; vp != nil {
+		top = vp.Top()
+	}
+	if max := src.LineCount() - contentH; top > max {
+		top = max
+	}
+	if top < 0 {
+		top = 0
+	}
+	lineIdx := top + r - 1
+	if lineIdx >= src.LineCount() {
 		return padCells("", panelW)
 	}
-	gw := buf.GutterWidth()
+	gw := src.GutterWidth()
 	gutter := fmt.Sprintf("%*d  ", gw-2, lineIdx+1)
 	if gw >= panelW {
 		return padCells(clipCells(gutter, panelW), panelW)
 	}
-	text, painted := m.renderCells(buf.Cells(lineIdx), buf.Highlights(lineIdx), panelW-gw, m.isCurrentLine(lineIdx))
+	text, painted := m.renderCells(src.Cells(lineIdx), src.Highlights(lineIdx), panelW-gw, m.isCurrentLine(lineIdx))
 	return m.theme.Gutter(gutter) + text + strings.Repeat(" ", panelW-gw-painted)
 }
 
