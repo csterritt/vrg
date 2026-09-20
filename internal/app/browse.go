@@ -7,7 +7,7 @@ import (
 	"github.com/clipperhouse/displaywidth"
 
 	"vrg/internal/filebuffer"
-	"vrg/internal/safepresent"
+	"vrg/internal/safepresentation"
 )
 
 // browseScreen composes the two-pane browse view: the raw-path-ordered
@@ -23,7 +23,7 @@ func (m Model) browseScreen() string {
 	}
 	names := make([]string, len(m.files))
 	for i, f := range m.files {
-		names[i] = safepresent.Path(f)
+		names[i] = safepresentation.EscapePath(f)
 	}
 	curIdx := -1
 	var curPath []byte
@@ -137,7 +137,7 @@ func (m Model) panelRow(r int, curPath []byte, names []string, curIdx, panelW, c
 
 // renderCells renders up to w display cells of one source line, painting
 // the highlight spans in inverse video.
-func (m Model) renderCells(cells []safepresent.Cell, spans []filebuffer.Span, w int) string {
+func (m Model) renderCells(cells []safepresentation.Cell, spans []filebuffer.Span, w int) string {
 	n := len(cells)
 	if n > w {
 		n = w

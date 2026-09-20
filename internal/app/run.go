@@ -8,7 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"vrg/internal/cli"
+	"vrg/internal/safepresentation"
 )
 
 // Env supplies Run's external dependencies; the zero value is the
@@ -50,7 +50,7 @@ func Run(argv []string, env Env) int {
 	}
 	workdir, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(stderr, "vrg: cannot determine the working directory: %s\n", cli.Escape(err.Error()))
+		fmt.Fprintf(stderr, "vrg: cannot determine the working directory: %s\n", safepresentation.EscapePath([]byte(err.Error())))
 		return 2
 	}
 	start := env.Start
@@ -59,7 +59,7 @@ func Run(argv []string, env Env) int {
 	}
 	child, err := start(argv, workdir)
 	if err != nil {
-		fmt.Fprintf(stderr, "vrg: cannot start rg: %s\n", cli.Escape(err.Error()))
+		fmt.Fprintf(stderr, "vrg: cannot start rg: %s\n", safepresentation.EscapePath([]byte(err.Error())))
 		return 2
 	}
 
@@ -82,7 +82,7 @@ func Run(argv []string, env Env) int {
 		// The single post-restoration stderr writer: a controlled
 		// application failure is reported here exactly once, after the
 		// terminal is back in its prior state.
-		fmt.Fprintf(stderr, "vrg: %s\n", cli.Escape(err.Error()))
+		fmt.Fprintf(stderr, "vrg: %s\n", safepresentation.EscapePath([]byte(err.Error())))
 		return 2
 	}
 	if fm, ok := final.(Model); ok {

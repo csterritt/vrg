@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"vrg/internal/filebuffer"
-	"vrg/internal/safepresent"
+	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
 )
 
@@ -27,7 +27,7 @@ func stop(line int64, ranges ...searchindex.Range) searchindex.Stop {
 }
 
 // text joins the cells of one display line.
-func text(cells []safepresent.Cell) string {
+func text(cells []safepresentation.Cell) string {
 	var b strings.Builder
 	for _, c := range cells {
 		b.WriteString(c.Text)

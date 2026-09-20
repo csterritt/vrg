@@ -4,7 +4,7 @@ import (
 	"os"
 	"sort"
 
-	"vrg/internal/safepresent"
+	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
 )
 
@@ -19,7 +19,7 @@ type Span struct {
 // the caller's update path does no full-file work — the prepared Buffer
 // travels inside the load-completion message.
 type Buffer struct {
-	lines [][]safepresent.Cell
+	lines [][]safepresentation.Cell
 	spans map[int][]Span
 }
 
@@ -36,7 +36,7 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 	}
 	b := &Buffer{spans: make(map[int][]Span)}
 	for _, line := range splitLines(raw) {
-		b.lines = append(b.lines, safepresent.Content(line))
+		b.lines = append(b.lines, safepresentation.EscapeContent(line))
 	}
 	for _, s := range stops {
 		i := int(s.Line) - 1
@@ -44,7 +44,7 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 			continue
 		}
 		for _, r := range s.Coverage {
-			cs, ce := safepresent.Span(b.lines[i], r.Start, r.End)
+			cs, ce := safepresentation.Span(b.lines[i], r.Start, r.End)
 			if cs < ce {
 				b.spans[i] = append(b.spans[i], Span{Start: cs, End: ce})
 			}
@@ -111,7 +111,7 @@ func (b *Buffer) GutterWidth() int {
 
 // Cells returns the display cells of 0-based source line i, or nil when
 // i is out of range. The slice is owned by the buffer; do not mutate.
-func (b *Buffer) Cells(i int) []safepresent.Cell {
+func (b *Buffer) Cells(i int) []safepresentation.Cell {
 	if i < 0 || i >= len(b.lines) {
 		return nil
 	}

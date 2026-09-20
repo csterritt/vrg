@@ -17,9 +17,10 @@ import (
 	"io/fs"
 	"os"
 	"strings"
-	"unicode/utf8"
 
 	mowcli "github.com/jawher/mow.cli"
+
+	"vrg/internal/safepresentation"
 )
 
 // appName is the fixed executable name used for the mow.cli application so
@@ -177,28 +178,28 @@ func newApp() *mowcli.Cli {
 // caller.
 func Parse(args []string, out io.Writer, env Env) Result {
 	if len(args) == 0 {
-		io.WriteString(out, renderHelp())
+		io.WriteString(out, safepresentation.EscapeDiagnostic(renderHelp()))
 		return Result{Kind: KindHelp}
 	}
 
 	p := scanArgs(args)
 	if p.help {
-		io.WriteString(out, renderHelp())
+		io.WriteString(out, safepresentation.EscapeDiagnostic(renderHelp()))
 		return Result{Kind: KindHelp}
 	}
 	// Scan errors are reported in argv order.
 	if p.badOption != "" && (p.excessU == "" || p.badIndex < p.excessIndex) {
-		return usageErrorf(ErrUnsupportedOption, "unsupported option %s", Escape(p.badOption))
+		return usageErrorf(ErrUnsupportedOption, "unsupported option %s", safepresentation.EscapePath([]byte(p.badOption)))
 	}
 	if p.excessU != "" {
 		return usageErrorf(ErrExcessUnrestricted,
-			"too many unrestricted options at %s: at most two -u/--unrestricted are allowed", Escape(p.excessU))
+			"too many unrestricted options at %s: at most two -u/--unrestricted are allowed", safepresentation.EscapePath([]byte(p.excessU)))
 	}
 	switch {
 	case len(p.positionals) == 0:
 		return usageErrorf(ErrMissingPattern, "missing required argument PATTERN")
 	case len(p.positionals) > 2:
-		return usageErrorf(ErrExcessOperand, "unexpected extra operand %s", Escape(p.positionals[2]))
+		return usageErrorf(ErrExcessOperand, "unexpected extra operand %s", safepresentation.EscapePath([]byte(p.positionals[2])))
 	}
 
 	// The preflight has resolved every help request and rejected every
@@ -230,7 +231,7 @@ func Parse(args []string, out io.Writer, env Env) Result {
 	// or search work.
 	for i, d := range optionDecls {
 		if d.help && values[i] {
-			io.WriteString(out, renderHelp())
+			io.WriteString(out, safepresentation.EscapeDiagnostic(renderHelp()))
 			return Result{Kind: KindHelp}
 		}
 	}
@@ -270,10 +271,10 @@ func checkRoot(stat func(string) (fs.FileInfo, error), root string) (Result, boo
 		if errors.Is(err, fs.ErrNotExist) {
 			reason = "does not exist"
 		}
-		return usageErrorf(ErrInvalidRoot, "invalid root %s: %s", Escape(root), reason), true
+		return usageErrorf(ErrInvalidRoot, "invalid root %s: %s", safepresentation.EscapePath([]byte(root)), reason), true
 	}
 	if !fi.IsDir() && !fi.Mode().IsRegular() {
-		return usageErrorf(ErrInvalidRoot, "invalid root %s: not a directory or regular file", Escape(root)), true
+		return usageErrorf(ErrInvalidRoot, "invalid root %s: not a directory or regular file", safepresentation.EscapePath([]byte(root))), true
 	}
 	return Result{}, false
 }
@@ -436,15 +437,19 @@ func isOptionToken(tok string) bool {
 }
 
 // HelpText returns the generated command-line help — the same text Parse
-// writes to the help writer for KindHelp results. The entry point appends
-// it to usage-error diagnostics on stderr.
+// writes to the help writer for KindHelp results, rendered through the
+// shared safe-presentation utility. The entry point appends it to
+// usage-error diagnostics on stderr.
 func HelpText() string {
-	return renderHelp()
+	return safepresentation.EscapeDiagnostic(renderHelp())
 }
 
-// renderHelp generates the command-line help from the shared declarations.
-// It contains no external substitutions: the application name and every
-// description string are fixed.
+// renderHelp generates the command-line help from the shared
+// declarations. It contains no external substitutions: the application
+// name and every description string are fixed. The raw text still passes
+// through safepresentation.EscapeDiagnostic at emission, so the stdout
+// sink's safety contract does not depend on the declarations staying
+// fixed.
 func renderHelp() string {
 	var b strings.Builder
 	b.WriteString("Usage: " + appName + " [OPTIONS]")
@@ -479,54 +484,6 @@ func renderHelp() string {
 			names += "--" + d.long
 		}
 		b.WriteString("  " + names + "\t" + d.desc + "\n")
-	}
-	return b.String()
-}
-
-// Escape renders external data safe for a single-line diagnostic or stub
-// substitution. Backslashes double; newline, carriage return, and tab
-// become \n, \r, \t; other C0 controls and DEL use caret notation; C1
-// controls use \u escapes; invalid UTF-8 bytes use \xNN. Printable text
-// passes through. This is the minimal Issue 1 escaper; Issue 6 generalizes
-// safe presentation for every sink.
-func Escape(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); {
-		c := s[i]
-		if c < utf8.RuneSelf {
-			switch {
-			case c == '\\':
-				b.WriteString(`\\`)
-			case c == '\n':
-				b.WriteString(`\n`)
-			case c == '\r':
-				b.WriteString(`\r`)
-			case c == '\t':
-				b.WriteString(`\t`)
-			case c < 0x20:
-				b.WriteByte('^')
-				b.WriteByte(c + '@')
-			case c == 0x7f:
-				b.WriteString(`^?`)
-			default:
-				b.WriteByte(c)
-			}
-			i++
-			continue
-		}
-		r, size := utf8.DecodeRuneInString(s[i:])
-		if r == utf8.RuneError && size == 1 {
-			fmt.Fprintf(&b, `\x%02x`, c)
-			i++
-			continue
-		}
-		if r >= 0x80 && r < 0xa0 {
-			fmt.Fprintf(&b, `\u%04x`, r)
-		} else {
-			b.WriteString(s[i : i+size])
-		}
-		i += size
 	}
 	return b.String()
 }
