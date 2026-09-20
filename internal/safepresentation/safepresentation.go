@@ -103,7 +103,7 @@ func EscapeDiagnostic(s string) string {
 			i++
 			continue
 		}
-		r, size := utf8.DecodeRuneInString(s[i:])
+		r, size := decodeRuneInString(s[i:])
 		if r == utf8.RuneError && size == 1 {
 			fmt.Fprintf(&b, `\x%02x`, c)
 			col += 4

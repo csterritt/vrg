@@ -46,7 +46,7 @@ func TestClipBlankCellsNeverCarryMatch(t *testing.T) {
 	m := NewRowModel(RowModelKey{TextWidth: 10}, src)
 
 	// Offset 3 splits 世 at the left edge: one clipping blank then "cd".
-	cells, spans := m.Clip(0, 3, 10)
+	cells, spans, _ := m.Clip(0, 3, 10)
 	if got := cellsText(cells); got != " cd" {
 		t.Fatalf("clip at offset 3 = %q, want %q", got, " cd")
 	}
@@ -55,7 +55,7 @@ func TestClipBlankCellsNeverCarryMatch(t *testing.T) {
 	}
 
 	// Window [1,3) covers b plus 世's first column: a trailing blank.
-	cells, spans = m.Clip(0, 1, 2)
+	cells, spans, _ = m.Clip(0, 1, 2)
 	if got := cellsText(cells); got != "b " {
 		t.Fatalf("clip at offset 1 width 2 = %q, want %q", got, "b ")
 	}

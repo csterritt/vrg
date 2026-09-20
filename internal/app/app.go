@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/clipperhouse/displaywidth"
 
 	"vrg/internal/filebuffer"
 	"vrg/internal/safepresentation"
@@ -493,7 +492,7 @@ func (m Model) enterBrowse() (tea.Model, tea.Cmd) {
 	m.fileIdx = make(map[string]int, len(m.files))
 	for i, f := range m.files {
 		m.fileIdx[string(f)] = i
-		if d := displaywidth.String(safepresentation.EscapePath(f)) + 2; d > m.listWidest {
+		if d := safepresentation.CellWidth(safepresentation.EscapePath(f)) + 2; d > m.listWidest {
 			m.listWidest = d
 		}
 	}
@@ -1004,7 +1003,7 @@ func (m Model) noResultsScreen() string {
 			msg = fmt.Sprintf("%s (%d binary files skipped)", msg, n)
 		}
 	}
-	pad := (w - displaywidth.String(msg)) / 2
+	pad := (w - safepresentation.CellWidth(msg)) / 2
 	if pad < 0 {
 		pad = 0
 	}

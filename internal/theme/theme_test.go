@@ -116,6 +116,39 @@ func TestOverlayBaseColoursSingleLineBorder(t *testing.T) {
 	}
 }
 
+// The overlay's interior sizing is measured in terminal cells on
+// grapheme-cluster boundaries: wide and combining content pads and
+// clips so the borders stay aligned, and a cluster split by the
+// interior edge drops whole rather than drawing a half cell.
+func TestOverlayMeasuresCellsForWideAndCombiningContent(t *testing.T) {
+	th := Plain()
+	want := "┌────┐\n│世界│\n│éx  │\n└────┘"
+	if got := th.Overlay([]string{"世界", "éx"}, 6, 4); got != want {
+		t.Fatalf("Overlay = %q, want %q", got, want)
+	}
+	// The trailing x does not fit; the wide clusters paint whole.
+	want = "┌────┐\n│世界│\n└────┘"
+	if got := th.Overlay([]string{"世界x"}, 6, 3); got != want {
+		t.Fatalf("Overlay = %q, want %q — x clipped, the wide clusters whole", got, want)
+	}
+}
+
+// The overlay measures its content ANSI-aware: embedded escape
+// sequences occupy no cells, borders still align, and a zero-width
+// trailing style reset survives interior truncation instead of being
+// cut away.
+func TestOverlayIgnoresANSIWhenSizing(t *testing.T) {
+	th := Plain()
+	want := "┌────┐\n│\x1b[31mhi\x1b[0m  │\n└────┘"
+	if got := th.Overlay([]string{"\x1b[31mhi\x1b[0m"}, 6, 3); got != want {
+		t.Fatalf("Overlay = %q, want %q — ANSI sequences are zero cells", got, want)
+	}
+	want = "┌──┐\n│\x1b[31mhe\x1b[0m│\n└──┘"
+	if got := th.Overlay([]string{"\x1b[31mhello\x1b[0m"}, 4, 3); got != want {
+		t.Fatalf("Overlay = %q, want %q — the reset survives truncation", got, want)
+	}
+}
+
 // The no-style composition path emits no ANSI styling at all; the
 // overlay keeps its structural border without colour codes.
 func TestPlainEmitsNoANSI(t *testing.T) {

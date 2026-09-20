@@ -3,7 +3,7 @@ package theme
 import (
 	"strings"
 
-	"github.com/clipperhouse/displaywidth"
+	"vrg/internal/safepresentation"
 )
 
 // SGR codes for the two schemes: dark is white on black, light is black
@@ -140,9 +140,9 @@ func (t Theme) Overlay(content []string, w, h int) string {
 		for i := 0; i < h-2; i++ {
 			line := ""
 			if i < len(content) {
-				line = displaywidth.TruncateString(content[i], inner, "")
+				line = safepresentation.TruncateCells(content[i], inner)
 			}
-			if d := displaywidth.String(line); d < inner {
+			if d := safepresentation.CellWidth(line); d < inner {
 				line += strings.Repeat(" ", inner-d)
 			}
 			rows = append(rows, "│"+line+"│")
@@ -150,7 +150,7 @@ func (t Theme) Overlay(content []string, w, h int) string {
 		rows = append(rows, "└"+strings.Repeat("─", inner)+"┘")
 	} else {
 		for i := 0; i < h && i < len(content); i++ {
-			rows = append(rows, displaywidth.TruncateString(content[i], w, ""))
+			rows = append(rows, safepresentation.TruncateCells(content[i], w))
 		}
 	}
 	return t.Base(strings.Join(rows, "\n"))

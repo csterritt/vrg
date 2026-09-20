@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/clipperhouse/displaywidth"
-
 	"vrg/internal/filebuffer"
 	"vrg/internal/safepresentation"
 	"vrg/internal/viewport"
@@ -112,8 +110,8 @@ func (m Model) listRow(fi, curIdx, lw int) string {
 	if fi >= len(m.files) {
 		return strings.Repeat(" ", lw)
 	}
-	name := truncateLeft(m.listItem(fi), lw)
-	pad := lw - displaywidth.String(name)
+	name := safepresentation.TruncateLeftGrapheme(m.listItem(fi), lw)
+	pad := lw - safepresentation.CellWidth(name)
 	if pad < 0 {
 		pad = 0
 	}
@@ -194,9 +192,9 @@ func (m Model) panelRow(r int, curPath []byte, curIdx, panelW, contentH int) str
 	if !src.Key().Wrap {
 		hid = src.Hidden(rowIdx, hoff, tw)
 	}
-	cells, spans := src.Clip(rowIdx, hoff, tw)
+	cells, spans, clusters := src.Clip(rowIdx, hoff, tw)
 	current := m.isCurrentLine(line)
-	text, painted := m.renderCells(cells, spans, tw, current)
+	text, painted := m.renderCells(cells, clusters, spans, tw, current)
 	row := m.gutterFor(first, line, gw, hid) + text
 	if pad := tw - painted; pad > 0 {
 		row += strings.Repeat(" ", pad)
@@ -246,22 +244,22 @@ func (m Model) isCurrentLine(i int) bool {
 	return ok && stop.Line == int64(i)+1
 }
 
-// renderCells renders up to w terminal cells of one rendered row,
+// renderCells renders up to w terminal cells of one clipped row,
 // painting the highlight spans in inverse video — additionally
 // underlined when the line is the current matched line — and reports
-// the painted cell width so the caller can pad the row. Truncation
-// stops before a cell that would overflow the width rather than
-// painting half a wide glyph.
-func (m Model) renderCells(cells []safepresentation.Cell, spans []filebuffer.Span, w int, current bool) (string, int) {
+// the painted cell width so the caller can pad the row. Geometry comes
+// from the row's clusters, not from re-measuring cell text: a cluster
+// that would overflow the width is never painted — never half-drawn —
+// and a cluster's cells always share one styling run.
+func (m Model) renderCells(cells []safepresentation.Cell, clusters []safepresentation.Cluster, spans []filebuffer.Span, w int, current bool) (string, int) {
 	n := 0
 	painted := 0
-	for n < len(cells) {
-		cw := displaywidth.String(cells[n].Text)
-		if painted+cw > w {
+	for _, c := range clusters {
+		if painted+c.Width > w {
 			break
 		}
-		painted += cw
-		n++
+		painted += c.Width
+		n = c.End
 	}
 	if n <= 0 {
 		return "", 0
@@ -314,53 +312,24 @@ func filenameRule(name, note string, w int) string {
 	if note != "" {
 		trailer = " " + note + " "
 	}
-	avail := w - displaywidth.String(prefix) - displaywidth.String(trailer)
+	avail := w - safepresentation.CellWidth(prefix) - safepresentation.CellWidth(trailer)
 	if avail < 2 {
 		return clipCells(prefix+name+trailer, w)
 	}
-	name = truncateLeft(name, avail-2) // a separator space and ≥1 rule cell
-	s := prefix + name + " " + strings.Repeat("─", avail-1-displaywidth.String(name))
+	name = safepresentation.TruncateLeftGrapheme(name, avail-2) // a separator space and ≥1 rule cell
+	s := prefix + name + " " + strings.Repeat("─", avail-1-safepresentation.CellWidth(name))
 	return s + trailer
 }
 
-// truncateLeft keeps the widest suffix of s fitting w cells, marked
-// with a leading ellipsis; unchanged when s already fits. Truncation
-// cuts only at grapheme-cluster boundaries: a kept suffix never opens
-// with a bare combining mark, and a wide glyph is never halved.
-func truncateLeft(s string, w int) string {
-	if w <= 0 {
-		return ""
-	}
-	if displaywidth.String(s) <= w {
-		return s
-	}
-	g := displaywidth.StringGraphemes(s)
-	var clusters []string
-	var widths []int
-	for g.Next() {
-		clusters = append(clusters, g.Value())
-		widths = append(widths, g.Width())
-	}
-	width := 1 // the ellipsis
-	i := len(clusters)
-	for i > 0 && width+widths[i-1] <= w {
-		width += widths[i-1]
-		i--
-	}
-	return "…" + strings.Join(clusters[i:], "")
-}
-
-// clipCells truncates s to w terminal cells.
+// clipCells truncates s to w terminal cells on grapheme-cluster
+// boundaries.
 func clipCells(s string, w int) string {
-	if w <= 0 {
-		return ""
-	}
-	return displaywidth.TruncateString(s, w, "")
+	return safepresentation.TruncateCells(s, w)
 }
 
 // padCells pads s — a plain, unstyled string — out to w terminal cells.
 func padCells(s string, w int) string {
-	if d := displaywidth.String(s); d < w {
+	if d := safepresentation.CellWidth(s); d < w {
 		s += strings.Repeat(" ", w-d)
 	}
 	return s

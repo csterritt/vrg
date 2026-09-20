@@ -2,11 +2,10 @@ package app
 
 import (
 	"strings"
-	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/clipperhouse/displaywidth"
+	"vrg/internal/safepresentation"
 )
 
 // scrollOverlay is the shared wrapped-scrollable modal overlay
@@ -167,10 +166,9 @@ func (m Model) overlayScreen(base string, o *scrollOverlay) string {
 func wrapCells(s string, w int) []string {
 	var rows []string
 	for len(s) > 0 {
-		take := displaywidth.TruncateString(s, w, "")
+		take := safepresentation.TruncateCells(s, w)
 		if take == "" {
-			_, size := utf8.DecodeRuneInString(s)
-			take = s[:size]
+			take = safepresentation.FirstGrapheme(s)
 		}
 		rows = append(rows, take)
 		s = s[len(take):]

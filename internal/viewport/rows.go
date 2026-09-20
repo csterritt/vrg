@@ -46,10 +46,16 @@ type RowModelKey struct {
 
 // row is one rendered row: the half-open display-cell range of one
 // source line it presents. In run-off-edge mode the range is the whole
-// line; in wrap mode it is the clusters that fit the row.
+// line; in wrap mode it is the clusters that fit the row. clusters is
+// the row's cluster layout with cell ranges rebased so the row's first
+// cell is index 0 — the geometry the renderer clips and measures by —
+// so a frame render reads the prepared model and never rescans the
+// source's segmentation. For run-off-edge rows and each line's first
+// wrapped row it aliases the source's own slice; both are read-only.
 type row struct {
 	line       int
 	start, end int
+	clusters   []safepresentation.Cluster
 }
 
 // RowModel is the prepared source-line → rendered-row mapping for one
@@ -99,21 +105,40 @@ func NewRowModel(key RowModelKey, src Source) *RowModel {
 		m.extent = append(m.extent, col)
 		m.fit = append(m.fit, fit)
 		if !key.Wrap || key.TextWidth <= 0 {
-			m.rows = append(m.rows, row{line: i, end: end})
+			m.rows = append(m.rows, row{line: i, end: end, clusters: clusters})
 			continue
 		}
-		start, width := 0, 0
-		for _, c := range clusters {
+		start, width, lo := 0, 0, 0
+		for k, c := range clusters {
 			if width > 0 && width+c.Width > key.TextWidth {
-				m.rows = append(m.rows, row{line: i, start: start, end: c.Start})
-				start, width = c.Start, 0
+				m.rows = append(m.rows, row{line: i, start: start, end: c.Start,
+					clusters: rebaseClusters(clusters[lo:k], start)})
+				start, width, lo = c.Start, 0, k
 			}
 			width += c.Width
 		}
-		m.rows = append(m.rows, row{line: i, start: start, end: end})
+		m.rows = append(m.rows, row{line: i, start: start, end: end,
+			clusters: rebaseClusters(clusters[lo:], start)})
 	}
 	m.first = append(m.first, len(m.rows))
 	return m
+}
+
+// rebaseClusters returns the row's clusters with their cell ranges
+// shifted so the row's first cell is index 0. A start of zero returns
+// the input slice unchanged — the ranges already index the row's
+// cells — and the slice is never mutated.
+func rebaseClusters(clusters []safepresentation.Cluster, start int) []safepresentation.Cluster {
+	if start == 0 {
+		return clusters
+	}
+	out := make([]safepresentation.Cluster, len(clusters))
+	for k, c := range clusters {
+		out[k] = safepresentation.Cluster{
+			Start: c.Start - start, End: c.End - start, Width: c.Width,
+		}
+	}
+	return out
 }
 
 // Key returns the parameters the model was built for.
@@ -172,35 +197,44 @@ func (m *RowModel) maxOffset(top, height int) int {
 	return s
 }
 
-// Clip returns rendered row i's display cells and highlight spans seen
-// through the horizontal window [off, off+w) of source-display
-// columns. Cells of clusters wholly outside the window are dropped; a
-// cluster either window edge splits contributes one blank cell per
-// in-window column instead, so a wide glyph never renders half-drawn.
-// The returned spans are rebased onto the window's cell indexes and
-// never mark a blank. Wrap-mode rows return the row's plain cells and
-// spans: panning is a no-op in wrap mode and each row already holds
-// only what fits.
-func (m *RowModel) Clip(i, off, w int) ([]safepresentation.Cell, []filebuffer.Span) {
-	if m.key.Wrap || off <= 0 {
-		return m.Cells(i), m.Highlights(i)
-	}
+// Clip returns rendered row i's display cells, highlight spans, and
+// cluster layout seen through the horizontal window [off, off+w) of
+// source-display columns. Cells of clusters wholly outside the window
+// are dropped; a cluster either window edge splits contributes one
+// blank cell per in-window column instead, so a wide glyph never
+// renders half-drawn. The returned spans are rebased onto the window's
+// cell indexes and never mark a blank. The returned clusters are the
+// window's cell ranges and column widths — a whole cluster's own
+// measured width, a blanked cluster's in-window column count — so the
+// renderer's width accounting never re-derives geometry from runes.
+// Wrap-mode rows return the row's plain cells, spans, and clusters:
+// panning is a no-op in wrap mode and each row already holds only what
+// fits.
+func (m *RowModel) Clip(i, off, w int) ([]safepresentation.Cell, []filebuffer.Span, []safepresentation.Cluster) {
 	if i < 0 || i >= len(m.rows) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	r := m.rows[i]
+	if m.key.Wrap || off <= 0 {
+		return m.Cells(i), m.Highlights(i), r.clusters
+	}
 	cells := m.src.Cells(r.line)
 	var out []safepresentation.Cell
 	var from []int // each output cell's line cell index; -1 for blanks
+	var clusters []safepresentation.Cluster
 	col, end := 0, off+w
-	for _, c := range m.src.Clusters(r.line) {
+	for _, c := range r.clusters {
 		next := col + c.Width
 		if col < end && next > off {
+			start := len(out)
 			if col >= off && next <= end {
 				for k := c.Start; k < c.End; k++ {
 					out = append(out, cells[k])
 					from = append(from, k)
 				}
+				clusters = append(clusters, safepresentation.Cluster{
+					Start: start, End: len(out), Width: c.Width,
+				})
 			} else {
 				lo, hi := col, next
 				if lo < off {
@@ -213,6 +247,9 @@ func (m *RowModel) Clip(i, off, w int) ([]safepresentation.Cell, []filebuffer.Sp
 					out = append(out, safepresentation.Cell{Text: " "})
 					from = append(from, -1)
 				}
+				clusters = append(clusters, safepresentation.Cluster{
+					Start: start, End: len(out), Width: len(out) - start,
+				})
 			}
 		}
 		if col = next; col >= end {
@@ -240,7 +277,7 @@ func (m *RowModel) Clip(i, off, w int) ([]safepresentation.Cell, []filebuffer.Sp
 		spans = append(spans, filebuffer.Span{Start: j, End: k})
 		j = k
 	}
-	return out, spans
+	return out, spans, clusters
 }
 
 // Highlights returns rendered row i's inverse-video spans in row-local
@@ -295,7 +332,7 @@ func (m *RowModel) Hidden(i, off, w int) Hidden {
 		return h
 	}
 	r := m.rows[i]
-	clusters := m.src.Clusters(r.line)
+	clusters := r.clusters
 	if len(clusters) == 0 {
 		return h
 	}

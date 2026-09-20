@@ -6,8 +6,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/clipperhouse/displaywidth"
-
 	"vrg/internal/safepresentation"
 )
 
@@ -44,8 +42,8 @@ func popupTick(id int) tea.Cmd {
 // timer.
 func (m Model) popupScreen(base string) string {
 	w, h := m.termSize()
-	text := truncateLeft(safepresentation.EscapePath(m.popup.path), w-2)
-	boxW := displaywidth.String(text) + 2
+	text := safepresentation.TruncateLeftGrapheme(safepresentation.EscapePath(m.popup.path), w-2)
+	boxW := safepresentation.CellWidth(text) + 2
 	if boxW > w {
 		boxW = w
 	}

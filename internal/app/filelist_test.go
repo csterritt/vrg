@@ -389,8 +389,8 @@ func TestTruncateLeftGraphemeSafe(t *testing.T) {
 		{"wide glyph fits", "ab日cd", 5, "…日cd"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := truncateLeft(tc.in, tc.w); got != tc.want {
-				t.Fatalf("truncateLeft(%q, %d) = %q, want %q", tc.in, tc.w, got, tc.want)
+			if got := safepresentation.TruncateLeftGrapheme(tc.in, tc.w); got != tc.want {
+				t.Fatalf("TruncateLeftGrapheme(%q, %d) = %q, want %q", tc.in, tc.w, got, tc.want)
 			}
 		})
 	}

@@ -36,7 +36,7 @@ func TestRevealFromRightIsMinimal(t *testing.T) {
 	// At the reveal offset both cells of the wide cluster paint: the
 	// window [22, 32) holds the last eight x's and all of 世.
 	m := layoutOf(t, 10, false, strings.Repeat("x", 30)+"世"+strings.Repeat("x", 20))
-	cells, _ := m.Clip(0, 22, 10)
+	cells, _, _ := m.Clip(0, 22, 10)
 	if got := cellsText(cells); got != "xxxxxxxx世" {
 		t.Fatalf("clip at the reveal offset = %q, want %q fully painted",
 			got, "xxxxxxxx世")
@@ -71,7 +71,7 @@ func TestRevealFromLeftIsMinimal(t *testing.T) {
 	if got := v.Offset(); got != 4 {
 		t.Fatalf("cluster split at the left edge: offset = %d, want its start column 4", got)
 	}
-	cells, _ := m.Clip(0, 4, 10)
+	cells, _, _ := m.Clip(0, 4, 10)
 	if got := cellsText(cells); got != "世xxxxxxxx" {
 		t.Fatalf("clip at the reveal offset = %q, want %q", got, "世xxxxxxxx")
 	}
@@ -112,7 +112,7 @@ func TestRevealClippedBlankCountsAsHidden(t *testing.T) {
 	// column only, rendering one clipping blank at its right edge.
 	line := strings.Repeat("x", 10) + "世" + strings.Repeat("x", 20)
 	m := layoutOf(t, 10, false, line)
-	cells, _ := m.Clip(0, 1, 10)
+	cells, _, _ := m.Clip(0, 1, 10)
 	if got := cellsText(cells); got != strings.Repeat("x", 9)+" " {
 		t.Fatalf("setup clip = %q, want a blank where 世 splits", got)
 	}
@@ -125,7 +125,7 @@ func TestRevealClippedBlankCountsAsHidden(t *testing.T) {
 		t.Fatalf("clipped-blank target: offset = %d, want 2 — "+
 			"the minimum that paints 世 whole", got)
 	}
-	cells, _ = m.Clip(0, 2, 10)
+	cells, _, _ = m.Clip(0, 2, 10)
 	if got := cellsText(cells); got != "xxxxxxxx世" {
 		t.Fatalf("clip after the reveal = %q, want %q", got, "xxxxxxxx世")
 	}
@@ -164,7 +164,7 @@ func TestRevealUnpaintableClusterFallsBackToStartColumn(t *testing.T) {
 	if got := v.Offset(); got != 2 {
 		t.Fatalf("unpaintable cluster: offset = %d, want its start column 2", got)
 	}
-	cells, spans := m.Clip(0, 2, 5)
+	cells, spans, _ := m.Clip(0, 2, 5)
 	if got := cellsText(cells); got != "     " {
 		t.Fatalf("unpaintable cluster renders %q, want five clipping blanks", got)
 	}

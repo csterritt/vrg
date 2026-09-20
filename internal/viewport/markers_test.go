@@ -64,7 +64,7 @@ func TestEndOfLineMarkerExtendsPaintableBoundary(t *testing.T) {
 	if got := v.Offset(); got != 10 {
 		t.Fatalf("offset = %d, want 10 — the marker's start column", got)
 	}
-	cells, spans := m.Clip(0, 10, 10)
+	cells, spans, _ := m.Clip(0, 10, 10)
 	if got := cellsText(cells); got != " " {
 		t.Fatalf("clip at the maximum = %q, want the marker cell alone", got)
 	}
@@ -129,7 +129,7 @@ func TestTerminatorMarkerClipsLikeAnyCell(t *testing.T) {
 			src := bufferOf(t, tc.content, stopAt(1, tc.start, tc.end))
 			m := NewRowModel(RowModelKey{TextWidth: 10}, src)
 
-			cells, spans := m.Clip(0, 3, 10)
+			cells, spans, _ := m.Clip(0, 3, 10)
 			if got := cellsText(cells); got != " " {
 				t.Fatalf("clip [3,13) = %q, want the marker cell at column 3", got)
 			}
@@ -137,7 +137,7 @@ func TestTerminatorMarkerClipsLikeAnyCell(t *testing.T) {
 				t.Fatalf("clip spans = %+v, want [{0 1}]", spans)
 			}
 
-			cells, spans = m.Clip(0, 4, 10)
+			cells, spans, _ = m.Clip(0, 4, 10)
 			if got := cellsText(cells); got != "" {
 				t.Fatalf("clip [4,14) = %q, want nothing — the marker dropped", got)
 			}
@@ -199,7 +199,7 @@ func TestMarkerIsARevealTarget(t *testing.T) {
 	if got := v.Offset(); got != 41 {
 		t.Fatalf("offset = %d, want 41 — marker column 50 plus width 1 minus text width 10", got)
 	}
-	cells, spans := m.Clip(0, 41, 10)
+	cells, spans, _ := m.Clip(0, 41, 10)
 	if got := cellsText(cells); got != "xxxxxxxxx " {
 		t.Fatalf("clip at the reveal offset = %q, want the marker painted at the edge", got)
 	}

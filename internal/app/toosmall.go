@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/clipperhouse/displaywidth"
+	"vrg/internal/safepresentation"
 )
 
 // The fixed terminal minimum: below 20 columns or 3 rows the too-small
@@ -50,7 +50,7 @@ func (m Model) updateTooSmall(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) tooSmallScreen() string {
 	w, h := m.termSize()
 	const msg = "Terminal too small"
-	pad := (w - displaywidth.String(msg)) / 2
+	pad := (w - safepresentation.CellWidth(msg)) / 2
 	if pad < 0 {
 		pad = 0
 	}

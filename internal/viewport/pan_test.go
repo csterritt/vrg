@@ -215,20 +215,20 @@ func TestClipSplitClusterRendersBlanks(t *testing.T) {
 
 	// 世 spans columns 2-3; an offset of 3 clips it — the in-window
 	// cell renders blank, then c and d paint.
-	cells, _ := m.Clip(0, 3, 10)
+	cells, _, _ := m.Clip(0, 3, 10)
 	if got := cellsText(cells); got != " cd" {
 		t.Fatalf("clip at offset 3 = %q, want %q — the split glyph's cell is blank", got, " cd")
 	}
 
 	// The same split at the right edge: the window [1,3) covers b and
 	// the first column of 世 — the half-shown glyph is blank again.
-	cells, _ = m.Clip(0, 1, 2)
+	cells, _, _ = m.Clip(0, 1, 2)
 	if got := cellsText(cells); got != "b " {
 		t.Fatalf("clip at offset 1 width 2 = %q, want %q", got, "b ")
 	}
 
 	// An offset on a cluster boundary clips cleanly: no blanks.
-	cells, _ = m.Clip(0, 2, 10)
+	cells, _, _ = m.Clip(0, 2, 10)
 	if got := cellsText(cells); got != "世cd" {
 		t.Fatalf("clip at offset 2 = %q, want %q", got, "世cd")
 	}
@@ -242,7 +242,7 @@ func TestClipRebasesHighlights(t *testing.T) {
 	src.spans[0] = []filebuffer.Span{{Start: 0, End: 2}, {Start: 3, End: 5}}
 	m := NewRowModel(RowModelKey{TextWidth: 10}, src)
 
-	cells, spans := m.Clip(0, 2, 10)
+	cells, spans, _ := m.Clip(0, 2, 10)
 	if got := cellsText(cells); got != "cdef" {
 		t.Fatalf("clip at offset 2 = %q, want %q", got, "cdef")
 	}
@@ -332,7 +332,7 @@ func TestMaxOffsetStopsAtTrailingCluster(t *testing.T) {
 	}
 	// At the maximum both cells of 世 remain fully painted: no blank,
 	// no half glyph.
-	cells, _ := m.Clip(0, 3, 10)
+	cells, _, _ := m.Clip(0, 3, 10)
 	if got := cellsText(cells); got != "世" {
 		t.Fatalf("clip at the maximum = %q, want %q fully painted", got, "世")
 	}
@@ -423,7 +423,7 @@ func TestUniformLinesMayAllHideTextLeft(t *testing.T) {
 	// Every visible row still paints ten whole cells at the offset:
 	// the widest line keeps its fitting cluster.
 	for i := 0; i < 6; i++ {
-		cells, _ := m.Clip(i, 20, 10)
+		cells, _, _ := m.Clip(i, 20, 10)
 		if got := cellsText(cells); got != strings.Repeat("x", 10) {
 			t.Fatalf("row %d clip = %q, want ten painted cells", i, got)
 		}
