@@ -458,7 +458,7 @@ func TestStaleLoadResultDiscarded(t *testing.T) {
 	if c != nil {
 		t.Fatalf("a stale failure returned a command: %v", c)
 	}
-	if m.failed["a.txt"] {
+	if _, bad := m.failed["a.txt"]; bad {
 		t.Fatal("a stale failure marked a.txt failed")
 	}
 	if m.overlay != nil {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -72,6 +73,18 @@ type outcomeRow struct {
 	wantOverlay bool
 	contains    []string
 	absent      []string
+
+	// failAll injects a load failure for every retained file after the
+	// initial presentation is asserted; failCurrent fails only the
+	// current file's load. The failures are injected completions, not
+	// filesystem state — an unreadable file never changes the status
+	// fixed at the outcome decision. postFailContains is asserted on
+	// the view after the injected failures settle; diagsContain names
+	// lines the session collection — the replay's source — must hold.
+	failAll          bool
+	failCurrent      bool
+	postFailContains []string
+	diagsContain     []string
 
 	// dismiss is the key that dismisses the initial overlay ("q" or
 	// "esc"); dismissQuits marks the fatal no-results overlay whose
@@ -383,6 +396,65 @@ func TestOutcomeMatrix(t *testing.T) {
 			wantState: stateBrowse, wantOverlay: true,
 			final: "ctrl+c", wantStatus: 130,
 		},
+		{
+			// Issue 26: every retained file failing to load touches only
+			// presentation and diagnostics — the fixed status stays 0.
+			name:             "every retained file failing to load still exits 0",
+			records:          valid,
+			wantState:        stateBrowse,
+			contains:         []string{"a.txt"},
+			absent:           []string{"┌"},
+			failAll:          true,
+			postFailContains: []string{"cannot read a.txt: unreadable fixture"},
+			diagsContain:     []string{"cannot read a.txt: unreadable fixture"},
+			dismiss:          "esc", // the failure's overlay, opened on settle
+			postContains:     []string{"a.txt", "(unreadable)"},
+			final:            "q", wantStatus: 0,
+		},
+		{
+			// Issue 26: a current-file read failure appends to the fatal
+			// search's overlay; the fixed status stays 2.
+			name:    "current-file failure under a fixed status 2 stays 2",
+			records: valid, procErr: exitError(2), stderr: "boom\n",
+			wantState: stateBrowse, wantOverlay: true,
+			contains:         []string{"boom", "a.txt"},
+			failCurrent:      true,
+			postFailContains: []string{"boom", "cannot read a.txt: unreadable fixture"},
+			dismiss:          "esc",
+			postContains:     []string{"a.txt", "(unreadable)"},
+			postAbsent:       []string{"boom", "cannot read"},
+			final:            "q", wantStatus: 2,
+		},
+		{
+			// Issue 26: the composed row — usable results with a fatal
+			// process outcome (fixed status 2) where every retained file
+			// then fails to load. The status stays 2, the failures touch
+			// only presentation and the diagnostic collection, and the
+			// already-fixed fatal outcome is never recomputed.
+			name: "fixed status 2 with every retained file failing to load stays 2",
+			records: []string{
+				beginRec("a.txt"),
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+				endRec("a.txt", nil),
+				beginRec("b.txt"),
+				matchRec("b.txt", "hit\n", 1, 0, 3, "hit"),
+				endRec("b.txt", nil),
+				summaryRec(),
+			},
+			procErr: exitError(2), stderr: "boom\n",
+			wantState: stateBrowse, wantOverlay: true,
+			contains:         []string{"boom", "a.txt", "b.txt"},
+			failAll:          true,
+			postFailContains: []string{"boom", "cannot read a.txt: unreadable fixture"},
+			diagsContain: []string{
+				"cannot read a.txt: unreadable fixture",
+				"cannot read b.txt: unreadable fixture",
+			},
+			dismiss:      "esc",
+			postContains: []string{"a.txt", "b.txt", "(unreadable)"},
+			postAbsent:   []string{"boom"},
+			final:        "q", wantStatus: 2,
+		},
 	}
 
 	for _, tc := range cases {
@@ -419,6 +491,40 @@ func TestOutcomeMatrix(t *testing.T) {
 			for _, not := range tc.absent {
 				if strings.Contains(v, not) {
 					t.Fatalf("initial view contains %q:\n%s", not, v)
+				}
+			}
+
+			// Issue 26 rows: inject the load failures — each retained
+			// file's in-flight request completes with an error, files
+			// never asked for first mint one — then assert the post-
+			// failure view and the collected-for-replay diagnostics.
+			if tc.failAll || tc.failCurrent {
+				for _, f := range m.files {
+					key := string(f)
+					if tc.failCurrent && key != m.curKey() {
+						continue
+					}
+					req, ok := m.loading[key]
+					if !ok {
+						var minted int
+						m, minted = beginLoad(m, key)
+						req = minted
+					}
+					m, _ = update(t, m, loadResult{
+						path: f, req: req,
+						err: errors.New("unreadable fixture"),
+					})
+				}
+				v = m.View().Content
+				for _, want := range tc.postFailContains {
+					if !strings.Contains(v, want) {
+						t.Fatalf("post-failure view lacks %q:\n%s", want, v)
+					}
+				}
+				for _, want := range tc.diagsContain {
+					if !slices.Contains(m.diags.snapshot(), want) {
+						t.Fatalf("collected diagnostics lack %q: %q", want, m.diags.snapshot())
+					}
 				}
 			}
 

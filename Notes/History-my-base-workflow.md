@@ -249,3 +249,36 @@ Usage
  Input tokens: 132152 tokens
  Output tokens: 55893 tokens
  Cached input tokens: 3221686 tokens
+
+----
+Task 024-file-list-layout-width-truncation-toggle.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 55 messages
+ Input tokens: 157043 tokens
+ Output tokens: 57746 tokens
+ Cached input tokens: 5943128 tokens
+
+----
+Task 025-async-load-isolation.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 51 messages
+ Input tokens: 141581 tokens
+ Output tokens: 56204 tokens
+ Cached input tokens: 4935159 tokens
+
+----
+Task 026-read-failures-unreadable-retry-rules.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 36 messages
+ Input tokens: 91795 tokens
+ Output tokens: 37737 tokens
+ Cached input tokens: 2749186 tokens

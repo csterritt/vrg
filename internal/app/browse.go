@@ -140,9 +140,14 @@ func (m Model) panelRow(r int, curPath []byte, curIdx, panelW, contentH int) str
 	src := m.buffers[key]
 	if src == nil {
 		if r == 1 {
+			// A load in flight reads "Loading…" even for a previously
+			// failed file: its entry retry is what settles the
+			// placeholder to content or "(unreadable)".
 			text := "Loading…"
-			if m.failed[key] {
-				text = "(unreadable)"
+			if _, flying := m.loading[key]; !flying {
+				if _, bad := m.failed[key]; bad {
+					text = "(unreadable)"
+				}
 			}
 			return padCells(clipCells(text, panelW), panelW)
 		}

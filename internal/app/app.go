@@ -92,23 +92,28 @@ type Model struct {
 	// the load bookkeeping that keeps one load in flight per path:
 	// loading records each path's in-flight request identity — minted
 	// by loadSeq — so a completion can be matched to the request it
-	// answers and a stale or unsolicited one discarded. The
-	// matched-line cursor lives in the index; the current file derives
-	// from it. vps holds each visited file's saved vertical viewport
-	// under the same key, so a revisited file resumes from its saved
-	// position — a width-independent logical anchor inside each
-	// Viewport. wrap is the wrap mode — on by default; w toggles it.
-	// revs counts each path's content revisions for row-model keying.
-	// pendingReveal marks a navigation or entry reveal intent that no
-	// current layout could commit; the next matching layout install
-	// commits it. listWidest is the file list's widest entry in cells,
-	// computed once at browse entry so a frame render never rescans the
-	// list. listVisible is the user's show/hide preference — a computed
-	// zero-width column draws nothing without touching it. itemName,
-	// when non-nil, renders entry i's display name — a test seam
-	// proving the frame queries only the visible window. notes holds
-	// each path's buffer-status note for the filename-row slot; Issues
-	// 26, 29, and 30 populate it.
+	// answers and a stale or unsolicited one discarded. failed holds
+	// each path's latest read-failure diagnostic — the prior-failure
+	// line a re-entry shows in the overlay — and doubles as the
+	// "(unreadable)" placeholder state once no load for the path is in
+	// flight. The matched-line cursor lives in the index; the current
+	// file derives from it. vps holds each visited file's saved
+	// vertical viewport under the same key, so a revisited file resumes
+	// from its saved position — a width-independent logical anchor
+	// inside each Viewport. wrap is the wrap mode — on by default; w
+	// toggles it. revs counts each path's content revisions for
+	// row-model keying. pendingReveal marks a navigation or entry
+	// reveal intent that no current layout could commit; the next
+	// matching layout install commits it. listWidest is the file
+	// list's widest entry in cells, computed once at browse entry so a
+	// frame render never rescans the list. listVisible is the user's
+	// show/hide preference — a computed zero-width column draws
+	// nothing without touching it. itemName, when non-nil, renders
+	// entry i's display name — a test seam proving the frame queries
+	// only the visible window. notes holds each path's buffer-status
+	// note for the filename-row slot; Issues 26, 29, and 30 populate
+	// it. loader is the file-read seam — fileLoader in production, a
+	// test substitute for failing and controlled loads.
 	files         [][]byte
 	fileIdx       map[string]int
 	buffers       map[string]*viewport.RowModel
@@ -116,8 +121,9 @@ type Model struct {
 	revs          map[string]int
 	loading       map[string]int
 	loadSeq       int
-	failed        map[string]bool
+	failed        map[string]string
 	notes         map[string]string
+	loader        loaderFunc
 	listTop       int
 	listWidest    int
 	listVisible   bool
@@ -144,7 +150,8 @@ func New(child Child, workdir string) Model {
 		sources:     make(map[string]viewport.Source),
 		revs:        make(map[string]int),
 		loading:     make(map[string]int),
-		failed:      make(map[string]bool),
+		failed:      make(map[string]string),
+		loader:      fileLoader,
 		notes:       make(map[string]string),
 		vps:         make(map[string]*viewport.Viewport),
 		wrap:        true,
@@ -245,21 +252,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		delete(m.loading, key)
 		if msg.err != nil {
-			m.failed[key] = true
-			delete(m.buffers, key)
-			delete(m.sources, key)
 			line := "cannot read " + safepresentation.EscapePath(msg.path) +
 				": " + safepresentation.EscapePath([]byte(msg.err.Error()))
+			m.failed[key] = line
+			delete(m.buffers, key)
+			delete(m.sources, key)
 			m.diags.add(line)
 			if m.state == stateBrowse && key == m.curKey() {
 				// A current-file failure interrupts with the error
-				// overlay; opening it cancels any pop-up for good.
-				m.popup = nil
-				if m.overlay != nil {
-					m.overlay.lines = append(m.overlay.lines, line)
-				} else {
-					m.overlay = &errOverlay{lines: []string{line}}
-				}
+				// overlay — an open one gains exactly one appended
+				// occurrence without moving the reader — while a
+				// non-current failure stays a diagnostic only.
+				m.showFailure(line)
 			}
 		} else {
 			m.revs[key]++
@@ -396,7 +400,9 @@ func (m Model) enterBrowse() (tea.Model, tea.Cmd) {
 // panel — the departing file's viewport stays saved under its key — and
 // an uncached destination's load is requested while a stale cached one
 // gets a keyed layout request. A file change also opens the file-change
-// pop-up with a fresh instance-keyed timer.
+// pop-up with a fresh instance-keyed timer — except when the
+// destination is a previously failed file, whose re-entry opens the
+// prior-failure overlay and stages its retry instead.
 func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
 	if len(m.index.Stops()) < 2 {
 		// Zero or one stop is a strict no-op: no reveal, pop-up, or retry.
@@ -419,12 +425,36 @@ func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
 	if !mv.FileChanged {
 		return m, nil
 	}
+	if diag, bad := m.failed[string(stop.Path)]; bad {
+		// Re-entering a previously failed file from a different file
+		// shows the prior failure immediately — the overlay, not the
+		// pop-up — while its retry load is staged. When that path's
+		// load is somehow already in flight, the staging request is
+		// dropped per Issue 25's one-load-per-path rule and the
+		// in-flight load's settlement drives the placeholder.
+		m.showFailure(diag)
+		m, stage := m.ensureStaged()
+		return m, stage
+	}
 	// The file-change pop-up starts at selection — never at load
 	// completion — with a fresh instance keying its own expiry timer.
 	m.popupSeq++
 	m.popup = &popup{id: m.popupSeq, path: append([]byte(nil), stop.Path...)}
 	m, stage := m.ensureStaged()
 	return m, tea.Batch(stage, m.popupTimer(m.popup.id))
+}
+
+// showFailure presents one file-read diagnostic on the modal overlay: a
+// closed overlay opens with the line and an open one gains it as an
+// appended occurrence that leaves the reader's scroll position alone.
+// Opening the overlay cancels any pop-up for good.
+func (m *Model) showFailure(line string) {
+	m.popup = nil
+	if m.overlay == nil {
+		m.overlay = &errOverlay{lines: []string{line}}
+		return
+	}
+	m.overlay.append(line)
 }
 
 // revealCurrent applies the destination reveal to the current stop when
@@ -483,7 +513,7 @@ func (m Model) ensureStaged() (Model, tea.Cmd) {
 		}
 		m.loadSeq++
 		m.loading[key] = m.loadSeq
-		return m, loadCmd(m.ctx, m.loadGate, m.loadSeq, stop, stopsForPath(m.index, stop.Path))
+		return m, loadCmd(m.ctx, m.loadGate, m.loader, m.loadSeq, stop, stopsForPath(m.index, stop.Path))
 	}
 	return m, m.prepareLayout()
 }
@@ -511,13 +541,31 @@ type loadResult struct {
 	err  error
 }
 
+// loaderFunc reads and prepares one file for display: the resolved raw
+// path and the file's stops in, the prepared source or the read error
+// out. Model.loader is the injection seam for failing and controlled
+// loads — tests substitute it rather than arranging filesystem
+// permissions.
+type loaderFunc func(resolved []byte, stops []searchindex.Stop) (viewport.Source, error)
+
+// fileLoader is the production loader: filebuffer.Load adapted to the
+// seam's Source result — a nil Buffer is a nil source.
+func fileLoader(resolved []byte, stops []searchindex.Stop) (viewport.Source, error) {
+	buf, err := filebuffer.Load(resolved, stops)
+	var src viewport.Source
+	if buf != nil {
+		src = buf
+	}
+	return src, err
+}
+
 // loadCmd reads and maps a file off the update path. A non-nil gate
 // holds the read and decode/map phase until it closes; ctx cancellation
 // releases a held gate promptly. The completion message carries the
 // request identity and the prepared source so Update does no full-file
 // decoding; the row model is built at install time so it always matches
 // the current text width and wrap mode.
-func loadCmd(ctx context.Context, gate <-chan struct{}, req int, stop searchindex.Stop, stops []searchindex.Stop) tea.Cmd {
+func loadCmd(ctx context.Context, gate <-chan struct{}, loader loaderFunc, req int, stop searchindex.Stop, stops []searchindex.Stop) tea.Cmd {
 	resolved := append([]byte(nil), stop.Resolved...)
 	path := append([]byte(nil), stop.Path...)
 	return func() tea.Msg {
@@ -527,11 +575,7 @@ func loadCmd(ctx context.Context, gate <-chan struct{}, req int, stop searchinde
 			case <-ctx.Done():
 			}
 		}
-		buf, err := filebuffer.Load(resolved, stops)
-		var src viewport.Source
-		if buf != nil {
-			src = buf
-		}
+		src, err := loader(resolved, stops)
 		return loadResult{path: path, req: req, src: src, err: err}
 	}
 }

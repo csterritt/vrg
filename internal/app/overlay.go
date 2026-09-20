@@ -46,6 +46,15 @@ func (m Model) updateOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// append adds one diagnostic occurrence to the overlay without moving
+// the reader: scroll names the first shown wrapped row and a new line
+// extends only the tail of the row set, so the position holds. Issue 26
+// owns this minimal append-preserving-scroll primitive; Issue 32
+// generalizes it to all appended errors.
+func (o *errOverlay) append(line string) {
+	o.lines = append(o.lines, line)
+}
+
 // rows is the overlay's complete scrollable row set: every diagnostic
 // line wrapped at interior width w.
 func (o *errOverlay) rows(w int) []string {
