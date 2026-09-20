@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"vrg/internal/cli"
 )
@@ -24,7 +25,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case cli.KindSearch:
 		// Interim stub proving the end-to-end slice; later issues replace
 		// it with the search and the TUI.
-		fmt.Fprintf(stdout, "search stub: pattern=%s root=%s\n", cli.Escape(res.Pattern), cli.Escape(res.Root))
+		esc := make([]string, len(res.Args))
+		for i, a := range res.Args {
+			esc[i] = cli.Escape(a)
+		}
+		fmt.Fprintf(stdout, "search stub: rg %s\n", strings.Join(esc, " "))
 		return 0
 	default:
 		fmt.Fprintln(stderr, res.Diagnostic)

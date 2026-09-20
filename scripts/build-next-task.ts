@@ -16,7 +16,7 @@ const MODEL_LABEL = "SWE-2";
 const MIN_FINISH_MARKER_BYTES = 10;
 const RETRY_DELAYS_MS = [30_000, 60_000, 120_000, 300_000, 600_000];
 const PREFIX_RE = /^(\d{3})/;
-const FINISH_MARKER_RE = /Notes\/finish-markers\/(\d{3})-(\d+)\/code-finish-marker/g;
+const FINISH_MARKER_RE = /Notes\/finish-markers\/(\d{3})-(\d+)\/finish-marker.md/g;
 const DRY_RUN = process.argv.includes("--dry-run");
 
 interface Task {
@@ -84,7 +84,6 @@ async function tasks(): Promise<Task[]> {
     const finish_marker = join(
       FINISH_MARKERS_DIR,
       `${finishMarkerMatch[1]}-${finishMarkerMatch[2]}`,
-      "code-finish-marker",
       "finish-marker.md",
     );
     result.push({ file, prefix: match[1], stepCount, finish_marker });
@@ -229,7 +228,7 @@ async function main(): Promise<void> {
     }
     const relativeFinish_marker = task.finish_marker.slice(ROOT.length + 1);
     log(`Next task: Notes/tasks/${task.file}`);
-    log(`Expected finish-marker: ${relativeFinish_marker} (${task.stepCount} steps, over 1 KiB)`);
+    log(`Expected finish-marker: ${relativeFinish_marker} (${task.stepCount} steps, over 10 B)`);
     if (DRY_RUN) {
       log(`[dry-run] would run Devin with model ${DEVIN_MODEL} and retry delays of 30s, 1m, 2m, 5m, and 10m.`);
       log(`[dry-run] would describe as: Task Notes/tasks/${task.file} implemented by ${MODEL_LABEL}`);

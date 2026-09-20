@@ -16,7 +16,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -57,6 +56,9 @@ const (
 	// ErrUnsupportedOption means a pre-terminator dash token is not a
 	// supported option spelling.
 	ErrUnsupportedOption
+	// ErrExcessUnrestricted means the cumulative -u/--unrestricted count
+	// across all spellings exceeded the limit of two.
+	ErrExcessUnrestricted
 	// ErrInvalidRoot means the root operand is not an existing directory
 	// or regular file.
 	ErrInvalidRoot
@@ -67,10 +69,14 @@ const (
 // statuses.
 type Result struct {
 	Kind Kind
-	// Pattern and Root are set only for KindSearch. Root is the validated
-	// operand, "." when omitted.
+	// Pattern, Root, and Args are set only for KindSearch. Root is the
+	// validated operand, "." when omitted. Args is the exact protected
+	// argument vector for the rg child, excluding the program name:
+	// "--json", "--no-config", the user's flags in encounter order with
+	// the supplied spellings preserved, "--", pattern, root.
 	Pattern string
 	Root    string
+	Args    []string
 	// ErrorKind and Diagnostic are set only for KindUsageError. Diagnostic
 	// is a sanitized single line without a trailing newline.
 	ErrorKind  ErrorKind
@@ -87,13 +93,15 @@ type Env struct {
 
 // optionDecl describes one command-line option. optionDecls is the single
 // declaration source for mow.cli configuration, raw-token recognition in
-// the preflight scan, and generated help; Issue 2 extends it with the
-// allow-listed search flags.
+// the preflight scan, and generated help.
 type optionDecl struct {
 	short byte   // short option letter, as in -h; 0 for long-only
 	long  string // long option name, as in --help; "" for short-only
 	help  bool   // local help option: its spellings are help requests
-	desc  string
+	// unrestricted marks the options whose occurrences count toward the
+	// cumulative limit of two; only -u/--unrestricted carries it.
+	unrestricted bool
+	desc         string
 }
 
 // argDecl describes one positional argument for the parser spec and
@@ -107,6 +115,17 @@ type argDecl struct {
 
 var optionDecls = []optionDecl{
 	{short: 'h', long: "help", help: true, desc: "Show command-line help and exit."},
+	{short: 'i', long: "ignore-case", desc: "Search case-insensitively."},
+	{short: 'S', long: "smart-case", desc: "Search case-insensitively unless the pattern contains uppercase."},
+	{short: 's', long: "case-sensitive", desc: "Search case-sensitively."},
+	{short: 'w', long: "word-regexp", desc: "Match the pattern against whole words only."},
+	{short: 'x', long: "line-regexp", desc: "Match the pattern against whole lines only."},
+	{short: 'F', long: "fixed-strings", desc: "Treat the pattern as a literal string."},
+	{long: "hidden", desc: "Search hidden files and directories."},
+	{long: "no-hidden", desc: "Do not search hidden files and directories."},
+	{long: "no-ignore", desc: "Do not respect ignore files."},
+	{short: 'u', long: "unrestricted", unrestricted: true, desc: "Reduce ignore restrictions; may be given at most twice."},
+	{short: 'L', long: "follow", desc: "Follow symbolic links while searching."},
 }
 
 var argDecls = []argDecl{
@@ -167,8 +186,13 @@ func Parse(args []string, out io.Writer, env Env) Result {
 		io.WriteString(out, renderHelp())
 		return Result{Kind: KindHelp}
 	}
-	if p.badOption != "" {
+	// Scan errors are reported in argv order.
+	if p.badOption != "" && (p.excessU == "" || p.badIndex < p.excessIndex) {
 		return usageErrorf(ErrUnsupportedOption, "unsupported option %s", Escape(p.badOption))
+	}
+	if p.excessU != "" {
+		return usageErrorf(ErrExcessUnrestricted,
+			"too many unrestricted options at %s: at most two -u/--unrestricted are allowed", Escape(p.excessU))
 	}
 	switch {
 	case len(p.positionals) == 0:
@@ -179,15 +203,16 @@ func Parse(args []string, out io.Writer, env Env) Result {
 
 	// The preflight has resolved every help request and rejected every
 	// token the library could fail on, so Run can neither emit nor error;
-	// only the declared syntax work remains for it.
-	var helpOpt bool
+	// only the declared syntax work remains for it. The parsed values are
+	// not used for forwarding: encounter order and cumulative counts come
+	// solely from the ordered scan records, which the library cannot
+	// preserve.
 	var pattern, root string
+	values := make([]bool, len(optionDecls))
 	app := newApp()
 	app.Spec = spec()
-	for _, d := range optionDecls {
-		// Issue 1 declares only the local help option; Issue 2 adds the
-		// search flags here from the same table.
-		app.BoolOptPtr(&helpOpt, d.name(), false, d.desc)
+	for i, d := range optionDecls {
+		app.BoolOptPtr(&values[i], d.name(), false, d.desc)
 	}
 	app.StringArgPtr(&pattern, "PATTERN", "", argDecls[0].desc)
 	app.StringArgPtr(&root, "ROOT", argDecls[1].defaultVal, argDecls[1].desc)
@@ -198,12 +223,16 @@ func Parse(args []string, out io.Writer, env Env) Result {
 		// grammar; never surface the library's own message.
 		return usageErrorf(ErrUnsupportedOption, "invalid arguments")
 	}
-	// A local help value set through a successful parse (an assignment
-	// spelling such as --help=true) yields the same help-only result,
-	// before root validation or any search work.
-	if helpOpt {
-		io.WriteString(out, renderHelp())
-		return Result{Kind: KindHelp}
+	// Defensive seam: every spelling the library could use to set a help
+	// value is already a help request or a rejected assignment in the
+	// preflight, so this cannot fire while the two stay aligned. If it
+	// ever did, the help-only result still wins before root validation
+	// or search work.
+	for i, d := range optionDecls {
+		if d.help && values[i] {
+			io.WriteString(out, renderHelp())
+			return Result{Kind: KindHelp}
+		}
 	}
 
 	stat := env.Stat
@@ -213,7 +242,19 @@ func Parse(args []string, out io.Writer, env Env) Result {
 	if res, bad := checkRoot(stat, root); bad {
 		return res
 	}
-	return Result{Kind: KindSearch, Pattern: pattern, Root: root}
+	return Result{Kind: KindSearch, Pattern: pattern, Root: root, Args: childArgs(p.flags, pattern, root)}
+}
+
+// childArgs builds the protected rg argument vector from the ordered scan
+// records: the mandatory internal flags, then each user-supplied flag in
+// encounter order, then the operands behind the -- terminator.
+func childArgs(flags []scanFlag, pattern, root string) []string {
+	args := make([]string, 0, len(flags)+5)
+	args = append(args, "--json", "--no-config")
+	for _, f := range flags {
+		args = append(args, f.arg)
+	}
+	return append(args, "--", pattern, root)
 }
 
 // checkRoot validates the parsed root operand: an existing directory or
@@ -247,19 +288,37 @@ func usageErrorf(kind ErrorKind, format string, args ...any) Result {
 
 // preflight is the product of the single ordered raw-token scan over argv.
 type preflight struct {
-	help        bool     // a help request appeared before the first --
-	badOption   string   // first unsupported option token, "" if none
-	positionals []string // positional operands in order
+	help      bool   // a help request appeared before the first --
+	badOption string // first unsupported option token, "" if none
+	badIndex  int    // argv index of badOption
+	// excessU is the first token carrying a third unrestricted occurrence,
+	// "" if the cumulative count stayed within the limit of two.
+	excessU     string
+	excessIndex int        // argv index of excessU
+	flags       []scanFlag // accepted search flags in encounter order
+	positionals []string   // positional operands in order
+}
+
+// scanFlag records one accepted search-flag occurrence: arg is the exact
+// child argv element preserving the supplied spelling, decl identifies the
+// option for cumulative counting.
+type scanFlag struct {
+	arg  string
+	decl *optionDecl
 }
 
 // scanArgs scans argv left to right, stopping option recognition at the
 // first "--" (later tokens are all positional, including -h, --help, and
 // another --). A help request wins over every other classification and
-// ends the scan. Issue 2 extends this same scan to record accepted
-// search-flag spellings in encounter order.
+// ends the scan. Every other pre-terminator dash token is classified
+// against the shared declarations: accepted spellings are recorded in
+// encounter order, combined shorts expand left to right, "=" assignment
+// forms are rejected outright, and unrestricted occurrences accumulate
+// toward their limit.
 func scanArgs(args []string) (p preflight) {
 	positional := false
-	for _, tok := range args {
+	unrestricted := 0
+	for i, tok := range args {
 		switch {
 		case positional:
 			p.positionals = append(p.positionals, tok)
@@ -268,15 +327,71 @@ func scanArgs(args []string) (p preflight) {
 		case isHelpToken(tok):
 			p.help = true
 			return p
-		case isOptionToken(tok):
-			if !isSupportedOption(tok) && p.badOption == "" {
-				p.badOption = tok
-			}
-		default:
+		case !isOptionToken(tok):
 			p.positionals = append(p.positionals, tok)
+		default:
+			flags, ok := expandOptionToken(tok)
+			if !ok {
+				if p.badOption == "" {
+					p.badOption, p.badIndex = tok, i
+				}
+				continue
+			}
+			for _, f := range flags {
+				if f.decl.unrestricted {
+					unrestricted++
+					if unrestricted > 2 && p.excessU == "" {
+						p.excessU, p.excessIndex = tok, i
+					}
+				}
+				p.flags = append(p.flags, f)
+			}
 		}
 	}
 	return p
+}
+
+// expandOptionToken classifies a pre-terminator option token — not "-",
+// "--", or a help request — into the ordered flag records it contributes.
+// ok is false when the token is not an exact spelling of a declared
+// no-argument option: unknown names, undeclared letters in a combined
+// token, and every "=" assignment form all reject the whole token.
+func expandOptionToken(tok string) (flags []scanFlag, ok bool) {
+	if strings.HasPrefix(tok, "--") {
+		for i := range optionDecls {
+			if d := &optionDecls[i]; !d.help && d.long != "" && tok == "--"+d.long {
+				return []scanFlag{{arg: tok, decl: d}}, true
+			}
+		}
+		return nil, false
+	}
+	if len(tok) == 2 {
+		if d := shortDecl(tok[1]); d != nil {
+			return []scanFlag{{arg: tok, decl: d}}, true
+		}
+		return nil, false
+	}
+	// A combined short token expands left to right; each letter becomes
+	// its own child argv element with the short spelling.
+	for i := 1; i < len(tok); i++ {
+		d := shortDecl(tok[i])
+		if d == nil {
+			return nil, false
+		}
+		flags = append(flags, scanFlag{arg: "-" + string(tok[i]), decl: d})
+	}
+	return flags, true
+}
+
+// shortDecl returns the declaration for a non-help option's short letter,
+// or nil when no declared search flag uses it.
+func shortDecl(c byte) *optionDecl {
+	for i := range optionDecls {
+		if d := &optionDecls[i]; !d.help && d.short == c {
+			return d
+		}
+	}
+	return nil
 }
 
 // isHelpToken reports whether tok is a local help request: a literal
@@ -318,33 +433,6 @@ func isHelpToken(tok string) bool {
 // token other than the lone "-" (a positional) or the "--" terminator.
 func isOptionToken(tok string) bool {
 	return strings.HasPrefix(tok, "-") && tok != "-" && tok != "--"
-}
-
-// isSupportedOption reports whether tok is an accepted spelling of a
-// declared option. Literal -h/--help never reach this check (they are help
-// requests); what remains supported is a boolean assignment to a declared
-// boolean option, which mow.cli accepts and parses.
-func isSupportedOption(tok string) bool {
-	for _, d := range optionDecls {
-		if d.short != 0 && validBoolAssignment(tok, "-"+string(d.short)) {
-			return true
-		}
-		if d.long != "" && validBoolAssignment(tok, "--"+d.long) {
-			return true
-		}
-	}
-	return false
-}
-
-// validBoolAssignment reports whether tok is exactly name=<bool literal>,
-// matching what the library accepts for a declared boolean option.
-func validBoolAssignment(tok, name string) bool {
-	rest, ok := strings.CutPrefix(tok, name+"=")
-	if !ok {
-		return false
-	}
-	_, err := strconv.ParseBool(rest)
-	return err == nil
 }
 
 // HelpText returns the generated command-line help — the same text Parse

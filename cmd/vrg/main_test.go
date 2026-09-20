@@ -148,6 +148,11 @@ func TestGeneratedHelpStdout(t *testing.T) {
 		{"foo", "bar", "baz", "--help"},
 		{"-i", "--help"},
 		{"-ih"},
+		{"-iw", "--help"},
+		{"-i", "foo", "-h"},
+		{"foo", ".", "--help"},
+		{"-uuu", "--help"},
+		{"--ignore-case=false", "--help"},
 		{"--unsupported", "--help"},
 		{"foo", "/nonexistent", "--help"},
 	}
@@ -280,15 +285,24 @@ func TestExecutableBoundary(t *testing.T) {
 	}
 
 	res := runVrg(t, "foo")
-	if !strings.Contains(res.stdout, `root="."`) && !strings.Contains(res.stdout, "root=.") {
-		t.Fatalf("default root missing from stub output: %q", res.stdout)
+	if res.stdout != "search stub: rg --json --no-config -- foo .\n" {
+		t.Fatalf("default-root stub output = %q, want the exact child argv", res.stdout)
 	}
 
 	errorCases := [][]string{
-		{"--"},            // missing pattern
-		{"a", "b", "c"},   // excess operands
-		{"--unsupported"}, // unsupported option
-		{"foo", "-x"},     // unsupported short option
+		{"--"},                  // missing pattern
+		{"a", "b", "c"},         // excess operands
+		{"--unsupported"},       // unsupported option
+		{"foo", "-e"},           // unsupported short option
+		{"-e", "foo"},           // -e is not allow-listed
+		{"--type", "go", "foo"}, // argument-taking option
+		{"-foo"},                // dash-leading pattern without --
+		{"-uuu", "foo"},         // third unrestricted occurrence
+		{"-u", "-uu", "foo"},
+		{"--unrestricted", "-uu", "foo"},
+		{"foo", "--ignore-case=false"}, // assignment spelling rejected
+		{"foo", "--help=false"},
+		{"foo", "-h=false"},
 		{"foo", "/nonexistent-vrg-root"},
 		{"foo", "-"}, // stdin root
 		{"foo", "/dev/null"},
@@ -304,6 +318,54 @@ func TestExecutableBoundary(t *testing.T) {
 	res = runVrg(t, "foo", "-")
 	if !strings.Contains(res.stderr, "stdin") && !strings.Contains(res.stderr, "standard input") {
 		t.Fatalf("stdin root diagnostic does not name stdin: %q", res.stderr)
+	}
+}
+
+// The success stub prints the exact protected child argv: mandatory
+// internal flags, user flags in encounter order with supplied spellings,
+// then -- pattern root.
+func TestChildArgvStub(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"no flags", []string{"foo"}, "search stub: rg --json --no-config -- foo .\n"},
+		{"combined shorts", []string{"-iw", "foo", "."},
+			"search stub: rg --json --no-config -i -w -- foo .\n"},
+		{"repeated shorts", []string{"-i", "-s", "-i", "foo"},
+			"search stub: rg --json --no-config -i -s -i -- foo .\n"},
+		{"combined repeats", []string{"-isi", "foo"},
+			"search stub: rg --json --no-config -i -s -i -- foo .\n"},
+		{"mixed spellings", []string{"--ignore-case", "-s", "-i", "foo"},
+			"search stub: rg --json --no-config --ignore-case -s -i -- foo .\n"},
+		{"option after pattern", []string{"foo", "-i", "."},
+			"search stub: rg --json --no-config -i -- foo .\n"},
+		{"options interleaved", []string{"foo", "-i", dir, "-s"},
+			"search stub: rg --json --no-config -i -s -- foo " + dir + "\n"},
+		{"unrestricted twice", []string{"-u", "--unrestricted", "foo"},
+			"search stub: rg --json --no-config -u --unrestricted -- foo .\n"},
+		{"empty pattern", []string{"", "."},
+			"search stub: rg --json --no-config --  .\n"},
+		{"literal -- pattern", []string{"--", "--"},
+			"search stub: rg --json --no-config -- -- .\n"},
+		{"protected dash pattern", []string{"--", "-foo"},
+			"search stub: rg --json --no-config -- -foo .\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := runVrg(t, tc.args...)
+			if res.code != 0 {
+				t.Fatalf("vrg %v exited %d, want 0 (stderr %q)", tc.args, res.code, res.stderr)
+			}
+			if res.stderr != "" {
+				t.Fatalf("vrg %v: stderr not empty: %q", tc.args, res.stderr)
+			}
+			if res.stdout != tc.want {
+				t.Fatalf("vrg %v stdout = %q, want %q", tc.args, res.stdout, tc.want)
+			}
+		})
 	}
 }
 
