@@ -17,6 +17,23 @@ import (
 	"vrg/internal/viewport"
 )
 
+// intent identifies the action a pending layout install commits — the
+// model carries it so that obsolete completions can neither consume
+// nor mutate it.
+type intent int
+
+const (
+	// intentNone is no pending action: an install commits nothing.
+	intentNone intent = iota
+	// intentReveal is the destination reveal owed to the latest cursor
+	// selection once a matching layout installs (Issues 14 and 17).
+	intentReveal
+	// intentReloadAnchor is the explicit-reload contract: preserve the
+	// logical viewport anchor, clamped to the new content, with no
+	// reveal (Issue 27).
+	intentReloadAnchor
+)
+
 // state identifies the current screen of the search lifecycle.
 type state int
 
@@ -102,9 +119,12 @@ type Model struct {
 	// from its saved position — a width-independent logical anchor
 	// inside each Viewport. wrap is the wrap mode — on by default; w
 	// toggles it. revs counts each path's content revisions for
-	// row-model keying. pendingReveal marks a navigation or entry
-	// reveal intent that no current layout could commit; the next
-	// matching layout install commits it. listWidest is the file
+	// row-model keying. pendingIntent marks an intent — a navigation
+	// or entry reveal, or a reload's anchor preservation — that no
+	// current layout could commit; the next matching layout install
+	// commits it. reloading marks each path whose in-flight load is an
+	// explicit r reload, so its completion records the anchor-preserving
+	// intent rather than a destination reveal. listWidest is the file
 	// list's widest entry in cells, computed once at browse entry so a
 	// frame render never rescans the list. listVisible is the user's
 	// show/hide preference — a computed zero-width column draws
@@ -130,7 +150,8 @@ type Model struct {
 	itemName      func(i int) string
 	vps           map[string]*viewport.Viewport
 	wrap          bool
-	pendingReveal bool
+	pendingIntent intent
+	reloading     map[string]bool
 	theme         theme.Theme
 }
 
@@ -154,6 +175,7 @@ func New(child Child, workdir string) Model {
 		loader:      fileLoader,
 		notes:       make(map[string]string),
 		vps:         make(map[string]*viewport.Viewport),
+		reloading:   make(map[string]bool),
 		wrap:        true,
 		listVisible: true,
 		theme:       theme.Styled(),
@@ -251,6 +273,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		delete(m.loading, key)
+		reload := m.reloading[key]
+		delete(m.reloading, key)
 		if msg.err != nil {
 			line := "cannot read " + safepresentation.EscapePath(msg.path) +
 				": " + safepresentation.EscapePath([]byte(msg.err.Error()))
@@ -270,6 +294,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sources[key] = msg.src
 			delete(m.failed, key)
 			if key == m.curKey() {
+				// A reload's completion records the anchor-preserving
+				// intent — unless a reveal is already owed to a
+				// selection made during the load; the newest intent
+				// wins.
+				if reload && m.pendingIntent != intentReveal {
+					m.pendingIntent = intentReloadAnchor
+				}
 				// The panel's layout is prepared off the update path;
 				// the placeholder — or a previous layout — stays on
 				// screen until the keyed result lands.
@@ -287,15 +318,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// names the current file and parameters: anything older — a
 		// superseded width or wrap mode, a stale content revision, a
 		// no-longer-current file — is discarded without touching the
-		// display, the anchor, saved per-file state, or a pending reveal
+		// display, the anchor, saved per-file state, or a pending
 		// intent.
 		if key != cur || src == nil || msg.key != m.rowKey(cur, src) {
 			return m, nil
 		}
 		m.buffers[key] = msg.model
 		m.viewportFor(key).SetLayout(msg.model, m.contentHeight())
-		if m.pendingReveal {
+		// The pending intent commits now: a reveal runs the destination
+		// rules against the installed rows, while the reload-anchor
+		// intent is the anchor-preserving install itself — SetLayout
+		// already mapped the anchor, clamped to the new content.
+		if m.pendingIntent == intentReveal {
 			m.revealCurrent()
+		} else {
+			m.pendingIntent = intentNone
 		}
 	case popupExpiredMsg:
 		// Only the live instance's own expiry dismisses the pop-up; a
@@ -355,6 +392,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.state == stateBrowse {
 				return m.navigate(msg.String())
 			}
+		case "r":
+			if m.state == stateBrowse {
+				return m.reload()
+			}
 		}
 	}
 	return m, nil
@@ -388,7 +429,7 @@ func (m Model) enterBrowse() (tea.Model, tea.Cmd) {
 	}
 	// The startup selection's reveal is a pending intent until the
 	// file's first layout installs.
-	m.pendingReveal = true
+	m.pendingIntent = intentReveal
 	return m.ensureStaged()
 }
 
@@ -475,10 +516,10 @@ func (m *Model) revealCurrent() {
 	}
 	key := string(stop.Path)
 	if !m.layoutCurrent(key) {
-		m.pendingReveal = true
+		m.pendingIntent = intentReveal
 		return
 	}
-	m.pendingReveal = false
+	m.pendingIntent = intentNone
 	vp := m.viewportFor(key)
 	vp.SetLayout(m.buffers[key], m.contentHeight())
 	vp.Reveal(stop)
@@ -494,6 +535,37 @@ func (m Model) layoutCurrent(key string) bool {
 		return false
 	}
 	return model.Key() == m.rowKey(key, src)
+}
+
+// reload applies the explicit r reload of the current file: one reread
+// of the same path, never a rerun of rg and never a change to the
+// cursor stops. While the load is in flight the panel reads "Loading…"
+// and the filename row still identifies the path; the placeholder's
+// change to content or "(unreadable)" is the completion signal. A
+// request while that path's load is already in flight is dropped
+// whole, not queued — no state changes. On a previously failed file r
+// is the retry route, re-showing the prior-failure overlay while the
+// retry runs — the same presentation a cross-file re-entry gives.
+func (m Model) reload() (tea.Model, tea.Cmd) {
+	stop, ok := m.index.Current()
+	if !ok {
+		return m, nil
+	}
+	key := string(stop.Path)
+	if _, ok := m.loading[key]; ok {
+		return m, nil
+	}
+	if diag, bad := m.failed[key]; bad {
+		m.showFailure(diag)
+	}
+	// The cached display is dropped at request time: stale content is
+	// never presented as refreshed, and with no installed source a
+	// layout prepared for the old revision can never satisfy the
+	// install guard over the placeholder.
+	delete(m.buffers, key)
+	delete(m.sources, key)
+	m.reloading[key] = true
+	return m.ensureStaged()
 }
 
 // ensureStaged makes the current stop's file displayable at the present

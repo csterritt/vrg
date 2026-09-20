@@ -131,7 +131,7 @@ func TestGatedLayoutKeepsInputResponsive(t *testing.T) {
 	if stop, _ := m.index.Current(); stop.Line != 5 {
 		t.Fatalf("p during a held layout selected line %d, want 5", stop.Line)
 	}
-	if !m.pendingReveal {
+	if m.pendingIntent != intentReveal {
 		t.Fatal("the pending reveal intent was lost while the layout was held")
 	}
 
@@ -193,7 +193,7 @@ func TestGatedLayoutKeepsInputResponsive(t *testing.T) {
 		if got := m.vps["a.txt"].Anchor(); got != anchor {
 			t.Fatalf("obsolete layout moved the anchor to %+v, want %+v", got, anchor)
 		}
-		if !m.pendingReveal {
+		if m.pendingIntent != intentReveal {
 			t.Fatal("an obsolete layout consumed the pending reveal intent")
 		}
 	}
@@ -206,7 +206,7 @@ func TestGatedLayoutKeepsInputResponsive(t *testing.T) {
 	if got := m.buffers["a.txt"].Key(); got != want {
 		t.Fatalf("matching layout did not install: key = %+v, want %+v", got, want)
 	}
-	if m.pendingReveal {
+	if m.pendingIntent != intentNone {
 		t.Fatal("the matching layout left the pending reveal uncommitted")
 	}
 	if got := m.vps["a.txt"].Top(); got != 0 {
@@ -489,7 +489,7 @@ func TestStaleLayoutNavigationRequestsPreparedLayout(t *testing.T) {
 	if got := m.buffers["b.txt"].Key(); got != bKey {
 		t.Fatalf("b.txt's installed key changed at selection: %+v, want %+v", got, bKey)
 	}
-	if !m.pendingReveal {
+	if m.pendingIntent != intentReveal {
 		t.Fatal("the stale-file entry reveal was not pending")
 	}
 	lr := navLayoutResult(t, nav)
@@ -502,7 +502,7 @@ func TestStaleLayoutNavigationRequestsPreparedLayout(t *testing.T) {
 	// position is the reveal's starting point and the target row 24 is
 	// visible inside it, so the saved top 13 survives.
 	m, _ = update(t, m, lr)
-	if m.pendingReveal {
+	if m.pendingIntent != intentNone {
 		t.Fatal("the matching layout left the entry intent pending")
 	}
 	if got := m.vps["b.txt"].Top(); got != 13 {
@@ -550,7 +550,7 @@ func TestMatchingLayoutNavigationIsImmediate(t *testing.T) {
 			t.Fatal("matching-layout navigation requested a layout")
 		}
 	}
-	if m.pendingReveal {
+	if m.pendingIntent != intentNone {
 		t.Fatal("the matching-layout entry left the reveal intent pending")
 	}
 	// Content height 23, third row 7: target row 39 → top 32, under the
