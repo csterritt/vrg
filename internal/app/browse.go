@@ -44,13 +44,15 @@ func (m Model) browseScreen() string {
 	return strings.Join(rows, "\n")
 }
 
-// listItem is file-list entry i's display name: the raw path's escaped
-// form, or the test-injected provider's answer.
-func (m Model) listItem(i int) string {
+// listItem renders file-list entry i's display name left-truncated to w
+// cells: the test-injected provider's answer truncated on the fly, or
+// the precomputed measured name's grapheme-safe suffix. Either way the
+// work is this one row's — never a pass over the list.
+func (m Model) listItem(i, w int) string {
 	if m.itemName != nil {
-		return m.itemName(i)
+		return safepresentation.TruncateLeftGrapheme(m.itemName(i), w)
 	}
-	return safepresentation.EscapePath(m.files[i])
+	return m.files[i].name.TruncateLeft(w)
 }
 
 // listColumn is the Issue 24 file-list column width in cells: zero
@@ -110,7 +112,7 @@ func (m Model) listRow(fi, curIdx, lw int) string {
 	if fi >= len(m.files) {
 		return strings.Repeat(" ", lw)
 	}
-	name := safepresentation.TruncateLeftGrapheme(m.listItem(fi), lw)
+	name := m.listItem(fi, lw)
 	pad := lw - safepresentation.CellWidth(name)
 	if pad < 0 {
 		pad = 0
@@ -130,7 +132,7 @@ func (m Model) panelRow(r int, curPath []byte, curIdx, panelW, contentH int) str
 	key := string(curPath)
 	name := ""
 	if curIdx >= 0 {
-		name = safepresentation.EscapePath(curPath)
+		name = m.files[curIdx].name.String()
 	}
 	if r == 0 {
 		return m.theme.FilenameRule(filenameRule(name, m.notes[key], panelW))

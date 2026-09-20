@@ -538,7 +538,7 @@ func TestOutcomeMatrix(t *testing.T) {
 			// buffer; Issue 30 rows with an unsupported-encoding one.
 			if tc.failAll || tc.failCurrent || tc.staleAll || tc.unsupportedAll {
 				for _, f := range m.files {
-					key := string(f)
+					key := string(f.raw)
 					if tc.failCurrent && key != m.curKey() {
 						continue
 					}
@@ -550,20 +550,20 @@ func TestOutcomeMatrix(t *testing.T) {
 					}
 					if tc.staleAll {
 						m = applyLoad(t, m, loadResult{
-							path: f, req: req,
-							src: staleBuffer(t, stopsForPath(m.index, f)),
+							path: f.raw, req: req,
+							src: staleBuffer(t, f.stops),
 						})
 						continue
 					}
 					if tc.unsupportedAll {
 						m = applyLoad(t, m, loadResult{
-							path: f, req: req,
-							src: unsupportedBuffer(t, stopsForPath(m.index, f)),
+							path: f.raw, req: req,
+							src: unsupportedBuffer(t, f.stops),
 						})
 						continue
 					}
 					m, _ = update(t, m, loadResult{
-						path: f, req: req,
+						path: f.raw, req: req,
 						err: errors.New("unreadable fixture"),
 					})
 				}

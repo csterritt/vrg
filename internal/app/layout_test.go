@@ -593,6 +593,189 @@ func TestRenderQueriesOnlyVisibleListEntries(t *testing.T) {
 	}
 }
 
+// scanGuardIndex is the Issue 40 bounded-render double: the cursor
+// methods delegate to the finalized index, while the whole-list
+// enumerators fail the test instead of answering. Installed once browse
+// entry has consumed its one permitted enumeration, it fails any
+// navigation update or frame render that rescans, copies, or regroups
+// the index — in whichever half of the model transition the work was
+// moved to.
+type scanGuardIndex struct {
+	resultIndex
+	t *testing.T
+}
+
+func (g scanGuardIndex) Stops() []searchindex.Stop {
+	g.t.Fatalf("Stops() enumerated the index on the navigation/render path")
+	return nil
+}
+
+func (g scanGuardIndex) Files() [][]byte {
+	g.t.Fatalf("Files() enumerated the index on the navigation/render path")
+	return nil
+}
+
+// A matched-line navigation and its rendered frame together never
+// enumerate the index: the guarded double fails a whole-list access in
+// either half of the combined Update+View transition — a same-file
+// step, a cross-file step and its staged load, and the step back.
+func TestNavigationAndRenderNeverEnumerateIndex(t *testing.T) {
+	dir := t.TempDir()
+	writeMatchFile(t, dir, "a.txt", "hit a1\nhit a2\n")
+	writeMatchFile(t, dir, "b.txt", "hit b\n")
+	writeMatchFile(t, dir, "c.txt", "hit c\n")
+	idx := searchindex.New(dir)
+	addRec(t, idx, matchRec("a.txt", "hit a1\n", 1, 0, 3, "hit"))
+	addRec(t, idx, matchRec("a.txt", "hit a2\n", 2, 0, 3, "hit"))
+	addRec(t, idx, matchRec("b.txt", "hit b\n", 1, 0, 3, "hit"))
+	addRec(t, idx, matchRec("c.txt", "hit c\n", 1, 0, 3, "hit"))
+	idx.Finish()
+
+	m, cmd := startBrowse(t, dir, idx, 80, 24)
+	m = applyLoad(t, m, cmd())
+	m.index = scanGuardIndex{resultIndex: m.index, t: t}
+
+	// Same-file step: a.txt's first stop to its second.
+	m, _ = update(t, m, keyMsg("n"))
+	if stop, _ := m.index.Current(); stop.Line != 2 {
+		t.Fatalf("same-file n selected line %d, want 2", stop.Line)
+	}
+	_ = m.View()
+
+	// Cross-file step: a.txt to b.txt — the staged load and its
+	// completion ride the precomputed per-file group, still under the
+	// guard.
+	m, nav := update(t, m, keyMsg("n"))
+	m = applyLoad(t, m, deliverNavLoad(t, nav))
+	if got := m.curKey(); got != "b.txt" {
+		t.Fatalf("cross-file n selected %q, want b.txt", got)
+	}
+	_ = m.View()
+
+	// The step back across the boundary renders the cached file.
+	m, _ = update(t, m, keyMsg("p"))
+	if got := m.curKey(); got != "a.txt" {
+		t.Fatalf("p selected %q, want a.txt", got)
+	}
+	_ = m.View()
+}
+
+// The combined navigation-plus-render path materializes only the
+// visible file range: a counting provider over ten thousand entries
+// stays untouched through thirty file-crossing Updates, then a single
+// View queries exactly the scrolled window — so whole-list
+// materialization moved into navigation handling fails just as a
+// render-side scan does.
+func TestNavigationRenderMaterializesOnlyVisibleEntries(t *testing.T) {
+	idx := searchindex.New("/w")
+	for i := 0; i < 10000; i++ {
+		name := fmt.Sprintf("f%05d.txt", i)
+		addRec(t, idx, matchRec(name, "hit\n", 1, 0, 3, "hit"))
+	}
+	idx.Finish()
+
+	m, _ := startBrowse(t, "/w", idx, 80, 24)
+	m.index = scanGuardIndex{resultIndex: m.index, t: t}
+
+	var calls []int
+	m.itemName = func(i int) string {
+		calls = append(calls, i)
+		return fmt.Sprintf("f%05d.txt", i)
+	}
+
+	// Thirty file-crossing navigations: the transition half never
+	// consults the item provider.
+	for i := 0; i < 30; i++ {
+		m, _ = update(t, m, keyMsg("n"))
+	}
+	if len(calls) != 0 {
+		t.Fatalf("navigation materialized %d list entries outside a render", len(calls))
+	}
+
+	_ = m.View()
+	if len(calls) > 24 {
+		t.Fatalf("frame materialized %d list entries of 10000, want only the %d visible rows",
+			len(calls), 24)
+	}
+	// The active entry is index 30: the window scrolled to 7..30.
+	for _, i := range calls {
+		if i < 7 || i > 30 {
+			t.Fatalf("frame materialized list entry %d outside the visible window 7..30", i)
+		}
+	}
+}
+
+// A list-width change — gutter growth after a load, then a narrower
+// resize — re-truncates the visible entries at grapheme boundaries
+// against the new width, still inside the visible-window query bound
+// and under the no-enumeration guard.
+func TestWidthChangeRetruncatesVisibleEntriesBounded(t *testing.T) {
+	dir := t.TempDir()
+	idx := searchindex.New(dir)
+	for i := 0; i < 100; i++ {
+		name := fmt.Sprintf("%05d日tail.txt", i)
+		addRec(t, idx, matchRec(name, "hit\n", 1, 0, 3, "hit"))
+	}
+	idx.Finish()
+	first := "00000日tail.txt"
+
+	// W=30, gutter=3, wrap reserved=0: list width min(17, 12, 17) = 12.
+	m, _ := startBrowse(t, dir, idx, 30, 24)
+	m = applyLoad(t, m, loadResult{
+		path: []byte(first),
+		req:  m.loading[first],
+		src:  &stubSource{gutter: 3, widths: []int{10}},
+	})
+	m.theme = theme.Plain()
+	m.index = scanGuardIndex{resultIndex: m.index, t: t}
+
+	queries := 0
+	m.itemName = func(i int) string {
+		queries++
+		return fmt.Sprintf("%05d日tail.txt", i)
+	}
+	_ = m.View()
+	queries = 0
+
+	// Gutter growth 3→9 narrows the column 12→11: the suffix loses the
+	// leading digit but keeps the wide cluster whole — "…日tail.txt",
+	// never a halved 日.
+	var req int
+	m, req = beginLoad(m, first)
+	m, cmd := update(t, m, loadResult{
+		path: []byte(first),
+		req:  req,
+		src:  &stubSource{gutter: 9, widths: []int{10}},
+	})
+	m = deliverCmd(t, m, cmd)
+	if got := m.listWidth(30); got != 11 {
+		t.Fatalf("list width after gutter growth = %d, want 11", got)
+	}
+	_ = m.View()
+	if queries > 24 {
+		t.Fatalf("gutter-growth frame materialized %d list entries of 100, want ≤ 24", queries)
+	}
+	if row := viewRow(t, m, 0); !strings.HasPrefix(row, "…日tail.txt") {
+		t.Fatalf("row 0 after gutter growth = %q, want the grapheme-safe %q", row, "…日tail.txt")
+	}
+
+	// A narrower resize re-truncates again against the new column —
+	// min(17, 10, 25−19) = 6 — with the same visible-window bound.
+	queries = 0
+	m, cmd = update(t, m, tea.WindowSizeMsg{Width: 25, Height: 24})
+	m = deliverCmd(t, m, cmd)
+	if got := m.listWidth(25); got != 6 {
+		t.Fatalf("list width after resize = %d, want 6", got)
+	}
+	_ = m.View()
+	if queries > 24 {
+		t.Fatalf("resize frame materialized %d list entries of 100, want ≤ 24", queries)
+	}
+	if row := viewRow(t, m, 0); !strings.HasPrefix(row, "…l.txt") {
+		t.Fatalf("row 0 after resize = %q, want the grapheme-safe %q", row, "…l.txt")
+	}
+}
+
 // The prepared-layout key pins the full parameter tuple: a completion
 // carrying another path's key never matches the current file's guard.
 func TestLayoutKeyRequiresCurrentFile(t *testing.T) {

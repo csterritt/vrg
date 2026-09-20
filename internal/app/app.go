@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -55,6 +54,37 @@ const (
 	stateCancelled
 )
 
+// resultIndex is the model's read surface over the finalized search
+// index: the circular matched-line cursor plus the whole-list
+// enumerators. The enumerators belong to the one-time browse
+// preparation at search completion; navigation and rendering read the
+// precomputed per-file structures instead, so a keystroke or a frame
+// never rescans the index (Issue 40). The interface is also the test
+// seam that proves it: a double guarding the enumerators fails any
+// whole-index access on the transition/render path.
+type resultIndex interface {
+	Current() (searchindex.Stop, bool)
+	Next() searchindex.Move
+	Prev() searchindex.Move
+	Stops() []searchindex.Stop
+	Files() [][]byte
+	UsableResults() int
+	BinaryExcluded() int
+}
+
+// fileEntry is one retained file's immutable browse data, prepared once
+// when the search completes: the raw path identity, its measured
+// display name — the escaped text, its grapheme-cluster boundaries, and
+// its full cell width, all width-independent — and the file's
+// navigation-stop group for the loader. Navigation and frame rendering
+// share these structures; neither regroups nor re-measures per
+// keystroke (Issue 40).
+type fileEntry struct {
+	raw   []byte
+	name  safepresentation.MeasuredText
+	stops []searchindex.Stop
+}
+
 // Model is the Bubble Tea model for the vrg lifecycle; this slice covers
 // the searching screen, the browse view with asynchronous file loading,
 // and cancellation.
@@ -81,7 +111,7 @@ type Model struct {
 	height int
 	state  state
 
-	index   *searchindex.Index
+	index   resultIndex
 	procErr error
 	status  int
 	// diags is the session diagnostic collection: every diagnostic the
@@ -142,7 +172,7 @@ type Model struct {
 	// note for the filename-row slot; Issues 26, 29, and 30 populate
 	// it. loader is the file-read seam — fileLoader in production, a
 	// test substitute for failing and controlled loads.
-	files         [][]byte
+	files         []fileEntry
 	fileIdx       map[string]int
 	buffers       map[string]*viewport.RowModel
 	sources       map[string]viewport.Source
@@ -483,18 +513,31 @@ func rgSucceeded(err error) bool {
 }
 
 // enterBrowse moves a completed search into the browse state and starts
-// staging the current file — the cursor's first stop. The file list's
-// widest entry is measured once here so a frame render never rescans
-// the list.
+// staging the current file — the cursor's first stop. The finalized
+// index is enumerated exactly once, here: the ordered file entries —
+// each raw path's measured display name and navigation-stop group —
+// plus the path→entry map and the list's widest entry are the immutable
+// structures every later frame and navigation shares, so neither half
+// of a keystroke's update/render rescans the index.
 func (m Model) enterBrowse() (tea.Model, tea.Cmd) {
 	m.state = stateBrowse
-	m.files = m.index.Files()
-	m.fileIdx = make(map[string]int, len(m.files))
-	for i, f := range m.files {
-		m.fileIdx[string(f)] = i
-		if d := safepresentation.CellWidth(safepresentation.EscapePath(f)) + 2; d > m.listWidest {
-			m.listWidest = d
+	m.files, m.listWidest = nil, 0
+	m.fileIdx = make(map[string]int)
+	for _, s := range m.index.Stops() {
+		key := string(s.Path)
+		i, ok := m.fileIdx[key]
+		if !ok {
+			i = len(m.files)
+			m.fileIdx[key] = i
+			m.files = append(m.files, fileEntry{
+				raw:  s.Path,
+				name: safepresentation.MeasureText(safepresentation.EscapePath(s.Path)),
+			})
+			if d := m.files[i].name.Width() + 2; d > m.listWidest {
+				m.listWidest = d
+			}
 		}
+		m.files[i].stops = append(m.files[i].stops, s)
 	}
 	// The startup selection's reveal is a pending intent until the
 	// file's first layout installs.
@@ -514,7 +557,7 @@ func (m Model) enterBrowse() (tea.Model, tea.Cmd) {
 // destination is a previously failed file, whose re-entry opens the
 // prior-failure overlay and stages its retry instead.
 func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
-	if len(m.index.Stops()) < 2 {
+	if m.index.UsableResults() < 2 {
 		// Zero or one stop is a strict no-op: no reveal, pop-up, or retry.
 		return m, nil
 	}
@@ -663,20 +706,16 @@ func (m Model) ensureStaged() (Model, tea.Cmd) {
 		}
 		m.loadSeq++
 		m.loading[key] = m.loadSeq
-		return m, loadCmd(m.ctx, m.loadGate, m.loader, m.loadSeq, stop, stopsForPath(m.index, stop.Path))
+		return m, loadCmd(m.ctx, m.loadGate, m.loader, m.loadSeq, stop, m.fileStops(key))
 	}
 	return m, m.prepareLayout()
 }
 
-// stopsForPath collects the file's matched-line stops for the loader.
-func stopsForPath(index *searchindex.Index, path []byte) []searchindex.Stop {
-	var out []searchindex.Stop
-	for _, s := range index.Stops() {
-		if bytes.Equal(s.Path, path) {
-			out = append(out, s)
-		}
-	}
-	return out
+// fileStops returns the raw path's navigation-stop group from the
+// per-file structure prepared at browse entry — a shared lookup, never
+// a re-derived scan of the index.
+func (m Model) fileStops(key string) []searchindex.Stop {
+	return m.files[m.fileIdx[key]].stops
 }
 
 // loadResult is the product of one file load, delivered to the model as

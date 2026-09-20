@@ -425,3 +425,14 @@ Usage
  Input tokens: 32018 tokens
  Output tokens: 7624 tokens
  Cached input tokens: 1141050 tokens
+
+----
+Task 040-browse-render-no-whole-index-scan.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 59 messages
+ Input tokens: 158645 tokens
+ Output tokens: 67634 tokens
+ Cached input tokens: 6736932 tokens

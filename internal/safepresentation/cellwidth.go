@@ -1,7 +1,6 @@
 package safepresentation
 
 import (
-	"strings"
 	"unicode/utf8"
 
 	"github.com/clipperhouse/displaywidth"
@@ -40,26 +39,70 @@ func TruncateCells(s string, w int) string {
 // never opens with a bare combining mark and a wide glyph is never
 // halved.
 func TruncateLeftGrapheme(s string, w int) string {
+	return MeasureText(s).TruncateLeft(w)
+}
+
+// measuredCluster is one grapheme cluster's start byte inside a
+// measured string and the cluster's terminal cell width; contiguous
+// segmentation makes a cluster's end the next cluster's start.
+type measuredCluster struct {
+	start, width int
+}
+
+// MeasuredText is a display string segmented once under the shared cell
+// policy: its grapheme-cluster boundaries and total cell width are
+// recorded up front so repeated width queries and left-truncations —
+// file-list entries refitted to a changing column every frame — reuse
+// the segmentation instead of re-deriving it (Issue 40).
+type MeasuredText struct {
+	s        string
+	clusters []measuredCluster
+	width    int
+}
+
+// MeasureText records s's grapheme-cluster boundaries and total
+// terminal cell width.
+func MeasureText(s string) MeasuredText {
+	t := MeasuredText{s: s}
+	g := cellMeasure.StringGraphemes(s)
+	pos := 0
+	for g.Next() {
+		c := g.Value()
+		w := g.Width()
+		t.clusters = append(t.clusters, measuredCluster{start: pos, width: w})
+		t.width += w
+		pos += len(c)
+	}
+	return t
+}
+
+// String returns the measured text.
+func (t MeasuredText) String() string { return t.s }
+
+// Width returns the text's total terminal cell width.
+func (t MeasuredText) Width() int { return t.width }
+
+// TruncateLeft keeps the widest suffix of the text fitting w cells,
+// marked with a leading ellipsis, and returns the text unchanged when
+// it already fits. The cut is evaluated against the recorded clusters,
+// so it still lands only on a grapheme-cluster boundary.
+func (t MeasuredText) TruncateLeft(w int) string {
 	if w <= 0 {
 		return ""
 	}
-	if CellWidth(s) <= w {
-		return s
-	}
-	g := cellMeasure.StringGraphemes(s)
-	var clusters []string
-	var widths []int
-	for g.Next() {
-		clusters = append(clusters, g.Value())
-		widths = append(widths, g.Width())
+	if t.width <= w {
+		return t.s
 	}
 	width := 1 // the ellipsis
-	i := len(clusters)
-	for i > 0 && width+widths[i-1] <= w {
-		width += widths[i-1]
+	i := len(t.clusters)
+	for i > 0 && width+t.clusters[i-1].width <= w {
+		width += t.clusters[i-1].width
 		i--
 	}
-	return "…" + strings.Join(clusters[i:], "")
+	if i == len(t.clusters) {
+		return "…"
+	}
+	return "…" + t.s[t.clusters[i].start:]
 }
 
 // FirstGrapheme returns s's first grapheme cluster, or "" for an empty
