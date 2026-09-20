@@ -52,8 +52,8 @@ type Stop struct {
 
 // Index collects ripgrep's JSON event stream into the ordered navigation
 // index. Per-record schema validation happens in Add; cross-record
-// lifecycle validation over a whole stream is Builder's concern, and
-// skip counting is Issue 10's.
+// lifecycle validation over a whole stream and the skip accounting are
+// Builder's concern.
 type Index struct {
 	workdir string
 	byPath  map[string]map[int64]*Stop
@@ -90,9 +90,9 @@ func malformed(format string, args ...any) error {
 // Add consumes one rg JSON event record — a single line of --json output
 // without its newline — validated against the per-record schema matrix.
 // Malformed records return an error and are not indexed. context events
-// and unknown string event types are known-but-ignored and return nil.
-// Add applies only per-record validation and index effects; Builder owns
-// the stream-level lifecycle contract.
+// and unknown string event types return nil without indexing; Builder
+// counts the skips. Add applies only per-record validation and index
+// effects; Builder owns the stream-level lifecycle contract.
 func (x *Index) Add(record []byte) error {
 	typ, err := eventType(record)
 	if err != nil {

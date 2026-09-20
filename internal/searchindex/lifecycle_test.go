@@ -8,8 +8,10 @@ import (
 )
 
 // build feeds records through a Builder and finishes it, failing if any
-// record is rejected: every matrix fixture is schema-valid.
-func build(t *testing.T, workdir string, records ...[]byte) (*searchindex.Index, searchindex.Integrity) {
+// record is rejected: every matrix fixture is schema-valid. It returns
+// the index, the stream-integrity result, and the record accounting —
+// the dispositions each matrix row asserts.
+func build(t *testing.T, workdir string, records ...[]byte) (*searchindex.Index, searchindex.Integrity, searchindex.Report) {
 	t.Helper()
 	b := searchindex.NewBuilder(workdir)
 	for i, rec := range records {
@@ -17,7 +19,8 @@ func build(t *testing.T, workdir string, records ...[]byte) (*searchindex.Index,
 			t.Fatalf("Add(record %d) rejected a valid record: %v\n%s", i, err, rec)
 		}
 	}
-	return b.Finish()
+	idx, integrity := b.Finish()
+	return idx, integrity, b.Report()
 }
 
 // stopInfo is the observable lifecycle result for one retained stop:
@@ -276,9 +279,15 @@ func TestLifecycleTransitionMatrix(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			idx, integrity := build(t, "/w", tc.records...)
+			idx, integrity, rep := build(t, "/w", tc.records...)
 			if integrity.Complete != tc.wantComplete {
 				t.Fatalf("Integrity.Complete = %v, want %v", integrity.Complete, tc.wantComplete)
+			}
+			// Lifecycle violations are integrity failures, never record
+			// loss: no matrix row may inflate the malformed or oversized
+			// counts. Unknown-type counting is asserted separately.
+			if rep.Malformed != 0 || rep.Oversized != 0 {
+				t.Fatalf("Report() = %+v, want no malformed or oversized records", rep)
 			}
 			wantStopInfo(t, idx, tc.wantStops)
 			if n := idx.BinaryExcluded(); n != tc.wantBinary {
@@ -312,7 +321,7 @@ func TestLifecyclePathIdentityAcrossEncodings(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			idx, integrity := build(t, "/w", tc.records...)
+			idx, integrity, _ := build(t, "/w", tc.records...)
 			if !integrity.Complete {
 				t.Fatal("mixed-encoding lifecycle events for one path did not pair")
 			}
@@ -322,8 +331,11 @@ func TestLifecyclePathIdentityAcrossEncodings(t *testing.T) {
 }
 
 // A malformed record after a valid summary carries both dispositions:
-// Add rejects it as malformed and the after-summary position is an
-// integrity failure.
+// Add rejects it as malformed — counted malformed even though the
+// after-summary position suppresses nothing — and the after-summary
+// position is an integrity failure. Both counters are asserted: the
+// malformed count and the incomplete-stream status, while the
+// oversized and unknown-type counts stay at zero.
 func TestMalformedRecordAfterSummaryIsBoth(t *testing.T) {
 	b := searchindex.NewBuilder("/w")
 	for _, rec := range [][]byte{
@@ -340,6 +352,9 @@ func TestMalformedRecordAfterSummaryIsBoth(t *testing.T) {
 		t.Fatal("Add accepted a malformed record after summary")
 	}
 	idx, integrity := b.Finish()
+	if rep := b.Report(); rep.Malformed != 1 || rep.Oversized != 0 || rep.UnknownTypes != 0 {
+		t.Fatalf("Report() = %+v, want exactly one malformed record", rep)
+	}
 	if integrity.Complete {
 		t.Fatal("a malformed record after summary left the stream complete")
 	}
@@ -365,7 +380,8 @@ func TestConsumeDrainsRecords(t *testing.T) {
 
 // A trailing fragment without its newline is an unterminated record: it
 // is not indexed — even when it happens to be parseable — and the stream
-// is incomplete. (Issue 10 owns counting it malformed.)
+// is incomplete. This ordinary, non-oversized record carries both
+// composite dispositions: counted malformed and marked stream-incomplete.
 func TestTrailingUnterminatedRecord(t *testing.T) {
 	stream := `{"type":"begin","data":{"path":{"text":"a.txt"}}}` + "\n" +
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"hit\n"},` +
@@ -380,6 +396,9 @@ func TestTrailingUnterminatedRecord(t *testing.T) {
 	b := searchindex.NewBuilder("/w")
 	b.Consume(strings.NewReader(stream))
 	idx, integrity := b.Finish()
+	if rep := b.Report(); rep.Malformed != 1 || rep.Oversized != 0 || rep.UnknownTypes != 0 {
+		t.Fatalf("Report() = %+v, want the unterminated record counted malformed and nothing else", rep)
+	}
 	if integrity.Complete {
 		t.Fatal("a stream with a trailing unterminated record is complete")
 	}

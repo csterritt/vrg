@@ -133,6 +133,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		oc := decideOutcome(outcomeInput{
 			procErr:   msg.err,
 			integrity: msg.integrity,
+			report:    msg.report,
 			usable:    msg.index.UsableResults(),
 			stderr:    msg.stderr,
 		})

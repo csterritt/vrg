@@ -104,12 +104,14 @@ func (p *reaper) Wait() error {
 
 // searchResult is the product of one collected search, delivered to the
 // model as a message: the prepared index, the stream-integrity result —
-// assessed separately from process success — the captured stderr bytes
-// (unclassified; the outcome decision owns classification), and the
-// child's wait status.
+// assessed separately from process success — the record accounting
+// (malformed, oversized, and unknown-type skips with recovered paths),
+// the captured stderr bytes (unclassified; the outcome decision owns
+// classification), and the child's wait status.
 type searchResult struct {
 	index     *searchindex.Index
 	integrity searchindex.Integrity
+	report    searchindex.Report
 	stderr    []byte
 	err       error
 }
@@ -141,5 +143,11 @@ func collect(ctx context.Context, child Child, workdir string, gate <-chan struc
 		}
 	}
 	index, integrity := b.Finish()
-	return searchResult{index: index, integrity: integrity, stderr: stderr.Bytes(), err: err}
+	return searchResult{
+		index:     index,
+		integrity: integrity,
+		report:    b.Report(),
+		stderr:    stderr.Bytes(),
+		err:       err,
+	}
 }

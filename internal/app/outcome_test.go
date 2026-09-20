@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -84,6 +85,35 @@ type outcomeRow struct {
 	// dismissal already quit.
 	final      string
 	wantStatus int
+}
+
+// Record-loss and unknown-type accounting composes into overlay
+// diagnostic lines: the pluralized malformed and oversized aggregates,
+// each recoverable oversized path escaped to a single line, and the
+// unknown-type warning.
+func TestRecordLossDiagnostics(t *testing.T) {
+	in := outcomeInput{
+		integrity: completeStream,
+		report: searchindex.Report{
+			Malformed:    1,
+			Oversized:    2,
+			UnknownTypes: 3,
+			OversizedPaths: [][]byte{
+				[]byte("big.txt"),
+				[]byte("a\nb.txt"),
+			},
+		},
+	}
+	want := []string{
+		"1 malformed record skipped",
+		"2 oversized records skipped",
+		"oversized record skipped for big.txt",
+		`oversized record skipped for a\nb.txt`,
+		"3 unrecognised record types skipped",
+	}
+	if got := diagnosticLines(in); !slices.Equal(got, want) {
+		t.Fatalf("diagnosticLines() = %q, want %q", got, want)
+	}
 }
 
 // TestOutcomeMatrix is the single table-driven outcome matrix of Issue
@@ -234,6 +264,93 @@ func TestOutcomeMatrix(t *testing.T) {
 			final:        "q", wantStatus: 1,
 		},
 		{
+			name:      "unknown-type warnings alone with zero results warn then exit 1",
+			records:   []string{`{"type":"weird","data":{}}`, `{"type":"stats","data":{}}`, summaryRec()},
+			wantState: stateNoResults, wantOverlay: true,
+			contains:     []string{"2 unrecognised record types skipped"},
+			dismiss:      "esc",
+			postContains: []string{"No results found"},
+			postAbsent:   []string{"unrecognised"},
+			final:        "q", wantStatus: 1,
+		},
+		{
+			name: "skipped malformed record with usable results browses with the overlay and exits 0",
+			records: []string{
+				beginRec("a.txt"),
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+				`{not json`,
+				endRec("a.txt", nil),
+				summaryRec(),
+			},
+			wantState: stateBrowse, wantOverlay: true,
+			contains:     []string{"1 malformed record skipped", "a.txt"},
+			dismiss:      "esc",
+			postContains: []string{"a.txt"},
+			final:        "q", wantStatus: 0,
+		},
+		{
+			name: "skipped malformed record with zero usable results is fatal record loss dismissed with q",
+			records: []string{
+				`{not json`,
+				summaryRec(),
+			},
+			wantState: stateFatal, wantOverlay: true,
+			contains: []string{"1 malformed record skipped"},
+			absent:   []string{"No results found"},
+			dismiss:  "q", dismissQuits: true,
+			wantStatus: 2,
+		},
+		{
+			name: "skipped malformed record with zero usable results is fatal record loss dismissed with esc",
+			records: []string{
+				`{not json`,
+				summaryRec(),
+			},
+			procErr:   exitError(1),
+			wantState: stateFatal, wantOverlay: true,
+			contains: []string{"1 malformed record skipped"},
+			dismiss:  "esc", dismissQuits: true,
+			wantStatus: 2,
+		},
+		{
+			name: "skipped record and binary exclusion leaving zero retained stops is fatal record loss",
+			records: []string{
+				beginRec("a.bin"),
+				matchRec("a.bin", "x\n", 1, 0, 1, "x"),
+				`{not json`,
+				endRec("a.bin", 7),
+				summaryRec(),
+			},
+			wantState: stateFatal, wantOverlay: true,
+			contains: []string{"1 malformed record skipped"},
+			dismiss:  "esc", dismissQuits: true,
+			wantStatus: 2,
+		},
+		{
+			name: "missing end with retained matches browses with the overlay and exits 2",
+			records: []string{
+				beginRec("a.txt"),
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+				summaryRec(),
+			},
+			wantState: stateBrowse, wantOverlay: true,
+			contains:     []string{"incomplete", "a.txt"},
+			dismiss:      "esc",
+			postContains: []string{"a.txt"},
+			final:        "q", wantStatus: 2,
+		},
+		{
+			name: "missing end with no matches is fatal",
+			records: []string{
+				beginRec("a.txt"),
+				summaryRec(),
+			},
+			wantState: stateFatal, wantOverlay: true,
+			contains: []string{"incomplete"},
+			dismiss:  "q", dismissQuits: true,
+			wantStatus: 2,
+		},
+		{
 			name:         "esc in a base state never exits",
 			records:      valid,
 			wantState:    stateBrowse,
@@ -271,17 +388,18 @@ func TestOutcomeMatrix(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			b := searchindex.NewBuilder("/w")
+			var stream strings.Builder
 			for _, r := range tc.records {
-				if err := b.Add([]byte(r)); err != nil {
-					t.Fatalf("Add(%q): %v", r, err)
-				}
+				stream.WriteString(r)
+				stream.WriteByte('\n')
 			}
+			b.Consume(strings.NewReader(stream.String()))
 			idx, integrity := b.Finish()
 
 			m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
 			m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 			m, _ = update(t, m, searchResult{
-				index: idx, integrity: integrity,
+				index: idx, integrity: integrity, report: b.Report(),
 				stderr: []byte(tc.stderr), err: tc.procErr,
 			})
 
