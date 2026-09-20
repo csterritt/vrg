@@ -378,7 +378,9 @@ func TestRevealReclampsOffset(t *testing.T) {
 	if got := v.Offset(); got != 299 {
 		t.Fatalf("setup pan: offset = %d, want 299", got)
 	}
-	v.Reveal(15) // hidden target → top 14, rows 14-16 all ten-cell lines
+	// Hidden target row 15 → top 14, rows 14-16 all ten-cell lines; the
+	// target's cell at column 9 stays painted at the re-clamped offset.
+	v.Reveal(stopAt(16, 9, 10))
 	if got := v.Offset(); got != 9 {
 		t.Fatalf("offset after the reveal = %d, want the re-clamped 9", got)
 	}

@@ -272,7 +272,7 @@ func TestRevealInsideLineTallerThanScreens(t *testing.T) {
 	}
 	v := &Viewport{}
 	v.SetLayout(m, 3)
-	v.Reveal(target)
+	v.Reveal(stopAt(1, 95, 98))
 	if got := v.Top(); got != 8 {
 		t.Fatalf("top = %d, want 8 so the target sits at row floor(3/3)=1", got)
 	}

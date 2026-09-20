@@ -400,10 +400,13 @@ func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
 // its file's installed layout matches the present parameters: the
 // file's saved vertical state — the top of the file on a first visit —
 // is the starting point, and the viewport moves only when the target
-// row is hidden from it. When no layout can serve — the file is
-// loading, or its installed layout is stale under the current geometry
-// — the intent is marked pending instead and the next matching layout
-// install commits it; obsolete completions never consume it.
+// row is hidden from it. The same reveal performs the minimal
+// horizontal reveal of the target cell's cluster in run-off-edge mode,
+// so startup and every navigation action — including same-file n/p —
+// reveal both axes. When no layout can serve — the file is loading, or
+// its installed layout is stale under the current geometry — the intent
+// is marked pending instead and the next matching layout install
+// commits it; obsolete completions never consume it.
 func (m *Model) revealCurrent() {
 	stop, ok := m.index.Current()
 	if !ok {
@@ -416,9 +419,8 @@ func (m *Model) revealCurrent() {
 	}
 	m.pendingReveal = false
 	vp := m.viewportFor(key)
-	model := m.buffers[key]
-	vp.SetLayout(model, m.contentHeight())
-	vp.Reveal(model.TargetRow(stop))
+	vp.SetLayout(m.buffers[key], m.contentHeight())
+	vp.Reveal(stop)
 }
 
 // layoutCurrent reports whether the file's installed layout still

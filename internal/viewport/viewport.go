@@ -1,5 +1,7 @@
 package viewport
 
+import "vrg/internal/searchindex"
+
 // Location is a width-independent logical text position: a 0-based
 // source line and a display-column offset within that line. It is the
 // viewport's anchor form, surviving rewraps, wrap toggles, and resizes
@@ -105,23 +107,59 @@ func (v *Viewport) PageUp() { v.scroll(-v.height) }
 // PageDown scrolls down one full page of the content height.
 func (v *Viewport) PageDown() { v.scroll(v.height) }
 
-// Reveal applies the destination-reveal contract to a target rendered
-// row: a target already inside the window leaves the top unchanged and
-// retains the anchor's logical column, and a hidden target lands at
-// zero-based row floor(height/3) of the content area by moving the top,
-// clamped to the valid positions — at BOF and EOF the available content
-// takes precedence over one-third placement. The reveal starts from
+// Reveal applies the destination-reveal contract to a stop: a target
+// row — the rendered row holding the first submatch's start cell —
+// already inside the window leaves the top unchanged and retains the
+// anchor's logical column, and a hidden target lands at zero-based row
+// floor(height/3) of the content area by moving the top, clamped to the
+// valid positions — at BOF and EOF the available content takes
+// precedence over one-third placement. The same call then performs the
+// run-off-edge minimal horizontal reveal of the target cell's cluster,
+// so every destination reveal covers both axes. The reveal starts from
 // whatever top the viewport holds, so a caller seeds it with the saved
 // per-file state on a revisit or the top of the file on a first visit;
 // a reveal that moves the top replaces the anchor with the resulting
 // top row's location.
-func (v *Viewport) Reveal(target int) {
-	if target >= v.top && target < v.top+v.height {
+func (v *Viewport) Reveal(stop searchindex.Stop) {
+	if v.model == nil {
 		return
 	}
-	v.top = target - v.height/3
-	v.clamp()
-	v.anchor = v.location(v.top)
+	if target := v.model.TargetRow(stop); target < v.top || target >= v.top+v.height {
+		v.top = target - v.height/3
+		v.clamp()
+		v.anchor = v.location(v.top)
+		v.clampOffset()
+	}
+	v.revealHorizontal(stop)
+}
+
+// revealHorizontal is the reveal's run-off-edge half: when the cluster
+// holding the target cell is not fully painted inside the text window —
+// outside it, or split by an edge into clipping blanks — the offset
+// moves by the minimum columns that paint it whole: to the cluster's
+// start column from the left, to start + width − text width from the
+// right. A painted start cell leaves the offset untouched. A cluster
+// wider than the text area can never paint at any offset: the offset is
+// set to its start column — the closest achievable position, treated as
+// geometrically revealed — which is stable, so repeated navigation
+// never enters a panning loop. Wrap mode leaves the offset untouched:
+// it is retained run-off-edge state.
+func (v *Viewport) revealHorizontal(stop searchindex.Stop) {
+	if v.model.Key().Wrap {
+		return
+	}
+	tw := v.model.Key().TextWidth
+	col, width := v.model.TargetColumn(stop)
+	switch {
+	case width > tw:
+		v.hoff = col
+	case col < v.hoff:
+		v.hoff = col
+	case col+width > v.hoff+tw:
+		v.hoff = col + width - tw
+	default:
+		return
+	}
 	v.clampOffset()
 }
 

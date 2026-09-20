@@ -133,7 +133,7 @@ func TestMovingRevealReplacesAnchor(t *testing.T) {
 	v := &Viewport{}
 	v.SetLayout(layoutOf(t, 10, true, linesOf(100)...), 10)
 
-	v.Reveal(50) // hidden below: lands at floor(10/3)=3 → top 47
+	v.Reveal(stopAt(51, 0, 1)) // hidden below: lands at floor(10/3)=3 → top 47
 	if got := v.Top(); got != 47 {
 		t.Fatalf("reveal top = %d, want 47", got)
 	}
@@ -152,7 +152,7 @@ func TestNoScrollRevealKeepsLogicalColumn(t *testing.T) {
 	v.Down()
 	v.Down() // anchor (0, 20), top row 2
 
-	v.Reveal(9) // inside the window [2, 12): no scroll
+	v.Reveal(stopAt(6, 0, 1)) // target row 9 is inside the window [2, 12): no scroll
 	if got := v.Top(); got != 2 {
 		t.Fatalf("no-scroll reveal moved the top to %d, want 2", got)
 	}

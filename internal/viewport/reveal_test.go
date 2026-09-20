@@ -18,7 +18,7 @@ func TestRevealVisibleTargetDoesNotScroll(t *testing.T) {
 	} {
 		v := &Viewport{anchor: Location{Line: tc.top}}
 		v.SetLayout(rowsLayout(t, tc.rows), tc.height)
-		v.Reveal(tc.target)
+		v.Reveal(stopAt(int64(tc.target)+1, 0, 1))
 		if got := v.Top(); got != tc.top {
 			t.Errorf("%s: top = %d, want unchanged %d", tc.name, got, tc.top)
 		}
@@ -43,7 +43,7 @@ func TestRevealPlacesHiddenTargetOneThirdDown(t *testing.T) {
 	} {
 		v := &Viewport{anchor: Location{Line: tc.top}}
 		v.SetLayout(rowsLayout(t, 1000), tc.height)
-		v.Reveal(tc.target)
+		v.Reveal(stopAt(int64(tc.target)+1, 0, 1))
 		if got := v.Top(); got != tc.want {
 			t.Errorf("%s: top = %d, want %d so the target sits at row floor(%d/3)",
 				tc.name, got, tc.want, tc.height)
@@ -57,7 +57,7 @@ func TestRevealPlacesHiddenTargetOneThirdDown(t *testing.T) {
 func TestRevealClampsAtBOF(t *testing.T) {
 	v := &Viewport{anchor: Location{Line: 50}}
 	v.SetLayout(rowsLayout(t, 100), 10)
-	v.Reveal(2) // 2 - 3 = -1, clamped to 0
+	v.Reveal(stopAt(3, 0, 1)) // target row 2: 2 - 3 = -1, clamped to 0
 	if got := v.Top(); got != 0 {
 		t.Fatalf("reveal near BOF: top = %d, want 0", got)
 	}
@@ -69,7 +69,7 @@ func TestRevealClampsAtBOF(t *testing.T) {
 func TestRevealClampsAtEOF(t *testing.T) {
 	v := &Viewport{}
 	v.SetLayout(rowsLayout(t, 30), 10)
-	v.Reveal(28) // 28 - 3 = 25, clamped to 30 - 10 = 20
+	v.Reveal(stopAt(29, 0, 1)) // target row 28: 28 - 3 = 25, clamped to 30 - 10 = 20
 	if got := v.Top(); got != 20 {
 		t.Fatalf("reveal near EOF: top = %d, want 20", got)
 	}
@@ -83,7 +83,7 @@ func TestRevealStartsFromHeldTop(t *testing.T) {
 	// First visit: the zero-value viewport sits at the top of the file.
 	v := &Viewport{}
 	v.SetLayout(rowsLayout(t, 100), 10)
-	v.Reveal(50)
+	v.Reveal(stopAt(51, 0, 1))
 	if got := v.Top(); got != 47 {
 		t.Fatalf("first-visit reveal: top = %d, want 47", got)
 	}
@@ -91,7 +91,7 @@ func TestRevealStartsFromHeldTop(t *testing.T) {
 	// Revisit: the saved top shows the target already, so it survives.
 	v = &Viewport{anchor: Location{Line: 45}}
 	v.SetLayout(rowsLayout(t, 100), 10)
-	v.Reveal(50) // 50 is inside [45, 55)
+	v.Reveal(stopAt(51, 0, 1)) // target row 50 is inside [45, 55)
 	if got := v.Top(); got != 45 {
 		t.Fatalf("saved-viewport reveal: top = %d, want the saved 45", got)
 	}

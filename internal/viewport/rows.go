@@ -275,6 +275,22 @@ func (m *RowModel) TargetRow(stop searchindex.Stop) int {
 	return m.rowOf(line, cell)
 }
 
+// TargetColumn returns the horizontal reveal's aim point for a stop:
+// the source-display column at which the cluster holding the stop's
+// target cell starts, and that cluster's terminal cell width. A target
+// cell past the line's cells — an insertion point at the line's end —
+// aims at the line's extent as a single end-of-line cell.
+func (m *RowModel) TargetColumn(stop searchindex.Stop) (col, width int) {
+	line, cell := m.src.TargetCell(stop)
+	for _, c := range m.src.Clusters(line) {
+		if cell < c.End {
+			return col, c.Width
+		}
+		col += c.Width
+	}
+	return col, 1
+}
+
 // rowOf returns the rendered row of source line that contains display
 // cell — the last of the line's rows starting at or before the cell.
 // The line is clamped into the model's extent so a location past the
