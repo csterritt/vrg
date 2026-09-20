@@ -52,13 +52,21 @@ type Stop struct {
 type Index struct {
 	workdir string
 	byPath  map[string]map[int64]*Stop
-	sorted  []Stop
+	// binary holds the raw path keys of files confirmed binary by a
+	// valid end event's non-null binary_offset. Their collected matches
+	// are dropped and later records for them are never retained.
+	binary map[string]struct{}
+	sorted []Stop
 }
 
 // New returns an Index that resolves relative result paths against
 // workdir, the directory the search was invoked from.
 func New(workdir string) *Index {
-	return &Index{workdir: workdir, byPath: make(map[string]map[int64]*Stop)}
+	return &Index{
+		workdir: workdir,
+		byPath:  make(map[string]map[int64]*Stop),
+		binary:  make(map[string]struct{}),
+	}
 }
 
 // errMalformed marks a record that violates the per-record schema
@@ -132,7 +140,9 @@ func decodeBlob(raw json.RawMessage) ([]byte, error) {
 
 // addLifecycle validates the shared begin/end contract: data.path is
 // required, and end additionally requires binary_offset present as null
-// or a non-negative integer. Binary exclusion itself is Issue 8's.
+// or a non-negative integer. A non-null binary_offset confirms the file
+// binary: all its collected matches are dropped and it joins the
+// distinct exclusion count.
 func (x *Index) addLifecycle(record []byte, typ string) error {
 	raw, err := data(record)
 	if err != nil {
@@ -145,7 +155,8 @@ func (x *Index) addLifecycle(record []byte, typ string) error {
 	if err := json.Unmarshal(raw, &d); err != nil {
 		return malformed("%s.data: %s", typ, err)
 	}
-	if _, err := decodeBlob(d.Path); err != nil {
+	path, err := decodeBlob(d.Path)
+	if err != nil {
 		return malformed("%s.data.path: %s", typ, err)
 	}
 	if typ == "end" {
@@ -157,9 +168,22 @@ func (x *Index) addLifecycle(record []byte, typ string) error {
 			if err != nil || v < 0 {
 				return malformed("end.data.binary_offset %s is not a non-negative integer", b)
 			}
+			x.excludeBinary(path)
 		}
 	}
 	return nil
+}
+
+// excludeBinary drops every match collected for path and records the
+// file in the distinct exclusion count; already-excluded files are not
+// counted again.
+func (x *Index) excludeBinary(path []byte) {
+	key := string(path)
+	if _, seen := x.binary[key]; seen {
+		return
+	}
+	x.binary[key] = struct{}{}
+	delete(x.byPath, key)
 }
 
 // addMatch validates and indexes one match record.
@@ -209,6 +233,11 @@ func (x *Index) addMatch(record []byte) error {
 				i, s.Start, s.End, len(lines))
 		}
 		subs = append(subs, Submatch{Range: Range{Start: int(start), End: int(end)}, Text: text})
+	}
+	// A file confirmed binary stays excluded: a valid match arriving
+	// after its binary end is not retained.
+	if _, excluded := x.binary[string(path)]; excluded {
+		return nil
 	}
 	x.merge(path, line, subs)
 	return nil
@@ -312,6 +341,19 @@ func unionRanges(subs []Submatch) []Range {
 // it.
 func (x *Index) Stops() []Stop {
 	return x.sorted
+}
+
+// UsableResults reports the count of retained matched-line stops after
+// binary exclusion — the single usable-results value the outcome logic
+// consumes. It is valid after Finish.
+func (x *Index) UsableResults() int {
+	return len(x.sorted)
+}
+
+// BinaryExcluded reports the distinct count of files dropped because a
+// valid end event carried a non-null binary_offset.
+func (x *Index) BinaryExcluded() int {
+	return len(x.binary)
 }
 
 // Files returns the distinct raw path bytes in index order, one entry

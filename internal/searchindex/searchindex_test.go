@@ -364,12 +364,15 @@ func TestSchemaMatrixHappyPath(t *testing.T) {
 		endEvent(t, textData("a.txt"), nil),
 		beginEvent(t, textData("b.txt")),
 		matchEvent(t, textData("b.txt"), textData("hit\n"), 9, submatch(textData("hit"), 0, 3)),
-		endEvent(t, textData("b.txt"), 128), // non-null binary_offset still a valid record
+		endEvent(t, textData("b.txt"), 128), // non-null binary_offset: valid record, excluded file
 		summaryEvent(t),
 	)
 	stops := idx.Stops()
-	if len(stops) != 2 {
-		t.Fatalf("Stops() = %d, want 2 (Issue 8 owns binary exclusion): %+v", len(stops), stops)
+	if len(stops) != 1 {
+		t.Fatalf("Stops() = %d, want 1: b.txt was binary-excluded: %+v", len(stops), stops)
+	}
+	if n := idx.BinaryExcluded(); n != 1 {
+		t.Fatalf("BinaryExcluded() = %d, want 1", n)
 	}
 }
 
@@ -493,6 +496,119 @@ func TestUnknownTypesIgnored(t *testing.T) {
 	idx.Finish()
 	if n := len(idx.Stops()); n != 0 {
 		t.Fatalf("Stops() = %d, want 0", n)
+	}
+}
+
+// A valid end event carrying a non-null binary_offset confirms its file
+// binary: every match already collected for it is dropped and the file
+// joins the distinct excluded count.
+func TestBinaryEndDropsCollectedMatches(t *testing.T) {
+	idx := collect(t, "/w",
+		beginEvent(t, textData("bin.dat")),
+		matchEvent(t, textData("bin.dat"), textData("hit\n"), 1, submatch(textData("hit"), 0, 3)),
+		matchEvent(t, textData("bin.dat"), textData("hit again\n"), 4, submatch(textData("hit"), 0, 3)),
+		endEvent(t, textData("bin.dat"), 1024),
+		summaryEvent(t),
+	)
+	if n := len(idx.Stops()); n != 0 {
+		t.Fatalf("Stops() = %d, want 0: a binary file kept its matches", n)
+	}
+	if n := len(idx.Files()); n != 0 {
+		t.Fatalf("Files() = %d, want 0", n)
+	}
+	if n := idx.BinaryExcluded(); n != 1 {
+		t.Fatalf("BinaryExcluded() = %d, want 1", n)
+	}
+	if n := idx.UsableResults(); n != 0 {
+		t.Fatalf("UsableResults() = %d, want 0", n)
+	}
+}
+
+// The exclusion count is over distinct files: two binary files count
+// two, while a second binary end for an already-excluded path does not
+// count again.
+func TestBinaryExclusionCountsDistinctFiles(t *testing.T) {
+	idx := collect(t, "/w",
+		beginEvent(t, textData("a.bin")),
+		matchEvent(t, textData("a.bin"), textData("x\n"), 1, submatch(textData("x"), 0, 1)),
+		endEvent(t, textData("a.bin"), 7),
+		beginEvent(t, textData("b.bin")),
+		matchEvent(t, textData("b.bin"), textData("x\n"), 1, submatch(textData("x"), 0, 1)),
+		endEvent(t, textData("b.bin"), 3),
+		endEvent(t, textData("a.bin"), 99), // anomalous duplicate: still one file
+		summaryEvent(t),
+	)
+	if n := idx.BinaryExcluded(); n != 2 {
+		t.Fatalf("BinaryExcluded() = %d, want 2 distinct files", n)
+	}
+	if n := idx.UsableResults(); n != 0 {
+		t.Fatalf("UsableResults() = %d, want 0", n)
+	}
+}
+
+// Usable results are the retained stops after binary exclusion — never
+// the number of match events received. The excluded file's matches leave
+// no trace; the retained file browses normally.
+func TestUsableResultsCountsRetainedStops(t *testing.T) {
+	idx := collect(t, "/w",
+		beginEvent(t, textData("a.bin")),
+		matchEvent(t, textData("a.bin"), textData("x\n"), 1, submatch(textData("x"), 0, 1)),
+		matchEvent(t, textData("a.bin"), textData("x\n"), 2, submatch(textData("x"), 0, 1)),
+		endEvent(t, textData("a.bin"), 4),
+		beginEvent(t, textData("b.txt")),
+		matchEvent(t, textData("b.txt"), textData("y\n"), 9, submatch(textData("y"), 0, 1)),
+		endEvent(t, textData("b.txt"), nil),
+		summaryEvent(t),
+	)
+	if n := idx.UsableResults(); n != 1 {
+		t.Fatalf("UsableResults() = %d, want the 1 retained stop, not the 3 match events", n)
+	}
+	if n := idx.BinaryExcluded(); n != 1 {
+		t.Fatalf("BinaryExcluded() = %d, want 1", n)
+	}
+	var files []string
+	for _, f := range idx.Files() {
+		files = append(files, string(f))
+	}
+	if !slices.Equal(files, []string{"b.txt"}) {
+		t.Fatalf("Files() = %v, want [b.txt]", files)
+	}
+}
+
+// A match arriving after its file's binary-excluding end is not
+// retained: exclusion drops the file, not only the matches seen so far.
+// Issue 9 owns flagging the orphaned record; the index contract here is
+// non-retention.
+func TestMatchAfterBinaryEndNotRetained(t *testing.T) {
+	idx := collect(t, "/w",
+		beginEvent(t, textData("a.bin")),
+		matchEvent(t, textData("a.bin"), textData("x\n"), 1, submatch(textData("x"), 0, 1)),
+		endEvent(t, textData("a.bin"), 8),
+		matchEvent(t, textData("a.bin"), textData("x\n"), 2, submatch(textData("x"), 0, 1)),
+		summaryEvent(t),
+	)
+	if n := idx.UsableResults(); n != 0 {
+		t.Fatalf("UsableResults() = %d, want 0: a match after the binary end was retained", n)
+	}
+	if n := idx.BinaryExcluded(); n != 1 {
+		t.Fatalf("BinaryExcluded() = %d, want 1", n)
+	}
+}
+
+// An end with a null binary_offset confirms nothing: the file's matches
+// are retained and it is not counted as excluded.
+func TestNullBinaryOffsetRetains(t *testing.T) {
+	idx := collect(t, "/w",
+		beginEvent(t, textData("a.txt")),
+		matchEvent(t, textData("a.txt"), textData("x\n"), 1, submatch(textData("x"), 0, 1)),
+		endEvent(t, textData("a.txt"), nil),
+		summaryEvent(t),
+	)
+	if n := idx.UsableResults(); n != 1 {
+		t.Fatalf("UsableResults() = %d, want 1", n)
+	}
+	if n := idx.BinaryExcluded(); n != 0 {
+		t.Fatalf("BinaryExcluded() = %d, want 0", n)
 	}
 }
 

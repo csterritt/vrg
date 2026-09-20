@@ -3,8 +3,12 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/clipperhouse/displaywidth"
 
 	"vrg/internal/filebuffer"
 	"vrg/internal/searchindex"
@@ -22,6 +26,9 @@ const (
 	// stateBrowse is the two-pane result browser: file list plus the
 	// current file's content panel.
 	stateBrowse
+	// stateNoResults is the centred outcome screen of a complete,
+	// successful search that retained no usable results.
+	stateNoResults
 	// stateCancelled is the terminal cancellation state: the program is
 	// quitting with status 130 and late completions must not revive it.
 	stateCancelled
@@ -111,7 +118,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.index = msg.index
 		m.stderr = msg.stderr
 		m.procErr = msg.err
-		return m.enterBrowse()
+		if m.index.UsableResults() > 0 {
+			return m.enterBrowse()
+		}
+		return m.enterNoResults()
 	case loadResult:
 		if m.state == stateCancelled {
 			return m, nil
@@ -136,7 +146,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.state {
 			case stateSearching:
 				return m.cancelRun()
-			case stateBrowse:
+			case stateBrowse, stateNoResults:
 				return m, tea.Quit
 			}
 		case "c":
@@ -146,6 +156,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// enterNoResults ends a completed search that retained no usable
+// results. A successful rg (exit 0 or 1) presents the no-results screen
+// with the fixed status 1. The fatal outcome rows — error overlay and
+// exit 2 — are Issue 9's; until then a failed rg with nothing usable
+// exits 2 rather than reporting failure as a successful empty search.
+func (m Model) enterNoResults() (tea.Model, tea.Cmd) {
+	if !rgSucceeded(m.procErr) {
+		m.status = 2
+		return m, tea.Quit
+	}
+	m.state = stateNoResults
+	m.status = 1
+	return m, nil
+}
+
+// rgSucceeded reports whether the child's wait status is an ordinary rg
+// outcome: a clean exit or exit code 1 (no matches). Any other wait
+// failure — another exit code, signal death, or a Wait error — is
+// fatal.
+func rgSucceeded(err error) bool {
+	if err == nil {
+		return true
+	}
+	var ex interface{ ExitCode() int }
+	return errors.As(err, &ex) && ex.ExitCode() == 1
 }
 
 // enterBrowse moves a completed search into the browse state and starts
@@ -241,9 +278,37 @@ func (m Model) screen() string {
 	switch m.state {
 	case stateBrowse:
 		return m.browseScreen()
+	case stateNoResults:
+		return m.noResultsScreen()
 	case stateCancelled:
 		return ""
 	default:
 		return m.theme.Base("Searching…")
 	}
+}
+
+// noResultsScreen renders the centred outcome of a successful search
+// that retained no usable results, appending the distinct exclusion
+// count when matched files were confirmed binary.
+func (m Model) noResultsScreen() string {
+	w, h := m.width, m.height
+	if w <= 0 {
+		w = 80
+	}
+	if h <= 0 {
+		h = 24
+	}
+	msg := "No results found"
+	if m.index != nil {
+		if n := m.index.BinaryExcluded(); n > 0 {
+			msg = fmt.Sprintf("%s (%d binary files skipped)", msg, n)
+		}
+	}
+	pad := (w - displaywidth.String(msg)) / 2
+	if pad < 0 {
+		pad = 0
+	}
+	rows := make([]string, h)
+	rows[h/2] = strings.Repeat(" ", pad) + msg
+	return m.theme.Base(strings.Join(rows, "\n"))
 }
