@@ -293,3 +293,14 @@ Usage
  Input tokens: 53646 tokens
  Output tokens: 8045 tokens
  Cached input tokens: 1348757 tokens
+
+----
+Task 028-load-completion-reveal-latest-target.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 41 messages
+ Input tokens: 184455 tokens
+ Output tokens: 85849 tokens
+ Cached input tokens: 4665750 tokens

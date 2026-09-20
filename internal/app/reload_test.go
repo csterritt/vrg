@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -553,5 +554,359 @@ func TestReloadSupersedesOldRevisionLayout(t *testing.T) {
 	}
 	if row := contentRow(t, m); !strings.Contains(row, "line-31") {
 		t.Fatalf("reloaded panel = %q, want line-31 at the preserved top", row)
+	}
+}
+
+// wideReloadIndex writes a.txt's reload-intent fixture — a 100-line
+// file whose lines 5, 41, and 95 are 200 cells wide so a run-off-edge
+// pan survives at either test scroll position — with matched stops at
+// lines 5 and 95, each targeting column 5.
+func wideReloadIndex(t *testing.T, dir string) *searchindex.Index {
+	t.Helper()
+	var b strings.Builder
+	for i := 1; i <= 100; i++ {
+		switch i {
+		case 5:
+			b.WriteString("aaaaa" + strings.Repeat("x", 195) + "\n")
+		case 41:
+			b.WriteString(strings.Repeat("x", 200) + "\n")
+		case 95:
+			b.WriteString("bbbbb" + strings.Repeat("x", 195) + "\n")
+		default:
+			fmt.Fprintf(&b, "line-%02d\n", i)
+		}
+	}
+	writeMatchFile(t, dir, "a.txt", b.String())
+	idx := searchindex.New(dir)
+	addRec(t, idx, matchRec("a.txt", "aaaaa"+strings.Repeat("x", 195)+"\n", 5, 5, 7, "xx"))
+	addRec(t, idx, matchRec("a.txt", "bbbbb"+strings.Repeat("x", 195)+"\n", 95, 5, 7, "xx"))
+	idx.Finish()
+	return idx
+}
+
+// reloadSetup loads a.txt's wide fixture in run-off-edge mode, then
+// scrolls to top 33 — hiding the line-5 target above the window — and
+// pans to offset 50: the position and offset a navigation-free reload
+// preserves, and a navigation reveal commits away from.
+func reloadSetup(t *testing.T, dir string, idx *searchindex.Index) Model {
+	t.Helper()
+	m, cmd := startBrowse(t, dir, idx, 80, 24)
+	m = applyLoad(t, m, cmd())
+	m.theme = theme.Plain()
+	m, cmd = update(t, m, keyMsg("w"))
+	m = deliverCmd(t, m, cmd)
+	for i := 0; i < 3; i++ {
+		m, _ = update(t, m, keyMsg("d")) // half-page: 11 each → top 33
+	}
+	for i := 0; i < 5; i++ {
+		m, _ = update(t, m, keyMsg(">")) // → offset 50
+	}
+	if got := m.vps["a.txt"].Top(); got != 33 {
+		t.Fatalf("setup top = %d, want 33", got)
+	}
+	if got := m.vps["a.txt"].Offset(); got != 50 {
+		t.Fatalf("setup offset = %d, want 50", got)
+	}
+	return m
+}
+
+// A reload with no intervening navigation commits the
+// anchor-preserving install: the saved top and the retained horizontal
+// offset both survive, re-clamped against the new revision — the
+// commit's horizontal reset applies only to a pending reveal.
+func TestReloadAnchorKeepsRetainedOffset(t *testing.T) {
+	dir := t.TempDir()
+	m := reloadSetup(t, dir, wideReloadIndex(t, dir))
+
+	m, c := update(t, m, keyMsg("r"))
+	m = applyLoad(t, m, c())
+
+	if got := m.vps["a.txt"].Top(); got != 33 {
+		t.Fatalf("anchor commit top = %d, want the preserved 33", got)
+	}
+	if got := m.vps["a.txt"].Offset(); got != 50 {
+		t.Fatalf("anchor commit offset = %d, want the retained 50", got)
+	}
+}
+
+// Navigation during the reload replaces the anchor-preserving intent
+// with the reveal for the newest selection: the commit lands the new
+// target at one-third and resets the retained offset first — the
+// navigation intent, not the reload, decides what installs.
+func TestReloadNavigationDuringLoadCommitsReveal(t *testing.T) {
+	dir := t.TempDir()
+	m := reloadSetup(t, dir, wideReloadIndex(t, dir))
+
+	loadGate := make(chan struct{})
+	m.loadGate = loadGate
+	layoutGate := make(chan struct{})
+	m.layoutGate = layoutGate
+	m, c := update(t, m, keyMsg("r"))
+	jobR := runWorker(t, c)
+	assertSilent(t, jobR, "a.txt's reload")
+
+	// n during the held load moves the cursor to the second stop and
+	// leaves the pending reveal.
+	m, c = update(t, m, keyMsg("n"))
+	if c != nil {
+		t.Fatalf("n during the held reload returned a command: %v", c)
+	}
+	if stop, _ := m.index.Current(); stop.Line != 95 {
+		t.Fatalf("n during the reload selected line %d, want 95", stop.Line)
+	}
+	if m.pendingIntent != intentReveal {
+		t.Fatalf("n during the reload left intent %v, want the pending reveal", m.pendingIntent)
+	}
+
+	// The completion keeps the reveal intent — the reload's anchor
+	// intent never displaces a pending reveal — and requests the
+	// new-revision layout.
+	close(loadGate)
+	m, cmd := update(t, m, collectMsg(t, jobR, "a.txt's reload"))
+	if m.pendingIntent != intentReveal {
+		t.Fatal("the reload completion overrode the navigation reveal")
+	}
+	jobL := runLayoutJob(t, cmd)
+	assertHeld(t, jobL, "the rev-2 layout")
+
+	// The install commits the newest selection's reveal: target row 94
+	// lands at 94 − 23/3 = 87, EOF-clamped to 77 — never the
+	// pre-reload anchor's 33 — and the offset resets before the
+	// column-5 target's minimal reveal leaves it at zero.
+	close(layoutGate)
+	m, _ = update(t, m, collectMsg(t, jobL, "the rev-2 layout"))
+	if got := m.vps["a.txt"].Top(); got != 77 {
+		t.Fatalf("committed top = %d, want 77 — the newest target's placement, not the anchor 33", got)
+	}
+	if got := m.vps["a.txt"].Offset(); got != 0 {
+		t.Fatalf("committed offset = %d, want the reset 0", got)
+	}
+	if row := contentRow(t, m); !strings.Contains(row, "line-78") {
+		t.Fatalf("panel top row = %q, want line-78", row)
+	}
+}
+
+// Same-file navigation away and back during the reload — ending on the
+// very stop the reload started from — still commits the reveal: the
+// intent records that navigation happened, never the cursor's equality
+// with its start.
+func TestReloadAwayAndBackStillCommitsReveal(t *testing.T) {
+	dir := t.TempDir()
+	m := reloadSetup(t, dir, wideReloadIndex(t, dir))
+
+	loadGate := make(chan struct{})
+	m.loadGate = loadGate
+	layoutGate := make(chan struct{})
+	m.layoutGate = layoutGate
+	m, c := update(t, m, keyMsg("r"))
+	jobR := runWorker(t, c)
+	assertSilent(t, jobR, "a.txt's reload")
+
+	// Away to line 95 and back to line 5: the cursor returns to its
+	// reload-time stop, but the navigation happened — the reveal
+	// intent stands.
+	m, _ = update(t, m, keyMsg("n"))
+	m, _ = update(t, m, keyMsg("p"))
+	if stop, _ := m.index.Current(); stop.Line != 5 {
+		t.Fatalf("n p during the reload selected line %d, want 5", stop.Line)
+	}
+	if m.pendingIntent != intentReveal {
+		t.Fatalf("the away-and-back left intent %v, want the pending reveal", m.pendingIntent)
+	}
+
+	close(loadGate)
+	m, cmd := update(t, m, collectMsg(t, jobR, "a.txt's reload"))
+	if m.pendingIntent != intentReveal {
+		t.Fatal("the reload completion overrode the navigation reveal")
+	}
+	jobL := runLayoutJob(t, cmd)
+	assertHeld(t, jobL, "the rev-2 layout")
+
+	// The commit reveals the line-5 target from the saved top 33: row
+	// 4 is hidden above, so the top moves to 4 − 23/3, clamped at the
+	// file top — never the anchor's 33 — and the offset resets.
+	close(layoutGate)
+	m, _ = update(t, m, collectMsg(t, jobL, "the rev-2 layout"))
+	if got := m.vps["a.txt"].Top(); got != 0 {
+		t.Fatalf("committed top = %d, want 0 — the reveal, not the anchor 33", got)
+	}
+	if got := m.vps["a.txt"].Offset(); got != 0 {
+		t.Fatalf("committed offset = %d, want the reset 0", got)
+	}
+	if row := contentRow(t, m); !strings.Contains(row, "line-01") {
+		t.Fatalf("panel top row = %q, want line-01", row)
+	}
+}
+
+// Navigation across files during the reload — away to b.txt and back —
+// shows "Loading…" on the return and commits the entry reveal for the
+// latest selection, never the pre-reload anchor.
+func TestReloadCrossFileAwayAndBackCommitsReveal(t *testing.T) {
+	dir := t.TempDir()
+	writeMatchFile(t, dir, "a.txt", numberedContent(100))
+	writeMatchFile(t, dir, "b.txt", "hit b\n")
+	idx := searchindex.New(dir)
+	addRec(t, idx, matchRec("a.txt", "line-05\n", 5, 0, 4, "line"))
+	addRec(t, idx, matchRec("b.txt", "hit b\n", 1, 0, 3, "hit"))
+	idx.Finish()
+
+	m, cmd := startBrowse(t, dir, idx, 80, 24)
+	m = applyLoad(t, m, cmd())
+	m.theme = theme.Plain()
+	for i := 0; i < 3; i++ {
+		m, _ = update(t, m, keyMsg("d")) // top 33 — target row 4 hidden above
+	}
+
+	loadGate := make(chan struct{})
+	m.loadGate = loadGate
+	m, c := update(t, m, keyMsg("r"))
+	jobR := runWorker(t, c)
+	assertSilent(t, jobR, "a.txt's reload")
+
+	// Away to b.txt — its load is held behind the same gate — and back
+	// to a.txt, which renders the reload placeholder.
+	m, nav := update(t, m, keyMsg("n"))
+	jobsB := navJobs(t, nav)
+	m, _ = update(t, m, keyMsg("p"))
+	if got := m.View().Content; !strings.Contains(got, "Loading…") {
+		t.Fatalf("the return to a.txt did not show the reload placeholder:\n%s", got)
+	}
+	if m.pendingIntent != intentReveal {
+		t.Fatal("the return to the reloading file did not leave a pending reveal")
+	}
+
+	// a.txt's completion commits the entry reveal for the line-5 stop:
+	// the saved anchor's top 33 is only the starting point — the
+	// hidden target lands at the file top.
+	close(loadGate)
+	m = applyLoad(t, m, collectMsg(t, jobR, "a.txt's reload"))
+	if got := m.vps["a.txt"].Top(); got != 0 {
+		t.Fatalf("committed top = %d, want the entry reveal's 0, not the anchor 33", got)
+	}
+	if row := contentRow(t, m); !strings.Contains(row, "line-01") {
+		t.Fatalf("panel top row = %q, want line-01", row)
+	}
+
+	// b.txt's held load completes non-current: cache only — the panel
+	// is untouched.
+	for _, j := range jobsB {
+		if lr, ok := collectMsg(t, j, "b.txt navigation job").(loadResult); ok {
+			before := m.View().Content
+			m, _ = update(t, m, lr)
+			if got := m.View().Content; got != before {
+				t.Fatal("b.txt's non-current completion changed the panel")
+			}
+		}
+	}
+}
+
+// Old-revision and new-revision layouts complete out of order: the new
+// revision installs and commits the anchor-preserving intent, and the
+// late old-revision layout is discarded without moving the anchor or
+// touching the consumed intent.
+func TestReloadOutOfOrderRevisionInstall(t *testing.T) {
+	dir := t.TempDir()
+	writeMatchFile(t, dir, "a.txt", numberedContent(100))
+	idx := searchindex.New(dir)
+	addRec(t, idx, matchRec("a.txt", "line-05\n", 5, 0, 4, "line"))
+	idx.Finish()
+
+	m, cmd := startBrowse(t, dir, idx, 80, 24)
+	m = applyLoad(t, m, cmd())
+	m.theme = theme.Plain()
+	for i := 0; i < 3; i++ {
+		m, _ = update(t, m, keyMsg("d")) // top 33
+	}
+
+	// A resize mints an old-revision layout, held behind the gate; r
+	// then reloads and its completion requests the new-revision one.
+	layoutGate := make(chan struct{})
+	m.layoutGate = layoutGate
+	m, resize := update(t, m, tea.WindowSizeMsg{Width: 100, Height: 24})
+	jobOld := runLayoutJob(t, resize)
+	assertHeld(t, jobOld, "the old-revision layout")
+
+	m, c := update(t, m, keyMsg("r"))
+	m, cmd = update(t, m, c()) // the ungated reload completes inline
+	jobNew := runLayoutJob(t, cmd)
+	assertHeld(t, jobNew, "the new-revision layout")
+
+	// The new revision installs first and commits the anchor intent:
+	// the saved top is preserved and the intent retires.
+	close(layoutGate)
+	m, _ = update(t, m, collectMsg(t, jobNew, "the new-revision layout"))
+	if got := m.buffers["a.txt"].Key().Revision; got != 2 {
+		t.Fatalf("installed revision = %d, want 2", got)
+	}
+	if got := m.vps["a.txt"].Top(); got != 33 {
+		t.Fatalf("the anchor-preserving commit moved the top to %d, want 33", got)
+	}
+	if m.pendingIntent != intentNone {
+		t.Fatal("the anchor commit left a pending intent")
+	}
+
+	// The late old-revision layout is discarded: the installed
+	// revision, the anchor, and the consumed intent are untouched.
+	m, c = update(t, m, collectMsg(t, jobOld, "the old-revision layout"))
+	if c != nil {
+		t.Fatal("the late old-revision layout issued a command")
+	}
+	if got := m.buffers["a.txt"].Key().Revision; got != 2 {
+		t.Fatalf("the old revision displaced the installed layout: revision %d", got)
+	}
+	if got := m.vps["a.txt"].Top(); got != 33 {
+		t.Fatalf("the old-revision discard moved the anchor to %d, want 33", got)
+	}
+	if m.pendingIntent != intentNone {
+		t.Fatal("the old-revision discard mutated the consumed intent")
+	}
+}
+
+// With navigation during the reload the new-revision install commits
+// the reveal instead; a still-later old-revision layout cannot undo
+// either the install or the commit.
+func TestReloadRevealCommitThenLateOldLayout(t *testing.T) {
+	dir := t.TempDir()
+	m := reloadSetup(t, dir, wideReloadIndex(t, dir))
+
+	// An old-revision layout is already in flight from a resize before
+	// the reload.
+	layoutGate := make(chan struct{})
+	m.layoutGate = layoutGate
+	m, resize := update(t, m, tea.WindowSizeMsg{Width: 100, Height: 24})
+	jobOld := runLayoutJob(t, resize)
+	assertHeld(t, jobOld, "the old-revision layout")
+
+	m, c := update(t, m, keyMsg("r"))
+	m, _ = update(t, m, keyMsg("n")) // select the line-95 stop mid-reload
+	m, cmd := update(t, m, c())      // the ungated reload completes → rev 2
+	jobNew := runLayoutJob(t, cmd)
+	assertHeld(t, jobNew, "the new-revision layout")
+
+	// The new revision installs and commits the reveal for the newest
+	// selection, evaluated at the resized width.
+	close(layoutGate)
+	m, _ = update(t, m, collectMsg(t, jobNew, "the new-revision layout"))
+	if got := m.vps["a.txt"].Top(); got != 77 {
+		t.Fatalf("committed top = %d, want 77", got)
+	}
+	if got := m.vps["a.txt"].Offset(); got != 0 {
+		t.Fatalf("committed offset = %d, want the reset 0", got)
+	}
+	if m.pendingIntent != intentNone {
+		t.Fatal("the reveal commit left a pending intent")
+	}
+
+	// The late old-revision layout is discarded whole — the installed
+	// revision and the committed viewport are untouched.
+	m, c = update(t, m, collectMsg(t, jobOld, "the old-revision layout"))
+	if c != nil || m.buffers["a.txt"].Key().Revision != 2 {
+		t.Fatal("the late old-revision layout was not discarded")
+	}
+	if got := m.vps["a.txt"].Top(); got != 77 {
+		t.Fatalf("the old-revision discard moved the top to %d, want 77", got)
+	}
+	if got := m.vps["a.txt"].Offset(); got != 0 {
+		t.Fatalf("the old-revision discard changed the offset to %d, want 0", got)
 	}
 }

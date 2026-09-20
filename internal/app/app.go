@@ -330,6 +330,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// intent is the anchor-preserving install itself — SetLayout
 		// already mapped the anchor, clamped to the new content.
 		if m.pendingIntent == intentReveal {
+			// The committed reveal is the file-change sequence: the
+			// horizontal offset — retained from a superseded layout
+			// or the placeholder — resets to zero before the
+			// minimal horizontal reveal.
+			m.viewportFor(key).ResetOffset()
 			m.revealCurrent()
 		} else {
 			m.pendingIntent = intentNone
