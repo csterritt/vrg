@@ -59,8 +59,11 @@ func TestReplayCollectsDisplayedAndUndisplayedOnceInOrder(t *testing.T) {
 			// failures — the diagnostics are collected but never
 			// displayed.
 			m, _ = update(t, m, keyPress("q"))
-			m, _ = update(t, m, loadResult{path: []byte("b.txt"), err: errors.New("denied")})
-			m, _ = update(t, m, loadResult{path: []byte("c.txt"), err: errors.New("gone")})
+			var req int
+			m, req = beginLoad(m, "b.txt")
+			m, _ = update(t, m, loadResult{path: []byte("b.txt"), req: req, err: errors.New("denied")})
+			m, req = beginLoad(m, "c.txt")
+			m, _ = update(t, m, loadResult{path: []byte("c.txt"), req: req, err: errors.New("gone")})
 			if got := m.View().Content; strings.Contains(got, "denied") || strings.Contains(got, "gone") {
 				t.Fatalf("a never-displayed diagnostic reached the screen:\n%s", got)
 			}
@@ -287,8 +290,10 @@ func TestReplayEscapesEmbeddedFilename(t *testing.T) {
 		Stderr: &stderr,
 		Program: func(m Model) (tea.Model, error) {
 			m, _ = update(t, m, searchResult{index: fixtureIndex(t, 1, 1), integrity: completeStream})
+			m, req := beginLoad(m, "evil\nname\x1b.txt")
 			m, _ = update(t, m, loadResult{
 				path: []byte("evil\nname\x1b.txt"),
+				req:  req,
 				err:  errors.New("denied"),
 			})
 			m, cmd := update(t, m, keyPress("q"))

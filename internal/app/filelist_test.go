@@ -167,6 +167,7 @@ func TestZeroWidthListRetainsPreference(t *testing.T) {
 	m, _ := startBrowse(t, dir, idx, 80, 24)
 	m = applyLoad(t, m, loadResult{
 		path: []byte("a.txt"),
+		req:  m.loading["a.txt"],
 		src:  &stubSource{gutter: 9, widths: []int{40, 1, 1}},
 	})
 	m.theme = theme.Plain()
@@ -306,6 +307,7 @@ func TestGutterGrowthRelayoutPreservesAnchor(t *testing.T) {
 	m, _ := startBrowse(t, dir, idx, 30, 24)
 	m = applyLoad(t, m, loadResult{
 		path: []byte("aaaaaaaaaaaa.txt"),
+		req:  m.loading["aaaaaaaaaaaa.txt"],
 		src:  &stubSource{gutter: 3, widths: widths},
 	})
 	m.theme = theme.Plain()
@@ -324,8 +326,11 @@ func TestGutterGrowthRelayoutPreservesAnchor(t *testing.T) {
 
 	// The completion's gutter 9 narrows the list to 11 and the text
 	// width to 10; the relayout preserves the anchor's location.
+	var req int
+	m, req = beginLoad(m, "aaaaaaaaaaaa.txt")
 	m, cmd := update(t, m, loadResult{
 		path: []byte("aaaaaaaaaaaa.txt"),
+		req:  req,
 		src:  &stubSource{gutter: 9, widths: widths},
 	})
 	m = deliverCmd(t, m, cmd)
@@ -345,8 +350,10 @@ func TestGutterGrowthRelayoutPreservesAnchor(t *testing.T) {
 
 	// Shrinking back restores the earlier geometry and the same top
 	// row — the round trip is lossless.
+	m, req = beginLoad(m, "aaaaaaaaaaaa.txt")
 	m, cmd = update(t, m, loadResult{
 		path: []byte("aaaaaaaaaaaa.txt"),
+		req:  req,
 		src:  &stubSource{gutter: 3, widths: widths},
 	})
 	m = deliverCmd(t, m, cmd)

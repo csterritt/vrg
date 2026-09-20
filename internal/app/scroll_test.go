@@ -278,7 +278,7 @@ func TestRenderQueriesOnlyVisibleRows(t *testing.T) {
 	m, _ = update(t, m, searchResult{index: idx, integrity: completeStream})
 
 	src := newCountingSource(10000)
-	m = applyLoad(t, m, loadResult{path: []byte("a.txt"), src: src})
+	m = applyLoad(t, m, loadResult{path: []byte("a.txt"), req: m.loading["a.txt"], src: src})
 
 	src.queried = nil
 	src.wrapped = 0

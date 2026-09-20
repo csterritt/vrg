@@ -18,9 +18,7 @@ import (
 // and reports the produced message on the returned channel.
 func runLayoutJob(t *testing.T, cmd tea.Cmd) <-chan tea.Msg {
 	t.Helper()
-	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
-	return done
+	return runWorker(t, cmd)
 }
 
 // assertHeld fails when a job completed while the layout gate is held.

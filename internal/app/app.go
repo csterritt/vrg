@@ -89,7 +89,10 @@ type Model struct {
 
 	// Browse state: the raw-path-ordered file list, per-path loaded
 	// content and its installed row model keyed by raw path bytes, and
-	// the load bookkeeping that keeps one load in flight per path. The
+	// the load bookkeeping that keeps one load in flight per path:
+	// loading records each path's in-flight request identity — minted
+	// by loadSeq — so a completion can be matched to the request it
+	// answers and a stale or unsolicited one discarded. The
 	// matched-line cursor lives in the index; the current file derives
 	// from it. vps holds each visited file's saved vertical viewport
 	// under the same key, so a revisited file resumes from its saved
@@ -111,7 +114,8 @@ type Model struct {
 	buffers       map[string]*viewport.RowModel
 	sources       map[string]viewport.Source
 	revs          map[string]int
-	loading       map[string]bool
+	loading       map[string]int
+	loadSeq       int
 	failed        map[string]bool
 	notes         map[string]string
 	listTop       int
@@ -139,7 +143,7 @@ func New(child Child, workdir string) Model {
 		buffers:     make(map[string]*viewport.RowModel),
 		sources:     make(map[string]viewport.Source),
 		revs:        make(map[string]int),
-		loading:     make(map[string]bool),
+		loading:     make(map[string]int),
 		failed:      make(map[string]bool),
 		notes:       make(map[string]string),
 		vps:         make(map[string]*viewport.Viewport),
@@ -164,8 +168,9 @@ func (m Model) Init() tea.Cmd {
 
 // Update applies messages to the model. Collection results arrive as
 // searchResult and enter the browse view; file loads arrive as
-// loadResult carrying a prepared buffer, and prepared row layouts
-// arrive as layoutResult keyed by the parameters they were built for.
+// loadResult carrying a prepared buffer keyed by raw path and request
+// identity, and prepared row layouts arrive as layoutResult keyed by
+// the parameters they were built for.
 // Keys act per state — q cancels while searching and quits while
 // browsing, and ctrl+c cancels in any state. Esc is not an exit key and
 // is a no-op outside overlays.
@@ -230,6 +235,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		key := string(msg.path)
+		req, ok := m.loading[key]
+		if !ok || req != msg.req {
+			// A completion counts only while the request it answers is
+			// still in flight: anything else — a stale duplicate, an
+			// unsolicited result — is discarded without touching the
+			// path's cache, status, or bookkeeping.
+			return m, nil
+		}
 		delete(m.loading, key)
 		if msg.err != nil {
 			m.failed[key] = true
@@ -465,11 +478,12 @@ func (m Model) ensureStaged() (Model, tea.Cmd) {
 	}
 	key := string(stop.Path)
 	if m.sources[key] == nil {
-		if m.loading[key] {
+		if _, ok := m.loading[key]; ok {
 			return m, nil
 		}
-		m.loading[key] = true
-		return m, loadCmd(m.ctx, m.loadGate, stop, stopsForPath(m.index, stop.Path))
+		m.loadSeq++
+		m.loading[key] = m.loadSeq
+		return m, loadCmd(m.ctx, m.loadGate, m.loadSeq, stop, stopsForPath(m.index, stop.Path))
 	}
 	return m, m.prepareLayout()
 }
@@ -486,10 +500,13 @@ func stopsForPath(index *searchindex.Index, path []byte) []searchindex.Stop {
 }
 
 // loadResult is the product of one file load, delivered to the model as
-// a message: the raw path it belongs to and the prepared source the row
-// model is built from, or the read error.
+// a message: the raw path it belongs to, the identity of the request it
+// answers, and the prepared source the row model is built from — or the
+// read error. The model applies it only while that exact request is
+// still in flight for that path.
 type loadResult struct {
 	path []byte
+	req  int
 	src  viewport.Source
 	err  error
 }
@@ -497,10 +514,10 @@ type loadResult struct {
 // loadCmd reads and maps a file off the update path. A non-nil gate
 // holds the read and decode/map phase until it closes; ctx cancellation
 // releases a held gate promptly. The completion message carries the
-// prepared source so Update does no full-file decoding; the row model
-// is built at install time so it always matches the current text width
-// and wrap mode.
-func loadCmd(ctx context.Context, gate <-chan struct{}, stop searchindex.Stop, stops []searchindex.Stop) tea.Cmd {
+// request identity and the prepared source so Update does no full-file
+// decoding; the row model is built at install time so it always matches
+// the current text width and wrap mode.
+func loadCmd(ctx context.Context, gate <-chan struct{}, req int, stop searchindex.Stop, stops []searchindex.Stop) tea.Cmd {
 	resolved := append([]byte(nil), stop.Resolved...)
 	path := append([]byte(nil), stop.Path...)
 	return func() tea.Msg {
@@ -515,7 +532,7 @@ func loadCmd(ctx context.Context, gate <-chan struct{}, stop searchindex.Stop, s
 		if buf != nil {
 			src = buf
 		}
-		return loadResult{path: path, src: src, err: err}
+		return loadResult{path: path, req: req, src: src, err: err}
 	}
 }
 

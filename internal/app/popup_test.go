@@ -313,7 +313,7 @@ func TestPopupCancelledByErrorOverlay(t *testing.T) {
 		t.Fatal("no pop-up to cancel")
 	}
 
-	m, _ = update(t, m, loadResult{path: []byte("b.txt"), err: errors.New("denied")})
+	m, _ = update(t, m, loadResult{path: []byte("b.txt"), req: m.loading["b.txt"], err: errors.New("denied")})
 	if m.overlay == nil {
 		t.Fatal("the current-file failure opened no error overlay")
 	}

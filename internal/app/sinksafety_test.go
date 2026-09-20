@@ -207,7 +207,8 @@ func popupExpect(f hostileFixture) []string {
 func stderrReplaySink(t *testing.T, f hostileFixture, _ bool) string {
 	t.Helper()
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
-	m, _ = update(t, m, loadResult{path: f.data, err: errors.New("denied")})
+	m, req := beginLoad(m, string(f.data))
+	m, _ = update(t, m, loadResult{path: f.data, req: req, err: errors.New("denied")})
 	var out bytes.Buffer
 	m.diags.replay(&out)
 	return out.String()
