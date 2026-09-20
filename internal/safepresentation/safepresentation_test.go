@@ -249,6 +249,33 @@ func TestContentSpanMapping(t *testing.T) {
 	}
 }
 
+// A cluster with no base or independent visible cell — standalone
+// combining marks — gains the recorded fallback: one cell showing
+// U+25CC DOTTED CIRCLE followed by the cluster's own bytes, its width
+// pinned to one, and its byte mapping still resolving to the original
+// source bytes. The following cluster starts in the next cell.
+func TestContentStandaloneCombiningClusterFallback(t *testing.T) {
+	cells, clusters := safepresentation.EscapeContent([]byte("́x"))
+	if len(cells) != 2 ||
+		cells[0] != (safepresentation.Cell{Text: "◌́", Start: 0, End: 2}) ||
+		cells[1] != (safepresentation.Cell{Text: "x", Start: 2, End: 3}) {
+		t.Fatalf("cells = %+v, want the ◌́ fallback cell on bytes [0,2) then x", cells)
+	}
+	want := []safepresentation.Cluster{{Start: 0, End: 1, Width: 1}, {Start: 1, End: 2, Width: 1}}
+	if len(clusters) != 2 || clusters[0] != want[0] || clusters[1] != want[1] {
+		t.Fatalf("clusters = %+v, want %+v", clusters, want)
+	}
+
+	// A run of standalone marks is still exactly one fallback cell.
+	cells, clusters = safepresentation.EscapeContent([]byte("́̂x"))
+	if len(cells) != 2 || cells[0].Text != "◌́̂" {
+		t.Fatalf("cells = %+v, want one ◌́̂ fallback cell then x", cells)
+	}
+	if clusters[0] != (safepresentation.Cluster{Start: 0, End: 1, Width: 1}) {
+		t.Fatalf("cluster = %+v, want one cell of width 1", clusters[0])
+	}
+}
+
 // A span over a multi-byte C1 escape covers all six cells of its
 // \uXXXX-style form.
 func TestContentSpanCoversC1Escape(t *testing.T) {

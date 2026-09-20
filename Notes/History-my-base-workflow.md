@@ -216,3 +216,14 @@ Usage
  Input tokens: 149157 tokens
  Output tokens: 61524 tokens
  Cached input tokens: 4122345 tokens
+
+----
+Task 021-grapheme-cluster-highlight-expansion.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 39 messages
+ Input tokens: 128266 tokens
+ Output tokens: 44478 tokens
+ Cached input tokens: 3142629 tokens

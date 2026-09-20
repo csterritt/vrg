@@ -148,7 +148,11 @@ type Cluster struct {
 // expands to spaces up to the next multiple of eight source-display
 // columns; C1 controls use \uXXXX escapes; invalid UTF-8 bytes each
 // become one U+FFFD cell retaining their raw-byte mapping; printable
-// text passes through.
+// text passes through. A cluster with no base or independent visible
+// cell — a standalone combining mark, say — gains the recorded
+// fallback (Notes/decisions/043): U+25CC DOTTED CIRCLE before the
+// cluster's bytes as exactly one cell of pinned width one, so a
+// highlight over it is never zero cells.
 func EscapeContent(raw []byte) ([]Cell, []Cluster) {
 	var cells []Cell
 	var clusters []Cluster
@@ -169,10 +173,17 @@ func EscapeContent(raw []byte) ([]Cell, []Cluster) {
 			var text strings.Builder
 			escapeCluster(&text, cluster)
 			s := text.String()
-			for _, r := range s {
-				cells = append(cells, Cell{Text: string(r), Start: from, End: pos})
+			if width = displaywidth.String(s); width == 0 {
+				// The fallback cell is constructed, not re-measured:
+				// pinned to one cell of width one, it still maps to the
+				// cluster's original source bytes.
+				cells = append(cells, Cell{Text: "◌" + s, Start: from, End: pos})
+				width = 1
+			} else {
+				for _, r := range s {
+					cells = append(cells, Cell{Text: string(r), Start: from, End: pos})
+				}
 			}
-			width = displaywidth.String(s)
 		}
 		clusters = append(clusters, Cluster{Start: start, End: len(cells), Width: width})
 		col += width

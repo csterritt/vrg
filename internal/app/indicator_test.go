@@ -268,6 +268,35 @@ func TestSplitGlyphMatchCountsAsHidden(t *testing.T) {
 	}
 }
 
+// A match whose recorded bytes start mid-cluster is indicator-counted
+// from the cluster start — FileBuffer's recorded span is already
+// cluster-expanded. Coverage beginning inside 世's bytes [0,3) marks
+// the cluster's whole cell range, so with the cluster split into a
+// blank at the window's left edge the span has no painted cell and the
+// match counts as hidden left.
+func TestMidClusterMatchCountsHiddenLeft(t *testing.T) {
+	dir := t.TempDir()
+	line1 := "世" + strings.Repeat("x", 99)
+	writeMatchFile(t, dir, "a.txt", line1+"\n"+strings.Repeat("x", 100)+"\n")
+	idx := searchindex.New(dir)
+	addRec(t, idx, matchRec("a.txt", line1+"\n", 1, 1, 3, "世")) // starts inside 世's bytes
+	idx.Finish()
+
+	m, cmd := startBrowse(t, dir, idx, 80, 24)
+	m = applyLoad(t, m, cmd())
+	m, cmd = update(t, m, keyMsg("w"))
+	m = deliverCmd(t, m, cmd)
+	m, _ = update(t, m, keyMsg(".")) // offset 1 splits 世's cells [0,2)
+
+	m.theme = theme.Plain()
+	if left, _ := indicatorCells(t, viewRow(t, m, 1), 7, 3); left != '*' {
+		t.Fatalf("line 1 gutter indicator = %q, want * — the cluster-expanded match is hidden left", left)
+	}
+	if left, _ := indicatorCells(t, viewRow(t, m, 2), 7, 3); left != '_' {
+		t.Fatalf("line 2 gutter indicator = %q, want _", left)
+	}
+}
+
 // Wrap mode draws neither hidden-content indicators nor the reserved
 // column: text paints through the panel's last cell and no gutter
 // position ever shows _ or *.
