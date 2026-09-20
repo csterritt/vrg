@@ -359,3 +359,25 @@ Usage
  Input tokens: 142712 tokens
  Output tokens: 46587 tokens
  Cached input tokens: 4652324 tokens
+
+----
+Task 034-documentation-scale-and-memory-limits.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 44 messages
+ Input tokens: 136637 tokens
+ Output tokens: 54577 tokens
+ Cached input tokens: 4221966 tokens
+
+----
+Task 035-final-integration-verification.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 54 messages
+ Input tokens: 88530 tokens
+ Output tokens: 30828 tokens
+ Cached input tokens: 3270797 tokens
