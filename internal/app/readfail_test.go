@@ -2,6 +2,9 @@ package app
 
 import (
 	"errors"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -10,6 +13,7 @@ import (
 
 	"github.com/clipperhouse/displaywidth"
 
+	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
 	"vrg/internal/theme"
 	"vrg/internal/viewport"
@@ -707,5 +711,228 @@ func TestReentryAwayDuringRetry(t *testing.T) {
 	m, _ = update(t, m, keyPress("esc"))
 	if v := m.View().Content; !strings.Contains(v, "(unreadable)") {
 		t.Fatalf("the twice-failed file lacks the placeholder:\n%s", v)
+	}
+}
+
+// hostileNames are the Issue 47 read-failure adversaries: an embedded
+// newline would split an unsanitized diagnostic into several lines,
+// while tab, invalid UTF-8, and ESC bytes must each reach the
+// diagnostic only in EscapePath form. Every name sorts before the
+// companion file "zzz.txt", so the hostile file is the startup
+// selection of each fixture.
+var hostileNames = [][]byte{
+	[]byte("two\nlines.txt"),
+	[]byte("tab\tname.txt"),
+	{'b', 'a', 'd', 0xff, '.', 't', 'x', 't'},
+	[]byte("esc\x1bname.txt"),
+}
+
+// gatedHostileFixture indexes a real file under a hostile name inside a
+// disposable directory — plus a plain companion file so cross-file
+// navigation exists — and enters browse with the production loader
+// held at the load gate. It returns the model, the fixture directory,
+// the gate holding the hostile file's startup load, and that load's
+// worker channel.
+func gatedHostileFixture(t *testing.T, name []byte) (Model, string, chan struct{}, <-chan tea.Msg) {
+	t.Helper()
+	dir := t.TempDir()
+	writeMatchFile(t, dir, string(name), "hit\n")
+	writeMatchFile(t, dir, "zzz.txt", "hit z\n")
+	idx := searchindex.New(dir)
+	addRec(t, idx, matchRecBytes(name, []byte("hit\n"), 1, 0, 3, []byte("hit")))
+	addRec(t, idx, matchRec("zzz.txt", "hit z\n", 1, 0, 3, "hit"))
+	idx.Finish()
+	m, gate, job := gatedBrowse(t, dir, idx, 80, 24)
+	if stop, _ := m.index.Current(); string(stop.Path) != string(name) {
+		t.Fatalf("the startup selection is %q, want the hostile file %q", stop.Path, name)
+	}
+	return m, dir, gate, job
+}
+
+// failHeldLoad removes the fixture while its read is held at the gate,
+// then releases the real os.ReadFile attempt: the settled result is a
+// genuine not-exist *fs.PathError — a deterministic real failure, not
+// a permission denial that elevated privileges or unusual ACLs could
+// bypass.
+func failHeldLoad(t *testing.T, dir string, name []byte, gate chan struct{}, job <-chan tea.Msg) loadResult {
+	t.Helper()
+	assertSilent(t, job, "the gated read of "+safepresentation.EscapePath(name))
+	if err := os.Remove(filepath.Join(dir, string(name))); err != nil {
+		t.Fatalf("removing the fixture: %v", err)
+	}
+	close(gate)
+	return collectReadFailure(t, job, name, "the released read")
+}
+
+// collectReadFailure reads a settled load result and asserts it is the
+// expected genuine failure: a not-exist *fs.PathError answering for
+// the hostile path.
+func collectReadFailure(t *testing.T, job <-chan tea.Msg, name []byte, what string) loadResult {
+	t.Helper()
+	msg := collectMsg(t, job, what)
+	lr, ok := msg.(loadResult)
+	if !ok {
+		t.Fatalf("%s produced %T, want loadResult", what, msg)
+	}
+	if string(lr.path) != string(name) {
+		t.Fatalf("%s answered for %q, want %q", what, lr.path, name)
+	}
+	var pe *fs.PathError
+	if !errors.As(lr.err, &pe) || !errors.Is(lr.err, fs.ErrNotExist) {
+		t.Fatalf("%s read error = %v (%T), want a not-exist *fs.PathError", what, lr.err, lr.err)
+	}
+	return lr
+}
+
+// wantFailureLine is the single-line diagnostic the Issue 47 contract
+// expects for a genuine read failure: "cannot read " plus the raw
+// path's EscapePath form plus the path error's own reason — the Err
+// the *fs.PathError wraps — never the wrapper's message, which would
+// embed the resolved path a second time.
+func wantFailureLine(t *testing.T, lr loadResult) string {
+	t.Helper()
+	var pe *fs.PathError
+	if !errors.As(lr.err, &pe) {
+		t.Fatalf("load error = %v (%T), want *fs.PathError", lr.err, lr.err)
+	}
+	line := "cannot read " + safepresentation.EscapePath(lr.path) +
+		": " + safepresentation.EscapePath([]byte(pe.Err.Error()))
+	if strings.Contains(line, "\n") {
+		t.Fatalf("the expected diagnostic is not a single line: %q", line)
+	}
+	if strings.Count(line, safepresentation.EscapePath(lr.path)) != 1 {
+		t.Fatalf("the escaped path repeats inside %q", line)
+	}
+	if strings.Contains(line, pe.Path) {
+		t.Fatalf("the raw resolved path %q leaks into %q", pe.Path, line)
+	}
+	return line
+}
+
+// assertReadFailureLine asserts the settled failure produced the
+// single-line diagnostic in every sink: the recorded prior failure and
+// every overlay row are exactly want, the session collection holds it
+// occurrences times in total, and the stderr replay writes those lines
+// verbatim — one line per failure, with no re-splitting.
+func assertReadFailureLine(t *testing.T, m Model, key, want string, occurrences int) {
+	t.Helper()
+	if got := m.failed[key]; got != want {
+		t.Fatalf("recorded failure = %q, want %q", got, want)
+	}
+	if m.overlay == nil || len(m.overlay.lines) != occurrences {
+		t.Fatalf("overlay lines = %q, want %d occurrences of %q", m.overlay.lines, occurrences, want)
+	}
+	for i, line := range m.overlay.lines {
+		if line != want {
+			t.Fatalf("overlay line %d = %q, want %q", i, line, want)
+		}
+	}
+	if got := countDiag(m, want); got != occurrences {
+		t.Fatalf("collected %d occurrences of %q, want %d", got, want, occurrences)
+	}
+	var replay strings.Builder
+	m.diags.replay(&replay)
+	if got, all := replay.String(), strings.Repeat(want+"\n", occurrences); got != all {
+		t.Fatalf("stderr replay = %q, want %q", got, all)
+	}
+}
+
+// A genuine read failure under a hostile filename — newline, tab,
+// invalid UTF-8, or ESC — produces exactly one diagnostic line: the
+// EscapePath-escaped raw path plus a sanitized reason that does not
+// repeat the raw path the way PathError.Error() does. The same line
+// is the overlay's row set and the collection's stderr replay, and the
+// removed fixture leaves nothing behind outside the temporary
+// directory.
+func TestHostileNameReadFailureSingleLine(t *testing.T) {
+	for _, name := range hostileNames {
+		t.Run(safepresentation.EscapePath(name), func(t *testing.T) {
+			m, dir, gate, job := gatedHostileFixture(t, name)
+			lr := failHeldLoad(t, dir, name, gate, job)
+			want := wantFailureLine(t, lr)
+			m = applyLoad(t, m, lr)
+			assertReadFailureLine(t, m, string(name), want, 1)
+		})
+	}
+}
+
+// The r retry of a failed hostile-named file uses the same single-line
+// construction: r re-shows the prior failure while the gated retry
+// runs, and the second genuine failure appends exactly one occurrence
+// — two in total through the overlay and the replay.
+func TestHostileNameReloadRetrySingleLine(t *testing.T) {
+	for _, name := range hostileNames {
+		t.Run(safepresentation.EscapePath(name), func(t *testing.T) {
+			m, dir, gate, job := gatedHostileFixture(t, name)
+			lr := failHeldLoad(t, dir, name, gate, job)
+			want := wantFailureLine(t, lr)
+			m = applyLoad(t, m, lr)
+			m, _ = update(t, m, keyPress("esc"))
+
+			gateR := make(chan struct{})
+			m.loadGate = gateR
+			m, c := update(t, m, keyMsg("r"))
+			if c == nil {
+				t.Fatal("r on the failed file issued no retry")
+			}
+			if m.overlay == nil || len(m.overlay.lines) != 1 || m.overlay.lines[0] != want {
+				t.Fatalf("r did not re-show the prior failure: %v", m.overlay)
+			}
+			retry := runWorker(t, c)
+			assertSilent(t, retry, "the gated reload retry")
+
+			close(gateR)
+			lr = collectReadFailure(t, retry, name, "the reload retry")
+			if got := wantFailureLine(t, lr); got != want {
+				t.Fatalf("the retry's diagnostic = %q, want %q", got, want)
+			}
+			m = applyLoad(t, m, lr)
+			assertReadFailureLine(t, m, string(name), want, 2)
+		})
+	}
+}
+
+// Re-entering the failed hostile-named file from another file uses the
+// same single-line construction: the prior failure shows immediately
+// while the gated retry runs, and the retry's genuine failure appends
+// exactly one occurrence.
+func TestHostileNameReentryRetrySingleLine(t *testing.T) {
+	for _, name := range hostileNames {
+		t.Run(safepresentation.EscapePath(name), func(t *testing.T) {
+			m, dir, gate, job := gatedHostileFixture(t, name)
+			lr := failHeldLoad(t, dir, name, gate, job)
+			want := wantFailureLine(t, lr)
+			m = applyLoad(t, m, lr)
+			m, _ = update(t, m, keyPress("esc"))
+
+			// Visit the companion file — a real load, ungated — then
+			// re-enter the failed file behind a fresh gate.
+			m.loadGate = nil
+			m, cmd := update(t, m, keyMsg("n"))
+			m = applyLoad(t, m, deliverNavLoad(t, cmd))
+			if m.buffers["zzz.txt"] == nil {
+				t.Fatal("the companion file did not load")
+			}
+
+			gateE := make(chan struct{})
+			m.loadGate = gateE
+			m, cmd = update(t, m, keyMsg("p"))
+			if m.overlay == nil || len(m.overlay.lines) != 1 || m.overlay.lines[0] != want {
+				t.Fatalf("re-entry did not show the prior failure: %v", m.overlay)
+			}
+			if _, ok := m.loading[string(name)]; !ok {
+				t.Fatal("re-entry minted no retry")
+			}
+			retry := runWorker(t, cmd)
+			assertSilent(t, retry, "the re-entry retry")
+
+			close(gateE)
+			lr = collectReadFailure(t, retry, name, "the re-entry retry")
+			if got := wantFailureLine(t, lr); got != want {
+				t.Fatalf("the re-entry retry's diagnostic = %q, want %q", got, want)
+			}
+			m = applyLoad(t, m, lr)
+			assertReadFailureLine(t, m, string(name), want, 2)
+		})
 	}
 }

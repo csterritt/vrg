@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -331,7 +332,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.reloading, key)
 		if msg.err != nil {
 			line := "cannot read " + safepresentation.EscapePath(msg.path) +
-				": " + safepresentation.EscapePath([]byte(msg.err.Error()))
+				": " + safepresentation.EscapePath([]byte(readReason(msg.err)))
 			m.failed[key] = line
 			delete(m.unsupported, key)
 			delete(m.buffers, key)
@@ -774,6 +775,19 @@ func fileLoader(resolved []byte, stops []searchindex.Stop) (viewport.Source, err
 		src = buf
 	}
 	return src, err
+}
+
+// readReason reduces a file-load error to the reason a diagnostic
+// reports: a path error's wrapped cause — the wrapper's own message
+// would repeat the raw path the diagnostic already carries in escaped
+// form — or the error's own text when it wraps no path. The result is
+// escaped at the composition site like any other substituted text.
+func readReason(err error) string {
+	var pe *fs.PathError
+	for errors.As(err, &pe) && pe.Err != nil {
+		err = pe.Err
+	}
+	return err.Error()
 }
 
 // loadCmd reads and maps a file off the update path. A non-nil gate
