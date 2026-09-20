@@ -295,8 +295,9 @@ func TestHelpScrollsUpDown(t *testing.T) {
 // entry's keys and description — plus the footer slot's content after
 // the table.
 func TestHelpRendersBindingTable(t *testing.T) {
+	prev := helpFooter
 	helpFooter = "scale note fixture"
-	defer func() { helpFooter = "" }()
+	defer func() { helpFooter = prev }()
 
 	m := helpModel(t, "h")
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 40})
@@ -321,8 +322,9 @@ func TestHelpRendersBindingTable(t *testing.T) {
 // A long unbroken footer line wraps at the interior width inside the
 // border: no rendered row exceeds the terminal width.
 func TestHelpWrapsUnbrokenText(t *testing.T) {
+	prev := helpFooter
 	helpFooter = strings.Repeat("z", 200)
-	defer func() { helpFooter = "" }()
+	defer func() { helpFooter = prev }()
 
 	m := helpModel(t, "?")
 	m.theme = theme.Plain()

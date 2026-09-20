@@ -71,6 +71,7 @@ var sinkSafetyTable = []sinkRow{
 	{"error overlay", errorOverlaySink, overlayExpect},
 	{"file-change pop-up", popupSink, popupExpect},
 	{"help overlay", helpSink, overlayExpect},
+	{"help footer", helpFooterSink, overlayExpect},
 	{"stderr replay", stderrReplaySink, pathExpect},
 	// The generated command-line help has no substitution point — the
 	// application name and every description are fixed — so the row
@@ -210,13 +211,23 @@ func popupExpect(f hostileFixture) []string {
 // must appear inside the overlay's bordered interior.
 func helpSink(t *testing.T, f hostileFixture, styled bool) string {
 	t.Helper()
+	prev := helpFooter
 	helpFooter = string(f.data)
-	defer func() { helpFooter = "" }()
+	defer func() { helpFooter = prev }()
 	m := helpModel(t, "h")
 	if !styled {
 		m.theme = theme.Plain()
 	}
 	return m.View().Content
+}
+
+// helpFooterSink substitutes the fixture at the rendered help footer's
+// runtime-string parameter — Issue 34's generated text path — and
+// returns the footer's rendered text, the same composition openHelp
+// uses for the slot.
+func helpFooterSink(t *testing.T, f hostileFixture, _ bool) string {
+	t.Helper()
+	return strings.Join(helpFooterLines(string(f.data)), "\n")
 }
 
 // stderrReplaySink collects a load-failure diagnostic embedding the

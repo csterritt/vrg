@@ -39,12 +39,20 @@ var helpBindings = []helpBinding{
 	{"ctrl+c", "exit immediately with status 130"},
 }
 
-// helpFooter is the help overlay's footer slot: the note rendered after
-// the binding table, empty until Issue 34 fills it with the
-// scale-and-limits text. It is runtime-substituted text, so it passes
-// through the safe-presentation diagnostic policy when the overlay's
-// lines are built.
-var helpFooter string
+// helpFooter is the help overlay's footer slot: the scale-and-limits
+// note rendered after the binding table, filled from the shared
+// scaleLimitNote source. The slot accepts a runtime string — tests
+// substitute hostile fixtures — so its lines always pass through the
+// safe-presentation diagnostic policy.
+var helpFooter = helpFooterNote()
+
+// helpFooterLines renders the footer's runtime-substituted note into
+// overlay lines through the safe-presentation diagnostic policy. It is
+// the Issue 34 generated text path that accepts a runtime string, and
+// the sink-safety table drives hostile fixtures through it.
+func helpFooterLines(note string) []string {
+	return strings.Split(safepresentation.EscapeDiagnostic(note), "\n")
+}
 
 // openHelp builds the modal help overlay on the shared scrollable
 // component: the binding table followed by the footer slot's escaped
@@ -56,7 +64,7 @@ func openHelp() *scrollOverlay {
 	}
 	if helpFooter != "" {
 		lines = append(lines, "")
-		lines = append(lines, strings.Split(safepresentation.EscapeDiagnostic(helpFooter), "\n")...)
+		lines = append(lines, helpFooterLines(helpFooter)...)
 	}
 	return &scrollOverlay{lines: lines}
 }
