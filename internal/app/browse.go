@@ -150,7 +150,12 @@ func (m Model) panelRow(r int, curPath []byte, curIdx, panelW, contentH int) str
 		return padCells(clipCells(gutter, panelW), panelW)
 	}
 	tw := viewport.TextWidth(panelW, gw, src.Key().Wrap)
-	text, painted := m.renderCells(src.Cells(rowIdx), src.Highlights(rowIdx), tw, m.isCurrentLine(line))
+	hoff := 0
+	if vp := m.vps[key]; vp != nil {
+		hoff = vp.Offset()
+	}
+	cells, spans := src.Clip(rowIdx, hoff, tw)
+	text, painted := m.renderCells(cells, spans, tw, m.isCurrentLine(line))
 	row := m.theme.Gutter(gutter) + text
 	if pad := tw - painted; pad > 0 {
 		row += strings.Repeat(" ", pad)

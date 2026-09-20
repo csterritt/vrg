@@ -12,12 +12,15 @@ type Location struct {
 // width-independent logical anchor plus the installed row model that
 // maps the anchor to the effective top rendered row of the visible
 // window. Scroll units are rendered rows — one row, a half page, or a
-// full page of the content height.
+// full page of the content height. The horizontal offset is separate
+// state in source-display columns: retained through wrap toggles
+// subject to the re-entry clamp, reset by the caller on file change.
 type Viewport struct {
 	model  *RowModel
 	height int
 	top    int
 	anchor Location
+	hoff   int
 }
 
 // SetLayout installs a prepared row model and the content height — the
@@ -41,10 +44,44 @@ func (v *Viewport) SetLayout(m *RowModel, height int) {
 	}
 	v.top = row
 	v.clamp()
+	v.clampOffset()
 }
 
 // Top returns the first rendered row of the visible window.
 func (v *Viewport) Top() int { return v.top }
+
+// Offset returns the horizontal pan offset in source-display columns:
+// the left edge of the text window in run-off-edge mode.
+func (v *Viewport) Offset() int { return v.hoff }
+
+// ResetOffset zeroes the horizontal offset — the file-change reset
+// applied before the destination file's reveal.
+func (v *Viewport) ResetOffset() { v.hoff = 0 }
+
+// Pan shifts the horizontal offset n source-display columns — positive
+// pans right, negative left — clamped to [0, the paintable-boundary
+// maximum] recomputed from the current visible rows. It is a strict
+// no-op in wrap mode and without an installed layout: the offset is
+// retained state, never re-derived against a wrapped layout.
+func (v *Viewport) Pan(n int) {
+	if v.model == nil || v.model.Key().Wrap {
+		return
+	}
+	v.hoff += n
+	v.clampOffset()
+}
+
+// HalfPan is the half-screen pan unit: max(1, floor(text width / 2)).
+func (v *Viewport) HalfPan() int {
+	tw := 0
+	if v.model != nil {
+		tw = v.model.Key().TextWidth
+	}
+	if h := tw / 2; h > 1 {
+		return h
+	}
+	return 1
+}
 
 // Anchor returns the logical anchor: the source line and display-column
 // offset the effective top derives from.
@@ -85,6 +122,7 @@ func (v *Viewport) Reveal(target int) {
 	v.top = target - v.height/3
 	v.clamp()
 	v.anchor = v.location(v.top)
+	v.clampOffset()
 }
 
 // halfPage is the half-page scroll unit: max(1, floor(height/2)).
@@ -102,6 +140,25 @@ func (v *Viewport) scroll(n int) {
 	v.top += n
 	v.clamp()
 	v.anchor = v.location(v.top)
+	v.clampOffset()
+}
+
+// clampOffset keeps the horizontal offset in [0, the paintable-boundary
+// maximum of the visible rows], recomputing the maximum on every call —
+// every visible-set change and every pan re-derives it rather than
+// trusting a cached value. Wrap-mode layouts and the no-layout state
+// leave the stored offset untouched: it is retained through wrap
+// toggles and re-clamped on each re-entry into run-off-edge mode.
+func (v *Viewport) clampOffset() {
+	if v.model == nil || v.model.Key().Wrap {
+		return
+	}
+	if max := v.model.maxOffset(v.top, v.height); v.hoff > max {
+		v.hoff = max
+	}
+	if v.hoff < 0 {
+		v.hoff = 0
+	}
 }
 
 // clamp keeps the top row in [0, max(0, extent-height)]: never above

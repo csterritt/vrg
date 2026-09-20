@@ -61,6 +61,14 @@ type RowModel struct {
 	src   Source
 	rows  []row
 	first []int // each source line's first row, plus len(rows) at the end
+	// extent and fit hold the per-line paintable-boundary data the
+	// horizontal clamp is computed from: the line's content extent in
+	// source-display columns and the largest column at which one of
+	// its clusters starts while the cluster's width still fits the
+	// text width. End-of-line marker cells (Issue 23) will extend both
+	// later.
+	extent []int
+	fit    []int
 }
 
 // NewRowModel builds the row model for key over src. In wrap mode each
@@ -77,10 +85,19 @@ func NewRowModel(key RowModelKey, src Source) *RowModel {
 	for i := 0; i < lines; i++ {
 		m.first = append(m.first, len(m.rows))
 		clusters := src.Clusters(i)
-		end := 0
-		if n := len(clusters); n > 0 {
-			end = clusters[n-1].End
+		// One pass over the line's clusters yields its cell-slice end,
+		// its content extent in columns, and the paintable boundary:
+		// the last cluster start whose width still fits the text width.
+		end, col, fit := 0, 0, 0
+		for _, c := range clusters {
+			if c.Width <= key.TextWidth {
+				fit = col
+			}
+			col += c.Width
+			end = c.End
 		}
+		m.extent = append(m.extent, col)
+		m.fit = append(m.fit, fit)
 		if !key.Wrap || key.TextWidth <= 0 {
 			m.rows = append(m.rows, row{line: i, end: end})
 			continue
@@ -124,6 +141,106 @@ func (m *RowModel) Cells(i int) []safepresentation.Cell {
 	}
 	r := m.rows[i]
 	return m.src.Cells(r.line)[r.start:r.end]
+}
+
+// maxOffset is the maximum valid horizontal offset for the rendered
+// rows [top, top+height) — the visible-lines extent policy's
+// paintable-boundary maximum. The widest visible source line sets the
+// clamp: the offset may reach the largest column at which one of that
+// line's clusters starts while its width still fits the text width, so
+// at the maximum the line keeps one fully painted cluster. Lines tied
+// for widest contribute their own fitting start, so the maximum is the
+// largest qualifying boundary among them. A widest line with no
+// fitting cluster — or an empty or all-blank view — clamps to 0.
+// Wrap-mode models report 0: panning is a no-op in wrap mode.
+func (m *RowModel) maxOffset(top, height int) int {
+	if m.key.Wrap {
+		return 0
+	}
+	widest, s := 0, 0
+	for i := top; i < top+height && i < len(m.rows); i++ {
+		if i < 0 {
+			continue
+		}
+		line := m.rows[i].line
+		if e := m.extent[line]; e > widest {
+			widest, s = e, m.fit[line]
+		} else if e == widest && m.fit[line] > s {
+			s = m.fit[line]
+		}
+	}
+	return s
+}
+
+// Clip returns rendered row i's display cells and highlight spans seen
+// through the horizontal window [off, off+w) of source-display
+// columns. Cells of clusters wholly outside the window are dropped; a
+// cluster either window edge splits contributes one blank cell per
+// in-window column instead, so a wide glyph never renders half-drawn.
+// The returned spans are rebased onto the window's cell indexes and
+// never mark a blank. Wrap-mode rows return the row's plain cells and
+// spans: panning is a no-op in wrap mode and each row already holds
+// only what fits.
+func (m *RowModel) Clip(i, off, w int) ([]safepresentation.Cell, []filebuffer.Span) {
+	if m.key.Wrap || off <= 0 {
+		return m.Cells(i), m.Highlights(i)
+	}
+	if i < 0 || i >= len(m.rows) {
+		return nil, nil
+	}
+	r := m.rows[i]
+	cells := m.src.Cells(r.line)
+	var out []safepresentation.Cell
+	var from []int // each output cell's line cell index; -1 for blanks
+	col, end := 0, off+w
+	for _, c := range m.src.Clusters(r.line) {
+		next := col + c.Width
+		if col < end && next > off {
+			if col >= off && next <= end {
+				for k := c.Start; k < c.End; k++ {
+					out = append(out, cells[k])
+					from = append(from, k)
+				}
+			} else {
+				lo, hi := col, next
+				if lo < off {
+					lo = off
+				}
+				if hi > end {
+					hi = end
+				}
+				for n := hi - lo; n > 0; n-- {
+					out = append(out, safepresentation.Cell{Text: " "})
+					from = append(from, -1)
+				}
+			}
+		}
+		if col = next; col >= end {
+			break
+		}
+	}
+	mark := make([]bool, len(out))
+	for _, s := range m.Highlights(i) {
+		for j, k := range from {
+			if k >= s.Start && k < s.End {
+				mark[j] = true
+			}
+		}
+	}
+	var spans []filebuffer.Span
+	for j := 0; j < len(mark); {
+		if !mark[j] {
+			j++
+			continue
+		}
+		k := j
+		for k < len(mark) && mark[k] {
+			k++
+		}
+		spans = append(spans, filebuffer.Span{Start: j, End: k})
+		j = k
+	}
+	return out, spans
 }
 
 // Highlights returns rendered row i's inverse-video spans in row-local

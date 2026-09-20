@@ -312,6 +312,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.state == stateBrowse {
 				m.scrollCurrent(msg.String())
 			}
+		case ",", ".", "<", ">", "[", "]":
+			if m.state == stateBrowse {
+				m.panCurrent(msg.String())
+			}
 		case "n", "p":
 			if m.state == stateBrowse {
 				return m.navigate(msg.String())
@@ -373,13 +377,19 @@ func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
 	} else {
 		mv = m.index.Prev()
 	}
+	stop, _ := m.index.Current()
+	if mv.FileChanged {
+		// A file change resets the horizontal offset to zero before
+		// the destination reveal: stored per-file pan does not carry
+		// across files.
+		m.viewportFor(string(stop.Path)).ResetOffset()
+	}
 	m.revealCurrent()
 	if !mv.FileChanged {
 		return m, nil
 	}
 	// The file-change pop-up starts at selection — never at load
 	// completion — with a fresh instance keying its own expiry timer.
-	stop, _ := m.index.Current()
 	m.popupSeq++
 	m.popup = &popup{id: m.popupSeq, path: append([]byte(nil), stop.Path...)}
 	m, stage := m.ensureStaged()
@@ -571,6 +581,35 @@ func (m Model) rowKey(path string, src viewport.Source) viewport.RowModelKey {
 func (m Model) panelWidth() int {
 	w, _ := m.termSize()
 	return w - m.listWidth(w)
+}
+
+// panCurrent applies a horizontal pan key to the current file's saved
+// viewport: one column for ,/. — ten columns for </> — and half the
+// text width for [/]. Panning is a no-op in wrap mode, and on a
+// "Loading…" or "(unreadable)" placeholder there is nothing to pan.
+func (m Model) panCurrent(key string) {
+	if m.wrap {
+		return
+	}
+	path := m.curKey()
+	if m.buffers[path] == nil {
+		return
+	}
+	vp := m.viewportFor(path)
+	switch key {
+	case ",":
+		vp.Pan(-1)
+	case ".":
+		vp.Pan(1)
+	case "<":
+		vp.Pan(-10)
+	case ">":
+		vp.Pan(10)
+	case "[":
+		vp.Pan(-vp.HalfPan())
+	case "]":
+		vp.Pan(vp.HalfPan())
+	}
 }
 
 // scrollCurrent applies a vertical scroll key to the current file's
