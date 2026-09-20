@@ -458,3 +458,25 @@ Usage
  Input tokens: 155911 tokens
  Output tokens: 79966 tokens
  Cached input tokens: 3643127 tokens
+
+----
+Task 043-combining-cluster-fallback-cell.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 36 messages
+ Input tokens: 72281 tokens
+ Output tokens: 19326 tokens
+ Cached input tokens: 1901109 tokens
+
+----
+Task 044-post-summary-context-integrity-failure.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 21 messages
+ Input tokens: 65840 tokens
+ Output tokens: 12444 tokens
+ Cached input tokens: 936728 tokens

@@ -946,6 +946,23 @@ func TestIntegrityCauseComposedDiagnostics(t *testing.T) {
 	}
 }
 
+// Issue 44: the dedicated summary-then-context stream — a context
+// record arriving directly after the stream's lone summary — is a
+// fatal stream-integrity outcome like any other post-summary record.
+// With no usable results the fatal overlay's complete composed
+// diagnostic is exactly the after-summary cause, and the same line is
+// retained in the session collection for the stderr replay.
+func TestPostSummaryContextFatalOutcome(t *testing.T) {
+	m := outcomeModel(t, streamRecs(summaryRec(), contextRec("a.txt")), nil, "")
+	if m.state != stateFatal {
+		t.Fatalf("state = %d, want stateFatal", m.state)
+	}
+	wantComposedDiagnostics(t, m, []string{"record after summary"})
+	if m.status != 2 {
+		t.Fatalf("exit status = %d, want 2", m.status)
+	}
+}
+
 // The oversized component always leads with the pluralized aggregate —
 // emitted on the count alone, even when no path recovered — then one
 // detail line per distinct recovered raw path in first-occurrence

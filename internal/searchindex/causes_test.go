@@ -160,8 +160,26 @@ func TestIntegrityCauseMatrix(t *testing.T) {
 			-1, []causeInfo{{searchindex.CauseAfterSummary, ""}}, 0, 0, 0,
 		},
 		{
+			"context before begin is ignored for lifecycle",
+			[][]byte{contextEvent(t, b), beginEvent(t, a), matchA1, endEvent(t, a, nil), summaryEvent(t)},
+			-1, nil, 0, 0, 0,
+		},
+		{
+			"context before summary is ignored for lifecycle",
+			[][]byte{beginEvent(t, a), matchA1, endEvent(t, a, nil), contextEvent(t, a), summaryEvent(t)},
+			-1, nil, 0, 0, 0,
+		},
+		{
 			"context after summary is a record after summary",
 			[][]byte{beginEvent(t, a), matchA1, endEvent(t, a, nil), summaryEvent(t), contextEvent(t, a)},
+			-1, []causeInfo{{searchindex.CauseAfterSummary, ""}}, 0, 0, 0,
+		},
+		{
+			// Issue 44: a context directly after a lone summary has no
+			// lifecycle state to violate — it is still exactly one
+			// record after summary.
+			"context after a lone summary is only a record after summary",
+			[][]byte{summaryEvent(t), contextEvent(t, a)},
 			-1, []causeInfo{{searchindex.CauseAfterSummary, ""}}, 0, 0, 0,
 		},
 		{
