@@ -95,7 +95,12 @@ type Model struct {
 	stderrLines []string
 	// overlay, when non-nil, is the open diagnostic overlay: the modal
 	// error/warning presentation of a completed search.
-	overlay *errOverlay
+	overlay *scrollOverlay
+	// help, when non-nil, is the open modal key-binding help overlay.
+	// The error overlay takes precedence: an error arriving while help
+	// is open suspends help, retaining its scroll position, and closing
+	// the error restores it.
+	help *scrollOverlay
 	// popup, when non-nil, is the active file-change pop-up; popupSeq
 	// mints each pop-up's instance ID, and popupTimer builds the
 	// instance's expiry command — a seam so tests drive expiry with
@@ -218,6 +223,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.overlay.scroll = max
 			}
 		}
+		if m.help != nil {
+			if max := m.help.maxScroll(m.width, m.height); m.help.scroll > max {
+				m.help.scroll = max
+			}
+		}
 		return m, m.resizeLayout()
 	case stderrMsg:
 		if m.state == stateCancelled {
@@ -252,7 +262,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// collection at the decision.
 		m.diags.addAll(oc.diagnostics[len(m.stderrLines):])
 		if len(oc.diagnostics) > 0 {
-			m.overlay = &errOverlay{lines: oc.diagnostics}
+			m.overlay = &scrollOverlay{lines: oc.diagnostics}
 			// An overlay opening cancels any pop-up for good.
 			m.popup = nil
 		}
@@ -392,6 +402,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.overlay != nil {
 			return m.updateOverlay(msg)
 		}
+		if m.help != nil {
+			return m.updateHelp(msg)
+		}
 		switch msg.String() {
 		case "q":
 			switch m.state {
@@ -434,6 +447,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "r":
 			if m.state == stateBrowse {
 				return m.reload()
+			}
+		case "h", "?":
+			if m.state == stateBrowse || m.state == stateNoResults {
+				// The pop-up was already dismissed above: opening help
+				// cancels it for good.
+				m.help = openHelp()
 			}
 		}
 	}
@@ -540,7 +559,7 @@ func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
 func (m *Model) showFailure(line string) {
 	m.popup = nil
 	if m.overlay == nil {
-		m.overlay = &errOverlay{lines: []string{line}}
+		m.overlay = &scrollOverlay{lines: []string{line}}
 		return
 	}
 	m.overlay.append(line)
@@ -933,7 +952,10 @@ func (m Model) screen() string {
 		base = m.theme.Base("Searching…")
 	}
 	if m.overlay != nil {
-		return m.overlayScreen(base)
+		return m.overlayScreen(base, m.overlay)
+	}
+	if m.help != nil {
+		return m.overlayScreen(base, m.help)
 	}
 	if m.popup != nil {
 		return m.popupScreen(base)

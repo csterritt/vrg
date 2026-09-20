@@ -9,32 +9,27 @@ import (
 	"github.com/clipperhouse/displaywidth"
 )
 
-// errOverlay is the modal diagnostic overlay: the escaped diagnostic
-// lines of a completed search — fatal errors and warnings alike —
-// presented in a full-width, single-line-bordered box centred over the
-// underlying screen. scroll is the index of the first wrapped interior
-// row shown, so the complete diagnostic is reachable with up/down even
-// when it does not fit the terminal.
-type errOverlay struct {
+// scrollOverlay is the shared wrapped-scrollable modal overlay
+// component: lines of safe text — escaped diagnostics for the error
+// overlay, the binding table for help — presented in a full-width,
+// single-line-bordered box centred over the underlying screen. scroll
+// is the index of the first wrapped interior row shown, so the complete
+// content is reachable with up/down even when it does not fit the
+// terminal.
+type scrollOverlay struct {
 	lines  []string
 	scroll int
 }
 
-// updateOverlay applies one key to the open overlay: up/down scroll the
-// wrapped diagnostic rows (clamped to the complete row set), q and Esc
-// dismiss — exiting outright when the fatal outcome left no underlying
-// state — and every other key is ignored.
+// updateOverlay applies one key to the open error overlay: up/down
+// scroll the wrapped diagnostic rows (clamped to the complete row set),
+// q and Esc dismiss — exiting outright when the fatal outcome left no
+// underlying state — and every other key is ignored.
 func (m Model) updateOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	o := m.overlay
-	switch msg.String() {
-	case "up":
-		if o.scroll > 0 {
-			o.scroll--
-		}
-	case "down":
-		if max := o.maxScroll(m.width, m.height); o.scroll < max {
-			o.scroll++
-		}
+	switch key := msg.String(); key {
+	case "up", "down":
+		o.scrollKey(key, m.width, m.height)
 	case "q", "esc":
 		if m.state == stateFatal {
 			// The fatal no-results overlay has no underlying state to
@@ -46,18 +41,35 @@ func (m Model) updateOverlay(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// append adds one diagnostic occurrence to the overlay without moving
-// the reader: scroll names the first shown wrapped row and a new line
-// extends only the tail of the row set, so the position holds. Issue 26
-// owns this minimal append-preserving-scroll primitive; Issue 32
-// generalizes it to all appended errors.
-func (o *errOverlay) append(line string) {
+// scrollKey applies the overlay scroll keys: up moves one row toward
+// the head, down one toward the tail, clamped to the complete wrapped
+// row set at the current terminal size. Any other key is a no-op.
+func (o *scrollOverlay) scrollKey(key string, w, h int) {
+	switch key {
+	case "up":
+		if o.scroll > 0 {
+			o.scroll--
+		}
+	case "down":
+		if max := o.maxScroll(w, h); o.scroll < max {
+			o.scroll++
+		}
+	}
+}
+
+// append adds one line to the overlay without moving the reader:
+// scroll names the first shown wrapped row and a new line extends only
+// the tail of the row set, so the position holds. The error overlay
+// uses it for appended diagnostics — Issue 26 owns this minimal
+// append-preserving-scroll primitive; Issue 32 generalizes it to all
+// appended errors.
+func (o *scrollOverlay) append(line string) {
 	o.lines = append(o.lines, line)
 }
 
-// rows is the overlay's complete scrollable row set: every diagnostic
-// line wrapped at interior width w.
-func (o *errOverlay) rows(w int) []string {
+// rows is the overlay's complete scrollable row set: every line wrapped
+// at interior width w.
+func (o *scrollOverlay) rows(w int) []string {
 	if w < 1 {
 		w = 1
 	}
@@ -71,7 +83,7 @@ func (o *errOverlay) rows(w int) []string {
 // maxScroll is the largest first-row index whose window still shows
 // rows: the wrapped row count minus the interior height the terminal
 // affords.
-func (o *errOverlay) maxScroll(w, h int) int {
+func (o *scrollOverlay) maxScroll(w, h int) int {
 	n := len(o.rows(w - 2))
 	max := n - interiorHeight(h, n)
 	if max < 0 {
@@ -93,10 +105,12 @@ func interiorHeight(h, rows int) int {
 	return ih
 }
 
-// overlayScreen composites the open overlay over base: the bordered box
+// overlayScreen composites overlay o over base: the bordered box
 // replaces the centre screen rows wholesale, leaving the rows above and
-// below the underlying screen visible.
-func (m Model) overlayScreen(base string) string {
+// below the underlying screen visible. At tiny sizes the box is clipped
+// to the terminal — there is no borderless mode — and growth restores
+// the normal layout.
+func (m Model) overlayScreen(base string, o *scrollOverlay) string {
 	w, h := m.width, m.height
 	if w <= 0 {
 		w = 80
@@ -116,9 +130,9 @@ func (m Model) overlayScreen(base string) string {
 	if iw < 1 {
 		iw = 1
 	}
-	all := m.overlay.rows(iw)
+	all := o.rows(iw)
 	ih := interiorHeight(h, len(all))
-	scroll := m.overlay.scroll
+	scroll := o.scroll
 	if max := len(all) - ih; scroll > max {
 		scroll = max
 	}

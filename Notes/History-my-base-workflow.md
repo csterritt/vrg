@@ -315,3 +315,25 @@ Usage
  Input tokens: 277386 tokens
  Output tokens: 66495 tokens
  Cached input tokens: 5933876 tokens
+
+----
+Task 030-unsupported-encodings-utf16-utf32.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 39 messages
+ Input tokens: 42135 tokens
+ Output tokens: 10615 tokens
+ Cached input tokens: 2329484 tokens
+
+----
+Task 031-help-overlay.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 39 messages
+ Input tokens: 122494 tokens
+ Output tokens: 33731 tokens
+ Cached input tokens: 3324240 tokens
