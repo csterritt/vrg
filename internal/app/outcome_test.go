@@ -677,6 +677,15 @@ func oversizedMatchRec(path string) string {
 		path, strings.Repeat("x", 64<<20))
 }
 
+// anonymousOversizedRec builds an oversized record whose payload limit
+// is hit before data.path is parsed — the oversized lines field precedes
+// the path — so path recovery fails and the record contributes only to
+// the oversized aggregate, never a per-path detail line.
+func anonymousOversizedRec() string {
+	return `{"type":"match","data":{"lines":{"text":"` + strings.Repeat("x", 64<<20) +
+		`"},"path":{"text":"anon.txt"},"line_number":1,"submatches":[]}}`
+}
+
 // wantComposedDiagnostics asserts the complete ordered diagnostic
 // composition reaches both sinks identically: the open overlay's lines
 // and the session collection the exit path replays to stderr.
@@ -929,6 +938,149 @@ func TestIntegrityCauseComposedDiagnostics(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			m := outcomeModel(t, tc.stream, tc.procErr, tc.stderr)
+			wantComposedDiagnostics(t, m, tc.want)
+			if m.status != tc.wantExit {
+				t.Fatalf("exit status = %d, want %d", m.status, tc.wantExit)
+			}
+		})
+	}
+}
+
+// The oversized component always leads with the pluralized aggregate —
+// emitted on the count alone, even when no path recovered — then one
+// detail line per distinct recovered raw path in first-occurrence
+// order: the detail lines deduplicate by raw path, the aggregate never
+// does.
+func TestOversizedDiagnostics(t *testing.T) {
+	cases := []struct {
+		name   string
+		report searchindex.Report
+		want   []string
+	}{
+		{
+			"one anonymous oversized record emits only the aggregate",
+			searchindex.Report{Oversized: 1},
+			[]string{"1 oversized record skipped"},
+		},
+		{
+			"one oversized record with a recovered path appends its detail",
+			searchindex.Report{Oversized: 1, OversizedPaths: [][]byte{[]byte("big.txt")}},
+			[]string{"1 oversized record skipped", "oversized record skipped for big.txt"},
+		},
+		{
+			"two oversized records naming one path emit one detail line",
+			searchindex.Report{
+				Oversized:      2,
+				OversizedPaths: [][]byte{[]byte("dup.txt"), []byte("dup.txt")},
+			},
+			[]string{"2 oversized records skipped", "oversized record skipped for dup.txt"},
+		},
+		{
+			"mixed recoverability counts every record and names each path once",
+			searchindex.Report{
+				Oversized: 4,
+				OversizedPaths: [][]byte{
+					[]byte("b.txt"), []byte("a.txt"), []byte("b.txt"),
+				},
+			},
+			[]string{
+				"4 oversized records skipped",
+				"oversized record skipped for b.txt",
+				"oversized record skipped for a.txt",
+			},
+		},
+		{
+			"the aggregate follows the malformed aggregate and precedes the details",
+			searchindex.Report{
+				Malformed:      2,
+				Oversized:      2,
+				OversizedPaths: [][]byte{[]byte("big.txt")},
+			},
+			[]string{
+				"2 malformed records skipped",
+				"2 oversized records skipped",
+				"oversized record skipped for big.txt",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			in := outcomeInput{integrity: completeStream, report: tc.report}
+			if got := diagnosticLines(in); !slices.Equal(got, tc.want) {
+				t.Fatalf("diagnosticLines() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// End-to-end oversized outcomes: the aggregate emits on the count
+// alone, so an anonymous oversized record — its path unrecoverable —
+// is never silent: with no usable results it is the fatal overlay's
+// only line at exit 2, and with usable results it is a visible warning
+// that also reaches the stderr replay. Recovered paths append one
+// detail line per distinct raw path after the aggregate.
+func TestOversizedOutcomeDiagnostics(t *testing.T) {
+	valid := streamRecs(
+		beginRec("a.txt"),
+		matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+		endRec("a.txt", nil),
+	)
+	cases := []struct {
+		name      string
+		stream    string
+		want      []string
+		wantState state
+		wantExit  int
+	}{
+		{
+			"an anonymous oversized record with no usable results is fatal on the aggregate alone",
+			streamRecs(anonymousOversizedRec(), summaryRec()),
+			[]string{"1 oversized record skipped"}, stateFatal, 2,
+		},
+		{
+			"an anonymous oversized record with usable results warns with the aggregate",
+			valid + streamRecs(anonymousOversizedRec(), summaryRec()),
+			[]string{"1 oversized record skipped"}, stateBrowse, 0,
+		},
+		{
+			"two oversized records naming one path emit the aggregate and one detail",
+			valid + streamRecs(
+				oversizedMatchRec("dup.txt"),
+				oversizedMatchRec("dup.txt"),
+				summaryRec()),
+			[]string{"2 oversized records skipped", "oversized record skipped for dup.txt"},
+			stateBrowse, 0,
+		},
+		{
+			"mixed recoverability counts every record and names each distinct path once",
+			valid + streamRecs(
+				oversizedMatchRec("big.txt"),
+				anonymousOversizedRec(),
+				oversizedMatchRec("other.txt"),
+				oversizedMatchRec("big.txt"),
+				summaryRec()),
+			[]string{
+				"4 oversized records skipped",
+				"oversized record skipped for big.txt",
+				"oversized record skipped for other.txt",
+			}, stateBrowse, 0,
+		},
+		{
+			"the aggregate follows the malformed aggregate and precedes the path detail",
+			valid + streamRecs("{not json", oversizedMatchRec("big.txt"), summaryRec()),
+			[]string{
+				"1 malformed record skipped",
+				"1 oversized record skipped",
+				"oversized record skipped for big.txt",
+			}, stateBrowse, 0,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := outcomeModel(t, tc.stream, nil, "")
+			if m.state != tc.wantState {
+				t.Fatalf("state = %d, want %d", m.state, tc.wantState)
+			}
 			wantComposedDiagnostics(t, m, tc.want)
 			if m.status != tc.wantExit {
 				t.Fatalf("exit status = %d, want %d", m.status, tc.wantExit)

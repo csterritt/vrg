@@ -114,10 +114,13 @@ func integrityLine(c searchindex.IntegrityCause) string {
 }
 
 // recordLossLines composes the record-loss diagnostics in Issue 37's
-// order: the malformed aggregate, the oversized aggregate, then each
-// recovered oversized path named on its own escaped line. Unknown types
-// warn but are not record loss — unknownTypeLines emits them — so the
-// warning can never sit between the malformed and oversized components.
+// order: the malformed aggregate, the oversized aggregate — emitted on
+// the count alone so an oversized record with no recoverable path still
+// surfaces — then one escaped line per distinct recovered oversized
+// path in first-occurrence order. The detail lines deduplicate by raw
+// path; the aggregate never does. Unknown types warn but are not record
+// loss — unknownTypeLines emits them — so the warning can never sit
+// between the malformed and oversized components.
 func recordLossLines(r searchindex.Report) []string {
 	var out []string
 	if r.Malformed > 0 {
@@ -126,7 +129,13 @@ func recordLossLines(r searchindex.Report) []string {
 	if r.Oversized > 0 {
 		out = append(out, skipCount(r.Oversized, "oversized"))
 	}
+	seen := make(map[string]struct{}, len(r.OversizedPaths))
 	for _, p := range r.OversizedPaths {
+		key := string(p)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
 		out = append(out, "oversized record skipped for "+safepresentation.EscapePath(p))
 	}
 	return out
