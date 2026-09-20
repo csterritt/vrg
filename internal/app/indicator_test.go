@@ -279,7 +279,9 @@ func TestMidClusterMatchCountsHiddenLeft(t *testing.T) {
 	line1 := "世" + strings.Repeat("x", 99)
 	writeMatchFile(t, dir, "a.txt", line1+"\n"+strings.Repeat("x", 100)+"\n")
 	idx := searchindex.New(dir)
-	addRec(t, idx, matchRec("a.txt", line1+"\n", 1, 1, 3, "世")) // starts inside 世's bytes
+	// A recorded match on bytes [1,3) — the tail of 世's E4 B8 96 — is
+	// what ripgrep reports for a match starting mid-cluster.
+	addRec(t, idx, matchRecBytes([]byte("a.txt"), []byte(line1+"\n"), 1, 1, 3, []byte("\xb8\x96")))
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24)

@@ -78,11 +78,15 @@ type outcomeRow struct {
 	// initial presentation is asserted; failCurrent fails only the
 	// current file's load. The failures are injected completions, not
 	// filesystem state — an unreadable file never changes the status
-	// fixed at the outcome decision. postFailContains is asserted on
-	// the view after the injected failures settle; diagsContain names
-	// lines the session collection — the replay's source — must hold.
+	// fixed at the outcome decision. staleAll instead completes each
+	// retained file's load with a buffer whose recorded submatches all
+	// failed Issue 29 validation — stale status is presentation too.
+	// postFailContains is asserted on the view after the injected
+	// completions settle; diagsContain names lines the session
+	// collection — the replay's source — must hold.
 	failAll          bool
 	failCurrent      bool
+	staleAll         bool
 	postFailContains []string
 	diagsContain     []string
 
@@ -412,6 +416,19 @@ func TestOutcomeMatrix(t *testing.T) {
 			final:            "q", wantStatus: 0,
 		},
 		{
+			// Issue 29: every retained stop's recorded submatches stale
+			// touches only presentation — the filename-row note — and
+			// the fixed status stays 0.
+			name:             "every retained stop stale still exits 0",
+			records:          valid,
+			wantState:        stateBrowse,
+			contains:         []string{"a.txt"},
+			absent:           []string{"┌"},
+			staleAll:         true,
+			postFailContains: []string{"file changed since search"},
+			final:            "q", wantStatus: 0,
+		},
+		{
 			// Issue 26: a current-file read failure appends to the fatal
 			// search's overlay; the fixed status stays 2.
 			name:    "current-file failure under a fixed status 2 stays 2",
@@ -498,7 +515,9 @@ func TestOutcomeMatrix(t *testing.T) {
 			// file's in-flight request completes with an error, files
 			// never asked for first mint one — then assert the post-
 			// failure view and the collected-for-replay diagnostics.
-			if tc.failAll || tc.failCurrent {
+			// Issue 29 rows complete the same way but with a stale
+			// buffer.
+			if tc.failAll || tc.failCurrent || tc.staleAll {
 				for _, f := range m.files {
 					key := string(f)
 					if tc.failCurrent && key != m.curKey() {
@@ -509,6 +528,13 @@ func TestOutcomeMatrix(t *testing.T) {
 						var minted int
 						m, minted = beginLoad(m, key)
 						req = minted
+					}
+					if tc.staleAll {
+						m = applyLoad(t, m, loadResult{
+							path: f, req: req,
+							src: staleBuffer(t, stopsForPath(m.index, f)),
+						})
+						continue
 					}
 					m, _ = update(t, m, loadResult{
 						path: f, req: req,

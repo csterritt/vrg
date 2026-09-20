@@ -304,3 +304,14 @@ Usage
  Input tokens: 184455 tokens
  Output tokens: 85849 tokens
  Cached input tokens: 4665750 tokens
+
+----
+Task 029-stale-match-validation-and-file-changed-note.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 61 messages
+ Input tokens: 277386 tokens
+ Output tokens: 66495 tokens
+ Cached input tokens: 5933876 tokens

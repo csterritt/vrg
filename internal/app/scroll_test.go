@@ -30,7 +30,15 @@ func browseLoaded(t *testing.T, name, content string, w, h int) Model {
 	dir := t.TempDir()
 	writeMatchFile(t, dir, name, content)
 	idx := searchindex.New(dir)
-	addRec(t, idx, matchRec(name, strings.SplitN(content, "\n", 2)[0]+"\n", 1, 0, 4, "line"))
+	// The recorded submatch echoes the bytes ripgrep would report for a
+	// match covering the first four bytes of the first line — Issue 29
+	// stale-match validation compares them against the loaded content.
+	first := strings.SplitN(content, "\n", 2)[0]
+	end := len(first)
+	if end > 4 {
+		end = 4
+	}
+	addRec(t, idx, matchRec(name, first+"\n", 1, 0, end, first[:end]))
 	idx.Finish()
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)

@@ -36,7 +36,9 @@ type Buffer struct {
 	raw      [][]byte
 	spans    map[int][]Span
 	markers  map[int][]int
+	targets  map[int]int
 	bom      int
+	stale    bool
 }
 
 // Load reads path — the raw resolved path bytes, never a display string
@@ -45,8 +47,12 @@ type Buffer struct {
 // first line's display view, each line's content escaped into display
 // cells carrying raw-file byte offsets, and every stop's rg-line
 // coverage ranges shifted into raw offsets and mapped onto those cells.
-// stops are the file's matched-line entries; stops whose line is out of
-// range contribute nothing (stale match validation is Issue 29's).
+// stops are the file's matched-line entries; when a stop carries
+// recorded submatches each is validated against the line's retained raw
+// bytes — range bounds shifted through rawOffset, then byte equality
+// with the recorded match bytes — so a file changed since the search
+// drops only the submatches that no longer hold, keeps the survivors'
+// highlights, and marks the buffer stale.
 func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 	raw, err := os.ReadFile(string(path))
 	if err != nil {
@@ -55,6 +61,7 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 	b := &Buffer{
 		spans:   make(map[int][]Span),
 		markers: make(map[int][]int),
+		targets: make(map[int]int),
 	}
 	if bytes.HasPrefix(raw, utf8BOM) {
 		b.bom = len(utf8BOM)
@@ -75,9 +82,33 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 	for _, s := range stops {
 		i := int(s.Line) - 1
 		if i < 0 || i >= len(b.lines) {
+			// Every recorded submatch on a missing line drops: the
+			// buffer is stale and the stop's reveal lands on the last
+			// source line's start.
+			if len(s.Submatches) > 0 {
+				b.stale = true
+			}
 			continue
 		}
-		for _, r := range s.Coverage {
+		cov := s.Coverage
+		if len(s.Submatches) > 0 {
+			// Stale-match validation: each recorded submatch must still
+			// exist in the loaded line — its rg-view range mapped into
+			// the retained raw bytes, its recorded bytes equal — or it
+			// drops and marks the buffer stale. Survivors replace the
+			// stop's coverage so only they highlight.
+			cov = nil
+			for _, m := range s.Submatches {
+				rs, re := b.rawOffset(i, m.Range.Start), b.rawOffset(i, m.Range.End)
+				if rs < 0 || rs > re || re > len(b.raw[i]) ||
+					!bytes.Equal(b.raw[i][rs:re], m.Text) {
+					b.stale = true
+					continue
+				}
+				cov = append(cov, m.Range)
+			}
+		}
+		for _, r := range cov {
 			cs, ce := safepresentation.Span(b.lines[i],
 				b.rawOffset(i, r.Start), b.rawOffset(i, r.End))
 			if r.Start < r.End && cs < ce {
@@ -85,6 +116,18 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 				continue
 			}
 			b.mark(i, cs, contentEnd[i])
+		}
+		// Resolve the reveal target after the line's markers exist: the
+		// first surviving submatch's start cell, or — none survived —
+		// the first recorded start clamped onto the line. Neither
+		// fallback invents a highlight or a marker.
+		switch {
+		case len(cov) > 0:
+			cs, _ := safepresentation.Span(b.lines[i],
+				b.rawOffset(i, cov[0].Start), b.rawOffset(i, cov[0].End))
+			b.targets[i] = cs
+		case len(s.Submatches) > 0:
+			b.targets[i] = b.clampedStart(i, s.Submatches[0].Range.Start)
 		}
 	}
 	for i, spans := range b.spans {
@@ -192,22 +235,61 @@ func mergeSpans(spans []Span) []Span {
 	return out
 }
 
+// clampedStart resolves the stale-fallback target of a stop whose line
+// exists but has no surviving submatch: the first recorded start is
+// clamped to the line's retained bytes and mapped to a valid display
+// cell. An end-of-line position yields the last rendered cell unless a
+// marker cell already sits there — the fallback never invents one.
+func (b *Buffer) clampedStart(i, rgStart int) int {
+	start := b.rawOffset(i, rgStart)
+	if start > len(b.raw[i]) {
+		start = len(b.raw[i])
+	}
+	if start < 0 {
+		start = 0
+	}
+	cs, _ := safepresentation.Span(b.lines[i], start, start)
+	if cs >= len(b.lines[i]) && !slices.Contains(b.markers[i], cs) {
+		cs = len(b.lines[i]) - 1
+		if cs < 0 {
+			cs = 0
+		}
+	}
+	return cs
+}
+
+// Stale reports whether stale-match validation dropped any recorded
+// submatch — the buffer-status flag behind the filename row's "file
+// changed since search" note. It is recomputed on every Load, so a
+// reload clears it only when the new content validates fully.
+func (b *Buffer) Stale() bool { return b.stale }
+
 // TargetCell returns the stop's display target: its 0-based source
-// line clamped to the buffer's lines and the start cell of its first
-// coverage range — the cell whose rendered row a reveal must find.
-// Taking the whole stop rather than a bare line ordinal is what lets
-// wrap mode move the target onto a later row of a tall line. A stop
-// without coverage targets the line's first cell; coverage reaching
-// past the line's cells maps to the insertion point at the line end.
+// line and the start cell of its first coverage range — the cell whose
+// rendered row a reveal must find. For a stop carrying recorded
+// submatches the target resolved during Load is returned instead: the
+// first surviving submatch's start, the clamped recorded start when
+// none survived, or the last source line's start when the recorded
+// line is gone — each inventing no highlight or marker. Taking the
+// whole stop rather than a bare line ordinal is what lets wrap mode
+// move the target onto a later row of a tall line. A stop without
+// coverage targets the line's first cell; coverage reaching past the
+// line's cells maps to the insertion point at the line end.
 func (b *Buffer) TargetCell(stop searchindex.Stop) (line, cell int) {
+	if len(b.lines) == 0 {
+		return 0, 0
+	}
 	line = int(stop.Line) - 1
-	if last := len(b.lines) - 1; line > last {
-		line = last
+	if line >= len(b.lines) {
+		return len(b.lines) - 1, 0
 	}
 	if line < 0 {
 		line = 0
 	}
-	if len(b.lines) == 0 || len(stop.Coverage) == 0 {
+	if t, ok := b.targets[line]; ok {
+		return line, t
+	}
+	if len(stop.Coverage) == 0 {
 		return line, 0
 	}
 	cs, _ := safepresentation.Span(b.lines[line],

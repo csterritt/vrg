@@ -293,6 +293,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.revs[key]++
 			m.sources[key] = msg.src
 			delete(m.failed, key)
+			// The Issue 29 buffer-status note rides the filename-row
+			// slot: recomputed on every completed load — first load and
+			// reload alike — it stands while any recorded submatch
+			// failed validation and clears only on fully validating
+			// content.
+			if src, ok := msg.src.(staleNoter); ok && src.Stale() {
+				m.notes[key] = staleNote
+			} else {
+				delete(m.notes, key)
+			}
 			if key == m.curKey() {
 				// A reload's completion records the anchor-preserving
 				// intent — unless a reveal is already owed to a
@@ -617,6 +627,16 @@ type loadResult struct {
 	src  viewport.Source
 	err  error
 }
+
+// staleNote is the Issue 29 filename-row buffer-status note for a file
+// whose recorded submatches no longer all validate against the loaded
+// content.
+const staleNote = "file changed since search"
+
+// staleNoter is the buffer-status seam for the Issue 29 note: a
+// prepared source that reports whether stale-match validation dropped
+// any recorded submatch. *filebuffer.Buffer implements it.
+type staleNoter interface{ Stale() bool }
 
 // loaderFunc reads and prepares one file for display: the resolved raw
 // path and the file's stops in, the prepared source or the read error
