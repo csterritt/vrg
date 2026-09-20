@@ -1,6 +1,7 @@
 package filebuffer
 
 import (
+	"bytes"
 	"os"
 	"sort"
 
@@ -14,31 +15,52 @@ type Span struct {
 	Start, End int
 }
 
+// utf8BOM is the encoding signature ripgrep removes from the searched
+// view of a file's first line under its default detection.
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
 // Buffer is a prepared file: display-ready source lines with their
-// grapheme-cluster layout plus highlight spans. Load performs the whole
-// read, decode, and byte→cell mapping so the caller's update path does
-// no full-file work — the prepared Buffer travels inside the
-// load-completion message.
+// grapheme-cluster layout plus highlight spans. Three coordinate views
+// stay separate throughout: the retained raw line bytes — terminators
+// and a leading UTF-8 BOM included — that LineBytes exposes; the
+// rg-line byte offsets stop coverage carries, which omit the BOM's
+// three bytes on the first line; and the display cells both map onto.
+// Load performs the whole read, decode, and byte→cell mapping so the
+// caller's update path does no full-file work — the prepared Buffer
+// travels inside the load-completion message.
 type Buffer struct {
 	lines    [][]safepresentation.Cell
 	clusters [][]safepresentation.Cluster
+	raw      [][]byte
 	spans    map[int][]Span
+	bom      int
 }
 
 // Load reads path — the raw resolved path bytes, never a display string
-// — and prepares it for display: source lines split on LF and CRLF, each
-// line's content escaped into display cells, and every stop's coverage
-// ranges mapped onto those cells. stops are the file's matched-line
-// entries; stops whose line is out of range contribute nothing (stale
-// match validation is Issue 29's).
+// — and prepares it for display: source lines split on LF and CRLF with
+// their original bytes retained, a leading UTF-8 BOM removed from the
+// first line's display view, each line's content escaped into display
+// cells carrying raw-file byte offsets, and every stop's rg-line
+// coverage ranges shifted into raw offsets and mapped onto those cells.
+// stops are the file's matched-line entries; stops whose line is out of
+// range contribute nothing (stale match validation is Issue 29's).
 func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 	raw, err := os.ReadFile(string(path))
 	if err != nil {
 		return nil, err
 	}
 	b := &Buffer{spans: make(map[int][]Span)}
-	for _, line := range splitLines(raw) {
-		cells, clusters := safepresentation.EscapeContent(line)
+	if bytes.HasPrefix(raw, utf8BOM) {
+		b.bom = len(utf8BOM)
+	}
+	for i, line := range splitLines(raw) {
+		b.raw = append(b.raw, line)
+		content, base := lineContent(line, i == 0 && b.bom > 0)
+		cells, clusters := safepresentation.EscapeContent(content)
+		for j := range cells {
+			cells[j].Start += base
+			cells[j].End += base
+		}
 		b.lines = append(b.lines, cells)
 		b.clusters = append(b.clusters, clusters)
 	}
@@ -48,7 +70,8 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 			continue
 		}
 		for _, r := range s.Coverage {
-			cs, ce := safepresentation.Span(b.lines[i], r.Start, r.End)
+			cs, ce := safepresentation.Span(b.lines[i],
+				b.rawOffset(i, r.Start), b.rawOffset(i, r.End))
 			if cs < ce {
 				b.spans[i] = append(b.spans[i], Span{Start: cs, End: ce})
 			}
@@ -61,10 +84,12 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 	return b, nil
 }
 
-// splitLines divides raw bytes into source lines: LF terminates a line,
-// a CR immediately before LF is part of the terminator, a standalone CR
-// stays in the line's bytes, an unterminated final line counts, a
+// splitLines divides raw bytes into source lines, each retaining its
+// original bytes including the terminator: LF ends a line, a CR
+// immediately before LF is part of the terminator, a standalone CR
+// stays ordinary content, an unterminated final line counts, a
 // trailing newline adds no empty line, and empty input yields no lines.
+// The returned slices share the input's backing array.
 func splitLines(raw []byte) [][]byte {
 	var lines [][]byte
 	start := 0
@@ -72,17 +97,44 @@ func splitLines(raw []byte) [][]byte {
 		if raw[i] != '\n' {
 			continue
 		}
-		line := raw[start:i]
-		if n := len(line); n > 0 && line[n-1] == '\r' {
-			line = line[:n-1]
-		}
-		lines = append(lines, line)
+		lines = append(lines, raw[start:i+1])
 		start = i + 1
 	}
 	if start < len(raw) {
 		lines = append(lines, raw[start:])
 	}
 	return lines
+}
+
+// lineContent returns the line's displayable bytes and their base
+// offset within the retained raw line. A trailing LF — and the CR of a
+// CRLF — is part of the terminator and leaves the display view; when
+// bom is set the line opens with a UTF-8 BOM, which is removed from
+// the display view but keeps its three bytes in the raw view, so the
+// content's first byte sits at raw offset 3.
+func lineContent(line []byte, bom bool) (content []byte, base int) {
+	content = line
+	if n := len(content); n > 0 && content[n-1] == '\n' {
+		content = content[:n-1]
+		if n := len(content); n > 0 && content[n-1] == '\r' {
+			content = content[:n-1]
+		}
+	}
+	if bom {
+		base, content = len(utf8BOM), content[len(utf8BOM):]
+	}
+	return content, base
+}
+
+// rawOffset maps a byte offset in rg's view of a line to the same
+// position in the line's retained raw bytes. The views differ only on
+// the first line of a UTF-8-BOM file, where rg's searched line data
+// omits the BOM's three bytes.
+func (b *Buffer) rawOffset(line, off int) int {
+	if line == 0 {
+		return off + b.bom
+	}
+	return off
 }
 
 // mergeSpans coalesces sorted overlapping or abutting spans.
@@ -118,12 +170,27 @@ func (b *Buffer) TargetCell(stop searchindex.Stop) (line, cell int) {
 	if len(b.lines) == 0 || len(stop.Coverage) == 0 {
 		return line, 0
 	}
-	cs, _ := safepresentation.Span(b.lines[line], stop.Coverage[0].Start, stop.Coverage[0].End)
+	cs, _ := safepresentation.Span(b.lines[line],
+		b.rawOffset(line, stop.Coverage[0].Start), b.rawOffset(line, stop.Coverage[0].End))
 	return line, cs
 }
 
 // LineCount is the number of source lines in the loaded file.
 func (b *Buffer) LineCount() int { return len(b.lines) }
+
+// LineBytes returns the retained raw file bytes of 0-based source line
+// i — content plus line terminator, plus the leading UTF-8 BOM on line
+// 0 — or nil when i is out of range. This raw-file coordinate view is
+// the byte space the display cells' Start/End offsets map into and the
+// comparison view Issue 29's stale-match validation checks recorded
+// submatch bytes against; rg coverage offsets reach it through
+// rawOffset. The slice is owned by the buffer; do not mutate.
+func (b *Buffer) LineBytes(i int) []byte {
+	if i < 0 || i >= len(b.raw) {
+		return nil
+	}
+	return b.raw[i]
+}
 
 // GutterWidth is the file-panel gutter width: the decimal digit width of
 // the largest line number plus two spaces, with at least one digit slot.
