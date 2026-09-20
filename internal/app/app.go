@@ -213,11 +213,20 @@ func (m Model) Init() tea.Cmd {
 // the parameters they were built for.
 // Keys act per state — q cancels while searching and quits while
 // browsing, and ctrl+c cancels in any state. Esc is not an exit key and
-// is a no-op outside overlays.
+// is a no-op outside overlays. Below the minimum terminal size the
+// too-small gate narrows input to q and ctrl+c alone; the resize gate
+// similarly defers all layout reconciliation until an adequate size.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.tooSmall() {
+			// The gate defers all reconciliation: no keyed layout is
+			// requested and no saved position — viewport or modal —
+			// is clamped at sizes that cannot hold them. Recovery
+			// runs once, at the first adequate size.
+			return m, nil
+		}
 		if m.overlay != nil {
 			if max := m.overlay.maxScroll(m.width, m.height); m.overlay.scroll > max {
 				m.overlay.scroll = max
@@ -392,6 +401,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		if m.state == stateCancelled {
 			return m, nil
+		}
+		if m.tooSmall() {
+			return m.updateTooSmall(msg)
 		}
 		// Any key press dismisses the file-change pop-up; the key still
 		// performs its normal action below in the same update.
@@ -936,6 +948,9 @@ func (m Model) View() tea.View {
 }
 
 func (m Model) screen() string {
+	if m.tooSmall() {
+		return m.tooSmallScreen()
+	}
 	var base string
 	switch m.state {
 	case stateBrowse:

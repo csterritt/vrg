@@ -263,7 +263,8 @@ func TestPopupKeyDismissesAndActs(t *testing.T) {
 
 // Resize neither dismisses the pop-up nor restarts its timer: centring
 // and truncation recompute from the current terminal size at every
-// render.
+// render — though below the 20x3 minimum the too-small gate takes the
+// screen and the pop-up stays live without being painted.
 func TestPopupRecentresOnResize(t *testing.T) {
 	m := twoFileBrowse(t, 80, 24)
 	m, _ = update(t, m, keyMsg("n"))
@@ -285,11 +286,15 @@ func TestPopupRecentresOnResize(t *testing.T) {
 		t.Fatalf("pop-up interior at (%d,%d), want recentred (14,46) at 100x30", row, col)
 	}
 
+	// At 6x5 the too-small gate owns the screen: the pop-up is not
+	// painted but stays live behind it, still the same instance.
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 6, Height: 5})
 	v := m.View().Content
-	row, col = popupBox(t, v, "…txt")
-	if row != 2 || col != 0 {
-		t.Fatalf("truncated pop-up interior at (%d,%d), want (2,0) at 6x5:\n%s", row, col, v)
+	if strings.Contains(v, "b.txt") || !strings.Contains(v, "Termin") {
+		t.Fatalf("6x5 view = %q, want the too-small screen with no pop-up", v)
+	}
+	if m.popup == nil || m.popup.id != id {
+		t.Fatal("the below-minimum resize dismissed or restarted the pop-up")
 	}
 	for i, r := range strings.Split(v, "\n") {
 		if w := displaywidth.String(r); w > 6 {
