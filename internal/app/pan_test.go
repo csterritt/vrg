@@ -35,7 +35,16 @@ func TestPanKeysShiftContent(t *testing.T) {
 	m := runOffEdge(t, "a.txt", line+"\n", 80, 24)
 
 	want := func(off int) string {
-		return "       " + "1  " + line[off:off+69] + " "
+		// The gutter's hidden-left slot: _ for hidden text, upgraded
+		// to * once the line's [0,4) match is entirely left of the
+		// window.
+		gutter := "1  "
+		if off >= 4 {
+			gutter = "1* "
+		} else if off > 0 {
+			gutter = "1_ "
+		}
+		return "       " + gutter + line[off:off+69] + " "
 	}
 	if got := contentRow(t, m); got != want(0) {
 		t.Fatalf("initial row = %q, want %q", got, want(0))
@@ -192,7 +201,7 @@ func TestPanSplitClusterRendersBlank(t *testing.T) {
 	if got := m.vps["a.txt"].Offset(); got != 1 {
 		t.Fatalf("setup pan: offset = %d, want 1", got)
 	}
-	want := "       " + "1  " + " " + strings.Repeat("z", 68) + " "
+	want := "       " + "1_ " + " " + strings.Repeat("z", 68) + " "
 	if got := contentRow(t, m); got != want {
 		t.Fatalf("row = %q, want %q — the split glyph's cell is blank", got, want)
 	}

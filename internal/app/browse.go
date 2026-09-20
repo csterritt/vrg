@@ -142,11 +142,11 @@ func (m Model) panelRow(r int, curPath []byte, curIdx, panelW, contentH int) str
 	}
 	gw := src.GutterWidth()
 	line, first := src.RowLine(rowIdx)
-	gutter := strings.Repeat(" ", gw)
-	if first {
-		gutter = fmt.Sprintf("%*d  ", gw-2, line+1)
-	}
 	if gw >= panelW {
+		gutter := strings.Repeat(" ", gw)
+		if first {
+			gutter = fmt.Sprintf("%*d  ", gw-2, line+1)
+		}
 		return padCells(clipCells(gutter, panelW), panelW)
 	}
 	tw := viewport.TextWidth(panelW, gw, src.Key().Wrap)
@@ -154,18 +154,53 @@ func (m Model) panelRow(r int, curPath []byte, curIdx, panelW, contentH int) str
 	if vp := m.vps[key]; vp != nil {
 		hoff = vp.Offset()
 	}
+	var hid viewport.Hidden
+	if !src.Key().Wrap {
+		hid = src.Hidden(rowIdx, hoff, tw)
+	}
 	cells, spans := src.Clip(rowIdx, hoff, tw)
-	text, painted := m.renderCells(cells, spans, tw, m.isCurrentLine(line))
-	row := m.theme.Gutter(gutter) + text
+	current := m.isCurrentLine(line)
+	text, painted := m.renderCells(cells, spans, tw, current)
+	row := m.gutterFor(first, line, gw, hid) + text
 	if pad := tw - painted; pad > 0 {
 		row += strings.Repeat(" ", pad)
 	}
 	if !src.Key().Wrap {
-		// The reserved right-indicator column stays blank until
-		// Issue 20 populates it.
-		row += " "
+		// The reserved rightmost column carries an inverse * on the
+		// current matched line's row when a match is entirely hidden
+		// right. The text width excludes it, so it never overwrites
+		// text; a current line scrolled off-screen simply has no row
+		// to carry it.
+		if current && hid.RightMatch {
+			row += m.theme.Indicator("*")
+		} else {
+			row += " "
+		}
 	}
 	return row
+}
+
+// gutterFor renders one rendered row's gutter: the right-justified
+// line number followed by two spaces, the first of which is the
+// run-off-edge hidden-left indicator — an inverse * when a match or
+// marker on the line is entirely hidden left, an inverse _ when text
+// is hidden left, blank otherwise. Continuation rows carry a blank
+// gutter, and wrap mode reports no hidden content.
+func (m Model) gutterFor(first bool, line, gw int, hid viewport.Hidden) string {
+	if !first {
+		return m.theme.Gutter(strings.Repeat(" ", gw))
+	}
+	num := fmt.Sprintf("%*d", gw-2, line+1)
+	ind := " "
+	if hid.LeftMatch {
+		ind = "*"
+	} else if hid.LeftText {
+		ind = "_"
+	}
+	if ind == " " {
+		return m.theme.Gutter(num + "  ")
+	}
+	return m.theme.Gutter(num) + m.theme.Indicator(ind) + m.theme.Gutter(" ")
 }
 
 // isCurrentLine reports whether 0-based source line i is the cursor's

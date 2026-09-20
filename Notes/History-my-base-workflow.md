@@ -205,3 +205,14 @@ Usage
  Input tokens: 168626 tokens
  Output tokens: 76044 tokens
  Cached input tokens: 4396596 tokens
+
+----
+Task 020-hidden-content-indicators.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 42 messages
+ Input tokens: 149157 tokens
+ Output tokens: 61524 tokens
+ Cached input tokens: 4122345 tokens

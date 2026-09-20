@@ -267,6 +267,92 @@ func (m *RowModel) Highlights(i int) []filebuffer.Span {
 	return out
 }
 
+// Hidden is a rendered row's hidden-content report for the
+// run-off-edge text window [off, off+w): cells concealed left of the
+// window and match/marker spans entirely concealed on each side.
+type Hidden struct {
+	// LeftText reports cells of the line hidden left of the window.
+	LeftText bool
+	// LeftMatch reports a match/marker with no painted cell whose
+	// columns reach left of the window.
+	LeftMatch bool
+	// RightMatch reports a match/marker with no painted cell whose
+	// columns reach past the window's right edge.
+	RightMatch bool
+}
+
+// Hidden computes rendered row i's hidden-content report for the
+// window [off, off+w). Visibility is the rendered-cell kind Clip
+// produces: only clusters wholly inside the window paint — edge-split
+// clusters render as blanks and outside clusters drop — so a span
+// covered by blanks alone counts as hidden, while a span with one
+// painted cell is visible and earns no hidden-match indicator for that
+// side. Wrap-mode models and out-of-range rows report nothing hidden:
+// wrap draws no indicators.
+func (m *RowModel) Hidden(i, off, w int) Hidden {
+	var h Hidden
+	if m.key.Wrap || w <= 0 || i < 0 || i >= len(m.rows) {
+		return h
+	}
+	r := m.rows[i]
+	clusters := m.src.Clusters(r.line)
+	if len(clusters) == 0 {
+		return h
+	}
+	end := off + w
+	// One pass over the line's clusters finds the cells hidden left of
+	// the window and the painted run [pLo, pHi] — the consecutive
+	// cluster indexes wholly inside it.
+	pLo, pHi := len(clusters), -1
+	col := 0
+	for k, c := range clusters {
+		next := col + c.Width
+		h.LeftText = h.LeftText || col < off
+		if col >= off && next <= end {
+			if k < pLo {
+				pLo = k
+			}
+			pHi = k
+		}
+		col = next
+	}
+	for _, s := range m.src.Highlights(r.line) {
+		if s.Start >= s.End {
+			continue
+		}
+		// The clusters holding the span's first and last cells — its
+		// whole cluster range, since clusters partition the cells.
+		lo := sort.Search(len(clusters), func(k int) bool { return clusters[k].End > s.Start })
+		if lo >= len(clusters) {
+			continue
+		}
+		hi := sort.Search(len(clusters), func(k int) bool { return clusters[k].End > s.End-1 })
+		if hi >= len(clusters) {
+			hi = len(clusters) - 1
+		}
+		if lo <= pHi && hi >= pLo {
+			continue // a painted cell makes the span visible
+		}
+		if clusterCol(clusters, lo) < off {
+			h.LeftMatch = true
+		}
+		if clusterCol(clusters, hi)+clusters[hi].Width > end {
+			h.RightMatch = true
+		}
+	}
+	return h
+}
+
+// clusterCol returns the source-display column at which cluster k
+// starts — the sum of the preceding clusters' widths.
+func clusterCol(clusters []safepresentation.Cluster, k int) int {
+	col := 0
+	for _, c := range clusters[:k] {
+		col += c.Width
+	}
+	return col
+}
+
 // TargetRow returns the rendered row holding the stop's display target:
 // the row of its source line that contains the first coverage range's
 // start cell, so a match far down a wrapped line lands on its own row.
@@ -326,8 +412,8 @@ func (m *RowModel) location(i int) Location {
 
 // TextWidth is the file panel's text width in cells: the panel width
 // minus the gutter minus the reserved right-indicator column — zero in
-// wrap mode, one in run-off-edge mode. The column is reserved now and
-// populated by Issue 20's hidden-content indicators.
+// wrap mode, one in run-off-edge mode — the column the hidden-content
+// indicators of Hidden populate.
 func TextWidth(panelWidth, gutterWidth int, wrap bool) int {
 	w := panelWidth - gutterWidth
 	if !wrap {
