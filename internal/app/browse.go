@@ -14,19 +14,17 @@ import (
 // browseScreen composes the two-pane browse view: the raw-path-ordered
 // file list on the left and the current file's panel on the right —
 // filename rule, then guttered content rows or the load placeholder.
+// The frame queries only the visible window: list entries come through
+// the item provider and panel rows through the installed row model.
 func (m Model) browseScreen() string {
 	w, h := m.termSize()
-	names := make([]string, len(m.files))
-	for i, f := range m.files {
-		names[i] = safepresentation.EscapePath(f)
-	}
 	curIdx := -1
 	var curPath []byte
 	if stop, ok := m.index.Current(); ok {
 		curPath = stop.Path
 		curIdx = m.fileIdx[string(curPath)]
 	}
-	lw := listWidth(names, w)
+	lw := m.listWidth(w)
 
 	// Keep the current entry inside the scrolled list window.
 	listTop := m.listTop
@@ -42,27 +40,31 @@ func (m Model) browseScreen() string {
 	panelW := w - lw
 	rows := make([]string, h)
 	for r := 0; r < h; r++ {
-		rows[r] = m.theme.Base(m.listRow(names, listTop+r, curIdx, lw) +
-			m.panelRow(r, curPath, names, curIdx, panelW, h-1))
+		rows[r] = m.theme.Base(m.listRow(listTop+r, curIdx, lw) +
+			m.panelRow(r, curPath, curIdx, panelW, h-1))
 	}
 	return strings.Join(rows, "\n")
 }
 
+// listItem is file-list entry i's display name: the raw path's escaped
+// form, or the test-injected provider's answer.
+func (m Model) listItem(i int) string {
+	if m.itemName != nil {
+		return m.itemName(i)
+	}
+	return safepresentation.EscapePath(m.files[i])
+}
+
 // listWidth is the Issue 5 heuristic for the file-list column: the
-// longest escaped path plus padding, capped at 40% of the terminal and
-// narrowed further to leave ten cells of panel. Issue 24 owns the real
-// formula.
-func listWidth(names []string, w int) int {
-	if len(names) == 0 {
+// widest entry plus padding, capped at 40% of the terminal and narrowed
+// further to leave ten cells of panel. Issue 24 owns the real formula.
+// The widest entry was measured once at browse entry — a frame render
+// never rescans the list.
+func (m Model) listWidth(w int) int {
+	if len(m.files) == 0 {
 		return 0
 	}
-	longest := 0
-	for _, n := range names {
-		if d := displaywidth.String(n); d > longest {
-			longest = d
-		}
-	}
-	lw := longest + 2
+	lw := m.listWidest
 	if cap := w * 2 / 5; lw > cap {
 		lw = cap
 	}
@@ -77,14 +79,14 @@ func listWidth(names []string, w int) int {
 
 // listRow renders file-list row fi padded to lw cells; the current entry
 // is underlined. Rows beyond the list render blank.
-func (m Model) listRow(names []string, fi, curIdx, lw int) string {
+func (m Model) listRow(fi, curIdx, lw int) string {
 	if lw <= 0 {
 		return ""
 	}
-	if fi >= len(names) {
+	if fi >= len(m.files) {
 		return strings.Repeat(" ", lw)
 	}
-	name := truncateLeft(names[fi], lw)
+	name := truncateLeft(m.listItem(fi), lw)
 	pad := lw - displaywidth.String(name)
 	if pad < 0 {
 		pad = 0
@@ -96,14 +98,14 @@ func (m Model) listRow(names []string, fi, curIdx, lw int) string {
 }
 
 // panelRow renders row r of the file panel: the filename rule, then
-// content rows of the loaded buffer or the load placeholder.
-func (m Model) panelRow(r int, curPath []byte, names []string, curIdx, panelW, contentH int) string {
+// content rows of the installed row model or the load placeholder.
+func (m Model) panelRow(r int, curPath []byte, curIdx, panelW, contentH int) string {
 	if panelW <= 0 {
 		return ""
 	}
 	name := ""
 	if curIdx >= 0 {
-		name = names[curIdx]
+		name = safepresentation.EscapePath(curPath)
 	}
 	if r == 0 {
 		return m.theme.FilenameRule(filenameRule(name, panelW))
@@ -120,10 +122,10 @@ func (m Model) panelRow(r int, curPath []byte, names []string, curIdx, panelW, c
 		}
 		return padCells("", panelW)
 	}
-	// The stored extent is maintained on load and on resize; the painted
-	// top is clamped here as well so a stale extent cannot paint
-	// avoidable blank rows below EOF. View must not mutate the saved
-	// state, so this clamp stays local to the frame.
+	// The installed row model and its saved viewport are reconciled at
+	// install time; the painted top is clamped here as well so a stale
+	// extent cannot paint avoidable blank rows below EOF. View must not
+	// mutate the saved state, so this clamp stays local to the frame.
 	top := 0
 	if vp := m.vps[key]; vp != nil {
 		top = vp.Top()

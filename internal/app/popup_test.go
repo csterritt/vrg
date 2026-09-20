@@ -96,7 +96,7 @@ func twoFileBrowse(t *testing.T, w, h int) Model {
 
 	m, cmd := startBrowse(t, dir, idx, w, h)
 	m.popupTimer = instantPopupTimer
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 	return m
 }
 
@@ -111,7 +111,7 @@ func TestPopupOnlyOnFileChange(t *testing.T) {
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24)
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 	if m.popup != nil {
 		t.Fatal("startup selection opened a pop-up")
 	}
@@ -168,7 +168,7 @@ func TestPopupShowsAtSelectionBeforeLoad(t *testing.T) {
 	}
 
 	// Load completion leaves the running pop-up untouched.
-	m, _ = update(t, m, deliverNavLoad(t, cmd))
+	m = applyLoad(t, m, deliverNavLoad(t, cmd))
 	if m.popup == nil || m.popup.id != id {
 		t.Fatal("load completion restarted or dismissed the pop-up")
 	}
@@ -352,7 +352,7 @@ func TestPopupTruncatesLongPath(t *testing.T) {
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 30, 10)
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 	m, _ = update(t, m, keyMsg("n"))
 	m.theme = theme.Plain()
 

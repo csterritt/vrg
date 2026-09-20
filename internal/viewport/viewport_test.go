@@ -7,7 +7,7 @@ import "testing"
 // page of the content height.
 func TestScrollUnits(t *testing.T) {
 	v := &Viewport{}
-	v.SetExtent(100, 10)
+	v.SetLayout(rowsLayout(t, 100), 10)
 
 	v.Down()
 	if got := v.Top(); got != 1 {
@@ -55,7 +55,7 @@ func TestHalfPageUnitByHeight(t *testing.T) {
 		{23, 11}, // odd: floor(23/2)=11
 	} {
 		v := &Viewport{}
-		v.SetExtent(1000, tc.height)
+		v.SetLayout(rowsLayout(t, 1000), tc.height)
 		v.HalfDown()
 		if got := v.Top(); got != tc.want {
 			t.Errorf("height %d: half page down moved to top %d, want %d", tc.height, got, tc.want)
@@ -71,7 +71,7 @@ func TestHalfPageUnitByHeight(t *testing.T) {
 // returns to the origin on a long file.
 func TestPageUnitIsContentHeight(t *testing.T) {
 	v := &Viewport{}
-	v.SetExtent(100, 7)
+	v.SetLayout(rowsLayout(t, 100), 7)
 	v.PageDown()
 	if got := v.Top(); got != 7 {
 		t.Fatalf("page down: top = %d, want 7", got)
@@ -98,7 +98,7 @@ func TestScrollClampsAtBOF(t *testing.T) {
 		{"page up", (*Viewport).PageUp},
 	} {
 		v := &Viewport{}
-		v.SetExtent(50, 10)
+		v.SetLayout(rowsLayout(t, 50), 10)
 		tc.act(v)
 		if got := v.Top(); got != 0 {
 			t.Errorf("%s at BOF: top = %d, want 0", tc.name, got)
@@ -118,7 +118,7 @@ func TestScrollClampsAtEOF(t *testing.T) {
 		{"page down", (*Viewport).PageDown},
 	} {
 		v := &Viewport{}
-		v.SetExtent(25, 10)
+		v.SetLayout(rowsLayout(t, 25), 10)
 		for i := 0; i < 30; i++ {
 			tc.act(v)
 		}
@@ -133,7 +133,7 @@ func TestScrollClampsAtEOF(t *testing.T) {
 func TestShortFileNeverScrolls(t *testing.T) {
 	for _, rows := range []int{0, 1, 9, 10} {
 		v := &Viewport{}
-		v.SetExtent(rows, 10)
+		v.SetLayout(rowsLayout(t, rows), 10)
 		v.Down()
 		v.HalfDown()
 		v.PageDown()
@@ -147,14 +147,14 @@ func TestShortFileNeverScrolls(t *testing.T) {
 // pulls the viewport up so no avoidable blank rows remain.
 func TestShrinkReclampsTop(t *testing.T) {
 	v := &Viewport{}
-	v.SetExtent(50, 10)
+	v.SetLayout(rowsLayout(t, 50), 10)
 	for i := 0; i < 5; i++ {
 		v.PageDown()
 	}
 	if got := v.Top(); got != 40 {
 		t.Fatalf("scrolled to top %d, want 40", got)
 	}
-	v.SetExtent(12, 10)
+	v.SetLayout(rowsLayout(t, 12), 10)
 	if got := v.Top(); got != 2 {
 		t.Fatalf("after shrink: top = %d, want 2 (12 rows - height 10)", got)
 	}

@@ -105,7 +105,7 @@ func browseSinkFrame(t *testing.T, name, content []byte, styled bool) string {
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 40})
 	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 	if !styled {
 		m.theme = theme.Plain()
 	}

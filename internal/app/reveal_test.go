@@ -23,7 +23,7 @@ func TestStartupRevealsTargetAfterLoad(t *testing.T) {
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24) // content height 23
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 
 	// floor(23/3) = 7, so target row 49 lands at content row 7 and the
 	// window's top is rendered row 42.
@@ -52,7 +52,7 @@ func TestSameFileNavigationRevealsTarget(t *testing.T) {
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24) // content height 23
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 	// Startup: target row 4 is already visible at top 0 — no scroll.
 	if row := contentRow(t, m); !strings.Contains(row, "line-01") {
 		t.Fatalf("startup: first content row = %q, want line-01", row)
@@ -100,7 +100,7 @@ func TestRevealTargetsFirstSubmatchStart(t *testing.T) {
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24) // content height 23
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 	m, _ = update(t, m, keyMsg("n")) // to line 50's row 49 → top 49-7 = 42
 	if row := contentRow(t, m); !strings.Contains(row, "plain-043") {
 		t.Fatalf("n to mid-line target: first content row = %q, want plain-043 (top row 42)", row)
@@ -122,7 +122,7 @@ func TestNavigationToVisibleTargetDoesNotScroll(t *testing.T) {
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24)
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 	for i := 0; i < 5; i++ {
 		m, _ = update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
 	}
@@ -164,7 +164,7 @@ func TestRevisitStartsFromSavedViewportThenReveals(t *testing.T) {
 	// Stop order: a.txt:6, a.txt:40, b.txt:1. Content height 23, third = 7.
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24)
-	m, _ = update(t, m, cmd()) // a.txt loaded; row 5 visible at top 0
+	m = applyLoad(t, m, cmd()) // a.txt loaded; row 5 visible at top 0
 	// The no-style theme keeps the fixture's matched text contiguous.
 	m.theme = theme.Plain()
 
@@ -180,7 +180,7 @@ func TestRevisitStartsFromSavedViewportThenReveals(t *testing.T) {
 	// n to b.txt: a first visit starts at the top, and its target row 0
 	// is visible there — no scroll.
 	m, cmd = update(t, m, keyMsg("n"))
-	m, _ = update(t, m, deliverNavLoad(t, cmd))
+	m = applyLoad(t, m, deliverNavLoad(t, cmd))
 	if row := contentRow(t, m); !strings.Contains(row, "row-01") {
 		t.Fatalf("first visit to b.txt: %q, want row-01 at the top", row)
 	}

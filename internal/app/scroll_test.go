@@ -36,7 +36,7 @@ func browseLoaded(t *testing.T, name, content string, w, h int) Model {
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 	// The no-style theme keeps assertions free of the ANSI codes the
 	// match highlight inserts inside the fixture's "line-NN" text.
 	m.theme = theme.Plain()
@@ -177,7 +177,7 @@ func TestVerticalViewportSavedPerFile(t *testing.T) {
 	m.popupTimer = instantPopupTimer
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
-	m, _ = update(t, m, cmd()) // a.txt loaded; target row 5 visible at top 0
+	m = applyLoad(t, m, cmd()) // a.txt loaded; target row 5 visible at top 0
 	m.theme = theme.Plain()    // no ANSI inside the fixture's match text
 
 	for i := 0; i < 5; i++ {
@@ -190,7 +190,7 @@ func TestVerticalViewportSavedPerFile(t *testing.T) {
 	// n switches to b.txt and requests its load; a first visit starts
 	// at the top, and its target row 3 is visible there.
 	m, cmd = update(t, m, keyMsg("n"))
-	m, _ = update(t, m, deliverNavLoad(t, cmd))
+	m = applyLoad(t, m, deliverNavLoad(t, cmd))
 	if row := contentRow(t, m); !strings.Contains(row, "row-01") {
 		t.Fatalf("first visit to b.txt shows %q, want row-01 at the top", row)
 	}
@@ -278,7 +278,7 @@ func TestRenderQueriesOnlyVisibleRows(t *testing.T) {
 	m, _ = update(t, m, searchResult{index: idx, integrity: completeStream})
 
 	src := newCountingSource(10000)
-	m, _ = update(t, m, loadResult{path: []byte("a.txt"), src: src})
+	m = applyLoad(t, m, loadResult{path: []byte("a.txt"), src: src})
 
 	src.queried = nil
 	src.wrapped = 0

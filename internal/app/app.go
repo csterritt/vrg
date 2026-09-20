@@ -52,6 +52,10 @@ type Model struct {
 	// file is read and mapped, so tests can hold a load off the update
 	// path while input stays live.
 	loadGate <-chan struct{}
+	// layoutGate, when non-nil, is awaited inside the layout worker
+	// before a row model is built, so tests can hold a layout off the
+	// update path while input stays live.
+	layoutGate <-chan struct{}
 	// ctx and cancel drive cancellation of collection and gated loads:
 	// cancelling releases a gate-held worker promptly.
 	ctx    context.Context
@@ -89,19 +93,29 @@ type Model struct {
 	// matched-line cursor lives in the index; the current file derives
 	// from it. vps holds each visited file's saved vertical viewport
 	// under the same key, so a revisited file resumes from its saved
-	// top row. wrap is the wrap mode — on by default; w toggles it.
+	// position — a width-independent logical anchor inside each
+	// Viewport. wrap is the wrap mode — on by default; w toggles it.
 	// revs counts each path's content revisions for row-model keying.
-	files   [][]byte
-	fileIdx map[string]int
-	buffers map[string]*viewport.RowModel
-	sources map[string]viewport.Source
-	revs    map[string]int
-	loading map[string]bool
-	failed  map[string]bool
-	listTop int
-	vps     map[string]*viewport.Viewport
-	wrap    bool
-	theme   theme.Theme
+	// pendingReveal marks a navigation or entry reveal intent that no
+	// current layout could commit; the next matching layout install
+	// commits it. listWidest is the file list's widest entry in cells,
+	// computed once at browse entry so a frame render never rescans the
+	// list. itemName, when non-nil, renders entry i's display name — a
+	// test seam proving the frame queries only the visible window.
+	files         [][]byte
+	fileIdx       map[string]int
+	buffers       map[string]*viewport.RowModel
+	sources       map[string]viewport.Source
+	revs          map[string]int
+	loading       map[string]bool
+	failed        map[string]bool
+	listTop       int
+	listWidest    int
+	itemName      func(i int) string
+	vps           map[string]*viewport.Viewport
+	wrap          bool
+	pendingReveal bool
+	theme         theme.Theme
 }
 
 // New returns a Model that collects the started child's stream. The
@@ -142,22 +156,21 @@ func (m Model) Init() tea.Cmd {
 
 // Update applies messages to the model. Collection results arrive as
 // searchResult and enter the browse view; file loads arrive as
-// loadResult carrying a prepared buffer. Keys act per state — q cancels
-// while searching and quits while browsing, and ctrl+c cancels in any
-// state. Esc is not an exit key and is a no-op outside overlays.
+// loadResult carrying a prepared buffer, and prepared row layouts
+// arrive as layoutResult keyed by the parameters they were built for.
+// Keys act per state — q cancels while searching and quits while
+// browsing, and ctrl+c cancels in any state. Esc is not an exit key and
+// is a no-op outside overlays.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		// Rebuild every loaded file's row model at the new text width
-		// and re-clamp its saved viewport: a shorter panel may leave
-		// avoidable blank rows below EOF at the old top.
-		m.rebuildRows()
 		if m.overlay != nil {
 			if max := m.overlay.maxScroll(m.width, m.height); m.overlay.scroll > max {
 				m.overlay.scroll = max
 			}
 		}
+		return m, m.resizeLayout()
 	case stderrMsg:
 		if m.state == stateCancelled {
 			// A diagnostic still in flight at the exit decision is never
@@ -230,17 +243,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.revs[key]++
 			m.sources[key] = msg.src
-			model := viewport.NewRowModel(m.rowKey(key, msg.src), msg.src)
-			m.buffers[key] = model
 			delete(m.failed, key)
-			// The file's saved viewport is clamped to the prepared row
-			// model's extent here and on resize.
-			m.viewportFor(key).SetExtent(model.LineCount(), m.contentHeight())
 			if key == m.curKey() {
-				// Startup and file-entry loads reveal the cursor's
-				// latest target once its rows exist.
-				m.revealCurrent()
+				// The panel's layout is prepared off the update path;
+				// the placeholder — or a previous layout — stays on
+				// screen until the keyed result lands.
+				return m, m.prepareLayout()
 			}
+		}
+	case layoutResult:
+		if m.state == stateCancelled {
+			return m, nil
+		}
+		key := msg.key.Path
+		cur := m.curKey()
+		src := m.sources[key]
+		// A prepared layout installs only while its complete key still
+		// names the current file and parameters: anything older — a
+		// superseded width or wrap mode, a stale content revision, a
+		// no-longer-current file — is discarded without touching the
+		// display, the anchor, saved per-file state, or a pending reveal
+		// intent.
+		if key != cur || src == nil || msg.key != m.rowKey(cur, src) {
+			return m, nil
+		}
+		m.buffers[key] = msg.model
+		m.viewportFor(key).SetLayout(msg.model, m.contentHeight())
+		if m.pendingReveal {
+			m.revealCurrent()
 		}
 	case popupExpiredMsg:
 		// Only the live instance's own expiry dismisses the pop-up; a
@@ -276,7 +306,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "w":
 			if m.state == stateBrowse {
 				m.wrap = !m.wrap
-				m.rebuildRows()
+				return m, m.prepareLayout()
 			}
 		case "up", "down", "u", "d", "pgup", "pgdown":
 			if m.state == stateBrowse {
@@ -304,24 +334,34 @@ func rgSucceeded(err error) bool {
 }
 
 // enterBrowse moves a completed search into the browse state and starts
-// loading the current file — the cursor's first stop.
+// staging the current file — the cursor's first stop. The file list's
+// widest entry is measured once here so a frame render never rescans
+// the list.
 func (m Model) enterBrowse() (tea.Model, tea.Cmd) {
 	m.state = stateBrowse
 	m.files = m.index.Files()
 	m.fileIdx = make(map[string]int, len(m.files))
 	for i, f := range m.files {
 		m.fileIdx[string(f)] = i
+		if d := displaywidth.String(safepresentation.EscapePath(f)) + 2; d > m.listWidest {
+			m.listWidest = d
+		}
 	}
-	return m.ensureLoaded()
+	// The startup selection's reveal is a pending intent until the
+	// file's first layout installs.
+	m.pendingReveal = true
+	return m.ensureStaged()
 }
 
 // navigate applies one matched-line navigation key: n advances and p
 // retreats the index cursor circularly. Every actual transition reveals
-// the destination's target row — immediately when its file is cached,
-// otherwise when the load completes. A stop in another file switches
-// the panel — the departing file's viewport stays saved under its key —
-// and an uncached destination's load is requested. A file change also
-// opens the file-change pop-up with a fresh instance-keyed timer.
+// the destination's target row — immediately when its installed layout
+// matches the current parameters, otherwise as a pending intent when
+// the matching layout installs. A stop in another file switches the
+// panel — the departing file's viewport stays saved under its key — and
+// an uncached destination's load is requested while a stale cached one
+// gets a keyed layout request. A file change also opens the file-change
+// pop-up with a fresh instance-keyed timer.
 func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
 	if len(m.index.Stops()) < 2 {
 		// Zero or one stop is a strict no-op: no reveal, pop-up, or retry.
@@ -342,41 +382,66 @@ func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
 	stop, _ := m.index.Current()
 	m.popupSeq++
 	m.popup = &popup{id: m.popupSeq, path: append([]byte(nil), stop.Path...)}
-	m, load := m.ensureLoaded()
-	return m, tea.Batch(load, m.popupTimer(m.popup.id))
+	m, stage := m.ensureStaged()
+	return m, tea.Batch(stage, m.popupTimer(m.popup.id))
 }
 
 // revealCurrent applies the destination reveal to the current stop when
-// its file is loaded: the file's saved vertical state — the top of the
-// file on a first visit — is the starting point, and the viewport moves
-// only when the target row is hidden from it. A file still loading has
-// no rows to target; its reveal runs when the load result arrives.
-func (m Model) revealCurrent() {
+// its file's installed layout matches the present parameters: the
+// file's saved vertical state — the top of the file on a first visit —
+// is the starting point, and the viewport moves only when the target
+// row is hidden from it. When no layout can serve — the file is
+// loading, or its installed layout is stale under the current geometry
+// — the intent is marked pending instead and the next matching layout
+// install commits it; obsolete completions never consume it.
+func (m *Model) revealCurrent() {
 	stop, ok := m.index.Current()
 	if !ok {
 		return
 	}
 	key := string(stop.Path)
-	src := m.buffers[key]
-	if src == nil {
+	if !m.layoutCurrent(key) {
+		m.pendingReveal = true
 		return
 	}
-	m.viewportFor(key).Reveal(src.TargetRow(stop))
+	m.pendingReveal = false
+	vp := m.viewportFor(key)
+	model := m.buffers[key]
+	vp.SetLayout(model, m.contentHeight())
+	vp.Reveal(model.TargetRow(stop))
 }
 
-// ensureLoaded starts a load for the current stop's file unless it is
-// already loaded or in flight — one load per raw path, never queued.
-func (m Model) ensureLoaded() (Model, tea.Cmd) {
+// layoutCurrent reports whether the file's installed layout still
+// matches the current terminal geometry, wrap mode, and content
+// revision — the only layout a reveal may read.
+func (m Model) layoutCurrent(key string) bool {
+	src := m.sources[key]
+	model := m.buffers[key]
+	if src == nil || model == nil {
+		return false
+	}
+	return model.Key() == m.rowKey(key, src)
+}
+
+// ensureStaged makes the current stop's file displayable at the present
+// parameters: an uncached file's load is requested — one per raw path,
+// never queued — a cached file whose installed layout is stale gets a
+// keyed layout request, and a file already prepared for the current
+// parameters needs neither.
+func (m Model) ensureStaged() (Model, tea.Cmd) {
 	stop, ok := m.index.Current()
 	if !ok {
 		return m, nil
 	}
 	key := string(stop.Path)
-	if m.buffers[key] != nil || m.loading[key] {
-		return m, nil
+	if m.sources[key] == nil {
+		if m.loading[key] {
+			return m, nil
+		}
+		m.loading[key] = true
+		return m, loadCmd(m.ctx, m.loadGate, stop, stopsForPath(m.index, stop.Path))
 	}
-	m.loading[key] = true
-	return m, loadCmd(m.ctx, m.loadGate, stop, stopsForPath(m.index, stop.Path))
+	return m, m.prepareLayout()
 }
 
 // stopsForPath collects the file's matched-line stops for the loader.
@@ -424,16 +489,70 @@ func loadCmd(ctx context.Context, gate <-chan struct{}, stop searchindex.Stop, s
 	}
 }
 
-// rebuildRows re-prepares every cached file's row model at the current
-// text width and wrap mode and re-clamps its saved viewport to the new
-// extent. Preparation is synchronous here; Issue 17 moves it off the
-// update path with keyed, isolated completions.
-func (m Model) rebuildRows() {
-	for key, src := range m.sources {
-		model := viewport.NewRowModel(m.rowKey(key, src), src)
-		m.buffers[key] = model
-		m.viewportFor(key).SetExtent(model.LineCount(), m.contentHeight())
+// layoutResult is the product of one prepared-layout job, delivered to
+// the model as a message: the complete key the row model was built for
+// plus the model itself. Installation is guarded on the key still
+// matching the current parameters — a superseded result is discarded
+// without touching state.
+type layoutResult struct {
+	key   viewport.RowModelKey
+	model *viewport.RowModel
+}
+
+// layoutCmd builds a row model off the update path. A non-nil gate
+// holds the build until it closes; ctx cancellation releases a held
+// gate promptly. The completion carries the key it was built for so a
+// superseded result can be discarded on arrival.
+func layoutCmd(ctx context.Context, gate <-chan struct{}, key viewport.RowModelKey, src viewport.Source) tea.Cmd {
+	return func() tea.Msg {
+		if gate != nil {
+			select {
+			case <-gate:
+			case <-ctx.Done():
+			}
+		}
+		return layoutResult{key: key, model: viewport.NewRowModel(key, src)}
 	}
+}
+
+// prepareLayout requests a prepared row model for the current file at
+// the present parameters — or nothing when the installed layout already
+// matches. The request is keyed by (path, content revision, text width,
+// wrap mode); the completion installs only while that key is current.
+func (m Model) prepareLayout() tea.Cmd {
+	key := m.curKey()
+	src := m.sources[key]
+	if src == nil {
+		return nil
+	}
+	rk := m.rowKey(key, src)
+	if cur := m.buffers[key]; cur != nil && cur.Key() == rk {
+		return nil
+	}
+	return layoutCmd(m.ctx, m.layoutGate, rk, src)
+}
+
+// resizeLayout reconciles the current file's layout with new terminal
+// geometry. When the prepared-layout key would not change — a
+// height-only resize — the installed model's anchor maps to the same
+// rendered row and only the EOF clamp can move the top, applied here;
+// a changed key requests keyed preparation instead, and the previous
+// layout stays installed until the result lands.
+func (m Model) resizeLayout() tea.Cmd {
+	if m.state != stateBrowse {
+		return nil
+	}
+	key := m.curKey()
+	src := m.sources[key]
+	if src == nil {
+		return nil
+	}
+	rk := m.rowKey(key, src)
+	if cur := m.buffers[key]; cur != nil && cur.Key() == rk {
+		m.viewportFor(key).SetLayout(cur, m.contentHeight())
+		return nil
+	}
+	return layoutCmd(m.ctx, m.layoutGate, rk, src)
 }
 
 // rowKey is the row-model key for path's source under the current
@@ -451,11 +570,7 @@ func (m Model) rowKey(path string, src viewport.Source) viewport.RowModelKey {
 // minus the file-list column.
 func (m Model) panelWidth() int {
 	w, _ := m.termSize()
-	names := make([]string, len(m.files))
-	for i, f := range m.files {
-		names[i] = safepresentation.EscapePath(f)
-	}
-	return w - listWidth(names, w)
+	return w - m.listWidth(w)
 }
 
 // scrollCurrent applies a vertical scroll key to the current file's

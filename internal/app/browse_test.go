@@ -98,8 +98,7 @@ func TestBrowseContentAfterLoad(t *testing.T) {
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
-	msg := cmd() // the worker: read + decode + map
-	m, _ = update(t, m, msg)
+	m = applyLoad(t, m, cmd())
 
 	v := m.View().Content
 	if strings.Contains(v, "Loading…") {
@@ -127,7 +126,7 @@ func TestFilenameRuleAndGutter(t *testing.T) {
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 
 	v := m.View().Content
 	first := strings.SplitN(v, "\n", 2)[0]
@@ -254,7 +253,7 @@ func TestCTogglesColourScheme(t *testing.T) {
 	}
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 
 	dark := m.View().Content
 	if !strings.HasPrefix(dark, "\x1b[37;40m") {
@@ -333,7 +332,7 @@ func TestBrowseSinksNeverEmitFixtureControlBytes(t *testing.T) {
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 40})
 	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 	m.theme = theme.Plain() // no-style composition: no escape byte may legitimately appear
 
 	raw := m.View().Content

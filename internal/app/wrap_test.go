@@ -76,7 +76,8 @@ func TestWTogglesWrapMode(t *testing.T) {
 		t.Fatalf("wrapped continuation row shows %d x's, want 30", got)
 	}
 
-	m, _ = update(t, m, keyMsg("w"))
+	m, cmd := update(t, m, keyMsg("w"))
+	m = deliverCmd(t, m, cmd)
 	row := viewRow(t, m, 1)
 	// Run-off-edge text width = 73 - 3 - 1 reserved = 69 cells, then
 	// the still-blank indicator column.
@@ -90,7 +91,8 @@ func TestWTogglesWrapMode(t *testing.T) {
 		t.Fatalf("run-off-edge mode still shows continuation rows: %d x's", got)
 	}
 
-	m, _ = update(t, m, keyMsg("w"))
+	m, cmd = update(t, m, keyMsg("w"))
+	m = deliverCmd(t, m, cmd)
 	if got := strings.Count(viewRow(t, m, 2), "x"); got != 30 {
 		t.Fatalf("second w did not restore wrapping: continuation shows %d x's, want 30", got)
 	}
@@ -116,7 +118,7 @@ func TestRevealFindsRowInsideWrappedLine(t *testing.T) {
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24)
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 	m, _ = update(t, m, keyMsg("n"))
 
 	// Text width 70: the 500-cell line 32 covers rendered rows 31..38

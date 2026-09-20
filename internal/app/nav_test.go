@@ -54,7 +54,7 @@ func TestStartupSelectsFirstStop(t *testing.T) {
 	if lr, ok := msg.(loadResult); !ok || string(lr.path) != "a.txt" {
 		t.Fatalf("startup load = %#v, want the a.txt load", msg)
 	}
-	m, _ = update(t, m, msg)
+	m = applyLoad(t, m, msg)
 
 	v := m.View().Content
 	if !strings.Contains(v, "── a.txt ") {
@@ -79,7 +79,7 @@ func TestNSameFileMovesCurrentLine(t *testing.T) {
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24)
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 
 	v := m.View().Content
 	if !strings.Contains(rowWith(t, v, " one"), "\x1b[4m") {
@@ -119,7 +119,7 @@ func TestNCrossesFileBoundary(t *testing.T) {
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24)
-	m, _ = update(t, m, cmd()) // a.txt loaded
+	m = applyLoad(t, m, cmd()) // a.txt loaded
 
 	m, cmd = update(t, m, keyMsg("n"))
 	if cmd == nil {
@@ -137,7 +137,7 @@ func TestNCrossesFileBoundary(t *testing.T) {
 	if lr, ok := msg.(loadResult); !ok || string(lr.path) != "b.txt" {
 		t.Fatalf("cross-file load = %#v, want the b.txt load", msg)
 	}
-	m, _ = update(t, m, msg)
+	m = applyLoad(t, m, msg)
 	v = m.View().Content
 	if !strings.Contains(v, "\x1b[4m\x1b[30;47mhit\x1b[24m\x1b[37;40m b") {
 		t.Fatalf("b.txt content did not render under the current matched line:\n%s", v)
@@ -157,9 +157,9 @@ func TestNavigationWrapsCircular(t *testing.T) {
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24)
-	m, _ = update(t, m, cmd()) // a.txt loaded
+	m = applyLoad(t, m, cmd()) // a.txt loaded
 	m, cmd = update(t, m, keyMsg("n"))
-	m, _ = update(t, m, deliverNavLoad(t, cmd)) // b.txt loaded; cursor on the last stop
+	m = applyLoad(t, m, deliverNavLoad(t, cmd)) // b.txt loaded; cursor on the last stop
 
 	m, cmd = update(t, m, keyMsg("n")) // wraps to a.txt
 	// A file change still opens the pop-up — the command is the new
@@ -204,7 +204,7 @@ func TestCrossFileRestoresSavedViewport(t *testing.T) {
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24)
-	m, _ = update(t, m, cmd()) // a.txt loaded; target row 5 visible at top 0
+	m = applyLoad(t, m, cmd()) // a.txt loaded; target row 5 visible at top 0
 	// The no-style theme keeps the fixture's matched text contiguous.
 	m.theme = theme.Plain()
 
@@ -217,7 +217,7 @@ func TestCrossFileRestoresSavedViewport(t *testing.T) {
 
 	// n to b.txt: a first visit starts at the top of the file.
 	m, cmd = update(t, m, keyMsg("n"))
-	m, _ = update(t, m, deliverNavLoad(t, cmd))
+	m = applyLoad(t, m, deliverNavLoad(t, cmd))
 	if row := contentRow(t, m); !strings.Contains(row, "row") {
 		t.Fatalf("first visit to b.txt shows %q, want the top of the file", row)
 	}
@@ -244,7 +244,7 @@ func TestManualScrollLeavesCursor(t *testing.T) {
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24)
-	m, _ = update(t, m, cmd())
+	m = applyLoad(t, m, cmd())
 	for i := 0; i < 10; i++ {
 		m, _ = update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
 	}

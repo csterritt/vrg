@@ -154,10 +154,18 @@ func (m *RowModel) Highlights(i int) []filebuffer.Span {
 // the row of its source line that contains the first coverage range's
 // start cell, so a match far down a wrapped line lands on its own row.
 func (m *RowModel) TargetRow(stop searchindex.Stop) int {
+	line, cell := m.src.TargetCell(stop)
+	return m.rowOf(line, cell)
+}
+
+// rowOf returns the rendered row of source line that contains display
+// cell — the last of the line's rows starting at or before the cell.
+// The line is clamped into the model's extent so a location past the
+// end of the file lands on the last row.
+func (m *RowModel) rowOf(line, cell int) int {
 	if len(m.rows) == 0 {
 		return 0
 	}
-	line, cell := m.src.TargetCell(stop)
 	if last := len(m.first) - 2; line > last {
 		line = last
 	}
@@ -170,6 +178,17 @@ func (m *RowModel) TargetRow(stop searchindex.Stop) int {
 	return lo + sort.Search(hi-lo, func(i int) bool {
 		return m.rows[lo+i].start > cell
 	}) - 1
+}
+
+// location returns the logical location where rendered row i begins —
+// its source line and the display column of the row's first cell — or
+// the zero location for a row outside the model.
+func (m *RowModel) location(i int) Location {
+	if i < 0 || i >= len(m.rows) {
+		return Location{}
+	}
+	r := m.rows[i]
+	return Location{Line: r.line, Col: r.start}
 }
 
 // TextWidth is the file panel's text width in cells: the panel width
