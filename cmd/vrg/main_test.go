@@ -211,7 +211,7 @@ func TestHelpDoesNotInvokeRipgrep(t *testing.T) {
 	if err := os.WriteFile(fake, []byte("#!/bin/sh\n: > \""+marker+"\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	res := runVrgFull(t, "", []string{"PATH=" + dir, "VRG_RG_MARKER=" + marker}, "--help")
+	res := runVrgFull(t, "", []string{"PATH=" + dir, "FAKE_RG_MARKER=" + marker}, "--help")
 	assertHelpRun(t, res, []string{"--help"})
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("help-only invocation executed the fake rg on PATH")

@@ -38,11 +38,11 @@ func TestChildArgvAndWorkdir(t *testing.T) {
 	}
 	argvFile := filepath.Join(dir, "argv")
 	pwdFile := filepath.Join(dir, "pwd")
-	t.Setenv("VRG_ARGV_FILE", argvFile)
-	t.Setenv("VRG_PWD_FILE", pwdFile)
+	t.Setenv("FAKE_RG_ARGV_FILE", argvFile)
+	t.Setenv("FAKE_RG_CWD_FILE", pwdFile)
 	writeFakeRg(t, `#!/bin/sh
-printf '%s\n' "$@" > "$VRG_ARGV_FILE"
-pwd -P > "$VRG_PWD_FILE"
+printf '%s\n' "$@" > "$FAKE_RG_ARGV_FILE"
+pwd -P > "$FAKE_RG_CWD_FILE"
 printf '%s\n' '{"type":"summary","data":{}}'
 `)
 
@@ -91,7 +91,7 @@ printf '%s\n' '{"type":"summary","data":{}}'
 func TestDualPipeBackpressure(t *testing.T) {
 	dir := t.TempDir()
 	doneFile := filepath.Join(dir, "done")
-	t.Setenv("VRG_DONE_FILE", doneFile)
+	t.Setenv("FAKE_RG_HANDSHAKE_FILE", doneFile)
 	// 64 blocks x 16385 bytes ≈ 1 MiB of stderr, far over pipe capacity,
 	// interleaved with 64 stdout records.
 	writeFakeRg(t, `#!/bin/sh
@@ -105,7 +105,7 @@ while [ "$i" -le 64 ]; do
 done
 printf '%s\n' '{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}'
 printf '%s\n' '{"type":"summary","data":{}}'
-: > "$VRG_DONE_FILE"
+: > "$FAKE_RG_HANDSHAKE_FILE"
 `)
 
 	child, err := execStarter([]string{"--json", "--no-config", "--", "hit", "."}, dir)

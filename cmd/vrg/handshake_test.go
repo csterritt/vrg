@@ -214,21 +214,21 @@ func TestHandshakeAcknowledgementStream(t *testing.T) {
 		t.Fatal(err)
 	}
 	rgDir := fakeRgPath(t, `#!/bin/sh
-echo $$ > "$VRG_TEST_PID"
+echo $$ > "$FAKE_RG_PID_FILE"
 printf '%s\n' '{"type":"begin","data":{"path":{"text":"file.txt"}}}'
 printf '%s\n' '{"type":"match","data":{"path":{"text":"file.txt"},"lines":{"text":"hit 01\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}'
 printf '%s\n' '{"type":"end","data":{"path":{"text":"file.txt"},"binary_offset":null}}'
 printf '%s\n' '{"type":"summary","data":{}}'
 printf '%s\n' 'warn one' >&2
-: > "$VRG_TEST_READY"
+: > "$FAKE_RG_READY_FILE"
 exit 0
 `)
 	r := startVrgPTY(t, dir, childEnv(map[string]string{
-		"PATH":           rgDir + ":" + os.Getenv("PATH"),
-		"TERM":           "xterm-256color",
-		"VRG_TEST_READY": ready,
-		"VRG_TEST_PID":   pidFile,
-		"VRG_TEST_ACK":   events,
+		"PATH":               rgDir + ":" + os.Getenv("PATH"),
+		"TERM":               "xterm-256color",
+		"FAKE_RG_READY_FILE": ready,
+		"FAKE_RG_PID_FILE":   pidFile,
+		"VRG_TEST_ACK":       events,
 	}), true, "hit", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -300,21 +300,21 @@ func TestOverlayDismissalAckedBeforeQuitKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	rgDir := fakeRgPath(t, `#!/bin/sh
-echo $$ > "$VRG_TEST_PID"
+echo $$ > "$FAKE_RG_PID_FILE"
 printf '%s\n' '{"type":"begin","data":{"path":{"text":"file.txt"}}}'
 printf '%s\n' '{"type":"match","data":{"path":{"text":"file.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}'
 printf '%s\n' '{"type":"end","data":{"path":{"text":"file.txt"},"binary_offset":null}}'
 printf '%s\n' '{"type":"summary","data":{}}'
 printf '%s\n' 'warn one' >&2
-: > "$VRG_TEST_READY"
+: > "$FAKE_RG_READY_FILE"
 exit 0
 `)
 	r := startVrgPTY(t, dir, childEnv(map[string]string{
-		"PATH":           rgDir + ":" + os.Getenv("PATH"),
-		"TERM":           "xterm-256color",
-		"VRG_TEST_READY": ready,
-		"VRG_TEST_PID":   pidFile,
-		"VRG_TEST_ACK":   events,
+		"PATH":               rgDir + ":" + os.Getenv("PATH"),
+		"TERM":               "xterm-256color",
+		"FAKE_RG_READY_FILE": ready,
+		"FAKE_RG_PID_FILE":   pidFile,
+		"VRG_TEST_ACK":       events,
 	}), false, "hit", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -350,20 +350,20 @@ func TestRepeatedSameKindAcksAreDistinctOccurrences(t *testing.T) {
 		t.Fatal(err)
 	}
 	rgDir := fakeRgPath(t, `#!/bin/sh
-echo $$ > "$VRG_TEST_PID"
+echo $$ > "$FAKE_RG_PID_FILE"
 printf '%s\n' '{"type":"begin","data":{"path":{"text":"file.txt"}}}'
 printf '%s\n' '{"type":"match","data":{"path":{"text":"file.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}'
 printf '%s\n' '{"type":"end","data":{"path":{"text":"file.txt"},"binary_offset":null}}'
 printf '%s\n' '{"type":"summary","data":{}}'
-: > "$VRG_TEST_READY"
+: > "$FAKE_RG_READY_FILE"
 exit 0
 `)
 	r := startVrgPTY(t, dir, childEnv(map[string]string{
-		"PATH":           rgDir + ":" + os.Getenv("PATH"),
-		"TERM":           "xterm-256color",
-		"VRG_TEST_READY": ready,
-		"VRG_TEST_PID":   pidFile,
-		"VRG_TEST_ACK":   events,
+		"PATH":               rgDir + ":" + os.Getenv("PATH"),
+		"TERM":               "xterm-256color",
+		"FAKE_RG_READY_FILE": ready,
+		"FAKE_RG_PID_FILE":   pidFile,
+		"VRG_TEST_ACK":       events,
 	}), false, "hit", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -424,17 +424,17 @@ func TestCollectAckPerOccurrence(t *testing.T) {
 	ack := filepath.Join(dir, "collect-ack")
 	events := filepath.Join(dir, "events")
 	rgDir := fakeRgPath(t, `#!/bin/sh
-echo $$ > "$VRG_TEST_PID"
+echo $$ > "$FAKE_RG_PID_FILE"
 printf '%s\n' 'warn dup' >&2
 printf '%s\n' 'warn dup' >&2
-: > "$VRG_TEST_READY"
+: > "$FAKE_RG_READY_FILE"
 exec sleep 100000
 `)
 	r := startVrgPTY(t, dir, childEnv(map[string]string{
 		"PATH":                 rgDir + ":" + os.Getenv("PATH"),
 		"TERM":                 "xterm-256color",
-		"VRG_TEST_READY":       ready,
-		"VRG_TEST_PID":         pidFile,
+		"FAKE_RG_READY_FILE":   ready,
+		"FAKE_RG_PID_FILE":     pidFile,
 		"VRG_TEST_COLLECT_ACK": ack,
 		"VRG_TEST_ACK":         events,
 	}), true, "foo", ".")

@@ -33,22 +33,22 @@ func TestFakeRgNonZeroExitOverResults(t *testing.T) {
 		t.Fatal(err)
 	}
 	rgDir := fakeRgPath(t, `#!/bin/sh
-echo $$ > "$VRG_TEST_PID"
+echo $$ > "$FAKE_RG_PID_FILE"
 printf '%s\n' '{"type":"begin","data":{"path":{"text":"file.txt"}}}'
 printf '%s\n' '{"type":"match","data":{"path":{"text":"file.txt"},"lines":{"text":"hit 01\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}'
 printf '%s\n' '{"type":"end","data":{"path":{"text":"file.txt"},"binary_offset":null}}'
 printf '%s\n' '{"type":"summary","data":{}}'
 printf '%s\n' 'boom' >&2
-: > "$VRG_TEST_READY"
+: > "$FAKE_RG_READY_FILE"
 exit 3
 `)
 	r := startVrgPTY(t, dir, childEnv(map[string]string{
-		"PATH":           rgDir + ":" + os.Getenv("PATH"),
-		"TERM":           "xterm-256color",
-		"VRG_TEST_READY": ready,
-		"VRG_TEST_PID":   pidFile,
-		"VRG_TEST_REAP":  reap,
-		"VRG_TEST_ACK":   events,
+		"PATH":               rgDir + ":" + os.Getenv("PATH"),
+		"TERM":               "xterm-256color",
+		"FAKE_RG_READY_FILE": ready,
+		"FAKE_RG_PID_FILE":   pidFile,
+		"VRG_TEST_REAP":      reap,
+		"VRG_TEST_ACK":       events,
 	}), false, "hit", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -98,7 +98,7 @@ func TestStderrContentFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 	rgDir := fakeRgPath(t, `#!/bin/sh
-echo $$ > "$VRG_TEST_PID"
+echo $$ > "$FAKE_RG_PID_FILE"
 printf '%s\n' 'VRG-STDERR-HEAD' >&2
 block=$(printf '%016385d' 0)
 printf '%s\n' '{"type":"begin","data":{"path":{"text":"file.txt"}}}'
@@ -111,16 +111,16 @@ done
 printf '%s\n' 'VRG-STDERR-TAIL' >&2
 printf '%s\n' '{"type":"end","data":{"path":{"text":"file.txt"},"binary_offset":null}}'
 printf '%s\n' '{"type":"summary","data":{}}'
-: > "$VRG_TEST_READY"
+: > "$FAKE_RG_READY_FILE"
 exit 0
 `)
 	r := startVrgPTY(t, dir, childEnv(map[string]string{
-		"PATH":           rgDir + ":" + os.Getenv("PATH"),
-		"TERM":           "xterm-256color",
-		"VRG_TEST_READY": ready,
-		"VRG_TEST_PID":   pidFile,
-		"VRG_TEST_REAP":  reap,
-		"VRG_TEST_ACK":   events,
+		"PATH":               rgDir + ":" + os.Getenv("PATH"),
+		"TERM":               "xterm-256color",
+		"FAKE_RG_READY_FILE": ready,
+		"FAKE_RG_PID_FILE":   pidFile,
+		"VRG_TEST_REAP":      reap,
+		"VRG_TEST_ACK":       events,
 	}), false, "hit", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -164,17 +164,17 @@ func TestFakeRgSilentExitGeneratesDiagnostic(t *testing.T) {
 	reap := filepath.Join(dir, "reap")
 	events := filepath.Join(dir, "events")
 	rgDir := fakeRgPath(t, `#!/bin/sh
-echo $$ > "$VRG_TEST_PID"
-: > "$VRG_TEST_READY"
+echo $$ > "$FAKE_RG_PID_FILE"
+: > "$FAKE_RG_READY_FILE"
 exit 2
 `)
 	r := startVrgPTY(t, dir, childEnv(map[string]string{
-		"PATH":           rgDir + ":" + os.Getenv("PATH"),
-		"TERM":           "xterm-256color",
-		"VRG_TEST_READY": ready,
-		"VRG_TEST_PID":   pidFile,
-		"VRG_TEST_REAP":  reap,
-		"VRG_TEST_ACK":   events,
+		"PATH":               rgDir + ":" + os.Getenv("PATH"),
+		"TERM":               "xterm-256color",
+		"FAKE_RG_READY_FILE": ready,
+		"FAKE_RG_PID_FILE":   pidFile,
+		"VRG_TEST_REAP":      reap,
+		"VRG_TEST_ACK":       events,
 	}), false, "hit", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)

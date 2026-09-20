@@ -25,8 +25,8 @@ import (
 // PTY input modes rather than inferring cleanup from a missing PID.
 //
 // Fixture-owned variables (read by the fake rg scripts, never by vrg):
-// VRG_TEST_READY is a file the fake rg touches once it has started, and
-// VRG_TEST_PID is a file it writes its process ID to. The vrg-consumed
+// FAKE_RG_READY_FILE is a file the fake rg touches once it has started, and
+// FAKE_RG_PID_FILE is a file it writes its process ID to. The vrg-consumed
 // seams are VRG_TEST_GATE (hold index preparation until the named file
 // exists), VRG_TEST_REAP (vrg writes the reaped wait status there),
 // VRG_TEST_COLLECT_ACK (vrg appends each collected diagnostic line
@@ -331,17 +331,17 @@ func TestQAgainstBlockedFakeRGExits130(t *testing.T) {
 	reap := filepath.Join(dir, "reap")
 	events := filepath.Join(dir, "events")
 	rgDir := fakeRgPath(t, `#!/bin/sh
-echo $$ > "$VRG_TEST_PID"
-: > "$VRG_TEST_READY"
+echo $$ > "$FAKE_RG_PID_FILE"
+: > "$FAKE_RG_READY_FILE"
 exec sleep 100000
 `)
 	r := startVrgPTY(t, dir, childEnv(map[string]string{
-		"PATH":           rgDir + ":" + os.Getenv("PATH"),
-		"TERM":           "xterm-256color",
-		"VRG_TEST_READY": ready,
-		"VRG_TEST_PID":   pidFile,
-		"VRG_TEST_REAP":  reap,
-		"VRG_TEST_ACK":   events,
+		"PATH":               rgDir + ":" + os.Getenv("PATH"),
+		"TERM":               "xterm-256color",
+		"FAKE_RG_READY_FILE": ready,
+		"FAKE_RG_PID_FILE":   pidFile,
+		"VRG_TEST_REAP":      reap,
+		"VRG_TEST_ACK":       events,
 	}), false, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -372,17 +372,17 @@ func TestCtrlCAgainstBlockedFakeRGExits130(t *testing.T) {
 	reap := filepath.Join(dir, "reap")
 	events := filepath.Join(dir, "events")
 	rgDir := fakeRgPath(t, `#!/bin/sh
-echo $$ > "$VRG_TEST_PID"
-: > "$VRG_TEST_READY"
+echo $$ > "$FAKE_RG_PID_FILE"
+: > "$FAKE_RG_READY_FILE"
 exec sleep 100000
 `)
 	r := startVrgPTY(t, dir, childEnv(map[string]string{
-		"PATH":           rgDir + ":" + os.Getenv("PATH"),
-		"TERM":           "xterm-256color",
-		"VRG_TEST_READY": ready,
-		"VRG_TEST_PID":   pidFile,
-		"VRG_TEST_REAP":  reap,
-		"VRG_TEST_ACK":   events,
+		"PATH":               rgDir + ":" + os.Getenv("PATH"),
+		"TERM":               "xterm-256color",
+		"FAKE_RG_READY_FILE": ready,
+		"FAKE_RG_PID_FILE":   pidFile,
+		"VRG_TEST_REAP":      reap,
+		"VRG_TEST_ACK":       events,
 	}), false, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -417,19 +417,19 @@ func TestQDuringGateHeldPreparationExits130(t *testing.T) {
 	events := filepath.Join(dir, "events")
 	gate := filepath.Join(dir, "gate") // never created: preparation stays held
 	rgDir := fakeRgPath(t, `#!/bin/sh
-echo $$ > "$VRG_TEST_PID"
+echo $$ > "$FAKE_RG_PID_FILE"
 printf '%s\n' '{"type":"summary","data":{}}'
-: > "$VRG_TEST_READY"
+: > "$FAKE_RG_READY_FILE"
 exit 0
 `)
 	r := startVrgPTY(t, dir, childEnv(map[string]string{
-		"PATH":           rgDir + ":" + os.Getenv("PATH"),
-		"TERM":           "xterm-256color",
-		"VRG_TEST_READY": ready,
-		"VRG_TEST_PID":   pidFile,
-		"VRG_TEST_REAP":  reap,
-		"VRG_TEST_GATE":  gate,
-		"VRG_TEST_ACK":   events,
+		"PATH":               rgDir + ":" + os.Getenv("PATH"),
+		"TERM":               "xterm-256color",
+		"FAKE_RG_READY_FILE": ready,
+		"FAKE_RG_PID_FILE":   pidFile,
+		"VRG_TEST_REAP":      reap,
+		"VRG_TEST_GATE":      gate,
+		"VRG_TEST_ACK":       events,
 	}), false, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -472,21 +472,21 @@ func TestNormalExitReapsChild(t *testing.T) {
 	// detached-output sleeper in its process group.
 	rgDir := fakeRgPath(t, `#!/bin/sh
 sleep 100000 </dev/null >/dev/null 2>&1 &
-echo $! > "$VRG_TEST_PID"
+echo $! > "$FAKE_RG_PID_FILE"
 printf '%s\n' '{"type":"begin","data":{"path":{"text":"file.txt"}}}'
 printf '%s\n' '{"type":"match","data":{"path":{"text":"file.txt"},"lines":{"text":"foo bar\n"},"line_number":1,"submatches":[{"match":{"text":"foo"},"start":0,"end":3}]}}'
 printf '%s\n' '{"type":"end","data":{"path":{"text":"file.txt"},"binary_offset":null}}'
 printf '%s\n' '{"type":"summary","data":{}}'
-: > "$VRG_TEST_READY"
+: > "$FAKE_RG_READY_FILE"
 exit 0
 `)
 	r := startVrgPTY(t, dir, childEnv(map[string]string{
-		"PATH":           rgDir + ":" + os.Getenv("PATH"),
-		"TERM":           "xterm-256color",
-		"VRG_TEST_READY": ready,
-		"VRG_TEST_PID":   pidFile,
-		"VRG_TEST_REAP":  reap,
-		"VRG_TEST_ACK":   events,
+		"PATH":               rgDir + ":" + os.Getenv("PATH"),
+		"TERM":               "xterm-256color",
+		"FAKE_RG_READY_FILE": ready,
+		"FAKE_RG_PID_FILE":   pidFile,
+		"VRG_TEST_REAP":      reap,
+		"VRG_TEST_ACK":       events,
 	}), false, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -517,15 +517,15 @@ func TestInjectedControlledFailure(t *testing.T) {
 	trigger := filepath.Join(dir, "trigger")
 	diag := "injected failure \x1b[31m\nsecond line"
 	rgDir := fakeRgPath(t, `#!/bin/sh
-echo $$ > "$VRG_TEST_PID"
-: > "$VRG_TEST_READY"
+echo $$ > "$FAKE_RG_PID_FILE"
+: > "$FAKE_RG_READY_FILE"
 exec sleep 100000
 `)
 	r := startVrgPTY(t, dir, childEnv(map[string]string{
 		"PATH":                     rgDir + ":" + os.Getenv("PATH"),
 		"TERM":                     "xterm-256color",
-		"VRG_TEST_READY":           ready,
-		"VRG_TEST_PID":             pidFile,
+		"FAKE_RG_READY_FILE":       ready,
+		"FAKE_RG_PID_FILE":         pidFile,
 		"VRG_TEST_REAP":            reap,
 		"VRG_TEST_FAIL_TRIGGER":    trigger,
 		"VRG_TEST_FAIL_DIAGNOSTIC": diag,

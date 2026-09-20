@@ -53,19 +53,19 @@ func runReturnShape(t *testing.T, env map[string]string) (*ptyRun, string) {
 		t.Fatal(err)
 	}
 	rgDir := fakeRgPath(t, `#!/bin/sh
-echo $$ > "$VRG_TEST_PID"
+echo $$ > "$FAKE_RG_PID_FILE"
 printf '%s\n' 'warn one' >&2
 printf '%s\n' '{"type":"begin","data":{"path":{"text":"file.txt"}}}'
 printf '%s\n' '{"type":"match","data":{"path":{"text":"file.txt"},"lines":{"text":"hit 01\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}'
 printf '%s\n' '{"type":"end","data":{"path":{"text":"file.txt"},"binary_offset":null}}'
 printf '%s\n' '{"type":"summary","data":{}}'
-: > "$VRG_TEST_READY"
+: > "$FAKE_RG_READY_FILE"
 exit 0
 `)
 	env["PATH"] = rgDir + ":" + os.Getenv("PATH")
 	env["TERM"] = "xterm-256color"
-	env["VRG_TEST_READY"] = ready
-	env["VRG_TEST_PID"] = pidFile
+	env["FAKE_RG_READY_FILE"] = ready
+	env["FAKE_RG_PID_FILE"] = pidFile
 	env["VRG_TEST_REAP"] = reap
 	env["VRG_TEST_COLLECT_ACK"] = ack
 	env["VRG_TEST_ACK"] = events

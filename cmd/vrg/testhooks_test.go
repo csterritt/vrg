@@ -15,7 +15,7 @@ import (
 // the untagged production binary must ignore — and must not even
 // contain. The list is Issue 45's manifest, never derived by scanning
 // for VRG_TEST_* occurrences, because fixture-owned fake-rg variables
-// (VRG_TEST_READY, VRG_TEST_PID — renamed FAKE_RG_* by Issue 50) are
+// (FAKE_RG_READY_FILE, FAKE_RG_PID_FILE — Issue 50's FAKE_RG_* names) are
 // not vrg behaviour. VRG_TEST_ACK is Issue 48's acknowledgement
 // stream.
 var testHookManifest = []string{
