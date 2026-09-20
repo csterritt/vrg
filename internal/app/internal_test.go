@@ -17,24 +17,45 @@ import (
 )
 
 // fakeChild is a Child whose piped streams are preloaded; Wait records
-// that the child was reaped so tests can prove rg had exited.
+// that the child was reaped and Terminate records that it was killed, so
+// tests can prove the exit and cleanup paths ran.
 type fakeChild struct {
-	stdout  io.Reader
-	stderr  io.Reader
-	waitErr error
-	waited  chan struct{}
-	once    sync.Once
+	stdout     io.Reader
+	stderr     io.Reader
+	waitErr    error
+	waited     chan struct{}
+	terminated chan struct{}
+	waitOnce   sync.Once
+	termOnce   sync.Once
 }
 
 func (f *fakeChild) Stdout() io.Reader { return f.stdout }
 func (f *fakeChild) Stderr() io.Reader { return f.stderr }
 func (f *fakeChild) Wait() error {
-	f.once.Do(func() {
+	f.waitOnce.Do(func() {
 		if f.waited != nil {
 			close(f.waited)
 		}
 	})
 	return f.waitErr
+}
+
+func (f *fakeChild) Terminate() {
+	f.termOnce.Do(func() {
+		if f.terminated != nil {
+			close(f.terminated)
+		}
+	})
+}
+
+// requireClosed fails unless ch is already closed.
+func requireClosed(t *testing.T, ch chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-ch:
+	default:
+		t.Fatalf("%s did not happen", what)
+	}
 }
 
 const validStream = `{"type":"begin","data":{"path":{"text":"a.txt"}}}` + "\n" +
@@ -232,5 +253,264 @@ func TestCollectIndexesStream(t *testing.T) {
 	}
 	if string(res.stderr) != "warning text\n" {
 		t.Fatalf("stderr = %q, want %q", res.stderr, "warning text\n")
+	}
+}
+
+// q while searching is cancellation: the child is terminated, the exit
+// status is 130, and the program quits without reaching the summary.
+func TestQWhileSearchingCancels(t *testing.T) {
+	child := &fakeChild{
+		stdout:     strings.NewReader(""),
+		stderr:     strings.NewReader(""),
+		terminated: make(chan struct{}),
+	}
+	m := New(child, "/w")
+	m2, cmd := m.Update(keyMsg("q"))
+	if cmd == nil {
+		t.Fatal("q while searching returned no command, want tea.Quit")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("q while searching returned %T, want tea.QuitMsg", cmd())
+	}
+	mm := m2.(Model)
+	if mm.status != 130 {
+		t.Fatalf("exit status = %d, want 130", mm.status)
+	}
+	requireClosed(t, child.terminated, "child termination")
+	if got := mm.View().Content; strings.Contains(got, "matched lines") {
+		t.Fatalf("cancellation produced a further screen: %q", got)
+	}
+}
+
+// ctrl+c is cancellation in every state: while searching and on the
+// interim summary it terminates the child and exits 130.
+func TestCtrlCCancelsFromAnyState(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		summary bool
+	}{
+		{"searching", false},
+		{"summary", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			child := &fakeChild{
+				stdout:     strings.NewReader(""),
+				stderr:     strings.NewReader(""),
+				terminated: make(chan struct{}),
+			}
+			m := New(child, "/w")
+			if tc.summary {
+				mi, _ := m.Update(searchResult{index: fixtureIndex(t, 1, 1)})
+				m = mi.(Model)
+			}
+			m2, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+			if cmd == nil {
+				t.Fatal("ctrl+c returned no command, want tea.Quit")
+			}
+			if _, ok := cmd().(tea.QuitMsg); !ok {
+				t.Fatalf("ctrl+c returned %T, want tea.QuitMsg", cmd())
+			}
+			if s := m2.(Model).status; s != 130 {
+				t.Fatalf("exit status = %d, want 130", s)
+			}
+			requireClosed(t, child.terminated, "child termination")
+		})
+	}
+}
+
+// q while rg has exited but index preparation is still gate-held is
+// cancellation (130), not a browse quit; cancelling releases the held
+// collection promptly and a late completion must not revive the UI.
+func TestQDuringGateHeldPreparationCancels(t *testing.T) {
+	child := &fakeChild{
+		stdout:     strings.NewReader(validStream),
+		stderr:     strings.NewReader(""),
+		waited:     make(chan struct{}),
+		terminated: make(chan struct{}),
+	}
+	m := New(child, "/w")
+	m.gate = make(chan struct{}) // never released
+
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("Init() returned no collection command")
+	}
+	msgs := make(chan tea.Msg, 1)
+	go func() { msgs <- cmd() }()
+
+	<-child.waited // rg has exited; index preparation is still held.
+
+	m2, quit := m.Update(keyMsg("q"))
+	mm := m2.(Model)
+	if quit == nil {
+		t.Fatal("q during gate-held preparation returned no command, want tea.Quit")
+	}
+	if _, ok := quit().(tea.QuitMsg); !ok {
+		t.Fatalf("q during gate-held preparation returned %T, want tea.QuitMsg", quit())
+	}
+	if mm.status != 130 {
+		t.Fatalf("exit status = %d, want 130", mm.status)
+	}
+	requireClosed(t, child.terminated, "child termination")
+
+	// Drainage and gated preparation end promptly on cancellation.
+	var late tea.Msg
+	select {
+	case late = <-msgs:
+	case <-time.After(10 * time.Second):
+		t.Fatal("collection did not return promptly after cancellation")
+	}
+
+	// The late search-completion message must not revive the UI.
+	m3, cmd := mm.Update(late)
+	if cmd != nil {
+		t.Fatalf("late completion after cancellation returned a command: %v", cmd)
+	}
+	mm3 := m3.(Model)
+	if got := mm3.View().Content; strings.Contains(got, "matched lines") {
+		t.Fatalf("late completion revived the UI: %q", got)
+	}
+	if mm3.status != 130 {
+		t.Fatalf("exit status after late completion = %d, want 130", mm3.status)
+	}
+}
+
+// Esc while searching is a no-op: no state change, no command, and the
+// searching screen remains.
+func TestEscWhileSearchingIsNoop(t *testing.T) {
+	child := &fakeChild{
+		stdout:     strings.NewReader(""),
+		stderr:     strings.NewReader(""),
+		terminated: make(chan struct{}),
+	}
+	m := New(child, "/w")
+	m2, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if cmd != nil {
+		t.Fatalf("Esc while searching returned a command: %v", cmd)
+	}
+	mm := m2.(Model)
+	if mm.state != stateSearching {
+		t.Fatalf("Esc while searching changed state to %d", mm.state)
+	}
+	if mm.status != 0 {
+		t.Fatalf("Esc while searching changed status to %d", mm.status)
+	}
+	select {
+	case <-child.terminated:
+		t.Fatal("Esc while searching terminated the child")
+	default:
+	}
+	if got := mm.View().Content; !strings.Contains(got, "Searching…") {
+		t.Fatalf("View after Esc = %q, want it to still show %q", got, "Searching…")
+	}
+}
+
+// A late search-completion message after cancellation is discarded: it
+// produces no further screen, no status change, and no command.
+func TestLateCompletionAfterCancelDiscarded(t *testing.T) {
+	child := &fakeChild{
+		stdout:     strings.NewReader(""),
+		stderr:     strings.NewReader(""),
+		terminated: make(chan struct{}),
+	}
+	m := New(child, "/w")
+	m2, _ := m.Update(keyMsg("q"))
+	mm := m2.(Model)
+	m3, cmd := mm.Update(searchResult{index: fixtureIndex(t, 2, 2)})
+	if cmd != nil {
+		t.Fatalf("late completion after cancellation returned a command: %v", cmd)
+	}
+	mm3 := m3.(Model)
+	if mm3.state == stateSummary {
+		t.Fatal("late completion after cancellation reached the summary state")
+	}
+	if mm3.status != 130 {
+		t.Fatalf("exit status after late completion = %d, want 130", mm3.status)
+	}
+	if got := mm3.View().Content; strings.Contains(got, "matched lines") {
+		t.Fatalf("late completion revived the UI: %q", got)
+	}
+}
+
+// A controlled application failure after the child started terminates
+// and reaps it, writes a sanitized diagnostic to stderr exactly once,
+// and exits 2.
+func TestControlledFailureCleansUp(t *testing.T) {
+	child := &fakeChild{
+		stdout:     strings.NewReader(""),
+		stderr:     strings.NewReader(""),
+		waited:     make(chan struct{}),
+		terminated: make(chan struct{}),
+	}
+	var stderr bytes.Buffer
+	code := Run([]string{"--json", "--no-config", "--", "foo", "."}, Env{
+		Start:  func(argv []string, workdir string) (Child, error) { return child, nil },
+		Stderr: &stderr,
+		Program: func(Model) (tea.Model, error) {
+			return nil, errors.New("boom \x1b[31m\nsecond line")
+		},
+	})
+	if code != 2 {
+		t.Fatalf("Run exit = %d, want 2", code)
+	}
+	requireClosed(t, child.terminated, "child termination")
+	requireClosed(t, child.waited, "child reap")
+	diag := strings.TrimSuffix(stderr.String(), "\n")
+	if !strings.HasPrefix(diag, "vrg: ") {
+		t.Fatalf("stderr = %q, want a vrg: diagnostic", stderr.String())
+	}
+	if strings.Count(diag, "boom") != 1 || strings.Contains(diag, "\n") {
+		t.Fatalf("diagnostic not written exactly once as a single line: %q", stderr.String())
+	}
+	if strings.ContainsAny(diag, "\x1b\x9b") || !strings.Contains(diag, "^[") {
+		t.Fatalf("diagnostic is not sanitized: %q", stderr.String())
+	}
+}
+
+// An ordinary exit while the child is still running terminates and
+// reaps it; the run does not leave a live or unreaped child behind.
+func TestOrdinaryExitReapsRunningChild(t *testing.T) {
+	child := &fakeChild{
+		stdout:     strings.NewReader(""),
+		stderr:     strings.NewReader(""),
+		waited:     make(chan struct{}),
+		terminated: make(chan struct{}),
+	}
+	code := Run([]string{"--json", "--no-config", "--", "foo", "."}, Env{
+		Start:   func(argv []string, workdir string) (Child, error) { return child, nil },
+		Stderr:  io.Discard,
+		Program: func(m Model) (tea.Model, error) { return m, nil },
+	})
+	if code != 0 {
+		t.Fatalf("Run exit = %d, want 0", code)
+	}
+	requireClosed(t, child.terminated, "child termination")
+	requireClosed(t, child.waited, "child reap")
+}
+
+// A program interrupted by SIGINT exits 130 and still terminates and
+// reaps the child.
+func TestInterruptCleansUp(t *testing.T) {
+	child := &fakeChild{
+		stdout:     strings.NewReader(""),
+		stderr:     strings.NewReader(""),
+		waited:     make(chan struct{}),
+		terminated: make(chan struct{}),
+	}
+	var stderr bytes.Buffer
+	code := Run([]string{"--json", "--no-config", "--", "foo", "."}, Env{
+		Start:  func(argv []string, workdir string) (Child, error) { return child, nil },
+		Stderr: &stderr,
+		Program: func(Model) (tea.Model, error) {
+			return nil, tea.ErrInterrupted
+		},
+	})
+	if code != 130 {
+		t.Fatalf("Run exit = %d, want 130", code)
+	}
+	requireClosed(t, child.terminated, "child termination")
+	requireClosed(t, child.waited, "child reap")
+	if stderr.Len() != 0 {
+		t.Fatalf("interrupted run wrote a diagnostic: %q", stderr.String())
 	}
 }
