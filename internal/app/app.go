@@ -139,6 +139,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case stateBrowse:
 				return m, tea.Quit
 			}
+		case "c":
+			if m.state == stateBrowse {
+				m.theme = m.theme.Toggle()
+			}
 		}
 	}
 	return m, nil
@@ -240,6 +244,6 @@ func (m Model) screen() string {
 	case stateCancelled:
 		return ""
 	default:
-		return "Searching…"
+		return m.theme.Base("Searching…")
 	}
 }

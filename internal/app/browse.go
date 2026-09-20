@@ -47,8 +47,8 @@ func (m Model) browseScreen() string {
 	panelW := w - lw
 	rows := make([]string, h)
 	for r := 0; r < h; r++ {
-		rows[r] = m.listRow(names, listTop+r, curIdx, lw) +
-			m.panelRow(r, curPath, names, curIdx, panelW, h-1)
+		rows[r] = m.theme.Base(m.listRow(names, listTop+r, curIdx, lw) +
+			m.panelRow(r, curPath, names, curIdx, panelW, h-1))
 	}
 	return strings.Join(rows, "\n")
 }
@@ -95,9 +95,9 @@ func (m Model) listRow(names []string, fi, curIdx, lw int) string {
 		pad = 0
 	}
 	if fi == curIdx {
-		name = m.theme.Underline(name)
+		return m.theme.CurrentFile(name) + strings.Repeat(" ", pad)
 	}
-	return name + strings.Repeat(" ", pad)
+	return m.theme.FileList(name + strings.Repeat(" ", pad))
 }
 
 // panelRow renders row r of the file panel: the filename rule, then
@@ -111,39 +111,53 @@ func (m Model) panelRow(r int, curPath []byte, names []string, curIdx, panelW, c
 		name = names[curIdx]
 	}
 	if r == 0 {
-		return filenameRule(name, panelW)
+		return m.theme.FilenameRule(filenameRule(name, panelW))
 	}
 	key := string(curPath)
 	buf := m.buffers[key]
 	if buf == nil {
 		if r == 1 {
+			text := "Loading…"
 			if m.failed[key] {
-				return clipCells("(unreadable)", panelW)
+				text = "(unreadable)"
 			}
-			return clipCells("Loading…", panelW)
+			return padCells(clipCells(text, panelW), panelW)
 		}
-		return ""
+		return padCells("", panelW)
 	}
 	m.vp.SetExtent(buf.LineCount(), contentH)
 	lineIdx := m.vp.Top() + r - 1
 	if lineIdx >= buf.LineCount() {
-		return ""
+		return padCells("", panelW)
 	}
 	gw := buf.GutterWidth()
 	gutter := fmt.Sprintf("%*d  ", gw-2, lineIdx+1)
-	text := m.renderCells(buf.Cells(lineIdx), buf.Highlights(lineIdx), panelW-gw)
-	return clipCells(gutter, panelW) + text
+	if gw >= panelW {
+		return padCells(clipCells(gutter, panelW), panelW)
+	}
+	text, painted := m.renderCells(buf.Cells(lineIdx), buf.Highlights(lineIdx), panelW-gw, m.isCurrentLine(lineIdx))
+	return m.theme.Gutter(gutter) + text + strings.Repeat(" ", panelW-gw-painted)
+}
+
+// isCurrentLine reports whether 0-based source line i is the cursor's
+// matched line; the panel only ever renders the cursor's file. Until
+// Issue 13 lands navigation the cursor stays on the first stop.
+func (m Model) isCurrentLine(i int) bool {
+	stops := m.index.Stops()
+	return m.cursor < len(stops) && stops[m.cursor].Line == int64(i)+1
 }
 
 // renderCells renders up to w display cells of one source line, painting
-// the highlight spans in inverse video.
-func (m Model) renderCells(cells []safepresentation.Cell, spans []filebuffer.Span, w int) string {
+// the highlight spans in inverse video — additionally underlined when
+// the line is the current matched line — and reports the painted cell
+// width so the caller can pad the row.
+func (m Model) renderCells(cells []safepresentation.Cell, spans []filebuffer.Span, w int, current bool) (string, int) {
 	n := len(cells)
 	if n > w {
 		n = w
 	}
 	if n <= 0 {
-		return ""
+		return "", 0
 	}
 	hl := make([]bool, n)
 	for _, s := range spans {
@@ -153,7 +167,7 @@ func (m Model) renderCells(cells []safepresentation.Cell, spans []filebuffer.Spa
 			}
 		}
 	}
-	var b strings.Builder
+	var b, plain strings.Builder
 	for i := 0; i < n; {
 		j := i + 1
 		for j < n && hl[j] == hl[i] {
@@ -163,14 +177,20 @@ func (m Model) renderCells(cells []safepresentation.Cell, spans []filebuffer.Spa
 		for k := i; k < j; k++ {
 			seg.WriteString(cells[k].Text)
 		}
+		text := seg.String()
+		plain.WriteString(text)
 		if hl[i] {
-			b.WriteString(m.theme.Inverse(seg.String()))
+			if current {
+				b.WriteString(m.theme.CurrentMatch(text))
+			} else {
+				b.WriteString(m.theme.Match(text))
+			}
 		} else {
-			b.WriteString(seg.String())
+			b.WriteString(text)
 		}
 		i = j
 	}
-	return b.String()
+	return b.String(), displaywidth.String(plain.String())
 }
 
 // filenameRule embeds the current file's escaped path in a horizontal
@@ -221,4 +241,12 @@ func clipCells(s string, w int) string {
 		return ""
 	}
 	return displaywidth.TruncateString(s, w, "")
+}
+
+// padCells pads s — a plain, unstyled string — out to w terminal cells.
+func padCells(s string, w int) string {
+	if d := displaywidth.String(s); d < w {
+		s += strings.Repeat(" ", w-d)
+	}
+	return s
 }

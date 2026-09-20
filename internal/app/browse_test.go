@@ -105,7 +105,7 @@ func TestBrowseContentAfterLoad(t *testing.T) {
 	if strings.Contains(v, "Loading…") {
 		t.Fatalf("loaded view still shows the placeholder:\n%s", v)
 	}
-	if !strings.Contains(v, "1  \x1b[7mhit\x1b[0m a") {
+	if !strings.Contains(v, "1  \x1b[37;40m\x1b[4m\x1b[30;47mhit\x1b[24m\x1b[37;40m a") {
 		t.Fatalf("loaded view lacks guttered inverse match:\n%q", v)
 	}
 }
@@ -136,7 +136,7 @@ func TestFilenameRuleAndGutter(t *testing.T) {
 	}
 	// Twelve lines need two digit slots; the gutter is right-justified
 	// with two trailing spaces.
-	if !strings.Contains(v, " 1  ") || !strings.Contains(v, "12  line-12") {
+	if !strings.Contains(v, " 1  ") || !strings.Contains(v, "12  \x1b[37;40mline-12") {
 		t.Fatalf("gutter format wrong:\n%s", v)
 	}
 }
@@ -230,6 +230,64 @@ func TestGatedLoadKeepsInputResponsive(t *testing.T) {
 	}
 	if m.state != stateCancelled || m.status != 130 {
 		t.Fatalf("late load result revived the UI: state %d, status %d", m.state, m.status)
+	}
+}
+
+// c toggles the composed view between the schemes: the dark scheme —
+// white on black — is active at startup and cannot change while
+// searching, and each c in the browse view flips the styling between
+// white-on-black and black-on-white with no persistence. Matches stay
+// the true inverse of the active base, the current matched line's match
+// stays underlined, and the current file-list entry stays underlined in
+// both schemes.
+func TestCTogglesColourScheme(t *testing.T) {
+	dir := t.TempDir()
+	writeMatchFile(t, dir, "a.txt", "hit a\n")
+	idx := searchindex.New(dir)
+	addRec(t, idx, matchRec("a.txt", "hit a\n", 1, 0, 3, "hit"))
+	idx.Finish()
+
+	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
+	m, c := update(t, m, keyMsg("c"))
+	if c != nil {
+		t.Fatalf("c while searching returned a command: %v", c)
+	}
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, cmd := update(t, m, searchResult{index: idx})
+	m, _ = update(t, m, cmd())
+
+	dark := m.View().Content
+	if !strings.HasPrefix(dark, "\x1b[37;40m") {
+		t.Fatalf("initial browse view is not white on black:\n%q", dark)
+	}
+	if !strings.Contains(dark, "\x1b[4m\x1b[30;47mhit\x1b[24m") {
+		t.Fatalf("dark view lacks the underlined inverse current match:\n%q", dark)
+	}
+	if !strings.Contains(dark, "\x1b[4ma.txt\x1b[24m") {
+		t.Fatalf("dark view lacks the underlined current file:\n%q", dark)
+	}
+
+	m, c = update(t, m, keyMsg("c"))
+	if c != nil {
+		t.Fatalf("c in the browse view returned a command: %v", c)
+	}
+	light := m.View().Content
+	if !strings.HasPrefix(light, "\x1b[30;47m") {
+		t.Fatalf("view after c is not black on white:\n%q", light)
+	}
+	if !strings.Contains(light, "\x1b[4m\x1b[37;40mhit\x1b[24m") {
+		t.Fatalf("light view lacks the underlined inverse current match:\n%q", light)
+	}
+	if !strings.Contains(light, "\x1b[4ma.txt\x1b[24m") {
+		t.Fatalf("light view lacks the underlined current file:\n%q", light)
+	}
+
+	m, c = update(t, m, keyMsg("c"))
+	if c != nil {
+		t.Fatalf("second c in the browse view returned a command: %v", c)
+	}
+	if got := m.View().Content; !strings.HasPrefix(got, "\x1b[37;40m") {
+		t.Fatalf("view after the second c did not return to white on black:\n%q", got)
 	}
 }
 
