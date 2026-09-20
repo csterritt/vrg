@@ -100,8 +100,12 @@ type Model struct {
 	// current layout could commit; the next matching layout install
 	// commits it. listWidest is the file list's widest entry in cells,
 	// computed once at browse entry so a frame render never rescans the
-	// list. itemName, when non-nil, renders entry i's display name — a
-	// test seam proving the frame queries only the visible window.
+	// list. listVisible is the user's show/hide preference — a computed
+	// zero-width column draws nothing without touching it. itemName,
+	// when non-nil, renders entry i's display name — a test seam
+	// proving the frame queries only the visible window. notes holds
+	// each path's buffer-status note for the filename-row slot; Issues
+	// 26, 29, and 30 populate it.
 	files         [][]byte
 	fileIdx       map[string]int
 	buffers       map[string]*viewport.RowModel
@@ -109,8 +113,10 @@ type Model struct {
 	revs          map[string]int
 	loading       map[string]bool
 	failed        map[string]bool
+	notes         map[string]string
 	listTop       int
 	listWidest    int
+	listVisible   bool
 	itemName      func(i int) string
 	vps           map[string]*viewport.Viewport
 	wrap          bool
@@ -124,21 +130,23 @@ type Model struct {
 func New(child Child, workdir string) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	return Model{
-		child:      child,
-		workdir:    workdir,
-		state:      stateSearching,
-		ctx:        ctx,
-		cancel:     cancel,
-		diags:      &diagnostics{},
-		buffers:    make(map[string]*viewport.RowModel),
-		sources:    make(map[string]viewport.Source),
-		revs:       make(map[string]int),
-		loading:    make(map[string]bool),
-		failed:     make(map[string]bool),
-		vps:        make(map[string]*viewport.Viewport),
-		wrap:       true,
-		theme:      theme.Styled(),
-		popupTimer: popupTick,
+		child:       child,
+		workdir:     workdir,
+		state:       stateSearching,
+		ctx:         ctx,
+		cancel:      cancel,
+		diags:       &diagnostics{},
+		buffers:     make(map[string]*viewport.RowModel),
+		sources:     make(map[string]viewport.Source),
+		revs:        make(map[string]int),
+		loading:     make(map[string]bool),
+		failed:      make(map[string]bool),
+		notes:       make(map[string]string),
+		vps:         make(map[string]*viewport.Viewport),
+		wrap:        true,
+		listVisible: true,
+		theme:       theme.Styled(),
+		popupTimer:  popupTick,
 	}
 }
 
@@ -306,6 +314,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "w":
 			if m.state == stateBrowse {
 				m.wrap = !m.wrap
+				return m, m.prepareLayout()
+			}
+		case "left", "tab":
+			if m.state == stateBrowse {
+				m.listVisible = false
+				return m, m.prepareLayout()
+			}
+		case "right", "shift+tab":
+			if m.state == stateBrowse {
+				m.listVisible = true
 				return m, m.prepareLayout()
 			}
 		case "up", "down", "u", "d", "pgup", "pgdown":

@@ -55,26 +55,52 @@ func (m Model) listItem(i int) string {
 	return safepresentation.EscapePath(m.files[i])
 }
 
-// listWidth is the Issue 5 heuristic for the file-list column: the
-// widest entry plus padding, capped at 40% of the terminal and narrowed
-// further to leave ten cells of panel. Issue 24 owns the real formula.
-// The widest entry was measured once at browse entry — a frame render
-// never rescans the list.
-func (m Model) listWidth(w int) int {
-	if len(m.files) == 0 {
+// listColumn is the Issue 24 file-list column width in cells: zero
+// when the list is hidden or has no entries, otherwise the nonnegative
+// minimum of the longest sanitized path width plus two, floor(0.40 ×
+// terminal width), and the terminal width minus (gutter width + 10 +
+// reserved indicator width). The 10 reserves the panel's minimum text
+// width; a computed zero draws no cells but is not a hidden list —
+// visible is the user's preference, carried separately.
+func listColumn(visible bool, widest, w, gutter, reserved int) int {
+	if !visible || widest <= 0 {
 		return 0
 	}
-	lw := m.listWidest
+	lw := widest
 	if cap := w * 2 / 5; lw > cap {
 		lw = cap
 	}
-	if w-lw < 10 {
-		lw = w - 10
-		if lw < 0 {
-			lw = 0
-		}
+	if max := w - (gutter + 10 + reserved); lw > max {
+		lw = max
+	}
+	if lw < 0 {
+		lw = 0
 	}
 	return lw
+}
+
+// listWidth applies the Issue 24 formula at the current geometry: the
+// widest entry was measured once at browse entry — a frame render
+// never rescans the list — while the gutter, reserved column, and
+// terminal width are read live so loading, mode, and size changes
+// recompute the column.
+func (m Model) listWidth(w int) int {
+	reserved := 0
+	if !m.wrap {
+		reserved = 1
+	}
+	return listColumn(m.listVisible, m.listWidest, w, m.gutterWidth(), reserved)
+}
+
+// gutterWidth is the gutter the list-width formula and the panel's
+// text width share: the current file's gutter once its content is
+// prepared, or the placeholder minimum — one digit slot plus two
+// spaces — while it is not.
+func (m Model) gutterWidth() int {
+	if src := m.sources[m.curKey()]; src != nil {
+		return src.GutterWidth()
+	}
+	return 3
 }
 
 // listRow renders file-list row fi padded to lw cells; the current entry
@@ -103,14 +129,14 @@ func (m Model) panelRow(r int, curPath []byte, curIdx, panelW, contentH int) str
 	if panelW <= 0 {
 		return ""
 	}
+	key := string(curPath)
 	name := ""
 	if curIdx >= 0 {
 		name = safepresentation.EscapePath(curPath)
 	}
 	if r == 0 {
-		return m.theme.FilenameRule(filenameRule(name, panelW))
+		return m.theme.FilenameRule(filenameRule(name, m.notes[key], panelW))
 	}
-	key := string(curPath)
 	src := m.buffers[key]
 	if src == nil {
 		if r == 1 {
@@ -264,26 +290,33 @@ func (m Model) renderCells(cells []safepresentation.Cell, spans []filebuffer.Spa
 }
 
 // filenameRule embeds the current file's escaped path in a horizontal
-// rule across the panel: "── name " followed by rule fill.
-func filenameRule(name string, w int) string {
+// rule across the panel: "── name " followed by rule fill, with the
+// buffer-status note — when the file has one — closing the row. The
+// path truncates to make room for the note where possible, and at
+// least one rule cell separates name from note. When the fixed parts
+// alone exceed the width the row clips rather than overflows.
+func filenameRule(name, note string, w int) string {
 	const prefix = "── "
 	if w <= 0 {
 		return ""
 	}
-	avail := w - displaywidth.String(prefix)
-	if avail < 1 {
-		return strings.Repeat("─", w)
+	trailer := ""
+	if note != "" {
+		trailer = " " + note + " "
 	}
-	name = truncateLeft(name, avail-1) // leave room for the trailing space
-	s := prefix + name + " "
-	if d := displaywidth.String(s); d < w {
-		s += strings.Repeat("─", w-d)
+	avail := w - displaywidth.String(prefix) - displaywidth.String(trailer)
+	if avail < 2 {
+		return clipCells(prefix+name+trailer, w)
 	}
-	return s
+	name = truncateLeft(name, avail-2) // a separator space and ≥1 rule cell
+	s := prefix + name + " " + strings.Repeat("─", avail-1-displaywidth.String(name))
+	return s + trailer
 }
 
-// truncateLeft keeps the widest suffix of s fitting w cells, marked with
-// a leading ellipsis; unchanged when s already fits.
+// truncateLeft keeps the widest suffix of s fitting w cells, marked
+// with a leading ellipsis; unchanged when s already fits. Truncation
+// cuts only at grapheme-cluster boundaries: a kept suffix never opens
+// with a bare combining mark, and a wide glyph is never halved.
 func truncateLeft(s string, w int) string {
 	if w <= 0 {
 		return ""
@@ -291,18 +324,20 @@ func truncateLeft(s string, w int) string {
 	if displaywidth.String(s) <= w {
 		return s
 	}
-	runes := []rune(s)
+	g := displaywidth.StringGraphemes(s)
+	var clusters []string
+	var widths []int
+	for g.Next() {
+		clusters = append(clusters, g.Value())
+		widths = append(widths, g.Width())
+	}
 	width := 1 // the ellipsis
-	i := len(runes)
-	for i > 0 {
-		rw := displaywidth.Rune(runes[i-1])
-		if width+rw > w {
-			break
-		}
-		width += rw
+	i := len(clusters)
+	for i > 0 && width+widths[i-1] <= w {
+		width += widths[i-1]
 		i--
 	}
-	return "…" + string(runes[i:])
+	return "…" + strings.Join(clusters[i:], "")
 }
 
 // clipCells truncates s to w terminal cells.
