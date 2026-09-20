@@ -75,6 +75,13 @@ type Model struct {
 	// overlay, when non-nil, is the open diagnostic overlay: the modal
 	// error/warning presentation of a completed search.
 	overlay *errOverlay
+	// popup, when non-nil, is the active file-change pop-up; popupSeq
+	// mints each pop-up's instance ID, and popupTimer builds the
+	// instance's expiry command — a seam so tests drive expiry with
+	// injected messages instead of the clock.
+	popup      *popup
+	popupSeq   int
+	popupTimer func(id int) tea.Cmd
 
 	// Browse state: the raw-path-ordered file list, per-path prepared
 	// buffers keyed by raw path bytes, and the load bookkeeping that
@@ -98,17 +105,18 @@ type Model struct {
 func New(child Child, workdir string) Model {
 	ctx, cancel := context.WithCancel(context.Background())
 	return Model{
-		child:   child,
-		workdir: workdir,
-		state:   stateSearching,
-		ctx:     ctx,
-		cancel:  cancel,
-		diags:   &diagnostics{},
-		buffers: make(map[string]rowSource),
-		loading: make(map[string]bool),
-		failed:  make(map[string]bool),
-		vps:     make(map[string]*viewport.Viewport),
-		theme:   theme.Styled(),
+		child:      child,
+		workdir:    workdir,
+		state:      stateSearching,
+		ctx:        ctx,
+		cancel:     cancel,
+		diags:      &diagnostics{},
+		buffers:    make(map[string]rowSource),
+		loading:    make(map[string]bool),
+		failed:     make(map[string]bool),
+		vps:        make(map[string]*viewport.Viewport),
+		theme:      theme.Styled(),
+		popupTimer: popupTick,
 	}
 }
 
@@ -177,6 +185,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.diags.addAll(oc.diagnostics[len(m.stderrLines):])
 		if len(oc.diagnostics) > 0 {
 			m.overlay = &errOverlay{lines: oc.diagnostics}
+			// An overlay opening cancels any pop-up for good.
+			m.popup = nil
 		}
 		switch oc.state {
 		case stateBrowse:
@@ -196,8 +206,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.failed[key] = true
 			delete(m.buffers, key)
-			m.diags.add("cannot read " + safepresentation.EscapePath(msg.path) +
-				": " + safepresentation.EscapePath([]byte(msg.err.Error())))
+			line := "cannot read " + safepresentation.EscapePath(msg.path) +
+				": " + safepresentation.EscapePath([]byte(msg.err.Error()))
+			m.diags.add(line)
+			if m.state == stateBrowse && key == m.curKey() {
+				// A current-file failure interrupts with the error
+				// overlay; opening it cancels any pop-up for good.
+				m.popup = nil
+				if m.overlay != nil {
+					m.overlay.lines = append(m.overlay.lines, line)
+				} else {
+					m.overlay = &errOverlay{lines: []string{line}}
+				}
+			}
 		} else {
 			m.buffers[key] = msg.buf
 			delete(m.failed, key)
@@ -210,10 +231,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.revealCurrent()
 			}
 		}
+	case popupExpiredMsg:
+		// Only the live instance's own expiry dismisses the pop-up; a
+		// stale instance's expiry cannot touch a newer pop-up.
+		if m.popup != nil && m.popup.id == msg.id {
+			m.popup = nil
+		}
 	case tea.KeyPressMsg:
 		if m.state == stateCancelled {
 			return m, nil
 		}
+		// Any key press dismisses the file-change pop-up; the key still
+		// performs its normal action below in the same update.
+		m.popup = nil
 		if msg.String() == "ctrl+c" {
 			return m.cancelRun()
 		}
@@ -274,8 +304,8 @@ func (m Model) enterBrowse() (tea.Model, tea.Cmd) {
 // the destination's target row — immediately when its file is cached,
 // otherwise when the load completes. A stop in another file switches
 // the panel — the departing file's viewport stays saved under its key —
-// and an uncached destination's load is requested. The file-change
-// pop-up is Issue 15's.
+// and an uncached destination's load is requested. A file change also
+// opens the file-change pop-up with a fresh instance-keyed timer.
 func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
 	if len(m.index.Stops()) < 2 {
 		// Zero or one stop is a strict no-op: no reveal, pop-up, or retry.
@@ -291,7 +321,13 @@ func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
 	if !mv.FileChanged {
 		return m, nil
 	}
-	return m.ensureLoaded()
+	// The file-change pop-up starts at selection — never at load
+	// completion — with a fresh instance keying its own expiry timer.
+	stop, _ := m.index.Current()
+	m.popupSeq++
+	m.popup = &popup{id: m.popupSeq, path: append([]byte(nil), stop.Path...)}
+	m, load := m.ensureLoaded()
+	return m, tea.Batch(load, m.popupTimer(m.popup.id))
 }
 
 // revealCurrent applies the destination reveal to the current stop when
@@ -471,6 +507,9 @@ func (m Model) screen() string {
 	}
 	if m.overlay != nil {
 		return m.overlayScreen(base)
+	}
+	if m.popup != nil {
+		return m.popupScreen(base)
 	}
 	return base
 }

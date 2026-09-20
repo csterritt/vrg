@@ -48,18 +48,19 @@ func TestReplayCollectsDisplayedAndUndisplayedOnceInOrder(t *testing.T) {
 		},
 		Program: func(m Model) (tea.Model, error) {
 			m = feedStderr(t, m, "warn one\n")
-			m, _ = update(t, m, searchResult{index: fixtureIndex(t, 2, 1), integrity: completeStream})
+			m, _ = update(t, m, searchResult{index: fixtureIndex(t, 3, 1), integrity: completeStream})
 			if m.overlay == nil {
 				t.Fatal("no warning overlay for the stderr diagnostic")
 			}
 			if got := m.View().Content; !strings.Contains(got, "warn one") {
 				t.Fatalf("overlay does not display the stderr diagnostic:\n%s", got)
 			}
-			// Dismiss the warning, then record two load failures — the
-			// diagnostics are collected but never displayed.
+			// Dismiss the warning, then record two non-current load
+			// failures — the diagnostics are collected but never
+			// displayed.
 			m, _ = update(t, m, keyPress("q"))
-			m, _ = update(t, m, loadResult{path: []byte("a.txt"), err: errors.New("denied")})
-			m, _ = update(t, m, loadResult{path: []byte("b.txt"), err: errors.New("gone")})
+			m, _ = update(t, m, loadResult{path: []byte("b.txt"), err: errors.New("denied")})
+			m, _ = update(t, m, loadResult{path: []byte("c.txt"), err: errors.New("gone")})
 			if got := m.View().Content; strings.Contains(got, "denied") || strings.Contains(got, "gone") {
 				t.Fatalf("a never-displayed diagnostic reached the screen:\n%s", got)
 			}
@@ -71,7 +72,7 @@ func TestReplayCollectsDisplayedAndUndisplayedOnceInOrder(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit status = %d, want 0", code)
 	}
-	want := []string{"warn one", "cannot read a.txt: denied", "cannot read b.txt: gone"}
+	want := []string{"warn one", "cannot read b.txt: denied", "cannot read c.txt: gone"}
 	if got := strings.Split(strings.TrimSuffix(stderr.String(), "\n"), "\n"); !slices.Equal(got, want) {
 		t.Fatalf("replayed stderr = %q, want %q — each diagnostic once, in collection order", got, want)
 	}

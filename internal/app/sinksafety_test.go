@@ -66,6 +66,7 @@ var sinkSafetyTable = []sinkRow{
 	{"panel content", browseContentSink, func(f hostileFixture) []string { return f.wantContent }},
 	{"usage-error stderr", usageErrorSink, pathExpect},
 	{"error overlay", errorOverlaySink, overlayExpect},
+	{"file-change pop-up", popupSink, popupExpect},
 	{"stderr replay", stderrReplaySink, pathExpect},
 	// The generated command-line help has no substitution point — the
 	// application name and every description are fixed — so the row
@@ -159,6 +160,44 @@ func overlayExpect(f hostileFixture) []string {
 	default:
 		return f.wantContent
 	}
+}
+
+// popupSink drives the fixture through the file-change pop-up's real
+// composition path: the fixture is the raw path navigation selects, so
+// its escaped single-line form must appear inside the pop-up's bordered
+// interior.
+func popupSink(t *testing.T, f hostileFixture, styled bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	idx := searchindex.New(dir)
+	addRec(t, idx, matchRecBytes(f.data, []byte("hit x\n"), 1, 0, 3, []byte("hit")))
+	addRec(t, idx, matchRec("companion.txt", "hit c\n", 1, 0, 3, "hit"))
+	idx.Finish()
+
+	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 40})
+	m, _ = update(t, m, searchResult{index: idx, integrity: completeStream})
+
+	// The pop-up fires on a file change: when the fixture sorts first
+	// the cursor leaves and returns to it, otherwise one step lands on
+	// it.
+	steps := 1
+	if bytes.Equal(idx.Stops()[0].Path, f.data) {
+		steps = 2
+	}
+	for i := 0; i < steps; i++ {
+		m, _ = update(t, m, keyMsg("n"))
+	}
+	if !styled {
+		m.theme = theme.Plain()
+	}
+	return m.View().Content
+}
+
+// popupExpect requires the fixture's escaped single-line path inside
+// the pop-up's bordered interior.
+func popupExpect(f hostileFixture) []string {
+	return []string{"│" + f.wantPath + "│"}
 }
 
 // stderrReplaySink collects a load-failure diagnostic embedding the

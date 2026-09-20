@@ -16,6 +16,7 @@ import (
 func startBrowse(t *testing.T, dir string, idx *searchindex.Index, w, h int) (Model, tea.Cmd) {
 	t.Helper()
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
+	m.popupTimer = instantPopupTimer
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 	return update(t, m, searchResult{index: idx, integrity: completeStream})
 }
@@ -132,7 +133,7 @@ func TestNCrossesFileBoundary(t *testing.T) {
 		t.Fatalf("cross-file n did not move the list underline to b.txt:\n%s", v)
 	}
 
-	msg := cmd()
+	msg := deliverNavLoad(t, cmd)
 	if lr, ok := msg.(loadResult); !ok || string(lr.path) != "b.txt" {
 		t.Fatalf("cross-file load = %#v, want the b.txt load", msg)
 	}
@@ -158,19 +159,27 @@ func TestNavigationWrapsCircular(t *testing.T) {
 	m, cmd := startBrowse(t, dir, idx, 80, 24)
 	m, _ = update(t, m, cmd()) // a.txt loaded
 	m, cmd = update(t, m, keyMsg("n"))
-	m, _ = update(t, m, cmd()) // b.txt loaded; cursor on the last stop
+	m, _ = update(t, m, deliverNavLoad(t, cmd)) // b.txt loaded; cursor on the last stop
 
 	m, cmd = update(t, m, keyMsg("n")) // wraps to a.txt
-	if cmd != nil {
-		t.Fatalf("n onto a cached file returned a command: %v", cmd)
+	// A file change still opens the pop-up — the command is the new
+	// instance's expiry timer, not a load for the cached file.
+	if em, ok := cmd().(popupExpiredMsg); !ok || em.id != m.popup.id {
+		t.Fatalf("n onto a cached file returned %T, want the pop-up's expiry", cmd())
+	}
+	if navLoadMsg(t, cmd) != nil || len(m.loading) != 0 {
+		t.Fatal("n onto a cached file requested a load")
 	}
 	if v := m.View().Content; !strings.Contains(v, "\x1b[4ma.txt\x1b[24m") {
 		t.Fatalf("wrapping n did not return to a.txt:\n%s", v)
 	}
 
 	m, cmd = update(t, m, keyMsg("p")) // wraps back to b.txt
-	if cmd != nil {
-		t.Fatalf("p onto a cached file returned a command: %v", cmd)
+	if em, ok := cmd().(popupExpiredMsg); !ok || em.id != m.popup.id {
+		t.Fatalf("p onto a cached file returned %T, want the pop-up's expiry", cmd())
+	}
+	if navLoadMsg(t, cmd) != nil || len(m.loading) != 0 {
+		t.Fatal("p onto a cached file requested a load")
 	}
 	if v := m.View().Content; !strings.Contains(v, "\x1b[4mb.txt\x1b[24m") {
 		t.Fatalf("wrapping p did not return to b.txt:\n%s", v)
@@ -208,7 +217,7 @@ func TestCrossFileRestoresSavedViewport(t *testing.T) {
 
 	// n to b.txt: a first visit starts at the top of the file.
 	m, cmd = update(t, m, keyMsg("n"))
-	m, _ = update(t, m, cmd())
+	m, _ = update(t, m, deliverNavLoad(t, cmd))
 	if row := contentRow(t, m); !strings.Contains(row, "row") {
 		t.Fatalf("first visit to b.txt shows %q, want the top of the file", row)
 	}

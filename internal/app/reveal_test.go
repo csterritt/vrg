@@ -180,10 +180,7 @@ func TestRevisitStartsFromSavedViewportThenReveals(t *testing.T) {
 	// n to b.txt: a first visit starts at the top, and its target row 0
 	// is visible there — no scroll.
 	m, cmd = update(t, m, keyMsg("n"))
-	if cmd == nil {
-		t.Fatal("n to uncached b.txt returned no load command")
-	}
-	m, _ = update(t, m, cmd())
+	m, _ = update(t, m, deliverNavLoad(t, cmd))
 	if row := contentRow(t, m); !strings.Contains(row, "row-01") {
 		t.Fatalf("first visit to b.txt: %q, want row-01 at the top", row)
 	}

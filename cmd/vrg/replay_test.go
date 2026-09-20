@@ -391,6 +391,12 @@ exit 0
 	// The hostile path does not exist on disk, so its load fails and the
 	// diagnostic is collected — the ack, not the render, is the signal.
 	waitCollectAck(t, ack, "cannot read")
+	// The failure is for the current file, so the error overlay opens:
+	// the first q dismisses it — revealing the "(unreadable)"
+	// placeholder — and the second q quits ordinary browsing.
+	r.waitOutput(t, "cannot read")
+	r.send(t, "q")
+	r.waitOutput(t, "(unreadable)")
 	r.send(t, "q")
 	waitReplayedInputRestored(t, r, "cannot read")
 	code := r.waitExit(t)

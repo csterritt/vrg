@@ -174,6 +174,7 @@ func TestVerticalViewportSavedPerFile(t *testing.T) {
 	idx.Finish()
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
+	m.popupTimer = instantPopupTimer
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
 	m, _ = update(t, m, cmd()) // a.txt loaded; target row 5 visible at top 0
@@ -189,10 +190,7 @@ func TestVerticalViewportSavedPerFile(t *testing.T) {
 	// n switches to b.txt and requests its load; a first visit starts
 	// at the top, and its target row 3 is visible there.
 	m, cmd = update(t, m, keyMsg("n"))
-	if cmd == nil {
-		t.Fatal("n to uncached b.txt returned no load command")
-	}
-	m, _ = update(t, m, cmd())
+	m, _ = update(t, m, deliverNavLoad(t, cmd))
 	if row := contentRow(t, m); !strings.Contains(row, "row-01") {
 		t.Fatalf("first visit to b.txt shows %q, want row-01 at the top", row)
 	}
@@ -207,8 +205,8 @@ func TestVerticalViewportSavedPerFile(t *testing.T) {
 	// at the top or inheriting b.txt's position; the target row 5 is
 	// visible inside it, so the reveal does not scroll.
 	m, cmd = update(t, m, keyMsg("p"))
-	if cmd != nil {
-		t.Fatalf("p to cached a.txt returned a command: %v", cmd)
+	if msg := navLoadMsg(t, cmd); msg != nil {
+		t.Fatalf("p to cached a.txt requested a load: %v", msg)
 	}
 	if row := contentRow(t, m); !strings.Contains(row, "line-06") {
 		t.Fatalf("revisit to a.txt shows %q, want the saved top line-06", row)
