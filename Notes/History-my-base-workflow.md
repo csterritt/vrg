@@ -73,3 +73,14 @@ Usage
  Input tokens: 99002 tokens
  Output tokens: 40946 tokens
  Cached input tokens: 2063271 tokens
+
+----
+Task 008-no-results-screen-and-binary-exclusion.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 31 messages
+ Input tokens: 165692 tokens
+ Output tokens: 34412 tokens
+ Cached input tokens: 2310739 tokens
