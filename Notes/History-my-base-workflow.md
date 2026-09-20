@@ -524,3 +524,7 @@ Usage
  Input tokens: 162925 tokens
  Output tokens: 77010 tokens
  Cached input tokens: 5848172 tokens
+----
+Task 049-tidy-dependency-manifests.md
+
+Agent SWE-2

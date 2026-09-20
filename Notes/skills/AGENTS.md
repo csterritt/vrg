@@ -16,5 +16,5 @@ description: As an agent, how to use skills for the project.
 - `code-writing/production-code-and-build-constraints` - You must read this when separating test/development code or using Go build constraints
 - `code-writing/running-tests` - You must read this when it is time to run or diagnose Go tests and verification
 - `code-writing/running-the-cli` - You must read this when it is time to build or run Sqloid
-- `code-writing/styling-tui` - You must read this when implementing terminal layout or TUI styling
+- `code-writing/styling-tui` - You must read this when implementing terminal layout or TUI styling; Bubbles and Lip Gloss are intentionally not dependencies
 - `code-writing/tui-behavior` - You must read this when implementing Bubble Tea state, commands, input, resize, or asynchronous behavior
