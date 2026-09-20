@@ -14,13 +14,15 @@ type Span struct {
 	Start, End int
 }
 
-// Buffer is a prepared file: display-ready source lines plus highlight
-// spans. Load performs the whole read, decode, and byte→cell mapping so
-// the caller's update path does no full-file work — the prepared Buffer
-// travels inside the load-completion message.
+// Buffer is a prepared file: display-ready source lines with their
+// grapheme-cluster layout plus highlight spans. Load performs the whole
+// read, decode, and byte→cell mapping so the caller's update path does
+// no full-file work — the prepared Buffer travels inside the
+// load-completion message.
 type Buffer struct {
-	lines [][]safepresentation.Cell
-	spans map[int][]Span
+	lines    [][]safepresentation.Cell
+	clusters [][]safepresentation.Cluster
+	spans    map[int][]Span
 }
 
 // Load reads path — the raw resolved path bytes, never a display string
@@ -36,7 +38,9 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 	}
 	b := &Buffer{spans: make(map[int][]Span)}
 	for _, line := range splitLines(raw) {
-		b.lines = append(b.lines, safepresentation.EscapeContent(line))
+		cells, clusters := safepresentation.EscapeContent(line)
+		b.lines = append(b.lines, cells)
+		b.clusters = append(b.clusters, clusters)
 	}
 	for _, s := range stops {
 		i := int(s.Line) - 1
@@ -96,22 +100,26 @@ func mergeSpans(spans []Span) []Span {
 	return out
 }
 
-// TargetRow returns the rendered row containing the stop's display
-// target — the start cell of its first submatch — clamped to the
-// buffer's rows. While every source line is one rendered row, the start
-// cell's row is the destination line itself; taking the whole stop
-// rather than a bare line ordinal is what lets wrap mode move the
-// target onto a later row of a tall line. A stop whose recorded line is
-// outside the loaded content lands on the nearest row.
-func (b *Buffer) TargetRow(stop searchindex.Stop) int {
-	row := int(stop.Line) - 1
-	if last := len(b.lines) - 1; row > last {
-		row = last
+// TargetCell returns the stop's display target: its 0-based source
+// line clamped to the buffer's lines and the start cell of its first
+// coverage range — the cell whose rendered row a reveal must find.
+// Taking the whole stop rather than a bare line ordinal is what lets
+// wrap mode move the target onto a later row of a tall line. A stop
+// without coverage targets the line's first cell; coverage reaching
+// past the line's cells maps to the insertion point at the line end.
+func (b *Buffer) TargetCell(stop searchindex.Stop) (line, cell int) {
+	line = int(stop.Line) - 1
+	if last := len(b.lines) - 1; line > last {
+		line = last
 	}
-	if row < 0 {
-		row = 0
+	if line < 0 {
+		line = 0
 	}
-	return row
+	if len(b.lines) == 0 || len(stop.Coverage) == 0 {
+		return line, 0
+	}
+	cs, _ := safepresentation.Span(b.lines[line], stop.Coverage[0].Start, stop.Coverage[0].End)
+	return line, cs
 }
 
 // LineCount is the number of source lines in the loaded file.
@@ -134,6 +142,19 @@ func (b *Buffer) Cells(i int) []safepresentation.Cell {
 		return nil
 	}
 	return b.lines[i]
+}
+
+// Clusters returns the grapheme clusters of 0-based source line i —
+// each cluster's half-open cell range and terminal cell width — or nil
+// when i is out of range. This is the one grapheme segmentation and
+// cell-width policy the viewport wraps and clips by; it never
+// re-derives boundaries. The slice is owned by the buffer; do not
+// mutate.
+func (b *Buffer) Clusters(i int) []safepresentation.Cluster {
+	if i < 0 || i >= len(b.clusters) {
+		return nil
+	}
+	return b.clusters[i]
 }
 
 // Highlights returns the sorted inverse-video cell spans of 0-based

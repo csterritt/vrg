@@ -352,7 +352,7 @@ func TestBrowseSinksNeverEmitFixtureControlBytes(t *testing.T) {
 		`nel \u0085`,         // C1 content
 		"del ^?",             // DEL content
 		"cr ^M",              // standalone CR content
-		"tab →",              // provisional tab placeholder
+		"tab    bad",         // tab expanded to its structural stop
 		"bad \uFFFD",         // invalid UTF-8 content
 	} {
 		if !strings.Contains(raw, want) {

@@ -53,10 +53,10 @@ func cellText(cells []safepresentation.Cell) string {
 
 // EscapeContent escapes one source line's raw bytes — its terminator
 // already removed — into display cells: C0 controls and DEL use caret
-// notation, a standalone carriage return renders as ^M, tab is the
-// provisional single-cell arrow placeholder, C1 controls use \uXXXX
-// escapes, invalid UTF-8 becomes U+FFFD, and printable text passes
-// through. (Issue 5 core cases, unchanged.)
+// notation, a standalone carriage return renders as ^M, a tab expands
+// to the next multiple of eight source-display columns, C1 controls use
+// \uXXXX escapes, invalid UTF-8 becomes U+FFFD, and printable text
+// passes through. (Issue 5 core cases, with structural tabs.)
 func TestContentEscapes(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -73,7 +73,7 @@ func TestContentEscapes(t *testing.T) {
 		{"unit separator", "\x1f", "^_"},
 		{"delete", "\x7f", "^?"},
 		{"standalone carriage return", "a\rb", "a^Mb"},
-		{"tab placeholder", "a\tb", "a→b"},
+		{"tab expands to the next stop", "a\tb", "a       b"},
 		{"c1 nel", "a\u0085b", `a\u0085b`},
 		{"invalid utf-8 byte", "a\xffb", "a\uFFFDb"},
 		{"invalid utf-8 run", "a\xff\xfeb", "a\uFFFD\uFFFDb"},
@@ -81,7 +81,7 @@ func TestContentEscapes(t *testing.T) {
 		{"empty", "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cells := safepresentation.EscapeContent([]byte(tc.in))
+			cells, _ := safepresentation.EscapeContent([]byte(tc.in))
 			if got := cellText(cells); got != tc.want {
 				t.Fatalf("EscapeContent(%q) text = %q, want %q", tc.in, got, tc.want)
 			}
@@ -117,8 +117,15 @@ func TestContentCellByteMappings(t *testing.T) {
 		{"invalid utf-8 byte", "\xff", []safepresentation.Cell{
 			{Text: "\uFFFD", Start: 0, End: 1},
 		}},
-		{"tab placeholder", "\t", []safepresentation.Cell{
-			{Text: "→", Start: 0, End: 1},
+		{"tab at column zero", "\t", []safepresentation.Cell{
+			{Text: " ", Start: 0, End: 1},
+			{Text: " ", Start: 0, End: 1},
+			{Text: " ", Start: 0, End: 1},
+			{Text: " ", Start: 0, End: 1},
+			{Text: " ", Start: 0, End: 1},
+			{Text: " ", Start: 0, End: 1},
+			{Text: " ", Start: 0, End: 1},
+			{Text: " ", Start: 0, End: 1},
 		}},
 		{"multi-byte rune", "é", []safepresentation.Cell{
 			{Text: "é", Start: 0, End: 2},
@@ -129,7 +136,7 @@ func TestContentCellByteMappings(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := safepresentation.EscapeContent([]byte(tc.in))
+			got, _ := safepresentation.EscapeContent([]byte(tc.in))
 			if len(got) != len(tc.want) {
 				t.Fatalf("EscapeContent(%q) produced %d cells %+v, want %d", tc.in, len(got), got, len(tc.want))
 			}
@@ -142,11 +149,81 @@ func TestContentCellByteMappings(t *testing.T) {
 	}
 }
 
+// EscapeContent also reports the line's grapheme clusters: the half-open
+// display-cell range each cluster occupies and its terminal cell width.
+// Combining sequences and emoji ZWJ sequences are one cluster; a tab is
+// one cluster spanning its expansion; escaped forms keep their cells in
+// a single cluster.
+func TestContentClusters(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		in   string
+		want []safepresentation.Cluster
+	}{
+		{"plain", "ab", []safepresentation.Cluster{
+			{Start: 0, End: 1, Width: 1},
+			{Start: 1, End: 2, Width: 1},
+		}},
+		{"combining sequence", "e\u0301x", []safepresentation.Cluster{
+			{Start: 0, End: 2, Width: 1},
+			{Start: 2, End: 3, Width: 1},
+		}},
+		{"wide runes", "世界", []safepresentation.Cluster{
+			{Start: 0, End: 1, Width: 2},
+			{Start: 1, End: 2, Width: 2},
+		}},
+		{"emoji zwj sequence", "👨‍👩‍👧!", []safepresentation.Cluster{
+			{Start: 0, End: 5, Width: 2},
+			{Start: 5, End: 6, Width: 1},
+		}},
+		{"escaped control", "\x1bx", []safepresentation.Cluster{
+			{Start: 0, End: 2, Width: 2},
+			{Start: 2, End: 3, Width: 1},
+		}},
+		{"c1 escape", "\u0085x", []safepresentation.Cluster{
+			{Start: 0, End: 6, Width: 6},
+			{Start: 6, End: 7, Width: 1},
+		}},
+		{"invalid utf-8", "\xffx", []safepresentation.Cluster{
+			{Start: 0, End: 1, Width: 1},
+			{Start: 1, End: 2, Width: 1},
+		}},
+		{"tab at column zero", "\tx", []safepresentation.Cluster{
+			{Start: 0, End: 8, Width: 8},
+			{Start: 8, End: 9, Width: 1},
+		}},
+		{"tab at column one", "a\tb", []safepresentation.Cluster{
+			{Start: 0, End: 1, Width: 1},
+			{Start: 1, End: 8, Width: 7},
+			{Start: 8, End: 9, Width: 1},
+		}},
+		{"tab after wide rune", "世\tx", []safepresentation.Cluster{
+			{Start: 0, End: 1, Width: 2},
+			{Start: 1, End: 7, Width: 6},
+			{Start: 7, End: 8, Width: 1},
+		}},
+		{"empty", "", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, got := safepresentation.EscapeContent([]byte(tc.in))
+			if len(got) != len(tc.want) {
+				t.Fatalf("EscapeContent(%q) clusters = %+v, want %+v", tc.in, got, tc.want)
+			}
+			for i, c := range got {
+				if c != tc.want[i] {
+					t.Fatalf("EscapeContent(%q) cluster %d = %+v, want %+v",
+						tc.in, i, c, tc.want[i])
+				}
+			}
+		})
+	}
+}
+
 // Span maps a half-open source-byte range to the half-open cell range it
 // covers: a match covering an ESC byte highlights both caret cells, and a
 // match inside a multi-cell escape covers the whole escape.
 func TestContentSpanMapping(t *testing.T) {
-	cells := safepresentation.EscapeContent([]byte("a\x1bb")) // renders a ^ [ b
+	cells, _ := safepresentation.EscapeContent([]byte("a\x1bb")) // renders a ^ [ b
 	if got := cellText(cells); got != "a^[b" {
 		t.Fatalf("fixture text = %q, want %q", got, "a^[b")
 	}
@@ -175,7 +252,7 @@ func TestContentSpanMapping(t *testing.T) {
 // A span over a multi-byte C1 escape covers all six cells of its
 // \uXXXX-style form.
 func TestContentSpanCoversC1Escape(t *testing.T) {
-	cells := safepresentation.EscapeContent([]byte("x\u0085y"))
+	cells, _ := safepresentation.EscapeContent([]byte("x\u0085y"))
 	s, e := safepresentation.Span(cells, 1, 3)
 	if s != 1 || e != 7 {
 		t.Fatalf("Span(1, 3) = (%d, %d), want (1, 7)", s, e)

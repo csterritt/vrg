@@ -45,7 +45,7 @@ var hostileFixtures = []hostileFixture{
 	{"standalone cr", []byte("\r"), "\r", `\r`, []string{"^M"}},
 	{"invalid utf-8 path bytes", []byte("\xff\xfe"), "\xff\xfe", `\xff\xfe`, []string{"\uFFFD\uFFFD"}},
 	{"embedded filename newline", []byte("evil\nname.txt"), "\nname", `evil\nname.txt`, []string{"evil", "name.txt"}},
-	{"embedded tab", []byte("\t"), "\t", `\t`, []string{"→"}},
+	{"embedded tab", []byte("\t"), "\t", `\t`, nil},
 }
 
 // sinkRow is one output sink in the safety table: render drives a

@@ -217,34 +217,55 @@ func TestVerticalViewportSavedPerFile(t *testing.T) {
 	}
 }
 
-// countingSource is a prepared-row provider that records every row a
-// frame render queries, so the test can prove the render path reads
-// only the visible range instead of scanning the whole buffer.
+// countingSource is a counting viewport.Source: a prepared buffer of
+// one-cell lines that records every line whose cells a frame render
+// queries and every line the grapheme wrapper is invoked for, so the
+// test can prove the render path reads only the visible range instead
+// of scanning — or rewrapping — the whole buffer.
 type countingSource struct {
-	rows    int
-	queried []int
+	cells    [][]safepresentation.Cell
+	clusters [][]safepresentation.Cluster
+	queried  []int
+	wrapped  int
 }
 
-func (c *countingSource) LineCount() int   { return c.rows }
+func newCountingSource(lines int) *countingSource {
+	src := &countingSource{}
+	for i := 0; i < lines; i++ {
+		src.cells = append(src.cells, []safepresentation.Cell{{Text: "x"}})
+		src.clusters = append(src.clusters, []safepresentation.Cluster{
+			{Start: 0, End: 1, Width: 1},
+		})
+	}
+	return src
+}
+
+func (c *countingSource) LineCount() int   { return len(c.cells) }
 func (c *countingSource) GutterWidth() int { return 6 }
 func (c *countingSource) Cells(i int) []safepresentation.Cell {
 	c.queried = append(c.queried, i)
-	return []safepresentation.Cell{{Text: "x"}}
+	return c.cells[i]
+}
+func (c *countingSource) Clusters(i int) []safepresentation.Cluster {
+	c.wrapped++
+	return c.clusters[i]
 }
 func (c *countingSource) Highlights(i int) []filebuffer.Span { return nil }
-func (c *countingSource) TargetRow(stop searchindex.Stop) int {
-	row := int(stop.Line) - 1
-	if last := c.rows - 1; row > last {
-		row = last
+func (c *countingSource) TargetCell(stop searchindex.Stop) (int, int) {
+	line := int(stop.Line) - 1
+	if last := len(c.cells) - 1; line > last {
+		line = last
 	}
-	if row < 0 {
-		row = 0
+	if line < 0 {
+		line = 0
 	}
-	return row
+	return line, 0
 }
 
-// Rendering a frame for a huge buffer queries the row provider for the
-// visible row range only — never O(file size) per frame.
+// Rendering a frame for a huge buffer queries the row model for the
+// visible row range only — never O(file size) per frame, and never
+// rewrapping: the grapheme cluster scan happened when the row model was
+// prepared at load time, not in View.
 func TestRenderQueriesOnlyVisibleRows(t *testing.T) {
 	dir := t.TempDir()
 	writeMatchFile(t, dir, "a.txt", "line\n")
@@ -256,14 +277,20 @@ func TestRenderQueriesOnlyVisibleRows(t *testing.T) {
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, _ = update(t, m, searchResult{index: idx, integrity: completeStream})
 
-	src := &countingSource{rows: 10000}
-	m, _ = update(t, m, loadResult{path: []byte("a.txt"), buf: src})
+	src := newCountingSource(10000)
+	m, _ = update(t, m, loadResult{path: []byte("a.txt"), src: src})
+
+	src.queried = nil
+	src.wrapped = 0
 	_ = m.View()
 
+	if src.wrapped != 0 {
+		t.Fatalf("View invoked the grapheme wrapper for %d lines, want 0", src.wrapped)
+	}
 	contentH := 23 // height 24 minus the filename row
 	if len(src.queried) != contentH {
 		t.Fatalf("frame queried %d rows of a %d-row buffer, want the %d visible rows",
-			len(src.queried), src.rows, contentH)
+			len(src.queried), src.LineCount(), contentH)
 	}
 	for i, q := range src.queried {
 		if q != i {

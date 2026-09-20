@@ -83,19 +83,24 @@ type Model struct {
 	popupSeq   int
 	popupTimer func(id int) tea.Cmd
 
-	// Browse state: the raw-path-ordered file list, per-path prepared
-	// buffers keyed by raw path bytes, and the load bookkeeping that
-	// keeps one load in flight per path. The matched-line cursor lives
-	// in the index; the current file derives from it. vps holds each
-	// visited file's saved vertical viewport under the same key, so a
-	// revisited file resumes from its saved top row.
+	// Browse state: the raw-path-ordered file list, per-path loaded
+	// content and its installed row model keyed by raw path bytes, and
+	// the load bookkeeping that keeps one load in flight per path. The
+	// matched-line cursor lives in the index; the current file derives
+	// from it. vps holds each visited file's saved vertical viewport
+	// under the same key, so a revisited file resumes from its saved
+	// top row. wrap is the wrap mode — on by default; w toggles it.
+	// revs counts each path's content revisions for row-model keying.
 	files   [][]byte
 	fileIdx map[string]int
-	buffers map[string]rowSource
+	buffers map[string]*viewport.RowModel
+	sources map[string]viewport.Source
+	revs    map[string]int
 	loading map[string]bool
 	failed  map[string]bool
 	listTop int
 	vps     map[string]*viewport.Viewport
+	wrap    bool
 	theme   theme.Theme
 }
 
@@ -111,10 +116,13 @@ func New(child Child, workdir string) Model {
 		ctx:        ctx,
 		cancel:     cancel,
 		diags:      &diagnostics{},
-		buffers:    make(map[string]rowSource),
+		buffers:    make(map[string]*viewport.RowModel),
+		sources:    make(map[string]viewport.Source),
+		revs:       make(map[string]int),
 		loading:    make(map[string]bool),
 		failed:     make(map[string]bool),
 		vps:        make(map[string]*viewport.Viewport),
+		wrap:       true,
 		theme:      theme.Styled(),
 		popupTimer: popupTick,
 	}
@@ -141,11 +149,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		// Re-clamp every loaded file's saved viewport: a shorter panel
-		// may leave avoidable blank rows below EOF at the old top.
-		for key, buf := range m.buffers {
-			m.viewportFor(key).SetExtent(buf.LineCount(), m.contentHeight())
-		}
+		// Rebuild every loaded file's row model at the new text width
+		// and re-clamp its saved viewport: a shorter panel may leave
+		// avoidable blank rows below EOF at the old top.
+		m.rebuildRows()
 		if m.overlay != nil {
 			if max := m.overlay.maxScroll(m.width, m.height); m.overlay.scroll > max {
 				m.overlay.scroll = max
@@ -206,6 +213,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.failed[key] = true
 			delete(m.buffers, key)
+			delete(m.sources, key)
 			line := "cannot read " + safepresentation.EscapePath(msg.path) +
 				": " + safepresentation.EscapePath([]byte(msg.err.Error()))
 			m.diags.add(line)
@@ -220,11 +228,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		} else {
-			m.buffers[key] = msg.buf
+			m.revs[key]++
+			m.sources[key] = msg.src
+			model := viewport.NewRowModel(m.rowKey(key, msg.src), msg.src)
+			m.buffers[key] = model
 			delete(m.failed, key)
-			// The prepared row data arrives with the buffer; the file's
-			// saved viewport is clamped to its extent here and on resize.
-			m.viewportFor(key).SetExtent(msg.buf.LineCount(), m.contentHeight())
+			// The file's saved viewport is clamped to the prepared row
+			// model's extent here and on resize.
+			m.viewportFor(key).SetExtent(model.LineCount(), m.contentHeight())
 			if key == m.curKey() {
 				// Startup and file-entry loads reveal the cursor's
 				// latest target once its rows exist.
@@ -261,6 +272,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			if m.state == stateBrowse {
 				m.theme = m.theme.Toggle()
+			}
+		case "w":
+			if m.state == stateBrowse {
+				m.wrap = !m.wrap
+				m.rebuildRows()
 			}
 		case "up", "down", "u", "d", "pgup", "pgdown":
 			if m.state == stateBrowse {
@@ -375,18 +391,20 @@ func stopsForPath(index *searchindex.Index, path []byte) []searchindex.Stop {
 }
 
 // loadResult is the product of one file load, delivered to the model as
-// a message: the raw path it belongs to and the prepared buffer or the
-// read error.
+// a message: the raw path it belongs to and the prepared source the row
+// model is built from, or the read error.
 type loadResult struct {
 	path []byte
-	buf  rowSource
+	src  viewport.Source
 	err  error
 }
 
 // loadCmd reads and maps a file off the update path. A non-nil gate
 // holds the read and decode/map phase until it closes; ctx cancellation
 // releases a held gate promptly. The completion message carries the
-// prepared buffer so Update does no full-file work.
+// prepared source so Update does no full-file decoding; the row model
+// is built at install time so it always matches the current text width
+// and wrap mode.
 func loadCmd(ctx context.Context, gate <-chan struct{}, stop searchindex.Stop, stops []searchindex.Stop) tea.Cmd {
 	resolved := append([]byte(nil), stop.Resolved...)
 	path := append([]byte(nil), stop.Path...)
@@ -398,8 +416,46 @@ func loadCmd(ctx context.Context, gate <-chan struct{}, stop searchindex.Stop, s
 			}
 		}
 		buf, err := filebuffer.Load(resolved, stops)
-		return loadResult{path: path, buf: buf, err: err}
+		var src viewport.Source
+		if buf != nil {
+			src = buf
+		}
+		return loadResult{path: path, src: src, err: err}
 	}
+}
+
+// rebuildRows re-prepares every cached file's row model at the current
+// text width and wrap mode and re-clamps its saved viewport to the new
+// extent. Preparation is synchronous here; Issue 17 moves it off the
+// update path with keyed, isolated completions.
+func (m Model) rebuildRows() {
+	for key, src := range m.sources {
+		model := viewport.NewRowModel(m.rowKey(key, src), src)
+		m.buffers[key] = model
+		m.viewportFor(key).SetExtent(model.LineCount(), m.contentHeight())
+	}
+}
+
+// rowKey is the row-model key for path's source under the current
+// terminal geometry and wrap mode.
+func (m Model) rowKey(path string, src viewport.Source) viewport.RowModelKey {
+	return viewport.RowModelKey{
+		Path:      path,
+		Revision:  m.revs[path],
+		TextWidth: viewport.TextWidth(m.panelWidth(), src.GutterWidth(), m.wrap),
+		Wrap:      m.wrap,
+	}
+}
+
+// panelWidth is the file panel's width in cells: the terminal width
+// minus the file-list column.
+func (m Model) panelWidth() int {
+	w, _ := m.termSize()
+	names := make([]string, len(m.files))
+	for i, f := range m.files {
+		names[i] = safepresentation.EscapePath(f)
+	}
+	return w - listWidth(names, w)
 }
 
 // scrollCurrent applies a vertical scroll key to the current file's

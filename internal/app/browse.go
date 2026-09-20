@@ -8,27 +8,8 @@ import (
 
 	"vrg/internal/filebuffer"
 	"vrg/internal/safepresentation"
-	"vrg/internal/searchindex"
+	"vrg/internal/viewport"
 )
-
-// rowSource is the prepared rendered-row provider the file panel
-// renders. While the panel is unwrapped, rendered row i is source line
-// i. Prepared row data is built when a load completes — the Buffer
-// travels inside the load message — so a frame queries the provider for
-// the visible row range only, never scanning the whole buffer.
-type rowSource interface {
-	// LineCount is the rendered row count.
-	LineCount() int
-	// GutterWidth is the line-number gutter width in cells.
-	GutterWidth() int
-	// Cells returns the display cells of rendered row i.
-	Cells(i int) []safepresentation.Cell
-	// Highlights returns the inverse-video spans of rendered row i.
-	Highlights(i int) []filebuffer.Span
-	// TargetRow returns the rendered row holding the stop's display
-	// target — the start cell of its first submatch.
-	TargetRow(stop searchindex.Stop) int
-}
 
 // browseScreen composes the two-pane browse view: the raw-path-ordered
 // file list on the left and the current file's panel on the right —
@@ -153,17 +134,31 @@ func (m Model) panelRow(r int, curPath []byte, names []string, curIdx, panelW, c
 	if top < 0 {
 		top = 0
 	}
-	lineIdx := top + r - 1
-	if lineIdx >= src.LineCount() {
+	rowIdx := top + r - 1
+	if rowIdx >= src.LineCount() {
 		return padCells("", panelW)
 	}
 	gw := src.GutterWidth()
-	gutter := fmt.Sprintf("%*d  ", gw-2, lineIdx+1)
+	line, first := src.RowLine(rowIdx)
+	gutter := strings.Repeat(" ", gw)
+	if first {
+		gutter = fmt.Sprintf("%*d  ", gw-2, line+1)
+	}
 	if gw >= panelW {
 		return padCells(clipCells(gutter, panelW), panelW)
 	}
-	text, painted := m.renderCells(src.Cells(lineIdx), src.Highlights(lineIdx), panelW-gw, m.isCurrentLine(lineIdx))
-	return m.theme.Gutter(gutter) + text + strings.Repeat(" ", panelW-gw-painted)
+	tw := viewport.TextWidth(panelW, gw, src.Key().Wrap)
+	text, painted := m.renderCells(src.Cells(rowIdx), src.Highlights(rowIdx), tw, m.isCurrentLine(line))
+	row := m.theme.Gutter(gutter) + text
+	if pad := tw - painted; pad > 0 {
+		row += strings.Repeat(" ", pad)
+	}
+	if !src.Key().Wrap {
+		// The reserved right-indicator column stays blank until
+		// Issue 20 populates it.
+		row += " "
+	}
+	return row
 }
 
 // isCurrentLine reports whether 0-based source line i is the cursor's
@@ -173,14 +168,22 @@ func (m Model) isCurrentLine(i int) bool {
 	return ok && stop.Line == int64(i)+1
 }
 
-// renderCells renders up to w display cells of one source line, painting
-// the highlight spans in inverse video — additionally underlined when
-// the line is the current matched line — and reports the painted cell
-// width so the caller can pad the row.
+// renderCells renders up to w terminal cells of one rendered row,
+// painting the highlight spans in inverse video — additionally
+// underlined when the line is the current matched line — and reports
+// the painted cell width so the caller can pad the row. Truncation
+// stops before a cell that would overflow the width rather than
+// painting half a wide glyph.
 func (m Model) renderCells(cells []safepresentation.Cell, spans []filebuffer.Span, w int, current bool) (string, int) {
-	n := len(cells)
-	if n > w {
-		n = w
+	n := 0
+	painted := 0
+	for n < len(cells) {
+		cw := displaywidth.String(cells[n].Text)
+		if painted+cw > w {
+			break
+		}
+		painted += cw
+		n++
 	}
 	if n <= 0 {
 		return "", 0
@@ -193,7 +196,7 @@ func (m Model) renderCells(cells []safepresentation.Cell, spans []filebuffer.Spa
 			}
 		}
 	}
-	var b, plain strings.Builder
+	var b strings.Builder
 	for i := 0; i < n; {
 		j := i + 1
 		for j < n && hl[j] == hl[i] {
@@ -204,7 +207,6 @@ func (m Model) renderCells(cells []safepresentation.Cell, spans []filebuffer.Spa
 			seg.WriteString(cells[k].Text)
 		}
 		text := seg.String()
-		plain.WriteString(text)
 		if hl[i] {
 			if current {
 				b.WriteString(m.theme.CurrentMatch(text))
@@ -216,7 +218,7 @@ func (m Model) renderCells(cells []safepresentation.Cell, spans []filebuffer.Spa
 		}
 		i = j
 	}
-	return b.String(), displaywidth.String(plain.String())
+	return b.String(), painted
 }
 
 // filenameRule embeds the current file's escaped path in a horizontal

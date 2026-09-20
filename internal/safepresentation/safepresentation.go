@@ -122,65 +122,96 @@ func EscapeDiagnostic(s string) string {
 	return b.String()
 }
 
-// Cell is one terminal display cell of escaped file content. Text is the
-// cell's display string; Start and End are the half-open source-line byte
-// range the cell presents, so a byte-range highlight can cover every cell
-// of an escaped form. The mapping is provisional for the tab placeholder
-// until Issue 16 lands structural tab expansion.
+// Cell is one terminal display cell of escaped file content. Text is
+// the cell's display string; Start and End are the half-open
+// source-line byte range of the cell's grapheme cluster, so a
+// byte-range highlight covers every cell of the cluster it touches.
 type Cell struct {
 	Text       string
 	Start, End int
 }
 
+// Cluster is one grapheme cluster of an escaped source line: the
+// half-open range of display cells it occupies and its width in
+// terminal cells. Wrapping and clipping never split a cluster — a
+// cluster that cannot fit a row's remaining cells moves to the next
+// row. A tab is a single cluster spanning its expansion cells.
+type Cluster struct {
+	Start, End int
+	Width      int
+}
+
 // EscapeContent escapes one source line's raw bytes — its line
-// terminator already removed — into display cells. C0 controls and DEL
-// use caret notation (ESC renders as ^[), so a standalone carriage
-// return renders as ^M; a tab renders as the provisional single-cell
-// arrow placeholder; C1 controls use \uXXXX escapes; invalid UTF-8 bytes
-// each become one U+FFFD cell retaining their raw-byte mapping;
-// printable text passes through.
-func EscapeContent(raw []byte) []Cell {
+// terminator already removed — into display cells and the line's
+// grapheme clusters. C0 controls and DEL use caret notation (ESC
+// renders as ^[), so a standalone carriage return renders as ^M; a tab
+// expands to spaces up to the next multiple of eight source-display
+// columns; C1 controls use \uXXXX escapes; invalid UTF-8 bytes each
+// become one U+FFFD cell retaining their raw-byte mapping; printable
+// text passes through.
+func EscapeContent(raw []byte) ([]Cell, []Cluster) {
 	var cells []Cell
-	emit := func(text string, start, end int) {
-		for _, r := range text {
-			cells = append(cells, Cell{Text: string(r), Start: start, End: end})
+	var clusters []Cluster
+	col := 0
+	g := displaywidth.BytesGraphemes(raw)
+	for pos := 0; g.Next(); {
+		cluster := g.Value()
+		from := pos
+		pos += len(cluster)
+		start := len(cells)
+		var width int
+		if len(cluster) == 1 && cluster[0] == '\t' {
+			width = 8 - col%8
+			for i := 0; i < width; i++ {
+				cells = append(cells, Cell{Text: " ", Start: from, End: pos})
+			}
+		} else {
+			var text strings.Builder
+			escapeCluster(&text, cluster)
+			s := text.String()
+			for _, r := range s {
+				cells = append(cells, Cell{Text: string(r), Start: from, End: pos})
+			}
+			width = displaywidth.String(s)
 		}
+		clusters = append(clusters, Cluster{Start: start, End: len(cells), Width: width})
+		col += width
 	}
-	for i := 0; i < len(raw); {
-		c := raw[i]
+	return cells, clusters
+}
+
+// escapeCluster appends the escaped display text of one grapheme
+// cluster's raw bytes: caret notation for C0 controls and DEL, \uXXXX
+// for C1 controls, U+FFFD for each invalid UTF-8 byte, and printable
+// text verbatim.
+func escapeCluster(b *strings.Builder, cluster []byte) {
+	for i := 0; i < len(cluster); {
+		c := cluster[i]
 		if c < utf8.RuneSelf {
 			switch {
-			case c == '\t':
-				emit("→", i, i+1)
 			case c < 0x20:
-				emit(caret(c), i, i+1)
+				writeCaret(b, c)
 			case c == 0x7f:
-				emit("^?", i, i+1)
+				b.WriteString("^?")
 			default:
-				emit(string(c), i, i+1)
+				b.WriteByte(c)
 			}
 			i++
 			continue
 		}
-		r, size := utf8.DecodeRune(raw[i:])
+		r, size := utf8.DecodeRune(cluster[i:])
 		if r == utf8.RuneError && size == 1 {
-			emit("\uFFFD", i, i+1)
+			b.WriteString("\uFFFD")
 			i++
 			continue
 		}
 		if r >= 0x80 && r < 0xa0 {
-			emit(fmt.Sprintf(`\u%04x`, r), i, i+size)
+			fmt.Fprintf(b, `\u%04x`, r)
 		} else {
-			emit(string(raw[i:i+size]), i, i+size)
+			b.Write(cluster[i : i+size])
 		}
 		i += size
 	}
-	return cells
-}
-
-// caret returns the caret-notation form of a C0 control byte.
-func caret(c byte) string {
-	return string([]byte{'^', c + '@'})
 }
 
 // writeCaret appends the caret-notation form of a C0 control byte.
