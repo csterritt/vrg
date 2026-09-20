@@ -337,3 +337,14 @@ Usage
  Input tokens: 122494 tokens
  Output tokens: 33731 tokens
  Cached input tokens: 3324240 tokens
+
+----
+Task 032-overlay-precedence-esc-semantics.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 26 messages
+ Input tokens: 128879 tokens
+ Output tokens: 42646 tokens
+ Cached input tokens: 1894483 tokens

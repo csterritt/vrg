@@ -59,10 +59,9 @@ func (o *scrollOverlay) scrollKey(key string, w, h int) {
 
 // append adds one line to the overlay without moving the reader:
 // scroll names the first shown wrapped row and a new line extends only
-// the tail of the row set, so the position holds. The error overlay
-// uses it for appended diagnostics — Issue 26 owns this minimal
-// append-preserving-scroll primitive; Issue 32 generalizes it to all
-// appended errors.
+// the tail of the row set, so the position holds. Every error arriving
+// while the overlay is open uses it — the Issue 26 primitive
+// generalized by Issue 32 to all appended errors.
 func (o *scrollOverlay) append(line string) {
 	o.lines = append(o.lines, line)
 }
