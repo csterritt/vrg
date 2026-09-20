@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -84,6 +85,220 @@ func TestOverlayScrollsUpDown(t *testing.T) {
 	v = m.View().Content
 	if !strings.Contains(v, "head-line") || strings.Contains(v, "tail-line") {
 		t.Fatalf("scrolled-to-top overlay lacks the head:\n%s", v)
+	}
+}
+
+// The scrollable row set is the complete wrapped diagnostic: every
+// captured line's rows in order — first and last markers included —
+// with no ellipsis or summary row ever substituted for content, and
+// maxScroll is exactly the row count minus the interior height.
+func TestOverlayRowsAreCompleteDiagnostic(t *testing.T) {
+	var sb strings.Builder
+	sb.WriteString("first-marker\n")
+	for i := 0; i < 28; i++ {
+		fmt.Fprintf(&sb, "diag %02d\n", i)
+	}
+	sb.WriteString("last-marker\n")
+	m := overlayModel(t, validRecords(), nil, sb.String())
+	if m.overlay == nil {
+		t.Fatal("no overlay open for a stderr diagnostic")
+	}
+
+	rows := m.overlay.rows(78)
+	if len(rows) != 30 {
+		t.Fatalf("scrollable rows = %d, want the complete 30", len(rows))
+	}
+	if rows[0] != "first-marker" || rows[len(rows)-1] != "last-marker" {
+		t.Fatalf("scrollable set ends = %q … %q, want both markers", rows[0], rows[len(rows)-1])
+	}
+	for i := 0; i < 28; i++ {
+		if want := fmt.Sprintf("diag %02d", i); rows[i+1] != want {
+			t.Fatalf("row %d = %q, want %q: content was elided or substituted", i+1, rows[i+1], want)
+		}
+	}
+	// The interior shows 22 rows at 80x24: the clamp is exactly
+	// 30 − 22 = 8.
+	if got := m.overlay.maxScroll(80, 24); got != 8 {
+		t.Fatalf("maxScroll = %d, want 8", got)
+	}
+}
+
+// A diagnostic at the ≥ 1 MiB fixture's shape — a head marker, 64
+// blocks of 16385 bytes, and a tail marker — keeps every wrapped row in
+// the scrollable set: over thirteen thousand rows at 80 columns, both
+// markers present, no ellipsis row. Reachability is a clamp property:
+// the rendered window at scroll 0 shows the head and at maxScroll shows
+// the tail, without thousands of key presses.
+func TestOverlayCompleteRowsForHugeDiagnostic(t *testing.T) {
+	var sb strings.Builder
+	sb.WriteString("VRG-STDERR-HEAD\n")
+	block := strings.Repeat("0", 16385)
+	for i := 0; i < 64; i++ {
+		sb.WriteString(block)
+		sb.WriteByte('\n')
+	}
+	sb.WriteString("VRG-STDERR-TAIL\n")
+	m := overlayModel(t, validRecords(), nil, sb.String())
+	if m.overlay == nil {
+		t.Fatal("no overlay open for a stderr diagnostic")
+	}
+
+	rows := m.overlay.rows(78)
+	want := 2 + 64*211 // ceil(16385/78) rows per block plus the markers
+	if len(rows) != want {
+		t.Fatalf("scrollable rows = %d, want the complete %d", len(rows), want)
+	}
+	if !strings.Contains(rows[0], "VRG-STDERR-HEAD") {
+		t.Fatalf("first scrollable row = %q, want the head marker", rows[0])
+	}
+	if !strings.Contains(rows[len(rows)-1], "VRG-STDERR-TAIL") {
+		t.Fatalf("last scrollable row = %q, want the tail marker", rows[len(rows)-1])
+	}
+	for i, r := range rows {
+		if strings.TrimSpace(r) == "…" {
+			t.Fatalf("row %d is an ellipsis substitute: %q", i, r)
+		}
+	}
+
+	// maxScroll is exactly rows − interior; rendering at the clamped
+	// position shows the tail row.
+	ih := interiorHeight(24, len(rows))
+	if got := m.overlay.maxScroll(80, 24); got != len(rows)-ih {
+		t.Fatalf("maxScroll = %d, want %d", got, len(rows)-ih)
+	}
+	m.overlay.scroll = m.overlay.maxScroll(80, 24)
+	if v := m.View().Content; !strings.Contains(v, "VRG-STDERR-TAIL") {
+		t.Fatalf("render at max scroll lacks the tail row:\n%s", v)
+	}
+	m.overlay.scroll = 0
+	if v := m.View().Content; !strings.Contains(v, "VRG-STDERR-HEAD") {
+		t.Fatalf("render at scroll 0 lacks the head row:\n%s", v)
+	}
+}
+
+// A diagnostic only slightly taller than the interior is traversable
+// end to end in a bounded row-by-row walk: each down advances exactly
+// one row until the clamp, which a further press cannot pass, and each
+// up returns one row to the first.
+func TestOverlayBoundedTraversalReachesEnds(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 25; i++ { // 25 rows against a 22-row interior
+		fmt.Fprintf(&sb, "row %02d\n", i)
+	}
+	m := overlayModel(t, validRecords(), nil, sb.String())
+	if m.overlay == nil {
+		t.Fatal("no overlay open for a stderr diagnostic")
+	}
+
+	for want := 1; want <= 3; want++ {
+		m, _ = update(t, m, keyPress("down"))
+		if m.overlay.scroll != want {
+			t.Fatalf("down press %d: scroll = %d, want %d", want, m.overlay.scroll, want)
+		}
+	}
+	m, _ = update(t, m, keyPress("down"))
+	if m.overlay.scroll != 3 {
+		t.Fatalf("down past the clamp moved scroll to %d, want 3", m.overlay.scroll)
+	}
+	if v := m.View().Content; !strings.Contains(v, "row 24") {
+		t.Fatalf("the traversal's bottom lacks the final row:\n%s", v)
+	}
+
+	for want := 2; want >= 0; want-- {
+		m, _ = update(t, m, keyPress("up"))
+		if m.overlay.scroll != want {
+			t.Fatalf("up press: scroll = %d, want %d", m.overlay.scroll, want)
+		}
+	}
+	m, _ = update(t, m, keyPress("up"))
+	if m.overlay.scroll != 0 {
+		t.Fatalf("up past the clamp moved scroll to %d, want 0", m.overlay.scroll)
+	}
+	if v := m.View().Content; !strings.Contains(v, "row 00") {
+		t.Fatalf("the traversal's top lacks the first row:\n%s", v)
+	}
+}
+
+// Scroll positions outside [0, maxScroll] are clamped at render time
+// too — a stale scroll can never hide the head or tail — and a resize
+// that shrinks the scrollable range re-clamps the live position.
+func TestOverlayClampsScrollAtRenderAndResize(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 40; i++ {
+		fmt.Fprintf(&sb, "row %02d\n", i)
+	}
+	m := overlayModel(t, validRecords(), nil, sb.String())
+	if m.overlay == nil {
+		t.Fatal("no overlay open for a stderr diagnostic")
+	}
+
+	m.overlay.scroll = 1 << 20
+	if v := m.View().Content; !strings.Contains(v, "row 39") {
+		t.Fatalf("render with scroll past the end lacks the tail:\n%s", v)
+	}
+	m.overlay.scroll = -7
+	if v := m.View().Content; !strings.Contains(v, "row 00") {
+		t.Fatalf("render with negative scroll lacks the head:\n%s", v)
+	}
+
+	// A taller terminal shrinks the scrollable range: 40 rows against a
+	// 28-row interior re-clamps the live position to 12.
+	for i := 0; i < 100; i++ {
+		m, _ = update(t, m, keyPress("down"))
+	}
+	if m.overlay.scroll != 18 {
+		t.Fatalf("scroll at the bottom = %d, want 18", m.overlay.scroll)
+	}
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 30})
+	if m.overlay.scroll != 12 {
+		t.Fatalf("scroll after growth = %d, want 12", m.overlay.scroll)
+	}
+}
+
+// An error appended while the overlay is open extends the scrollable
+// set — one more row at the tail — without moving the reader's
+// position, and the appended row is reachable by scrolling to the end.
+func TestOverlayAppendExtendsScrollableSet(t *testing.T) {
+	var sb strings.Builder
+	for i := 0; i < 30; i++ {
+		fmt.Fprintf(&sb, "diag %02d\n", i)
+	}
+	m := overlayModel(t, validRecords(), nil, sb.String())
+	if m.overlay == nil {
+		t.Fatal("no overlay open for a stderr diagnostic")
+	}
+	for i := 0; i < 5; i++ {
+		m, _ = update(t, m, keyPress("down"))
+	}
+	if m.overlay.scroll != 5 {
+		t.Fatalf("setup: scroll = %d, want 5", m.overlay.scroll)
+	}
+	before := len(m.overlay.lines)
+
+	// The current file's in-flight load settling into a read failure
+	// appends its diagnostic to the open overlay.
+	m, _ = update(t, m, loadResult{
+		path: []byte("a.txt"), req: m.loading["a.txt"],
+		err: errors.New("permission denied"),
+	})
+	want := "cannot read a.txt: permission denied"
+	if len(m.overlay.lines) != before+1 || m.overlay.lines[before] != want {
+		t.Fatalf("overlay lines = %q, want one appended %q", m.overlay.lines, want)
+	}
+	if m.overlay.scroll != 5 {
+		t.Fatalf("the append moved the reader: scroll = %d, want 5", m.overlay.scroll)
+	}
+
+	// The appended row extends the scrollable set — maxScroll grows by
+	// one to 31−22 = 9 — and the row renders at the bottom.
+	if got := m.overlay.maxScroll(80, 24); got != 9 {
+		t.Fatalf("maxScroll after the append = %d, want 9", got)
+	}
+	for i := 0; i < 100; i++ {
+		m, _ = update(t, m, keyPress("down"))
+	}
+	if v := m.View().Content; !strings.Contains(v, want) {
+		t.Fatalf("scrolled to the bottom, the appended row is not rendered:\n%s", v)
 	}
 }
 
@@ -171,7 +386,7 @@ func TestOverlayIgnoresOtherKeys(t *testing.T) {
 	if m.overlay == nil || m.overlay.scroll != 1 {
 		t.Fatalf("setup: overlay scroll = %v/%d", m.overlay != nil, m.overlay.scroll)
 	}
-	for _, key := range []string{"x", "n", "c", "left", "right", "pgdn", "enter", " "} {
+	for _, key := range []string{"x", "n", "c", "u", "d", "left", "right", "pgup", "pgdn", "enter", " "} {
 		m2, cmd := update(t, m, keyPress(key))
 		if cmd != nil {
 			t.Fatalf("%s with an open overlay returned a command: %v", key, cmd)
