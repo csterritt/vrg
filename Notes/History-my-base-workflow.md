@@ -447,3 +447,14 @@ Usage
  Input tokens: 81452 tokens
  Output tokens: 26608 tokens
  Cached input tokens: 1113198 tokens
+
+----
+Task 042-dropped-reload-no-intent-mutation.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 39 messages
+ Input tokens: 155911 tokens
+ Output tokens: 79966 tokens
+ Cached input tokens: 3643127 tokens

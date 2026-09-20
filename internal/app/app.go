@@ -664,9 +664,13 @@ func (m Model) layoutCurrent(key string) bool {
 // and the filename row still identifies the path; the placeholder's
 // change to content or "(unreadable)" is the completion signal. A
 // request while that path's load is already in flight is dropped
-// whole, not queued — no state changes. On a previously failed file r
-// is the retry route, re-showing the prior-failure overlay while the
-// retry runs — the same presentation a cross-file re-entry gives.
+// whole, not queued — the admission check is the commit point, ahead
+// of every reload-state mutation, so a dropped r leaves revision,
+// pending intent, and presentation untouched and the in-flight load
+// completes under its original classification (Issue 42). On a
+// previously failed file r is the retry route, re-showing the
+// prior-failure overlay while the retry runs — the same presentation a
+// cross-file re-entry gives.
 func (m Model) reload() (tea.Model, tea.Cmd) {
 	stop, ok := m.index.Current()
 	if !ok {
@@ -686,7 +690,7 @@ func (m Model) reload() (tea.Model, tea.Cmd) {
 	delete(m.buffers, key)
 	delete(m.sources, key)
 	m.reloading[key] = true
-	return m.ensureStaged()
+	return m.startLoad(stop)
 }
 
 // ensureStaged makes the current stop's file displayable at the present
@@ -704,11 +708,19 @@ func (m Model) ensureStaged() (Model, tea.Cmd) {
 		if _, ok := m.loading[key]; ok {
 			return m, nil
 		}
-		m.loadSeq++
-		m.loading[key] = m.loadSeq
-		return m, loadCmd(m.ctx, m.loadGate, m.loader, m.loadSeq, stop, m.fileStops(key))
+		return m.startLoad(stop)
 	}
 	return m, m.prepareLayout()
+}
+
+// startLoad records and launches a fresh load request for the stop's
+// path. The caller has already decided admission — one load per raw
+// path, never queued — so a minted request is never dropped.
+func (m Model) startLoad(stop searchindex.Stop) (Model, tea.Cmd) {
+	key := string(stop.Path)
+	m.loadSeq++
+	m.loading[key] = m.loadSeq
+	return m, loadCmd(m.ctx, m.loadGate, m.loader, m.loadSeq, stop, m.fileStops(key))
 }
 
 // fileStops returns the raw path's navigation-stop group from the
