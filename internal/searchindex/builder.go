@@ -17,6 +17,10 @@ import (
 // summary.
 type Integrity struct {
 	Complete bool
+	// MissingSummary reports that the stream ended without a valid
+	// summary — the summary was absent, lost, or malformed — while any
+	// other lifecycle violation leaves it clear.
+	MissingSummary bool
 }
 
 // Report is the stream-level record accounting a Builder accumulates
@@ -504,5 +508,5 @@ func (b *Builder) Finish() (*Index, Integrity) {
 		b.failed = true
 	}
 	b.idx.Finish()
-	return b.idx, Integrity{Complete: !b.failed}
+	return b.idx, Integrity{Complete: !b.failed, MissingSummary: !b.sawSummary}
 }

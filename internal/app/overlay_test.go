@@ -260,3 +260,17 @@ func TestIntegrityFailureProducesDiagnostic(t *testing.T) {
 		t.Fatalf("overlay lacks an integrity diagnostic:\n%s", v)
 	}
 }
+
+// A stream that ends without its summary names the missing summary
+// record as the integrity cause, alongside the generic
+// incomplete-stream note.
+func TestMissingSummaryNamesIntegrityCause(t *testing.T) {
+	m := overlayModel(t, []string{
+		beginRec("a.txt"),
+		matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+		endRec("a.txt", nil),
+	}, nil, "")
+	if v := m.View().Content; !strings.Contains(v, "missing summary record") {
+		t.Fatalf("overlay lacks the missing-summary cause:\n%s", v)
+	}
+}

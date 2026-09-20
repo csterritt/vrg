@@ -408,3 +408,30 @@ func TestTrailingUnterminatedRecord(t *testing.T) {
 		}
 	}
 }
+
+// Integrity.MissingSummary isolates the absent-summary cause: a stream
+// that ends without a valid summary sets it, while a complete stream
+// and a stream whose only violation is a missing end leave it clear.
+func TestIntegrityMissingSummary(t *testing.T) {
+	_, integrity, _ := build(t, "/w",
+		beginEvent(t, textData("a.txt")),
+		endEvent(t, textData("a.txt"), nil))
+	if integrity.Complete || !integrity.MissingSummary {
+		t.Fatalf("summary-less stream: Integrity = %+v, want incomplete with MissingSummary", integrity)
+	}
+
+	_, integrity, _ = build(t, "/w",
+		beginEvent(t, textData("a.txt")),
+		endEvent(t, textData("a.txt"), nil),
+		summaryEvent(t))
+	if integrity.MissingSummary {
+		t.Fatal("a complete stream reports MissingSummary")
+	}
+
+	_, integrity, _ = build(t, "/w",
+		beginEvent(t, textData("a.txt")),
+		summaryEvent(t))
+	if integrity.Complete || integrity.MissingSummary {
+		t.Fatalf("missing-end stream: Integrity = %+v, want incomplete without MissingSummary", integrity)
+	}
+}

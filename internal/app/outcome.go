@@ -71,8 +71,9 @@ func procFatal(err error) bool {
 // accounting follows: the malformed and oversized aggregate counts, a
 // line per recoverable oversized path (escaped to a single line each),
 // and the unknown-type warning — unknown types warn but are not record
-// loss. An incomplete stream closes the list with a note explaining the
-// retained results' provenance.
+// loss. An incomplete stream closes the list with its named integrity
+// cause where one is known, then a note explaining the retained
+// results' provenance.
 func diagnosticLines(in outcomeInput) []string {
 	out := append([]string(nil), in.stderr...)
 	if len(out) == 0 && procFatal(in.procErr) {
@@ -80,6 +81,9 @@ func diagnosticLines(in outcomeInput) []string {
 	}
 	out = append(out, recordLossLines(in.report)...)
 	if !in.integrity.Complete {
+		if in.integrity.MissingSummary {
+			out = append(out, "missing summary record")
+		}
 		out = append(out, "the search result stream was incomplete")
 	}
 	return out
