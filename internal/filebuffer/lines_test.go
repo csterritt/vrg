@@ -102,7 +102,7 @@ func TestTerminatorBytesMapToEndOfLine(t *testing.T) {
 
 // A coverage span reaching from visible text into the line's terminator
 // highlights only the visible text; a span covering only terminator
-// bytes adds no highlight — its end-of-line marker is Issue 23's.
+// bytes highlights the Issue 23 end-of-line marker cell it appends.
 func TestSpanAcrossTerminatorHighlightsTextOnly(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -111,8 +111,8 @@ func TestSpanAcrossTerminatorHighlightsTextOnly(t *testing.T) {
 	}{
 		{"whole line plus terminator", 0, 5, &filebuffer.Span{Start: 0, End: 3}},
 		{"tail of text plus terminator", 1, 5, &filebuffer.Span{Start: 1, End: 3}},
-		{"terminator only", 3, 5, nil},
-		{"zero-width at terminator", 4, 4, nil},
+		{"terminator only", 3, 5, &filebuffer.Span{Start: 3, End: 4}},
+		{"zero-width at terminator", 4, 4, &filebuffer.Span{Start: 3, End: 4}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := writeFile(t, filepath.Join(t.TempDir(), "f.txt"), "hit\r\n")

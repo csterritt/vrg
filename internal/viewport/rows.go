@@ -65,8 +65,8 @@ type RowModel struct {
 	// horizontal clamp is computed from: the line's content extent in
 	// source-display columns and the largest column at which one of
 	// its clusters starts while the cluster's width still fits the
-	// text width. End-of-line marker cells (Issue 23) will extend both
-	// later.
+	// text width. End-of-line marker cells (Issue 23) arrive as
+	// ordinary width-one clusters, so they extend both like any cell.
 	extent []int
 	fit    []int
 }

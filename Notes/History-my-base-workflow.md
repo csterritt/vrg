@@ -238,3 +238,14 @@ Usage
  Input tokens: 67467 tokens
  Output tokens: 28388 tokens
  Cached input tokens: 849405 tokens
+
+----
+Task 023-zero-width-match-markers.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 36 messages
+ Input tokens: 132152 tokens
+ Output tokens: 55893 tokens
+ Cached input tokens: 3221686 tokens

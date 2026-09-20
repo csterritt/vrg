@@ -2,7 +2,9 @@ package filebuffer
 
 import (
 	"bytes"
+	"math"
 	"os"
+	"slices"
 	"sort"
 
 	"vrg/internal/safepresentation"
@@ -20,19 +22,20 @@ type Span struct {
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
 // Buffer is a prepared file: display-ready source lines with their
-// grapheme-cluster layout plus highlight spans. Three coordinate views
-// stay separate throughout: the retained raw line bytes — terminators
-// and a leading UTF-8 BOM included — that LineBytes exposes; the
-// rg-line byte offsets stop coverage carries, which omit the BOM's
-// three bytes on the first line; and the display cells both map onto.
-// Load performs the whole read, decode, and byte→cell mapping so the
-// caller's update path does no full-file work — the prepared Buffer
-// travels inside the load-completion message.
+// grapheme-cluster layout plus highlight spans and zero-width markers.
+// Three coordinate views stay separate throughout: the retained raw
+// line bytes — terminators and a leading UTF-8 BOM included — that
+// LineBytes exposes; the rg-line byte offsets stop coverage carries,
+// which omit the BOM's three bytes on the first line; and the display
+// cells both map onto. Load performs the whole read, decode, and
+// byte→cell mapping so the caller's update path does no full-file work
+// — the prepared Buffer travels inside the load-completion message.
 type Buffer struct {
 	lines    [][]safepresentation.Cell
 	clusters [][]safepresentation.Cluster
 	raw      [][]byte
 	spans    map[int][]Span
+	markers  map[int][]int
 	bom      int
 }
 
@@ -49,10 +52,14 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &Buffer{spans: make(map[int][]Span)}
+	b := &Buffer{
+		spans:   make(map[int][]Span),
+		markers: make(map[int][]int),
+	}
 	if bytes.HasPrefix(raw, utf8BOM) {
 		b.bom = len(utf8BOM)
 	}
+	var contentEnd []int
 	for i, line := range splitLines(raw) {
 		b.raw = append(b.raw, line)
 		content, base := lineContent(line, i == 0 && b.bom > 0)
@@ -63,6 +70,7 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		}
 		b.lines = append(b.lines, cells)
 		b.clusters = append(b.clusters, clusters)
+		contentEnd = append(contentEnd, base+len(content))
 	}
 	for _, s := range stops {
 		i := int(s.Line) - 1
@@ -72,16 +80,48 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		for _, r := range s.Coverage {
 			cs, ce := safepresentation.Span(b.lines[i],
 				b.rawOffset(i, r.Start), b.rawOffset(i, r.End))
-			if cs < ce {
+			if r.Start < r.End && cs < ce {
 				b.spans[i] = append(b.spans[i], Span{Start: cs, End: ce})
+				continue
 			}
+			b.mark(i, cs, contentEnd[i])
 		}
 	}
 	for i, spans := range b.spans {
 		sort.Slice(spans, func(a, c int) bool { return spans[a].Start < spans[c].Start })
 		b.spans[i] = mergeSpans(spans)
 	}
+	for i, markers := range b.markers {
+		sort.Ints(markers)
+		b.markers[i] = slices.Compact(markers)
+	}
 	return b, nil
+}
+
+// mark records a zero-width marker on line i at display cell — the
+// mapped position of a zero-width coverage range or of a nonempty range
+// covering only removed terminator bytes. A marker inside the line
+// marks that existing cell — the cluster's start cell when the position
+// fell inside a cluster — without shifting following text; a marker at
+// the line's end appends one cell, extending the effective width by
+// one. Either way the marked cell joins the line's spans so it paints
+// as one inverse cell like any match.
+func (b *Buffer) mark(i, cell, end int) {
+	if cell == len(b.lines[i]) {
+		// The appended marker cell is a space the renderer paints
+		// inverse. Its byte range starts at the end of the line's
+		// displayable content and absorbs every byte position at or
+		// after it, so all later terminator-region positions — at the
+		// CR, at the LF, past the line's end — coalesce onto this one
+		// end-of-line marker rather than appending further cells.
+		b.lines[i] = append(b.lines[i], safepresentation.Cell{
+			Text: " ", Start: end, End: math.MaxInt,
+		})
+		b.clusters[i] = append(b.clusters[i],
+			safepresentation.Cluster{Start: cell, End: cell + 1, Width: 1})
+	}
+	b.markers[i] = append(b.markers[i], cell)
+	b.spans[i] = append(b.spans[i], Span{Start: cell, End: cell + 1})
 }
 
 // splitLines divides raw bytes into source lines, each retaining its
@@ -227,3 +267,13 @@ func (b *Buffer) Clusters(i int) []safepresentation.Cluster {
 // Highlights returns the sorted inverse-video cell spans of 0-based
 // source line i, or nil when the line has none.
 func (b *Buffer) Highlights(i int) []Span { return b.spans[i] }
+
+// Markers returns the sorted distinct display cells of 0-based source
+// line i holding a zero-width marker, or nil when the line has none.
+// Each marker occupies exactly one cell: an interior marker marks an
+// existing cell — the cluster's start cell when the recorded position
+// fell inside a cluster — and an end-of-line marker is the appended
+// space cell that extends the line's effective width by one. Marker
+// cells are ordinary cells for wrap, clip, extent, and indicator
+// purposes; their spans already appear in Highlights.
+func (b *Buffer) Markers(i int) []int { return b.markers[i] }
