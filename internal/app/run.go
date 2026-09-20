@@ -20,6 +20,13 @@ type Env struct {
 	Stderr io.Writer
 	// Program runs the Bubble Tea program; nil uses tea.NewProgram.
 	Program func(Model) (tea.Model, error)
+	// Runner, when non-nil, runs the constructed Bubble Tea program in
+	// place of a direct Run call. Unlike Program — a substitution that
+	// replaces the whole program — Runner wraps the real program, so
+	// diagnostic delivery and the Fail trigger still apply. It is the
+	// executable's build-tagged runner seam; nil runs the program
+	// directly.
+	Runner func(*tea.Program) (tea.Model, error)
 	// Gate, when non-nil, holds index preparation between child exit and
 	// index readiness until it closes or the run is cancelled.
 	Gate <-chan struct{}
@@ -115,8 +122,12 @@ func runProgram(m Model, env Env) (tea.Model, error) {
 	// Diagnostic messages the collection path drains from the child are
 	// delivered back into the program's own message queue.
 	m.diags.emit = prog.Send
+	run := prog.Run
+	if env.Runner != nil {
+		run = func() (tea.Model, error) { return env.Runner(prog) }
+	}
 	if env.Fail == nil {
-		return prog.Run()
+		return run()
 	}
 	type outcome struct {
 		model tea.Model
@@ -124,7 +135,7 @@ func runProgram(m Model, env Env) (tea.Model, error) {
 	}
 	out := make(chan outcome, 1)
 	go func() {
-		fm, err := prog.Run()
+		fm, err := run()
 		out <- outcome{fm, err}
 	}()
 	select {

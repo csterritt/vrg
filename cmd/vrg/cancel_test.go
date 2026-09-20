@@ -150,6 +150,14 @@ func (r *ptyRun) finish(t *testing.T) {
 // so terminal output and stderr share one ordered byte stream.
 func startVrgPTY(t *testing.T, dir string, env []string, merged bool, args ...string) *ptyRun {
 	t.Helper()
+	return startBinaryPTY(t, binPath, dir, env, merged, args...)
+}
+
+// startBinaryPTY launches bin — rather than TestMain's binary — under
+// the same PTY harness, so tests can exercise a differently built
+// artifact such as the untagged production binary.
+func startBinaryPTY(t *testing.T, bin, dir string, env []string, merged bool, args ...string) *ptyRun {
+	t.Helper()
 	master, slave, err := pty.Open()
 	if err != nil {
 		t.Fatalf("pty.Open: %v", err)
@@ -162,7 +170,7 @@ func startVrgPTY(t *testing.T, dir string, env []string, merged bool, args ...st
 		t.Fatalf("termios before launch: %v", err)
 	}
 	r := &ptyRun{master: master, slave: slave, before: *before}
-	cmd := exec.Command(binPath, args...)
+	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
 	cmd.Env = env
 	cmd.Stdin = slave
