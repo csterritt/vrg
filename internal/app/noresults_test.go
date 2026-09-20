@@ -36,7 +36,7 @@ func TestEmptySearchShowsNoResultsScreen(t *testing.T) {
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, cmd := update(t, m, searchResult{index: idx, err: exitError(1)})
+	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream, err: exitError(1)})
 	if cmd != nil {
 		t.Fatalf("empty search completion returned a command: %v", cmd)
 	}
@@ -77,7 +77,7 @@ func TestNoResultsQuitExitsOne(t *testing.T) {
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, _ = update(t, m, searchResult{index: idx, err: exitError(1)})
+	m, _ = update(t, m, searchResult{index: idx, integrity: completeStream, err: exitError(1)})
 
 	m, cmd := update(t, m, keyMsg("q"))
 	if cmd == nil {
@@ -107,7 +107,7 @@ func TestAllBinarySearchShowsSkippedCount(t *testing.T) {
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, _ = update(t, m, searchResult{index: idx}) // rg exit 0, all filtered
+	m, _ = update(t, m, searchResult{index: idx, integrity: completeStream}) // rg exit 0, all filtered
 
 	content := m.View().Content
 	if !strings.Contains(content, "No results found (2 binary files skipped)") {
@@ -138,7 +138,7 @@ func TestMixedBinaryRetentionBrowses(t *testing.T) {
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, cmd := update(t, m, searchResult{index: idx})
+	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
 	if m.state != stateBrowse {
 		t.Fatalf("state = %d, want stateBrowse for the retained file", m.state)
 	}
@@ -162,7 +162,7 @@ func TestNoResultsEscIsNoop(t *testing.T) {
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, _ = update(t, m, searchResult{index: idx, err: exitError(1)})
+	m, _ = update(t, m, searchResult{index: idx, integrity: completeStream, err: exitError(1)})
 
 	m, cmd := update(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
 	if cmd != nil {
@@ -189,7 +189,7 @@ func TestNoResultsCtrlCExits130(t *testing.T) {
 	}
 	m := New(child, "/w")
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, _ = update(t, m, searchResult{index: idx, err: exitError(1)})
+	m, _ = update(t, m, searchResult{index: idx, integrity: completeStream, err: exitError(1)})
 
 	m, cmd := update(t, m, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if cmd == nil {

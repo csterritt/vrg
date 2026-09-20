@@ -68,7 +68,7 @@ func TestBrowseShowsListAndLoading(t *testing.T) {
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, cmd := update(t, m, searchResult{index: idx})
+	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
 	if cmd == nil {
 		t.Fatal("search completion started no file load")
 	}
@@ -97,7 +97,7 @@ func TestBrowseContentAfterLoad(t *testing.T) {
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, cmd := update(t, m, searchResult{index: idx})
+	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
 	msg := cmd() // the worker: read + decode + map
 	m, _ = update(t, m, msg)
 
@@ -126,7 +126,7 @@ func TestFilenameRuleAndGutter(t *testing.T) {
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, cmd := update(t, m, searchResult{index: idx})
+	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
 	m, _ = update(t, m, cmd())
 
 	v := m.View().Content
@@ -153,7 +153,7 @@ func TestFileListCurrentUnderlined(t *testing.T) {
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, _ = update(t, m, searchResult{index: idx})
+	m, _ = update(t, m, searchResult{index: idx, integrity: completeStream})
 
 	v := m.View().Content
 	if !strings.Contains(v, "\x1b[4ma.txt\x1b[24m") {
@@ -182,7 +182,7 @@ func TestGatedLoadKeepsInputResponsive(t *testing.T) {
 	m := New(child, dir)
 	m.loadGate = make(chan struct{})
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, cmd := update(t, m, searchResult{index: idx})
+	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
 	msgs := make(chan tea.Msg, 1)
 	go func() { msgs <- cmd() }()
 
@@ -253,7 +253,7 @@ func TestCTogglesColourScheme(t *testing.T) {
 		t.Fatalf("c while searching returned a command: %v", c)
 	}
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, cmd := update(t, m, searchResult{index: idx})
+	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
 	m, _ = update(t, m, cmd())
 
 	dark := m.View().Content
@@ -301,7 +301,7 @@ func TestBrowseQExitsZero(t *testing.T) {
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, _ = update(t, m, searchResult{index: idx})
+	m, _ = update(t, m, searchResult{index: idx, integrity: completeStream})
 	m, cmd := update(t, m, keyMsg("q"))
 	if cmd == nil {
 		t.Fatal("q in the browse view returned no command, want tea.Quit")
@@ -332,7 +332,7 @@ func TestBrowseSinksNeverEmitFixtureControlBytes(t *testing.T) {
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 40})
-	m, cmd := update(t, m, searchResult{index: idx})
+	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
 	m, _ = update(t, m, cmd())
 	m.theme = theme.Plain() // no-style composition: no escape byte may legitimately appear
 

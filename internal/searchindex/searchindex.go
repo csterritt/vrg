@@ -43,12 +43,17 @@ type Stop struct {
 	// sorted, disjoint highlight ranges prepared for display.
 	Submatches []Submatch
 	Coverage   []Range
+	// Incomplete reports that the file's lifecycle metadata is
+	// incomplete: its matches were retained from a never-opened or
+	// never-closed stream region, so confirmed nonbinary status must not
+	// be inferred for it.
+	Incomplete bool
 }
 
 // Index collects ripgrep's JSON event stream into the ordered navigation
 // index. Per-record schema validation happens in Add; cross-record
-// lifecycle validation (Issue 9) and skip counting (Issue 10) are
-// separate concerns.
+// lifecycle validation over a whole stream is Builder's concern, and
+// skip counting is Issue 10's.
 type Index struct {
 	workdir string
 	byPath  map[string]map[int64]*Stop
@@ -56,16 +61,21 @@ type Index struct {
 	// valid end event's non-null binary_offset. Their collected matches
 	// are dropped and later records for them are never retained.
 	binary map[string]struct{}
-	sorted []Stop
+	// incomplete holds the raw path keys of files whose lifecycle
+	// metadata is incomplete: orphaned matches retained, or still open
+	// when the stream ended.
+	incomplete map[string]struct{}
+	sorted     []Stop
 }
 
 // New returns an Index that resolves relative result paths against
 // workdir, the directory the search was invoked from.
 func New(workdir string) *Index {
 	return &Index{
-		workdir: workdir,
-		byPath:  make(map[string]map[int64]*Stop),
-		binary:  make(map[string]struct{}),
+		workdir:    workdir,
+		byPath:     make(map[string]map[int64]*Stop),
+		binary:     make(map[string]struct{}),
+		incomplete: make(map[string]struct{}),
 	}
 }
 
@@ -81,29 +91,46 @@ func malformed(format string, args ...any) error {
 // without its newline — validated against the per-record schema matrix.
 // Malformed records return an error and are not indexed. context events
 // and unknown string event types are known-but-ignored and return nil.
-// begin, end, and summary are validated but have no index effect here.
+// Add applies only per-record validation and index effects; Builder owns
+// the stream-level lifecycle contract.
 func (x *Index) Add(record []byte) error {
+	typ, err := eventType(record)
+	if err != nil {
+		return err
+	}
+	switch typ {
+	case "begin", "end":
+		path, binary, err := x.checkLifecycle(record, typ)
+		if err != nil {
+			return err
+		}
+		if binary {
+			x.excludeBinary(path)
+		}
+		return nil
+	case "match":
+		_, err := x.addMatch(record)
+		return err
+	case "summary":
+		return checkSummary(record)
+	default:
+		return nil
+	}
+}
+
+// eventType decodes only the record's type field: a record that is not
+// an object or lacks a string type is malformed.
+func eventType(record []byte) (string, error) {
 	var head struct {
 		Type *string `json:"type"`
 	}
 	if err := json.Unmarshal(record, &head); err != nil {
-		return malformed("record is not a JSON object: %s", err)
+		return "", malformed("record is not a JSON object: %s", err)
 	}
 	if head.Type == nil {
-		return malformed("missing type field")
+		return "", malformed("missing type field")
 	}
-	switch *head.Type {
-	case "begin", "end":
-		return x.addLifecycle(record, *head.Type)
-	case "match":
-		return x.addMatch(record)
-	case "summary":
-		return checkSummary(record)
-	case "context":
-		return nil
-	default:
-		return nil
-	}
+	return *head.Type, nil
 }
 
 // data extracts the record's data object as raw JSON for per-event
@@ -138,40 +165,41 @@ func decodeBlob(raw json.RawMessage) ([]byte, error) {
 	return nil, errors.New("neither text nor bytes present")
 }
 
-// addLifecycle validates the shared begin/end contract: data.path is
-// required, and end additionally requires binary_offset present as null
-// or a non-negative integer. A non-null binary_offset confirms the file
-// binary: all its collected matches are dropped and it joins the
-// distinct exclusion count.
-func (x *Index) addLifecycle(record []byte, typ string) error {
+// checkLifecycle validates the shared begin/end contract and decodes the
+// event without mutating the index: data.path is required, and end
+// additionally requires binary_offset present as null or a non-negative
+// integer. It returns the decoded raw path and whether a valid end
+// carried a non-null binary_offset — the binary exclusion evidence the
+// caller applies.
+func (x *Index) checkLifecycle(record []byte, typ string) (path []byte, binary bool, err error) {
 	raw, err := data(record)
 	if err != nil {
-		return malformed("%s.data: %s", typ, err)
+		return nil, false, malformed("%s.data: %s", typ, err)
 	}
 	var d struct {
 		Path         json.RawMessage `json:"path"`
 		BinaryOffset json.RawMessage `json:"binary_offset"`
 	}
 	if err := json.Unmarshal(raw, &d); err != nil {
-		return malformed("%s.data: %s", typ, err)
+		return nil, false, malformed("%s.data: %s", typ, err)
 	}
-	path, err := decodeBlob(d.Path)
+	path, err = decodeBlob(d.Path)
 	if err != nil {
-		return malformed("%s.data.path: %s", typ, err)
+		return nil, false, malformed("%s.data.path: %s", typ, err)
 	}
 	if typ == "end" {
 		if d.BinaryOffset == nil {
-			return malformed("end.data.binary_offset missing")
+			return nil, false, malformed("end.data.binary_offset missing")
 		}
 		if b := bytes.TrimSpace(d.BinaryOffset); !bytes.Equal(b, []byte("null")) {
 			v, err := decodeInt(b)
 			if err != nil || v < 0 {
-				return malformed("end.data.binary_offset %s is not a non-negative integer", b)
+				return nil, false, malformed("end.data.binary_offset %s is not a non-negative integer", b)
 			}
-			x.excludeBinary(path)
+			binary = true
 		}
 	}
-	return nil
+	return path, binary, nil
 }
 
 // excludeBinary drops every match collected for path and records the
@@ -184,13 +212,23 @@ func (x *Index) excludeBinary(path []byte) {
 	}
 	x.binary[key] = struct{}{}
 	delete(x.byPath, key)
+	delete(x.incomplete, key)
 }
 
-// addMatch validates and indexes one match record.
-func (x *Index) addMatch(record []byte) error {
+// markIncomplete flags a file's lifecycle metadata as incomplete; every
+// retained stop for the path carries the flag after Finish.
+func (x *Index) markIncomplete(path []byte) {
+	x.incomplete[string(path)] = struct{}{}
+}
+
+// addMatch validates and indexes one match record, returning the
+// decoded raw path so the caller can apply lifecycle rules. A file
+// confirmed binary stays excluded: a valid match arriving after its
+// binary end is not retained.
+func (x *Index) addMatch(record []byte) ([]byte, error) {
 	raw, err := data(record)
 	if err != nil {
-		return malformed("match.data: %s", err)
+		return nil, malformed("match.data: %s", err)
 	}
 	var d struct {
 		Path  json.RawMessage `json:"path"`
@@ -203,44 +241,42 @@ func (x *Index) addMatch(record []byte) error {
 		} `json:"submatches"`
 	}
 	if err := json.Unmarshal(raw, &d); err != nil {
-		return malformed("match.data: %s", err)
+		return nil, malformed("match.data: %s", err)
 	}
 	path, err := decodeBlob(d.Path)
 	if err != nil {
-		return malformed("match.data.path: %s", err)
+		return nil, malformed("match.data.path: %s", err)
 	}
 	lines, err := decodeBlob(d.Lines)
 	if err != nil {
-		return malformed("match.data.lines: %s", err)
+		return nil, malformed("match.data.lines: %s", err)
 	}
 	line, err := decodeInt(d.Line)
 	if err != nil || line < 1 {
-		return malformed("match.data.line_number %s is not an integer >= 1", d.Line)
+		return nil, malformed("match.data.line_number %s is not an integer >= 1", d.Line)
 	}
 	if len(d.Subs) == 0 {
-		return malformed("match.data.submatches is missing or empty")
+		return nil, malformed("match.data.submatches is missing or empty")
 	}
 	subs := make([]Submatch, 0, len(d.Subs))
 	for i, s := range d.Subs {
 		text, err := decodeBlob(s.Match)
 		if err != nil {
-			return malformed("match.data.submatches[%d].match: %s", i, err)
+			return nil, malformed("match.data.submatches[%d].match: %s", i, err)
 		}
 		start, err1 := decodeInt(s.Start)
 		end, err2 := decodeInt(s.End)
 		if err1 != nil || err2 != nil || start < 0 || start > end || end > int64(len(lines)) {
-			return malformed("match.data.submatches[%d] range %s..%s is outside 0..%d",
+			return nil, malformed("match.data.submatches[%d] range %s..%s is outside 0..%d",
 				i, s.Start, s.End, len(lines))
 		}
 		subs = append(subs, Submatch{Range: Range{Start: int(start), End: int(end)}, Text: text})
 	}
-	// A file confirmed binary stays excluded: a valid match arriving
-	// after its binary end is not retained.
 	if _, excluded := x.binary[string(path)]; excluded {
-		return nil
+		return path, nil
 	}
 	x.merge(path, line, subs)
-	return nil
+	return path, nil
 }
 
 // decodeInt decodes a raw JSON integer literal into int64. Quoted
@@ -316,6 +352,7 @@ func (x *Index) Finish() {
 	})
 	for i := range x.sorted {
 		x.sorted[i].Coverage = unionRanges(x.sorted[i].Submatches)
+		_, x.sorted[i].Incomplete = x.incomplete[string(x.sorted[i].Path)]
 	}
 }
 

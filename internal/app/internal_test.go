@@ -145,7 +145,7 @@ func TestSearchingCoversPostExitPreparation(t *testing.T) {
 // browse view: the file list appears and the current file loads.
 func TestCompletionTransitionsToBrowse(t *testing.T) {
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
-	m2, _ := m.Update(searchResult{index: fixtureIndex(t, 2, 3)})
+	m2, _ := m.Update(searchResult{index: fixtureIndex(t, 2, 3), integrity: completeStream})
 	got := m2.(Model).View().Content
 	if !strings.Contains(got, "a.txt") || !strings.Contains(got, "b.txt") {
 		t.Fatalf("browse View = %q, want it to list a.txt and b.txt", got)
@@ -158,7 +158,7 @@ func TestCompletionTransitionsToBrowse(t *testing.T) {
 // q in the browse view quits with exit status 0.
 func TestBrowseQuitExitsZero(t *testing.T) {
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
-	m2, _ := m.Update(searchResult{index: fixtureIndex(t, 1, 1)})
+	m2, _ := m.Update(searchResult{index: fixtureIndex(t, 1, 1), integrity: completeStream})
 	m3, cmd := m2.(Model).Update(keyMsg("q"))
 	if cmd == nil {
 		t.Fatal("q in the browse view returned no command, want tea.Quit")
@@ -301,7 +301,7 @@ func TestCtrlCCancelsFromAnyState(t *testing.T) {
 			}
 			m := New(child, "/w")
 			if tc.browse {
-				mi, _ := m.Update(searchResult{index: fixtureIndex(t, 1, 1)})
+				mi, _ := m.Update(searchResult{index: fixtureIndex(t, 1, 1), integrity: completeStream})
 				m = mi.(Model)
 			}
 			m2, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
@@ -417,7 +417,7 @@ func TestLateCompletionAfterCancelDiscarded(t *testing.T) {
 	m := New(child, "/w")
 	m2, _ := m.Update(keyMsg("q"))
 	mm := m2.(Model)
-	m3, cmd := mm.Update(searchResult{index: fixtureIndex(t, 2, 2)})
+	m3, cmd := mm.Update(searchResult{index: fixtureIndex(t, 2, 2), integrity: completeStream})
 	if cmd != nil {
 		t.Fatalf("late completion after cancellation returned a command: %v", cmd)
 	}

@@ -84,3 +84,14 @@ Usage
  Input tokens: 165692 tokens
  Output tokens: 34412 tokens
  Cached input tokens: 2310739 tokens
+
+----
+Task 009-error-overlay-and-fatal-outcomes.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 61 messages
+ Input tokens: 150096 tokens
+ Output tokens: 59434 tokens
+ Cached input tokens: 6429448 tokens

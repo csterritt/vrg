@@ -29,6 +29,10 @@ const (
 	// stateNoResults is the centred outcome screen of a complete,
 	// successful search that retained no usable results.
 	stateNoResults
+	// stateFatal is the fatal no-results outcome: the error overlay is
+	// the whole presentation — there is no underlying state — so its
+	// dismissal exits at the fixed status 2.
+	stateFatal
 	// stateCancelled is the terminal cancellation state: the program is
 	// quitting with status 130 and late completions must not revive it.
 	stateCancelled
@@ -60,6 +64,9 @@ type Model struct {
 	stderr  []byte
 	procErr error
 	status  int
+	// overlay, when non-nil, is the open diagnostic overlay: the modal
+	// error/warning presentation of a completed search.
+	overlay *errOverlay
 
 	// Browse state: the raw-path-ordered file list, the matched-line
 	// cursor, per-path prepared buffers keyed by raw path bytes, and the
@@ -110,6 +117,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.overlay != nil {
+			if max := m.overlay.maxScroll(m.width, m.height); m.overlay.scroll > max {
+				m.overlay.scroll = max
+			}
+		}
 	case searchResult:
 		if m.state == stateCancelled {
 			// A late completion must not revive a cancelled run.
@@ -118,10 +130,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.index = msg.index
 		m.stderr = msg.stderr
 		m.procErr = msg.err
-		if m.index.UsableResults() > 0 {
-			return m.enterBrowse()
+		oc := decideOutcome(outcomeInput{
+			procErr:   msg.err,
+			integrity: msg.integrity,
+			usable:    msg.index.UsableResults(),
+			stderr:    msg.stderr,
+		})
+		// The exit status is fixed here, at the outcome decision; only
+		// ctrl+c overrides it later.
+		m.status = oc.status
+		if len(oc.diagnostics) > 0 {
+			m.overlay = &errOverlay{lines: oc.diagnostics}
 		}
-		return m.enterNoResults()
+		switch oc.state {
+		case stateBrowse:
+			return m.enterBrowse()
+		case stateFatal:
+			m.state = stateFatal
+		default:
+			m.state = stateNoResults
+		}
+		return m, nil
 	case loadResult:
 		if m.state == stateCancelled {
 			return m, nil
@@ -139,14 +168,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.state == stateCancelled {
 			return m, nil
 		}
-		switch msg.String() {
-		case "ctrl+c":
+		if msg.String() == "ctrl+c" {
 			return m.cancelRun()
+		}
+		if m.overlay != nil {
+			return m.updateOverlay(msg)
+		}
+		switch msg.String() {
 		case "q":
 			switch m.state {
 			case stateSearching:
 				return m.cancelRun()
-			case stateBrowse, stateNoResults:
+			case stateBrowse, stateNoResults, stateFatal:
 				return m, tea.Quit
 			}
 		case "c":
@@ -155,21 +188,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	return m, nil
-}
-
-// enterNoResults ends a completed search that retained no usable
-// results. A successful rg (exit 0 or 1) presents the no-results screen
-// with the fixed status 1. The fatal outcome rows — error overlay and
-// exit 2 — are Issue 9's; until then a failed rg with nothing usable
-// exits 2 rather than reporting failure as a successful empty search.
-func (m Model) enterNoResults() (tea.Model, tea.Cmd) {
-	if !rgSucceeded(m.procErr) {
-		m.status = 2
-		return m, tea.Quit
-	}
-	m.state = stateNoResults
-	m.status = 1
 	return m, nil
 }
 
@@ -275,16 +293,34 @@ func (m Model) View() tea.View {
 }
 
 func (m Model) screen() string {
+	var base string
 	switch m.state {
 	case stateBrowse:
-		return m.browseScreen()
+		base = m.browseScreen()
 	case stateNoResults:
-		return m.noResultsScreen()
+		base = m.noResultsScreen()
+	case stateFatal:
+		// The fatal no-results outcome has no underlying state: the
+		// overlay is the whole presentation.
+		base = m.blankScreen()
 	case stateCancelled:
 		return ""
 	default:
-		return m.theme.Base("Searching…")
+		base = m.theme.Base("Searching…")
 	}
+	if m.overlay != nil {
+		return m.overlayScreen(base)
+	}
+	return base
+}
+
+// blankScreen is h empty rows — the base under a stateless overlay.
+func (m Model) blankScreen() string {
+	h := m.height
+	if h <= 0 {
+		h = 24
+	}
+	return strings.Join(make([]string, h), "\n")
 }
 
 // noResultsScreen renders the centred outcome of a successful search

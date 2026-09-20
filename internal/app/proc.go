@@ -1,7 +1,6 @@
 package app
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"io"
@@ -104,24 +103,27 @@ func (p *reaper) Wait() error {
 }
 
 // searchResult is the product of one collected search, delivered to the
-// model as a message: the prepared index, the captured stderr bytes
-// (unclassified; Issue 9 owns classification), and the child's wait
-// status.
+// model as a message: the prepared index, the stream-integrity result —
+// assessed separately from process success — the captured stderr bytes
+// (unclassified; the outcome decision owns classification), and the
+// child's wait status.
 type searchResult struct {
-	index  *searchindex.Index
-	stderr []byte
-	err    error
+	index     *searchindex.Index
+	integrity searchindex.Integrity
+	stderr    []byte
+	err       error
 }
 
 // collect drains both pipes concurrently for the whole child lifetime —
-// stdout records feed the index, stderr bytes are buffered — waits for
-// the child, then prepares the index. Neither pipe can fill and block
+// stdout records feed the index builder, which applies the lifecycle
+// matrix; stderr bytes are buffered — waits for the child, then prepares
+// the index and its integrity result. Neither pipe can fill and block
 // rg, and terminating the child closes both pipes so drainage ends
 // promptly. A non-nil gate is awaited between child exit and index
 // preparation so tests can hold preparation independently of rg exit;
 // ctx cancellation releases a held gate.
 func collect(ctx context.Context, child Child, workdir string, gate <-chan struct{}) searchResult {
-	index := searchindex.New(workdir)
+	b := searchindex.NewBuilder(workdir)
 	var stderr bytes.Buffer
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -129,7 +131,7 @@ func collect(ctx context.Context, child Child, workdir string, gate <-chan struc
 		defer wg.Done()
 		_, _ = io.Copy(&stderr, child.Stderr())
 	}()
-	drainRecords(child.Stdout(), index)
+	b.Consume(child.Stdout())
 	wg.Wait()
 	err := child.Wait()
 	if gate != nil {
@@ -138,21 +140,6 @@ func collect(ctx context.Context, child Child, workdir string, gate <-chan struc
 		case <-ctx.Done():
 		}
 	}
-	index.Finish()
-	return searchResult{index: index, stderr: stderr.Bytes(), err: err}
-}
-
-// drainRecords feeds every newline-terminated record to the index.
-// Records failing per-record validation are skipped — skip/count
-// accounting is Issue 10's. A trailing unterminated fragment is dropped
-// here; Issue 10 counts it malformed.
-func drainRecords(r io.Reader, index *searchindex.Index) {
-	br := bufio.NewReader(r)
-	for {
-		rec, err := br.ReadBytes('\n')
-		if err != nil {
-			return
-		}
-		_ = index.Add(rec[:len(rec)-1])
-	}
+	index, integrity := b.Finish()
+	return searchResult{index: index, integrity: integrity, stderr: stderr.Bytes(), err: err}
 }

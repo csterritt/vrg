@@ -64,6 +64,7 @@ var sinkSafetyTable = []sinkRow{
 	{"filename rule", browseFilenameSink, ruleExpect},
 	{"panel content", browseContentSink, func(f hostileFixture) []string { return f.wantContent }},
 	{"usage-error stderr", usageErrorSink, pathExpect},
+	{"error overlay", errorOverlaySink, overlayExpect},
 	// The generated command-line help has no substitution point — the
 	// application name and every description are fixed — so the row
 	// pins the sink's clean-output contract itself.
@@ -100,7 +101,7 @@ func browseSinkFrame(t *testing.T, name, content []byte, styled bool) string {
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 40})
-	m, cmd := update(t, m, searchResult{index: idx})
+	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
 	m, _ = update(t, m, cmd())
 	if !styled {
 		m.theme = theme.Plain()
@@ -117,6 +118,44 @@ func usageErrorSink(t *testing.T, f hostileFixture, _ bool) string {
 		t.Fatalf("fixture operand %q produced kind %v, want KindUsageError", f.data, res.Kind)
 	}
 	return res.Diagnostic
+}
+
+// errorOverlaySink injects the fixture as the failed child's stderr on
+// a fatal run with no results: the fixture reaches the error overlay's
+// interior through the real composition path.
+func errorOverlaySink(t *testing.T, f hostileFixture, styled bool) string {
+	t.Helper()
+	b := searchindex.NewBuilder("/w")
+	if err := b.Add([]byte(summaryRec())); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	idx, integrity := b.Finish()
+	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = update(t, m, searchResult{
+		index: idx, integrity: integrity,
+		stderr: f.data, err: exitError(2),
+	})
+	if !styled {
+		m.theme = theme.Plain()
+	}
+	return m.View().Content
+}
+
+// overlayExpect lists the escaped form each fixture takes in the error
+// overlay's diagnostic text. Diagnostics use the multi-line
+// EscapeDiagnostic form: invalid UTF-8 escapes per byte as \xNN (the
+// wantPath rendering), a tab expands to spaces with no assertable
+// fragment, and an embedded newline stays a real line boundary.
+func overlayExpect(f hostileFixture) []string {
+	switch f.name {
+	case "invalid utf-8 path bytes":
+		return []string{f.wantPath}
+	case "embedded tab":
+		return nil
+	default:
+		return f.wantContent
+	}
 }
 
 // cliHelpSink renders the Issue 1 generated command-line help, the

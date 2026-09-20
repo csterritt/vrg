@@ -58,8 +58,11 @@ type ptyRun struct {
 	out    lockedBuffer
 	stderr lockedBuffer
 	done   chan error
-	before unix.Termios
-	after  unix.Termios
+	// copyDone closes when the PTY copier reaches master EOF — after
+	// every slave end is closed and its buffered bytes are drained.
+	copyDone chan struct{}
+	before   unix.Termios
+	after    unix.Termios
 }
 
 // waitBounded polls cond until it holds or the deadline fails the test.
@@ -122,13 +125,20 @@ func (r *ptyRun) waitExit(t *testing.T) int {
 	return -1
 }
 
-// finish captures the post-exit termios and releases the PTY pair.
+// finish captures the post-exit termios and releases the PTY pair. The
+// parent's slave closes first so the copier drains the master's buffered
+// bytes — including anything written just before process exit — and
+// reaches EOF before the master itself is closed.
 func (r *ptyRun) finish(t *testing.T) {
 	t.Helper()
 	if after, err := unix.IoctlGetTermios(int(r.master.Fd()), unix.TCGETS); err == nil {
 		r.after = *after
 	}
 	_ = r.slave.Close()
+	select {
+	case <-r.copyDone:
+	case <-time.After(5 * time.Second):
+	}
 	_ = r.master.Close()
 }
 
@@ -166,8 +176,9 @@ func startVrgPTY(t *testing.T, dir string, env []string, merged bool, args ...st
 	}
 	r.cmd = cmd
 	r.done = make(chan error, 1)
+	r.copyDone = make(chan struct{})
 	go func() { r.done <- cmd.Wait() }()
-	go func() { _, _ = io.Copy(&r.out, master) }()
+	go func() { _, _ = io.Copy(&r.out, master); close(r.copyDone) }()
 	t.Cleanup(func() {
 		if cmd.ProcessState == nil {
 			_ = cmd.Process.Kill()
@@ -424,7 +435,9 @@ func TestNormalExitReapsChild(t *testing.T) {
 	rgDir := fakeRgPath(t, `#!/bin/sh
 sleep 100000 </dev/null >/dev/null 2>&1 &
 echo $! > "$VRG_TEST_PID"
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"file.txt"}}}'
 printf '%s\n' '{"type":"match","data":{"path":{"text":"file.txt"},"lines":{"text":"foo bar\n"},"line_number":1,"submatches":[{"match":{"text":"foo"},"start":0,"end":3}]}}'
+printf '%s\n' '{"type":"end","data":{"path":{"text":"file.txt"},"binary_offset":null}}'
 printf '%s\n' '{"type":"summary","data":{}}'
 : > "$VRG_TEST_READY"
 exit 0
