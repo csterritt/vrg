@@ -135,35 +135,36 @@ func TestSearchingCoversPostExitPreparation(t *testing.T) {
 		t.Fatal("collection did not deliver after the gate was released")
 	}
 	m2, _ := m.Update(msg)
-	if got := m2.(Model).View().Content; !strings.Contains(got, "1 files, 1 matched lines") {
-		t.Fatalf("summary View = %q, want %q", got, "1 files, 1 matched lines")
+	got := m2.(Model).View().Content
+	if !strings.Contains(got, "a.txt") || !strings.Contains(got, "Loading…") {
+		t.Fatalf("browse View = %q, want it to list a.txt with a loading placeholder", got)
 	}
 }
 
 // An injected search-completion message transitions the model to the
-// interim summary screen: "N files, M matched lines".
-func TestCompletionTransitionsToSummary(t *testing.T) {
+// browse view: the file list appears and the current file loads.
+func TestCompletionTransitionsToBrowse(t *testing.T) {
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
 	m2, _ := m.Update(searchResult{index: fixtureIndex(t, 2, 3)})
 	got := m2.(Model).View().Content
-	if !strings.Contains(got, "2 files, 6 matched lines") {
-		t.Fatalf("summary View = %q, want %q", got, "2 files, 6 matched lines")
+	if !strings.Contains(got, "a.txt") || !strings.Contains(got, "b.txt") {
+		t.Fatalf("browse View = %q, want it to list a.txt and b.txt", got)
 	}
 	if strings.Contains(got, "Searching") {
-		t.Fatalf("summary View still shows searching: %q", got)
+		t.Fatalf("browse View still shows searching: %q", got)
 	}
 }
 
-// q on the interim summary quits with exit status 0.
-func TestSummaryQuitExitsZero(t *testing.T) {
+// q in the browse view quits with exit status 0.
+func TestBrowseQuitExitsZero(t *testing.T) {
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
 	m2, _ := m.Update(searchResult{index: fixtureIndex(t, 1, 1)})
 	m3, cmd := m2.(Model).Update(keyMsg("q"))
 	if cmd == nil {
-		t.Fatal("q on the summary returned no command, want tea.Quit")
+		t.Fatal("q in the browse view returned no command, want tea.Quit")
 	}
 	if _, ok := cmd().(tea.QuitMsg); !ok {
-		t.Fatalf("q on the summary returned %T, want tea.QuitMsg", cmd())
+		t.Fatalf("q in the browse view returned %T, want tea.QuitMsg", cmd())
 	}
 	if s := m3.(Model).status; s != 0 {
 		t.Fatalf("exit status = %d, want 0", s)
@@ -277,20 +278,20 @@ func TestQWhileSearchingCancels(t *testing.T) {
 		t.Fatalf("exit status = %d, want 130", mm.status)
 	}
 	requireClosed(t, child.terminated, "child termination")
-	if got := mm.View().Content; strings.Contains(got, "matched lines") {
-		t.Fatalf("cancellation produced a further screen: %q", got)
+	if got := mm.View().Content; strings.Contains(got, "a.txt") {
+		t.Fatalf("cancellation produced a browse screen: %q", got)
 	}
 }
 
-// ctrl+c is cancellation in every state: while searching and on the
-// interim summary it terminates the child and exits 130.
+// ctrl+c is cancellation in every state: while searching and while
+// browsing it terminates the child and exits 130.
 func TestCtrlCCancelsFromAnyState(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		summary bool
+		name   string
+		browse bool
 	}{
 		{"searching", false},
-		{"summary", true},
+		{"browsing", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			child := &fakeChild{
@@ -299,7 +300,7 @@ func TestCtrlCCancelsFromAnyState(t *testing.T) {
 				terminated: make(chan struct{}),
 			}
 			m := New(child, "/w")
-			if tc.summary {
+			if tc.browse {
 				mi, _ := m.Update(searchResult{index: fixtureIndex(t, 1, 1)})
 				m = mi.(Model)
 			}
@@ -367,8 +368,8 @@ func TestQDuringGateHeldPreparationCancels(t *testing.T) {
 		t.Fatalf("late completion after cancellation returned a command: %v", cmd)
 	}
 	mm3 := m3.(Model)
-	if got := mm3.View().Content; strings.Contains(got, "matched lines") {
-		t.Fatalf("late completion revived the UI: %q", got)
+	if mm3.state != stateCancelled {
+		t.Fatalf("late completion revived the UI into state %d", mm3.state)
 	}
 	if mm3.status != 130 {
 		t.Fatalf("exit status after late completion = %d, want 130", mm3.status)
@@ -421,13 +422,13 @@ func TestLateCompletionAfterCancelDiscarded(t *testing.T) {
 		t.Fatalf("late completion after cancellation returned a command: %v", cmd)
 	}
 	mm3 := m3.(Model)
-	if mm3.state == stateSummary {
-		t.Fatal("late completion after cancellation reached the summary state")
+	if mm3.state == stateBrowse {
+		t.Fatal("late completion after cancellation reached the browse state")
 	}
 	if mm3.status != 130 {
 		t.Fatalf("exit status after late completion = %d, want 130", mm3.status)
 	}
-	if got := mm3.View().Content; strings.Contains(got, "matched lines") {
+	if got := mm3.View().Content; strings.Contains(got, "a.txt") {
 		t.Fatalf("late completion revived the UI: %q", got)
 	}
 }

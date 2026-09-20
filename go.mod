@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	charm.land/bubbletea/v2 v2.0.9
+	github.com/clipperhouse/displaywidth v0.11.0
 	github.com/creack/pty v1.1.21
 	github.com/jawher/mow.cli v1.2.0
 	golang.org/x/sys v0.47.0
@@ -18,7 +19,6 @@ require (
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
-	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-runewidth v0.0.27 // indirect

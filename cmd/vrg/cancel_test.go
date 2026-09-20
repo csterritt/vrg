@@ -392,8 +392,8 @@ exit 0
 		return err == nil
 	})
 	r.waitOutput(t, "Searching")
-	if strings.Contains(r.output(), "matched lines") {
-		t.Fatalf("gate-held run reached the summary screen: %q", r.output())
+	if strings.Contains(r.output(), "──") {
+		t.Fatalf("gate-held run reached the browse screen: %q", r.output())
 	}
 	r.send(t, "q")
 	code := r.waitExit(t)
@@ -416,11 +416,15 @@ func TestNormalExitReapsChild(t *testing.T) {
 	ready := filepath.Join(dir, "ready")
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
-	// rg emits a complete stream and exits, leaving a detached-output
-	// sleeper in its process group.
+	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte("foo bar\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// rg emits a complete stream with one match and exits, leaving a
+	// detached-output sleeper in its process group.
 	rgDir := fakeRgPath(t, `#!/bin/sh
 sleep 100000 </dev/null >/dev/null 2>&1 &
 echo $! > "$VRG_TEST_PID"
+printf '%s\n' '{"type":"match","data":{"path":{"text":"file.txt"},"lines":{"text":"foo bar\n"},"line_number":1,"submatches":[{"match":{"text":"foo"},"start":0,"end":3}]}}'
 printf '%s\n' '{"type":"summary","data":{}}'
 : > "$VRG_TEST_READY"
 exit 0
@@ -434,7 +438,7 @@ exit 0
 	}), false, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
-	r.waitOutput(t, "matched lines")
+	r.waitOutput(t, "file.txt")
 	r.send(t, "q")
 	code := r.waitExit(t)
 	r.finish(t)

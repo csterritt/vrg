@@ -1,12 +1,15 @@
 package app
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 
 	tea "charm.land/bubbletea/v2"
 
+	"vrg/internal/filebuffer"
 	"vrg/internal/searchindex"
+	"vrg/internal/theme"
+	"vrg/internal/viewport"
 )
 
 // state identifies the current screen of the search lifecycle.
@@ -16,24 +19,29 @@ const (
 	// stateSearching covers collection and post-exit processing: the
 	// whole interval until the index is ready, even after rg has exited.
 	stateSearching state = iota
-	// stateSummary is the interim post-search summary screen that later
-	// issues replace with browsing.
-	stateSummary
+	// stateBrowse is the two-pane result browser: file list plus the
+	// current file's content panel.
+	stateBrowse
 	// stateCancelled is the terminal cancellation state: the program is
 	// quitting with status 130 and late completions must not revive it.
 	stateCancelled
 )
 
 // Model is the Bubble Tea model for the vrg lifecycle; this slice covers
-// the searching screen, the interim summary, and cancellation.
+// the searching screen, the browse view with asynchronous file loading,
+// and cancellation.
 type Model struct {
 	child   Child
 	workdir string
 	// gate, when non-nil, is awaited between child exit and index
 	// preparation so tests can hold preparation independently of rg exit.
 	gate <-chan struct{}
-	// ctx and cancel drive cancellation of collection: cancelling
-	// releases a gate-held preparation promptly.
+	// loadGate, when non-nil, is awaited inside the load worker before a
+	// file is read and mapped, so tests can hold a load off the update
+	// path while input stays live.
+	loadGate <-chan struct{}
+	// ctx and cancel drive cancellation of collection and gated loads:
+	// cancelling releases a gate-held worker promptly.
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -45,6 +53,19 @@ type Model struct {
 	stderr  []byte
 	procErr error
 	status  int
+
+	// Browse state: the raw-path-ordered file list, the matched-line
+	// cursor, per-path prepared buffers keyed by raw path bytes, and the
+	// load bookkeeping that keeps one load in flight per path.
+	files   [][]byte
+	fileIdx map[string]int
+	cursor  int
+	buffers map[string]*filebuffer.Buffer
+	loading map[string]bool
+	failed  map[string]bool
+	listTop int
+	vp      viewport.Viewport
+	theme   theme.Theme
 }
 
 // New returns a Model that collects the started child's stream. The
@@ -52,7 +73,17 @@ type Model struct {
 // before the TUI exists.
 func New(child Child, workdir string) Model {
 	ctx, cancel := context.WithCancel(context.Background())
-	return Model{child: child, workdir: workdir, state: stateSearching, ctx: ctx, cancel: cancel}
+	return Model{
+		child:   child,
+		workdir: workdir,
+		state:   stateSearching,
+		ctx:     ctx,
+		cancel:  cancel,
+		buffers: make(map[string]*filebuffer.Buffer),
+		loading: make(map[string]bool),
+		failed:  make(map[string]bool),
+		theme:   theme.Styled(),
+	}
 }
 
 // Init starts collection and index preparation off the UI update path.
@@ -64,9 +95,10 @@ func (m Model) Init() tea.Cmd {
 }
 
 // Update applies messages to the model. Collection results arrive as
-// searchResult; keys act per state — q cancels while searching and quits
-// the interim summary, and ctrl+c cancels in any state. Esc is not an
-// exit key and is a no-op outside overlays.
+// searchResult and enter the browse view; file loads arrive as
+// loadResult carrying a prepared buffer. Keys act per state — q cancels
+// while searching and quits while browsing, and ctrl+c cancels in any
+// state. Esc is not an exit key and is a no-op outside overlays.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -79,7 +111,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.index = msg.index
 		m.stderr = msg.stderr
 		m.procErr = msg.err
-		m.state = stateSummary
+		return m.enterBrowse()
+	case loadResult:
+		if m.state == stateCancelled {
+			return m, nil
+		}
+		key := string(msg.path)
+		delete(m.loading, key)
+		if msg.err != nil {
+			m.failed[key] = true
+			delete(m.buffers, key)
+		} else {
+			m.buffers[key] = msg.buf
+			delete(m.failed, key)
+		}
 	case tea.KeyPressMsg:
 		if m.state == stateCancelled {
 			return m, nil
@@ -91,12 +136,80 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.state {
 			case stateSearching:
 				return m.cancelRun()
-			case stateSummary:
+			case stateBrowse:
 				return m, tea.Quit
 			}
 		}
 	}
 	return m, nil
+}
+
+// enterBrowse moves a completed search into the browse state and starts
+// loading the current file.
+func (m Model) enterBrowse() (tea.Model, tea.Cmd) {
+	m.state = stateBrowse
+	m.files = m.index.Files()
+	m.fileIdx = make(map[string]int, len(m.files))
+	for i, f := range m.files {
+		m.fileIdx[string(f)] = i
+	}
+	m.cursor = 0
+	return m.ensureLoaded()
+}
+
+// ensureLoaded starts a load for the current stop's file unless it is
+// already loaded or in flight — one load per raw path, never queued.
+func (m Model) ensureLoaded() (Model, tea.Cmd) {
+	stops := m.index.Stops()
+	if len(stops) == 0 {
+		return m, nil
+	}
+	stop := stops[m.cursor]
+	key := string(stop.Path)
+	if m.buffers[key] != nil || m.loading[key] {
+		return m, nil
+	}
+	m.loading[key] = true
+	return m, loadCmd(m.ctx, m.loadGate, stop, stopsForPath(m.index, stop.Path))
+}
+
+// stopsForPath collects the file's matched-line stops for the loader.
+func stopsForPath(index *searchindex.Index, path []byte) []searchindex.Stop {
+	var out []searchindex.Stop
+	for _, s := range index.Stops() {
+		if bytes.Equal(s.Path, path) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// loadResult is the product of one file load, delivered to the model as
+// a message: the raw path it belongs to and the prepared buffer or the
+// read error.
+type loadResult struct {
+	path []byte
+	buf  *filebuffer.Buffer
+	err  error
+}
+
+// loadCmd reads and maps a file off the update path. A non-nil gate
+// holds the read and decode/map phase until it closes; ctx cancellation
+// releases a held gate promptly. The completion message carries the
+// prepared buffer so Update does no full-file work.
+func loadCmd(ctx context.Context, gate <-chan struct{}, stop searchindex.Stop, stops []searchindex.Stop) tea.Cmd {
+	resolved := append([]byte(nil), stop.Resolved...)
+	path := append([]byte(nil), stop.Path...)
+	return func() tea.Msg {
+		if gate != nil {
+			select {
+			case <-gate:
+			case <-ctx.Done():
+			}
+		}
+		buf, err := filebuffer.Load(resolved, stops)
+		return loadResult{path: path, buf: buf, err: err}
+	}
 }
 
 // cancelRun terminates the child, releases any gate-held collection,
@@ -121,8 +234,12 @@ func (m Model) View() tea.View {
 }
 
 func (m Model) screen() string {
-	if m.state == stateSummary && m.index != nil {
-		return fmt.Sprintf("%d files, %d matched lines", len(m.index.Files()), len(m.index.Stops()))
+	switch m.state {
+	case stateBrowse:
+		return m.browseScreen()
+	case stateCancelled:
+		return ""
+	default:
+		return "Searching…"
 	}
-	return "Searching…"
 }
