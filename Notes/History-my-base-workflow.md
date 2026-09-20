@@ -502,3 +502,25 @@ Usage
  Input tokens: 132588 tokens
  Output tokens: 32622 tokens
  Cached input tokens: 4265663 tokens
+
+----
+Task 047-read-failure-single-line-filenames.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 33 messages
+ Input tokens: 125996 tokens
+ Output tokens: 31515 tokens
+ Cached input tokens: 2754175 tokens
+
+----
+Task 048-pty-tests-deterministic-handshakes.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 52 messages
+ Input tokens: 162925 tokens
+ Output tokens: 77010 tokens
+ Cached input tokens: 5848172 tokens

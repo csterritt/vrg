@@ -24,6 +24,7 @@ func TestFakeRgNonZeroExitOverResults(t *testing.T) {
 	ready := filepath.Join(dir, "ready")
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
+	events := filepath.Join(dir, "events")
 	var content strings.Builder
 	for i := 1; i <= 20; i++ {
 		fmt.Fprintf(&content, "hit %02d\n", i)
@@ -47,18 +48,22 @@ exit 3
 		"VRG_TEST_READY": ready,
 		"VRG_TEST_PID":   pidFile,
 		"VRG_TEST_REAP":  reap,
+		"VRG_TEST_ACK":   events,
 	}), false, "hit", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
 
+	r.waitAck(t, 0, "state", "browse")
+	r.waitAck(t, 0, "overlay", "open")
 	r.waitOutput(t, "boom")   // the error overlay is open
 	r.waitOutput(t, "hit 09") // the file loaded; the row above the box shows
 	if strings.Contains(r.output(), "hit 10") {
 		t.Fatal("a row under the overlay box was visible before dismissal")
 	}
-	r.send(t, "\x1b")         // Esc dismisses the overlay to browse
+	mark := r.sendAcked(t, "\x1b", "esc") // Esc dismisses the overlay to browse
+	r.waitAck(t, mark, "overlay", "dismissed")
 	r.waitOutput(t, "hit 10") // the covered row is revealed
-	r.send(t, "q")
+	r.sendAcked(t, "q", "q")
 	code := r.waitExit(t)
 	r.finish(t)
 
@@ -84,6 +89,7 @@ func TestStderrContentFixture(t *testing.T) {
 	ready := filepath.Join(dir, "ready")
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
+	events := filepath.Join(dir, "events")
 	var content strings.Builder
 	for i := 1; i <= 64; i++ {
 		fmt.Fprintf(&content, "hit %02d\n", i)
@@ -114,22 +120,28 @@ exit 0
 		"VRG_TEST_READY": ready,
 		"VRG_TEST_PID":   pidFile,
 		"VRG_TEST_REAP":  reap,
+		"VRG_TEST_ACK":   events,
 	}), false, "hit", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
 
 	r.waitOutput(t, "VRG-STDERR-HEAD") // the warning overlay is open at its head
 	// The 64 wrapped 16 KiB blocks need ~13k interior rows; enlarge the
-	// terminal well past that so the tail row is rendered too.
+	// terminal well past that so the tail row is rendered too. The
+	// resize is acknowledged by the model's msg record before the
+	// rendered tail is awaited.
+	mark := r.ackMark(t)
 	if err := pty.Setsize(r.master, &pty.Winsize{Rows: 20000, Cols: 80}); err != nil {
 		t.Fatalf("pty.Setsize: %v", err)
 	}
+	r.waitAck(t, mark, "msg", "tea.WindowSizeMsg")
 	r.waitOutput(t, "VRG-STDERR-TAIL")
-	// Two q presses: the first dismisses the warning overlay, the second
-	// quits browse. A bare ESC here could merge with a following byte
-	// into an alt- sequence before the parser decides.
-	r.send(t, "q")
-	r.send(t, "q")
+	// Two q presses: the first dismisses the warning overlay — its
+	// dismissal acknowledgement is awaited before the second — and the
+	// second quits browse.
+	mark = r.sendAcked(t, "q", "q")
+	r.waitAck(t, mark, "overlay", "dismissed")
+	r.sendAcked(t, "q", "q")
 	code := r.waitExit(t)
 	r.finish(t)
 
@@ -150,6 +162,7 @@ func TestFakeRgSilentExitGeneratesDiagnostic(t *testing.T) {
 	ready := filepath.Join(dir, "ready")
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
+	events := filepath.Join(dir, "events")
 	rgDir := fakeRgPath(t, `#!/bin/sh
 echo $$ > "$VRG_TEST_PID"
 : > "$VRG_TEST_READY"
@@ -161,12 +174,14 @@ exit 2
 		"VRG_TEST_READY": ready,
 		"VRG_TEST_PID":   pidFile,
 		"VRG_TEST_REAP":  reap,
+		"VRG_TEST_ACK":   events,
 	}), false, "hit", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
 
+	r.waitAck(t, 0, "state", "fatal")
 	r.waitOutput(t, "code 2") // the generated diagnostic names the exit code
-	r.send(t, "q")
+	r.sendAcked(t, "q", "q")
 	code := r.waitExit(t)
 	r.finish(t)
 

@@ -123,6 +123,11 @@ type Model struct {
 	// stderr, which the outcome decision shows in an overlay.
 	diags       *diagnostics
 	stderrLines []string
+	// acks is the per-run acknowledgement log, shared across the
+	// model's value copies like diags: Update records each processed
+	// message and committed transition so the test seam can wait on
+	// occurrences rather than elapsed time.
+	acks *events
 	// overlay, when non-nil, is the open diagnostic overlay: the modal
 	// error/warning presentation of a completed search.
 	overlay *scrollOverlay
@@ -207,6 +212,7 @@ func New(child Child, workdir string) Model {
 		ctx:         ctx,
 		cancel:      cancel,
 		diags:       &diagnostics{},
+		acks:        &events{},
 		buffers:     make(map[string]*viewport.RowModel),
 		sources:     make(map[string]viewport.Source),
 		revs:        make(map[string]int),
@@ -236,7 +242,32 @@ func (m Model) Init() tea.Cmd {
 	}
 }
 
-// Update applies messages to the model. Collection results arrive as
+// Update applies messages to the model and records the acknowledgement
+// events each processed message commits — one msg record per message,
+// a key record per key press, and the transition records — on the
+// run's shared acknowledgement log. The records observe the applied
+// transition; they never change it.
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// A load result counts only while the request it answers is still
+	// in flight; the request table is a map shared across the model's
+	// value copies, so the admission check is captured before update
+	// consumes the entry.
+	load, isLoad := msg.(loadResult)
+	loadOK := false
+	if isLoad {
+		req, ok := m.loading[string(load.path)]
+		loadOK = ok && req == load.req
+	}
+	next, cmd := m.update(msg)
+	n, ok := next.(Model)
+	if !ok {
+		return next, cmd
+	}
+	n.acks.noteUpdate(m, n, msg, loadOK)
+	return n, cmd
+}
+
+// update applies messages to the model. Collection results arrive as
 // searchResult and enter the browse view; file loads arrive as
 // loadResult carrying a prepared buffer keyed by raw path and request
 // identity, and prepared row layouts arrive as layoutResult keyed by
@@ -246,7 +277,7 @@ func (m Model) Init() tea.Cmd {
 // is a no-op outside overlays. Below the minimum terminal size the
 // too-small gate narrows input to q and ctrl+c alone; the resize gate
 // similarly defers all layout reconciliation until an adequate size.
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height

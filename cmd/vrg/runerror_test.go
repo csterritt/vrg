@@ -44,6 +44,7 @@ func runReturnShape(t *testing.T, env map[string]string) (*ptyRun, string) {
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
 	ack := filepath.Join(dir, "collect-ack")
+	events := filepath.Join(dir, "events")
 	var content strings.Builder
 	for i := 1; i <= 20; i++ {
 		fmt.Fprintf(&content, "hit %02d\n", i)
@@ -67,6 +68,7 @@ exit 0
 	env["VRG_TEST_PID"] = pidFile
 	env["VRG_TEST_REAP"] = reap
 	env["VRG_TEST_COLLECT_ACK"] = ack
+	env["VRG_TEST_ACK"] = events
 	r := startVrgPTY(t, dir, childEnv(env), true, "hit", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -77,9 +79,10 @@ exit 0
 	if strings.Contains(r.output(), "hit 10") {
 		t.Fatal("a row under the overlay box was visible before dismissal")
 	}
-	r.send(t, "q") // dismisses the overlay to browse
+	mark := r.sendAcked(t, "q", "q") // dismisses the overlay to browse
+	r.waitAck(t, mark, "overlay", "dismissed")
 	r.waitOutput(t, "hit 10")
-	r.send(t, "q") // quits browse: Run() returns (status-0 model, nil)
+	r.sendAcked(t, "q", "q") // quits browse: Run() returns (status-0 model, nil)
 	waitReplayedInputRestored(t, r, "warn one")
 	code := r.waitExit(t)
 	r.finish(t)

@@ -25,13 +25,11 @@ import (
 
 // waitCollectAck waits until the VRG_TEST_COLLECT_ACK side channel —
 // one line per diagnostic processed into the session collection —
-// contains marker.
+// contains marker. It is occurrence 1 of waitCollectAckN's per-
+// occurrence contract.
 func waitCollectAck(t *testing.T, path, marker string) {
 	t.Helper()
-	waitBounded(t, "collect ack "+strconv.Quote(marker), 15*time.Second, func() bool {
-		b, err := os.ReadFile(path)
-		return err == nil && strings.Contains(string(b), marker)
-	})
+	waitCollectAckN(t, path, marker, 1)
 }
 
 // assertReplayedAfterRestore requires the diagnostic to appear in vrg's
@@ -81,6 +79,7 @@ func TestCtrlCAfterCollectedDiagnosticReplays(t *testing.T) {
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
 	ack := filepath.Join(dir, "collect-ack")
+	events := filepath.Join(dir, "events")
 	rgDir := fakeRgPath(t, `#!/bin/sh
 echo $$ > "$VRG_TEST_PID"
 printf '%s\n' 'warn one' >&2
@@ -94,12 +93,13 @@ exec sleep 100000
 		"VRG_TEST_PID":         pidFile,
 		"VRG_TEST_REAP":        reap,
 		"VRG_TEST_COLLECT_ACK": ack,
+		"VRG_TEST_ACK":         events,
 	}), true, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
 	r.waitOutput(t, "Searching")
 	waitCollectAck(t, ack, "warn one")
-	r.send(t, "\x03")
+	r.sendAcked(t, "\x03", "ctrl+c")
 	waitReplayedInputRestored(t, r, "warn one")
 	code := r.waitExit(t)
 	r.finish(t)
@@ -128,6 +128,7 @@ func TestQWhileBlockedFakeRGReplaysCollected(t *testing.T) {
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
 	ack := filepath.Join(dir, "collect-ack")
+	events := filepath.Join(dir, "events")
 	rgDir := fakeRgPath(t, `#!/bin/sh
 echo $$ > "$VRG_TEST_PID"
 printf '%s\n' 'warn one' >&2
@@ -141,12 +142,13 @@ exec sleep 100000
 		"VRG_TEST_PID":         pidFile,
 		"VRG_TEST_REAP":        reap,
 		"VRG_TEST_COLLECT_ACK": ack,
+		"VRG_TEST_ACK":         events,
 	}), true, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
 	r.waitOutput(t, "Searching")
 	waitCollectAck(t, ack, "warn one")
-	r.send(t, "q")
+	r.sendAcked(t, "q", "q")
 	waitReplayedInputRestored(t, r, "warn one")
 	code := r.waitExit(t)
 	r.finish(t)
@@ -175,6 +177,7 @@ func TestQDuringGateHeldPreparationReplaysCollected(t *testing.T) {
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
 	ack := filepath.Join(dir, "collect-ack")
+	events := filepath.Join(dir, "events")
 	gate := filepath.Join(dir, "gate") // never created: preparation stays held
 	rgDir := fakeRgPath(t, `#!/bin/sh
 echo $$ > "$VRG_TEST_PID"
@@ -192,6 +195,7 @@ exit 0
 		"VRG_TEST_REAP":        reap,
 		"VRG_TEST_GATE":        gate,
 		"VRG_TEST_COLLECT_ACK": ack,
+		"VRG_TEST_ACK":         events,
 	}), true, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -203,7 +207,7 @@ exit 0
 	})
 	r.waitOutput(t, "Searching")
 	waitCollectAck(t, ack, "warn gate")
-	r.send(t, "q")
+	r.sendAcked(t, "q", "q")
 	waitReplayedInputRestored(t, r, "warn gate")
 	code := r.waitExit(t)
 	r.finish(t)
@@ -233,6 +237,7 @@ func TestNormalQuitReplaysCollectedWarning(t *testing.T) {
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
 	ack := filepath.Join(dir, "collect-ack")
+	events := filepath.Join(dir, "events")
 	var content strings.Builder
 	for i := 1; i <= 20; i++ {
 		fmt.Fprintf(&content, "hit %02d\n", i)
@@ -257,6 +262,7 @@ exit 0
 		"VRG_TEST_PID":         pidFile,
 		"VRG_TEST_REAP":        reap,
 		"VRG_TEST_COLLECT_ACK": ack,
+		"VRG_TEST_ACK":         events,
 	}), true, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -267,9 +273,10 @@ exit 0
 	if strings.Contains(r.output(), "hit 10") {
 		t.Fatal("a row under the overlay box was visible before dismissal")
 	}
-	r.send(t, "q") // dismisses the overlay to browse
+	mark := r.sendAcked(t, "q", "q") // dismisses the overlay to browse
+	r.waitAck(t, mark, "overlay", "dismissed")
 	r.waitOutput(t, "hit 10")
-	r.send(t, "q")
+	r.sendAcked(t, "q", "q")
 	waitReplayedInputRestored(t, r, "warn one")
 	code := r.waitExit(t)
 	r.finish(t)
@@ -367,6 +374,7 @@ func TestReplayedDiagnosticEscapesFilename(t *testing.T) {
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
 	ack := filepath.Join(dir, "collect-ack")
+	events := filepath.Join(dir, "events")
 	hostile := "evil\nname\x1b.txt"
 	b64 := base64.StdEncoding.EncodeToString([]byte(hostile))
 	rgDir := fakeRgPath(t, fmt.Sprintf(`#!/bin/sh
@@ -385,19 +393,23 @@ exit 0
 		"VRG_TEST_PID":         pidFile,
 		"VRG_TEST_REAP":        reap,
 		"VRG_TEST_COLLECT_ACK": ack,
+		"VRG_TEST_ACK":         events,
 	}), true, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
 	// The hostile path does not exist on disk, so its load fails and the
-	// diagnostic is collected — the ack, not the render, is the signal.
+	// diagnostic is collected — the acks, not the render, are the signal.
 	waitCollectAck(t, ack, "cannot read")
+	r.waitAck(t, 0, "load", "fail ")
 	// The failure is for the current file, so the error overlay opens:
-	// the first q dismisses it — revealing the "(unreadable)"
-	// placeholder — and the second q quits ordinary browsing.
+	// the first q dismisses it — its dismissal acknowledged — revealing
+	// the "(unreadable)" placeholder — and the second q quits ordinary
+	// browsing.
 	r.waitOutput(t, "cannot read")
-	r.send(t, "q")
+	mark := r.sendAcked(t, "q", "q")
+	r.waitAck(t, mark, "overlay", "dismissed")
 	r.waitOutput(t, "(unreadable)")
-	r.send(t, "q")
+	r.sendAcked(t, "q", "q")
 	waitReplayedInputRestored(t, r, "cannot read")
 	code := r.waitExit(t)
 	r.finish(t)

@@ -4,6 +4,7 @@ package main
 
 import (
 	"os"
+	"strconv"
 	"time"
 
 	"vrg/internal/app"
@@ -12,9 +13,10 @@ import (
 // testSeamEnv is the testhooks half of the test-hook boundary: it reads
 // the option-related VRG_TEST_* variables — a preparation gate, a reap
 // side channel, a diagnostic-collection acknowledgement side channel,
-// and a controlled-failure trigger — and wires them into the search
-// environment. It exists only in the vrg_testhooks build; stop releases
-// any file watchers it started.
+// a per-message acknowledgement stream, and a controlled-failure
+// trigger — and wires them into the search environment. It exists only
+// in the vrg_testhooks build; stop releases any file watchers it
+// started.
 func testSeamEnv(env app.Env, stop <-chan struct{}) app.Env {
 	if path := os.Getenv("VRG_TEST_GATE"); path != "" {
 		env.Gate = fileTrigger(path, stop)
@@ -30,11 +32,16 @@ func testSeamEnv(env app.Env, stop <-chan struct{}) app.Env {
 	}
 	if path := os.Getenv("VRG_TEST_COLLECT_ACK"); path != "" {
 		env.OnCollect = func(line string) {
-			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-			if err == nil {
-				_, _ = f.WriteString(line + "\n")
-				_ = f.Close()
+			appendLine(path, line)
+		}
+	}
+	if path := os.Getenv("VRG_TEST_ACK"); path != "" {
+		env.OnEvent = func(ev app.Event) {
+			line := strconv.FormatUint(ev.Seq, 10) + " " + ev.Kind
+			if ev.Detail != "" {
+				line += " " + ev.Detail
 			}
+			appendLine(path, line)
 		}
 	}
 	if path := os.Getenv("VRG_TEST_FAIL_TRIGGER"); path != "" {
@@ -42,6 +49,17 @@ func testSeamEnv(env app.Env, stop <-chan struct{}) app.Env {
 		env.FailDiagnostic = os.Getenv("VRG_TEST_FAIL_DIAGNOSTIC")
 	}
 	return env
+}
+
+// appendLine appends one line to a side-channel file, creating it on
+// first use; a failing write is dropped — the seam observes the run,
+// never alters it.
+func appendLine(path, line string) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err == nil {
+		_, _ = f.WriteString(line + "\n")
+		_ = f.Close()
+	}
 }
 
 // fileTrigger returns a channel that closes once path exists, polled on

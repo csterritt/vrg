@@ -16,8 +16,8 @@ import (
 // contain. The list is Issue 45's manifest, never derived by scanning
 // for VRG_TEST_* occurrences, because fixture-owned fake-rg variables
 // (VRG_TEST_READY, VRG_TEST_PID — renamed FAKE_RG_* by Issue 50) are
-// not vrg behaviour. Issue 48 may extend it with acknowledgement
-// hooks.
+// not vrg behaviour. VRG_TEST_ACK is Issue 48's acknowledgement
+// stream.
 var testHookManifest = []string{
 	"VRG_TEST_REAP",
 	"VRG_TEST_GATE",
@@ -26,6 +26,7 @@ var testHookManifest = []string{
 	"VRG_TEST_DIAGNOSTIC_TRIGGER",
 	"VRG_TEST_DIAGNOSTIC_TEXT",
 	"VRG_TEST_COLLECT_ACK",
+	"VRG_TEST_ACK",
 	"VRG_TEST_RUN_FINAL_MODEL",
 	"VRG_TEST_RUN_ERROR",
 }
@@ -78,6 +79,7 @@ func TestUntaggedBinaryIgnoresHookManifest(t *testing.T) {
 	ready := filepath.Join(dir, "ready")
 	reap := filepath.Join(dir, "reap")
 	ack := filepath.Join(dir, "ack")
+	events := filepath.Join(dir, "events")
 	gate := filepath.Join(dir, "gate") // never created: a live seam would hold preparation
 	trigger := filepath.Join(dir, "trigger")
 	diagTrigger := filepath.Join(dir, "diag-trigger")
@@ -101,6 +103,7 @@ func TestUntaggedBinaryIgnoresHookManifest(t *testing.T) {
 		"VRG_TEST_DIAGNOSTIC_TRIGGER": diagTrigger,
 		"VRG_TEST_DIAGNOSTIC_TEXT":    "VRG-INJECTED-DIAGNOSTIC",
 		"VRG_TEST_COLLECT_ACK":        ack,
+		"VRG_TEST_ACK":                events,
 		"VRG_TEST_RUN_FINAL_MODEL":    "nil",
 		"VRG_TEST_RUN_ERROR":          "VRG-INJECTED-RUN-ERROR",
 	})
@@ -114,7 +117,7 @@ func TestUntaggedBinaryIgnoresHookManifest(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit status = %d, want 0 — a manifest hook changed the run", code)
 	}
-	for _, p := range []string{reap, ack} {
+	for _, p := range []string{reap, ack, events} {
 		if _, err := os.Stat(p); err == nil {
 			t.Fatalf("the untagged binary wrote hook side channel %s", p)
 		}
@@ -157,6 +160,7 @@ func TestTaggedRunnerInjectsErrorOverValidModel(t *testing.T) {
 	bin := buildVrgVariant(t, true)
 	dir := t.TempDir()
 	ready := filepath.Join(dir, "ready")
+	events := filepath.Join(dir, "events")
 	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte("hit\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -164,11 +168,12 @@ func TestTaggedRunnerInjectsErrorOverValidModel(t *testing.T) {
 	r := startBinaryPTY(t, bin, dir, childEnv(map[string]string{
 		"PATH":               rgDir + ":" + os.Getenv("PATH"),
 		"TERM":               "xterm-256color",
+		"VRG_TEST_ACK":       events,
 		"VRG_TEST_RUN_ERROR": "VRG-INJECTED-RUN-ERROR",
 	}), false, "hit", ".")
 	waitFile(t, ready)
 	r.waitOutput(t, "file.txt") // the real program ran to browse
-	r.send(t, "q")
+	r.sendAcked(t, "q", "q")
 	code := r.waitExit(t)
 	r.finish(t)
 
@@ -209,16 +214,18 @@ func TestTaggedRunnerInjectsFinalModel(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			ready := filepath.Join(dir, "ready")
+			events := filepath.Join(dir, "events")
 			rgDir := fakeRgPath(t, fmt.Sprintf(exitTwoFixture, ready))
 			r := startBinaryPTY(t, bin, dir, childEnv(map[string]string{
 				"PATH":                     rgDir + ":" + os.Getenv("PATH"),
 				"TERM":                     "xterm-256color",
+				"VRG_TEST_ACK":             events,
 				"VRG_TEST_RUN_FINAL_MODEL": tc.finalMod,
 				"VRG_TEST_RUN_ERROR":       "nil",
 			}), false, "hit", ".")
 			waitFile(t, ready)
 			r.waitOutput(t, "code 2") // the fatal overlay proves the real program ran
-			r.send(t, "q")
+			r.sendAcked(t, "q", "q")
 			code := r.waitExit(t)
 			r.finish(t)
 
@@ -240,16 +247,18 @@ func TestTaggedRunnerInjectsModelAndError(t *testing.T) {
 		t.Run(fm+" final model with error", func(t *testing.T) {
 			dir := t.TempDir()
 			ready := filepath.Join(dir, "ready")
+			events := filepath.Join(dir, "events")
 			rgDir := fakeRgPath(t, fmt.Sprintf(exitTwoFixture, ready))
 			r := startBinaryPTY(t, bin, dir, childEnv(map[string]string{
 				"PATH":                     rgDir + ":" + os.Getenv("PATH"),
 				"TERM":                     "xterm-256color",
+				"VRG_TEST_ACK":             events,
 				"VRG_TEST_RUN_FINAL_MODEL": fm,
 				"VRG_TEST_RUN_ERROR":       "VRG-INJECTED-RUN-ERROR",
 			}), false, "hit", ".")
 			waitFile(t, ready)
 			r.waitOutput(t, "code 2") // the real program ran
-			r.send(t, "q")
+			r.sendAcked(t, "q", "q")
 			code := r.waitExit(t)
 			r.finish(t)
 

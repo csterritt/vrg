@@ -46,6 +46,15 @@ type Env struct {
 	// acknowledgement side channel tests wait on before sending an exit
 	// key, proving collection rather than mere child output.
 	OnCollect func(string)
+	// OnEvent, when non-nil, receives each acknowledgement record the
+	// model's Update emits — one per processed message, one per
+	// processed key press, and one per committed transition (a state
+	// entered, an overlay opened or dismissed, a load applied, a
+	// layout installed) — each with a per-process monotonic sequence
+	// number so a test waits on the exact occurrence its action
+	// caused rather than a stale same-kind record. The records observe
+	// the model's transitions; they never change them.
+	OnEvent func(Event)
 }
 
 // Run executes a validated search invocation end to end: it starts rg
@@ -82,6 +91,7 @@ func Run(argv []string, env Env) int {
 	m := New(proc, workdir)
 	m.gate = env.Gate
 	m.diags.onAdd = env.OnCollect
+	m.acks.emit = env.OnEvent
 	final, err := runProgram(m, env)
 
 	// Cleanup boundary, common to ordinary quits, cancellation, and

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -30,8 +31,10 @@ import (
 // exists), VRG_TEST_REAP (vrg writes the reaped wait status there),
 // VRG_TEST_COLLECT_ACK (vrg appends each collected diagnostic line
 // there), VRG_TEST_FAIL_TRIGGER (inject a controlled application failure
-// when the named file appears), and VRG_TEST_FAIL_DIAGNOSTIC (its
-// text).
+// when the named file appears), VRG_TEST_FAIL_DIAGNOSTIC (its
+// text), and VRG_TEST_ACK (vrg appends one acknowledgement record per
+// Update-processed message and committed transition — the Issue 48
+// deterministic-handshake stream).
 
 // lockedBuffer is a bytes.Buffer safe for concurrent writers and
 // readers; PTY and stderr copier goroutines write while the test polls.
@@ -63,20 +66,33 @@ type ptyRun struct {
 	// copyDone closes when the PTY copier reaches master EOF — after
 	// every slave end is closed and its buffered bytes are drained.
 	copyDone chan struct{}
-	before   unix.Termios
-	after    unix.Termios
+	// ackPath is the run's VRG_TEST_ACK acknowledgement stream — the
+	// per-process event log the handshake helpers wait on — or empty
+	// when the run was launched without one armed.
+	ackPath string
+	before  unix.Termios
+	after   unix.Termios
 }
 
-// waitBounded polls cond until it holds or the deadline fails the test.
-// The sleep only paces re-checks of an explicit condition.
-func waitBounded(t *testing.T, what string, timeout time.Duration, cond func() bool) {
-	t.Helper()
+// pollBounded polls cond until it holds, returning a descriptive error
+// when the deadline passes. Its sleep only paces re-checks of an
+// explicit condition — it is the package's single pacing site.
+func pollBounded(what string, timeout time.Duration, cond func() bool) error {
 	deadline := time.Now().Add(timeout)
 	for !cond() {
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
+			return fmt.Errorf("timed out waiting for %s", what)
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+	return nil
+}
+
+// waitBounded polls cond until it holds or the deadline fails the test.
+func waitBounded(t *testing.T, what string, timeout time.Duration, cond func() bool) {
+	t.Helper()
+	if err := pollBounded(what, timeout, cond); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -170,6 +186,11 @@ func startBinaryPTY(t *testing.T, bin, dir string, env []string, merged bool, ar
 		t.Fatalf("termios before launch: %v", err)
 	}
 	r := &ptyRun{master: master, slave: slave, before: *before}
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "VRG_TEST_ACK="); ok {
+			r.ackPath = v
+		}
+	}
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
 	cmd.Env = env
@@ -308,6 +329,7 @@ func TestQAgainstBlockedFakeRGExits130(t *testing.T) {
 	ready := filepath.Join(dir, "ready")
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
+	events := filepath.Join(dir, "events")
 	rgDir := fakeRgPath(t, `#!/bin/sh
 echo $$ > "$VRG_TEST_PID"
 : > "$VRG_TEST_READY"
@@ -319,11 +341,12 @@ exec sleep 100000
 		"VRG_TEST_READY": ready,
 		"VRG_TEST_PID":   pidFile,
 		"VRG_TEST_REAP":  reap,
+		"VRG_TEST_ACK":   events,
 	}), false, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
 	r.waitOutput(t, "Searching")
-	r.send(t, "q")
+	r.sendAcked(t, "q", "q")
 	code := r.waitExit(t)
 	r.finish(t)
 
@@ -347,6 +370,7 @@ func TestCtrlCAgainstBlockedFakeRGExits130(t *testing.T) {
 	ready := filepath.Join(dir, "ready")
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
+	events := filepath.Join(dir, "events")
 	rgDir := fakeRgPath(t, `#!/bin/sh
 echo $$ > "$VRG_TEST_PID"
 : > "$VRG_TEST_READY"
@@ -358,13 +382,14 @@ exec sleep 100000
 		"VRG_TEST_READY": ready,
 		"VRG_TEST_PID":   pidFile,
 		"VRG_TEST_REAP":  reap,
+		"VRG_TEST_ACK":   events,
 	}), false, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
 	// The rendered searching screen proves raw mode is active, so the
 	// ^C byte arrives as a key press rather than a signal.
 	r.waitOutput(t, "Searching")
-	r.send(t, "\x03")
+	r.sendAcked(t, "\x03", "ctrl+c")
 	code := r.waitExit(t)
 	r.finish(t)
 
@@ -389,6 +414,7 @@ func TestQDuringGateHeldPreparationExits130(t *testing.T) {
 	ready := filepath.Join(dir, "ready")
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
+	events := filepath.Join(dir, "events")
 	gate := filepath.Join(dir, "gate") // never created: preparation stays held
 	rgDir := fakeRgPath(t, `#!/bin/sh
 echo $$ > "$VRG_TEST_PID"
@@ -403,6 +429,7 @@ exit 0
 		"VRG_TEST_PID":   pidFile,
 		"VRG_TEST_REAP":  reap,
 		"VRG_TEST_GATE":  gate,
+		"VRG_TEST_ACK":   events,
 	}), false, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
@@ -416,7 +443,7 @@ exit 0
 	if strings.Contains(r.output(), "──") {
 		t.Fatalf("gate-held run reached the browse screen: %q", r.output())
 	}
-	r.send(t, "q")
+	r.sendAcked(t, "q", "q")
 	code := r.waitExit(t)
 	r.finish(t)
 
@@ -437,6 +464,7 @@ func TestNormalExitReapsChild(t *testing.T) {
 	ready := filepath.Join(dir, "ready")
 	pidFile := filepath.Join(dir, "pid")
 	reap := filepath.Join(dir, "reap")
+	events := filepath.Join(dir, "events")
 	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte("foo bar\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -458,11 +486,12 @@ exit 0
 		"VRG_TEST_READY": ready,
 		"VRG_TEST_PID":   pidFile,
 		"VRG_TEST_REAP":  reap,
+		"VRG_TEST_ACK":   events,
 	}), false, "foo", ".")
 	waitFile(t, ready)
 	killPidOnCleanup(t, pidFile)
 	r.waitOutput(t, "file.txt")
-	r.send(t, "q")
+	r.sendAcked(t, "q", "q")
 	code := r.waitExit(t)
 	r.finish(t)
 
