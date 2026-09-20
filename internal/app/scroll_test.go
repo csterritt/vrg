@@ -155,8 +155,10 @@ func TestScrollKeysOnPlaceholderAreNoop(t *testing.T) {
 }
 
 // The vertical viewport is saved per file: scrolling in one file is
-// remembered and restored on a revisit, while a first visit starts at
-// the top. Navigation between files goes through the n/p keys.
+// remembered and is the revisit's starting point, while a first visit
+// starts at the top. The destination reveal leaves each saved top alone
+// here because every stop's target row is visible inside it. Navigation
+// between files goes through the n/p keys.
 func TestVerticalViewportSavedPerFile(t *testing.T) {
 	dir := t.TempDir()
 	writeMatchFile(t, dir, "a.txt", numberedContent(50))
@@ -167,14 +169,14 @@ func TestVerticalViewportSavedPerFile(t *testing.T) {
 	writeMatchFile(t, dir, "b.txt", b.String())
 
 	idx := searchindex.New(dir)
-	addRec(t, idx, matchRec("a.txt", "line-01\n", 1, 0, 4, "line"))
-	addRec(t, idx, matchRec("b.txt", "row-01\n", 1, 0, 3, "row"))
+	addRec(t, idx, matchRec("a.txt", "line-06\n", 6, 0, 4, "line"))
+	addRec(t, idx, matchRec("b.txt", "row-04\n", 4, 0, 3, "row"))
 	idx.Finish()
 
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, dir)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, searchResult{index: idx, integrity: completeStream})
-	m, _ = update(t, m, cmd()) // a.txt loaded
+	m, _ = update(t, m, cmd()) // a.txt loaded; target row 5 visible at top 0
 	m.theme = theme.Plain()    // no ANSI inside the fixture's match text
 
 	for i := 0; i < 5; i++ {
@@ -185,7 +187,7 @@ func TestVerticalViewportSavedPerFile(t *testing.T) {
 	}
 
 	// n switches to b.txt and requests its load; a first visit starts
-	// at the top.
+	// at the top, and its target row 3 is visible there.
 	m, cmd = update(t, m, keyMsg("n"))
 	if cmd == nil {
 		t.Fatal("n to uncached b.txt returned no load command")
@@ -201,8 +203,9 @@ func TestVerticalViewportSavedPerFile(t *testing.T) {
 		t.Fatalf("b.txt scrolled to %q, want row-04", row)
 	}
 
-	// Revisiting a.txt restores its saved top rather than restarting
-	// at the top or inheriting b.txt's position.
+	// Revisiting a.txt starts from its saved top rather than restarting
+	// at the top or inheriting b.txt's position; the target row 5 is
+	// visible inside it, so the reveal does not scroll.
 	m, cmd = update(t, m, keyMsg("p"))
 	if cmd != nil {
 		t.Fatalf("p to cached a.txt returned a command: %v", cmd)
@@ -231,6 +234,16 @@ func (c *countingSource) Cells(i int) []safepresentation.Cell {
 	return []safepresentation.Cell{{Text: "x"}}
 }
 func (c *countingSource) Highlights(i int) []filebuffer.Span { return nil }
+func (c *countingSource) TargetRow(stop searchindex.Stop) int {
+	row := int(stop.Line) - 1
+	if last := c.rows - 1; row > last {
+		row = last
+	}
+	if row < 0 {
+		row = 0
+	}
+	return row
+}
 
 // Rendering a frame for a huge buffer queries the row provider for the
 // visible row range only — never O(file size) per frame.

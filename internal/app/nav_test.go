@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"vrg/internal/searchindex"
+	"vrg/internal/theme"
 )
 
 // startBrowse drives a model into the browse state at the given
@@ -177,7 +178,9 @@ func TestNavigationWrapsCircular(t *testing.T) {
 }
 
 // The departing file's viewport stays saved and a visited file resumes
-// from it, while a first visit starts from the top of the file.
+// from it, while a first visit starts from the top of the file. The
+// destination reveal leaves the saved top alone here because the
+// target row is visible inside it.
 func TestCrossFileRestoresSavedViewport(t *testing.T) {
 	dir := t.TempDir()
 	writeMatchFile(t, dir, "a.txt", numberedContent(50))
@@ -187,12 +190,14 @@ func TestCrossFileRestoresSavedViewport(t *testing.T) {
 	}
 	writeMatchFile(t, dir, "b.txt", b.String())
 	idx := searchindex.New(dir)
-	addRec(t, idx, matchRec("a.txt", "line-01\n", 1, 0, 4, "line"))
+	addRec(t, idx, matchRec("a.txt", "line-06\n", 6, 0, 4, "line"))
 	addRec(t, idx, matchRec("b.txt", "row\n", 1, 0, 3, "row"))
 	idx.Finish()
 
 	m, cmd := startBrowse(t, dir, idx, 80, 24)
-	m, _ = update(t, m, cmd()) // a.txt loaded
+	m, _ = update(t, m, cmd()) // a.txt loaded; target row 5 visible at top 0
+	// The no-style theme keeps the fixture's matched text contiguous.
+	m.theme = theme.Plain()
 
 	for i := 0; i < 5; i++ {
 		m, _ = update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
@@ -211,7 +216,8 @@ func TestCrossFileRestoresSavedViewport(t *testing.T) {
 		m, _ = update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 
-	// p back to a.txt resumes its saved top rather than restarting.
+	// p back to a.txt resumes its saved top: the target row 5 is still
+	// inside the saved window [5, 28), so the reveal does not scroll.
 	m, _ = update(t, m, keyMsg("p"))
 	if row := contentRow(t, m); !strings.Contains(row, "line-06") {
 		t.Fatalf("revisit to a.txt shows %q, want the saved top line-06", row)
@@ -246,10 +252,10 @@ func TestManualScrollLeavesCursor(t *testing.T) {
 		t.Fatalf("n after scrolling selected line %d, want 40: the cursor must continue "+
 			"from the selected stop, not the scrolled position", stop.Line)
 	}
-	// Destination reveal is Issue 14's: same-file navigation does not
-	// scroll the viewport.
-	if row := contentRow(t, m); !strings.Contains(row, "line-11") {
-		t.Fatalf("same-file n scrolled the panel to %q, want line-11 still at the top", row)
+	// The destination reveal then moves the viewport to the target row:
+	// 39 - floor(23/3) = 32, clamped to 50 - 23 = 27.
+	if row := contentRow(t, m); !strings.Contains(row, "line-28") {
+		t.Fatalf("same-file n did not reveal the target: first content row = %q, want line-28", row)
 	}
 }
 

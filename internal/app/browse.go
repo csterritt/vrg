@@ -8,6 +8,7 @@ import (
 
 	"vrg/internal/filebuffer"
 	"vrg/internal/safepresentation"
+	"vrg/internal/searchindex"
 )
 
 // rowSource is the prepared rendered-row provider the file panel
@@ -24,6 +25,9 @@ type rowSource interface {
 	Cells(i int) []safepresentation.Cell
 	// Highlights returns the inverse-video spans of rendered row i.
 	Highlights(i int) []filebuffer.Span
+	// TargetRow returns the rendered row holding the stop's display
+	// target — the start cell of its first submatch.
+	TargetRow(stop searchindex.Stop) int
 }
 
 // browseScreen composes the two-pane browse view: the raw-path-ordered

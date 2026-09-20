@@ -204,6 +204,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The prepared row data arrives with the buffer; the file's
 			// saved viewport is clamped to its extent here and on resize.
 			m.viewportFor(key).SetExtent(msg.buf.LineCount(), m.contentHeight())
+			if key == m.curKey() {
+				// Startup and file-entry loads reveal the cursor's
+				// latest target once its rows exist.
+				m.revealCurrent()
+			}
 		}
 	case tea.KeyPressMsg:
 		if m.state == stateCancelled {
@@ -265,23 +270,46 @@ func (m Model) enterBrowse() (tea.Model, tea.Cmd) {
 }
 
 // navigate applies one matched-line navigation key: n advances and p
-// retreats the index cursor circularly. A stop in another file switches
-// the panel — the departing file's viewport stays saved under its key
-// and the new file starts from its own saved viewport or the top — and
-// an uncached destination's load is requested. Same-file movement only
-// changes the current matched line; destination reveal is Issue 14's.
-// The file-change pop-up is Issue 15's.
+// retreats the index cursor circularly. Every actual transition reveals
+// the destination's target row — immediately when its file is cached,
+// otherwise when the load completes. A stop in another file switches
+// the panel — the departing file's viewport stays saved under its key —
+// and an uncached destination's load is requested. The file-change
+// pop-up is Issue 15's.
 func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
+	if len(m.index.Stops()) < 2 {
+		// Zero or one stop is a strict no-op: no reveal, pop-up, or retry.
+		return m, nil
+	}
 	var mv searchindex.Move
 	if key == "n" {
 		mv = m.index.Next()
 	} else {
 		mv = m.index.Prev()
 	}
+	m.revealCurrent()
 	if !mv.FileChanged {
 		return m, nil
 	}
 	return m.ensureLoaded()
+}
+
+// revealCurrent applies the destination reveal to the current stop when
+// its file is loaded: the file's saved vertical state — the top of the
+// file on a first visit — is the starting point, and the viewport moves
+// only when the target row is hidden from it. A file still loading has
+// no rows to target; its reveal runs when the load result arrives.
+func (m Model) revealCurrent() {
+	stop, ok := m.index.Current()
+	if !ok {
+		return
+	}
+	key := string(stop.Path)
+	src := m.buffers[key]
+	if src == nil {
+		return
+	}
+	m.viewportFor(key).Reveal(src.TargetRow(stop))
 }
 
 // ensureLoaded starts a load for the current stop's file unless it is

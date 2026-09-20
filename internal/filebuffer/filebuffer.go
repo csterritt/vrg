@@ -96,6 +96,24 @@ func mergeSpans(spans []Span) []Span {
 	return out
 }
 
+// TargetRow returns the rendered row containing the stop's display
+// target — the start cell of its first submatch — clamped to the
+// buffer's rows. While every source line is one rendered row, the start
+// cell's row is the destination line itself; taking the whole stop
+// rather than a bare line ordinal is what lets wrap mode move the
+// target onto a later row of a tall line. A stop whose recorded line is
+// outside the loaded content lands on the nearest row.
+func (b *Buffer) TargetRow(stop searchindex.Stop) int {
+	row := int(stop.Line) - 1
+	if last := len(b.lines) - 1; row > last {
+		row = last
+	}
+	if row < 0 {
+		row = 0
+	}
+	return row
+}
+
 // LineCount is the number of source lines in the loaded file.
 func (b *Buffer) LineCount() int { return len(b.lines) }
 
