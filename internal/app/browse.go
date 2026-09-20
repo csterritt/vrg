@@ -37,8 +37,8 @@ func (m Model) browseScreen() string {
 	}
 	curIdx := -1
 	var curPath []byte
-	if stops := m.index.Stops(); len(stops) > 0 {
-		curPath = stops[m.cursor].Path
+	if stop, ok := m.index.Current(); ok {
+		curPath = stop.Path
 		curIdx = m.fileIdx[string(curPath)]
 	}
 	lw := listWidth(names, w)
@@ -163,11 +163,10 @@ func (m Model) panelRow(r int, curPath []byte, names []string, curIdx, panelW, c
 }
 
 // isCurrentLine reports whether 0-based source line i is the cursor's
-// matched line; the panel only ever renders the cursor's file. Until
-// Issue 13 lands navigation the cursor stays on the first stop.
+// matched line; the panel only ever renders the cursor's file.
 func (m Model) isCurrentLine(i int) bool {
-	stops := m.index.Stops()
-	return m.cursor < len(stops) && stops[m.cursor].Line == int64(i)+1
+	stop, ok := m.index.Current()
+	return ok && stop.Line == int64(i)+1
 }
 
 // renderCells renders up to w display cells of one source line, painting

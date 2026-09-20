@@ -76,14 +76,14 @@ type Model struct {
 	// error/warning presentation of a completed search.
 	overlay *errOverlay
 
-	// Browse state: the raw-path-ordered file list, the matched-line
-	// cursor, per-path prepared buffers keyed by raw path bytes, and the
-	// load bookkeeping that keeps one load in flight per path. vps holds
-	// each visited file's saved vertical viewport under the same key, so
-	// a revisited file resumes from its saved top row.
+	// Browse state: the raw-path-ordered file list, per-path prepared
+	// buffers keyed by raw path bytes, and the load bookkeeping that
+	// keeps one load in flight per path. The matched-line cursor lives
+	// in the index; the current file derives from it. vps holds each
+	// visited file's saved vertical viewport under the same key, so a
+	// revisited file resumes from its saved top row.
 	files   [][]byte
 	fileIdx map[string]int
-	cursor  int
 	buffers map[string]rowSource
 	loading map[string]bool
 	failed  map[string]bool
@@ -231,6 +231,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.state == stateBrowse {
 				m.scrollCurrent(msg.String())
 			}
+		case "n", "p":
+			if m.state == stateBrowse {
+				return m.navigate(msg.String())
+			}
 		}
 	}
 	return m, nil
@@ -249,7 +253,7 @@ func rgSucceeded(err error) bool {
 }
 
 // enterBrowse moves a completed search into the browse state and starts
-// loading the current file.
+// loading the current file — the cursor's first stop.
 func (m Model) enterBrowse() (tea.Model, tea.Cmd) {
 	m.state = stateBrowse
 	m.files = m.index.Files()
@@ -257,18 +261,36 @@ func (m Model) enterBrowse() (tea.Model, tea.Cmd) {
 	for i, f := range m.files {
 		m.fileIdx[string(f)] = i
 	}
-	m.cursor = 0
+	return m.ensureLoaded()
+}
+
+// navigate applies one matched-line navigation key: n advances and p
+// retreats the index cursor circularly. A stop in another file switches
+// the panel — the departing file's viewport stays saved under its key
+// and the new file starts from its own saved viewport or the top — and
+// an uncached destination's load is requested. Same-file movement only
+// changes the current matched line; destination reveal is Issue 14's.
+// The file-change pop-up is Issue 15's.
+func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
+	var mv searchindex.Move
+	if key == "n" {
+		mv = m.index.Next()
+	} else {
+		mv = m.index.Prev()
+	}
+	if !mv.FileChanged {
+		return m, nil
+	}
 	return m.ensureLoaded()
 }
 
 // ensureLoaded starts a load for the current stop's file unless it is
 // already loaded or in flight — one load per raw path, never queued.
 func (m Model) ensureLoaded() (Model, tea.Cmd) {
-	stops := m.index.Stops()
-	if len(stops) == 0 {
+	stop, ok := m.index.Current()
+	if !ok {
 		return m, nil
 	}
-	stop := stops[m.cursor]
 	key := string(stop.Path)
 	if m.buffers[key] != nil || m.loading[key] {
 		return m, nil
@@ -355,11 +377,11 @@ func (m Model) viewportFor(key string) *viewport.Viewport {
 // curKey is the per-file map key of the current stop's raw path, or ""
 // when the index has no stops.
 func (m Model) curKey() string {
-	stops := m.index.Stops()
-	if len(stops) == 0 {
+	stop, ok := m.index.Current()
+	if !ok {
 		return ""
 	}
-	return string(stops[m.cursor].Path)
+	return string(stop.Path)
 }
 
 // termSize returns the terminal dimensions, defaulting to 80x24 before

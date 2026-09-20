@@ -156,8 +156,7 @@ func TestScrollKeysOnPlaceholderAreNoop(t *testing.T) {
 
 // The vertical viewport is saved per file: scrolling in one file is
 // remembered and restored on a revisit, while a first visit starts at
-// the top. The cursor poke stands in for Issue 13's navigation keys,
-// which own the user-facing route between files.
+// the top. Navigation between files goes through the n/p keys.
 func TestVerticalViewportSavedPerFile(t *testing.T) {
 	dir := t.TempDir()
 	writeMatchFile(t, dir, "a.txt", numberedContent(50))
@@ -185,13 +184,13 @@ func TestVerticalViewportSavedPerFile(t *testing.T) {
 		t.Fatalf("a.txt scrolled to %q, want line-06", row)
 	}
 
-	// Switch to b.txt and load it; a first visit starts at the top.
-	m.cursor = 1
-	bbuf, err := filebuffer.Load(idx.Stops()[1].Resolved, idx.Stops()[1:2])
-	if err != nil {
-		t.Fatalf("loading b.txt: %v", err)
+	// n switches to b.txt and requests its load; a first visit starts
+	// at the top.
+	m, cmd = update(t, m, keyMsg("n"))
+	if cmd == nil {
+		t.Fatal("n to uncached b.txt returned no load command")
 	}
-	m, _ = update(t, m, loadResult{path: []byte("b.txt"), buf: bbuf})
+	m, _ = update(t, m, cmd())
 	if row := contentRow(t, m); !strings.Contains(row, "row-01") {
 		t.Fatalf("first visit to b.txt shows %q, want row-01 at the top", row)
 	}
@@ -204,11 +203,14 @@ func TestVerticalViewportSavedPerFile(t *testing.T) {
 
 	// Revisiting a.txt restores its saved top rather than restarting
 	// at the top or inheriting b.txt's position.
-	m.cursor = 0
+	m, cmd = update(t, m, keyMsg("p"))
+	if cmd != nil {
+		t.Fatalf("p to cached a.txt returned a command: %v", cmd)
+	}
 	if row := contentRow(t, m); !strings.Contains(row, "line-06") {
 		t.Fatalf("revisit to a.txt shows %q, want the saved top line-06", row)
 	}
-	m.cursor = 1
+	m, _ = update(t, m, keyMsg("n"))
 	if row := contentRow(t, m); !strings.Contains(row, "row-04") {
 		t.Fatalf("revisit to b.txt shows %q, want the saved top row-04", row)
 	}

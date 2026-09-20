@@ -66,6 +66,19 @@ type Index struct {
 	// when the stream ended.
 	incomplete map[string]struct{}
 	sorted     []Stop
+	// cursor is the index into sorted of the current navigation stop —
+	// the single matched-line cursor the UI's n/p keys drive. Finish
+	// places it on the first stop.
+	cursor int
+}
+
+// Move reports how one cursor step changed the selection: Wrapped is
+// true when the step crossed an end of the stop list — Next past the
+// last stop or Prev past the first — and FileChanged is true when the
+// selected stop is in a different file than the departed one.
+type Move struct {
+	Wrapped     bool
+	FileChanged bool
 }
 
 // New returns an Index that resolves relative result paths against
@@ -354,6 +367,8 @@ func (x *Index) Finish() {
 		x.sorted[i].Coverage = unionRanges(x.sorted[i].Submatches)
 		_, x.sorted[i].Incomplete = x.incomplete[string(x.sorted[i].Path)]
 	}
+	// Startup selects the first stop in path-then-line order.
+	x.cursor = 0
 }
 
 // unionRanges merges sorted submatches into sorted, disjoint ranges —
@@ -378,6 +393,42 @@ func unionRanges(subs []Submatch) []Range {
 // it.
 func (x *Index) Stops() []Stop {
 	return x.sorted
+}
+
+// Current returns the stop under the matched-line cursor — the first
+// stop in path-then-line order at startup — or false when the index
+// holds no stops. It is valid after Finish.
+func (x *Index) Current() (Stop, bool) {
+	if len(x.sorted) == 0 {
+		return Stop{}, false
+	}
+	return x.sorted[x.cursor], true
+}
+
+// Next moves the cursor to the following stop, wrapping past the last
+// stop to the first; Prev moves it to the preceding stop, wrapping past
+// the first stop to the last. With zero or one stop both are strict
+// no-ops and report a zero Move.
+func (x *Index) Next() Move { return x.step(1) }
+
+// Prev moves the cursor to the preceding stop; see Next for the
+// circular and no-op contract.
+func (x *Index) Prev() Move { return x.step(-1) }
+
+// step moves the cursor by one stop in direction d, circularly, and
+// reports the wrap and file-change information the UI needs to follow
+// the cursor across files.
+func (x *Index) step(d int) Move {
+	n := len(x.sorted)
+	if n < 2 {
+		return Move{}
+	}
+	from := x.sorted[x.cursor].Path
+	x.cursor = (x.cursor + d + n) % n
+	return Move{
+		Wrapped:     d > 0 && x.cursor == 0 || d < 0 && x.cursor == n-1,
+		FileChanged: !bytes.Equal(x.sorted[x.cursor].Path, from),
+	}
 }
 
 // UsableResults reports the count of retained matched-line stops after
