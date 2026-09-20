@@ -28,8 +28,10 @@ import (
 // VRG_TEST_PID is a file it writes its process ID to. The vrg-consumed
 // seams are VRG_TEST_GATE (hold index preparation until the named file
 // exists), VRG_TEST_REAP (vrg writes the reaped wait status there),
-// VRG_TEST_FAIL_TRIGGER (inject a controlled application failure when
-// the named file appears), and VRG_TEST_FAIL_DIAGNOSTIC (its text).
+// VRG_TEST_COLLECT_ACK (vrg appends each collected diagnostic line
+// there), VRG_TEST_FAIL_TRIGGER (inject a controlled application failure
+// when the named file appears), and VRG_TEST_FAIL_DIAGNOSTIC (its
+// text).
 
 // lockedBuffer is a bytes.Buffer safe for concurrent writers and
 // readers; PTY and stderr copier goroutines write while the test polls.

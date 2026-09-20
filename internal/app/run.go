@@ -34,6 +34,11 @@ type Env struct {
 	// OnReap, when non-nil, is invoked once with the child's wait status
 	// at the moment the child is reaped.
 	OnReap func(error)
+	// OnCollect, when non-nil, is invoked once per diagnostic line at
+	// the moment it is processed into the session collection — the
+	// acknowledgement side channel tests wait on before sending an exit
+	// key, proving collection rather than mere child output.
+	OnCollect func(string)
 }
 
 // Run executes a validated search invocation end to end: it starts rg
@@ -42,7 +47,8 @@ type Env struct {
 // stderr diagnostic and exit 2 without entering the TUI. Every exit —
 // ordinary, cancelled, or a controlled application failure — terminates
 // and reaps a still-running child after the program has restored the
-// terminal, and only then reports a failure on stderr.
+// terminal, and only then replays the session's collected diagnostics
+// to stderr.
 func Run(argv []string, env Env) int {
 	stderr := env.Stderr
 	if stderr == nil {
@@ -66,6 +72,7 @@ func Run(argv []string, env Env) int {
 	proc := &reaper{child: child, onReap: env.OnReap}
 	m := New(proc, workdir)
 	m.gate = env.Gate
+	m.diags.onAdd = env.OnCollect
 	final, err := runProgram(m, env)
 
 	// Cleanup boundary, common to ordinary quits, cancellation, and
@@ -75,14 +82,19 @@ func Run(argv []string, env Env) int {
 	proc.Terminate()
 	_ = proc.Wait()
 
+	// Replay boundary: a controlled failure's diagnostic enters the
+	// session collection here rather than through a separate direct
+	// write, then the single post-restoration writer emits every
+	// collected diagnostic to stderr exactly once, in collection order.
+	if err != nil && !errors.Is(err, tea.ErrInterrupted) {
+		m.diags.add("vrg: " + safepresentation.EscapePath([]byte(err.Error())))
+	}
+	m.diags.replay(stderr)
+
 	switch {
 	case errors.Is(err, tea.ErrInterrupted):
 		return 130
 	case err != nil:
-		// The single post-restoration stderr writer: a controlled
-		// application failure is reported here exactly once, after the
-		// terminal is back in its prior state.
-		fmt.Fprintf(stderr, "vrg: %s\n", safepresentation.EscapePath([]byte(err.Error())))
 		return 2
 	}
 	if fm, ok := final.(Model); ok {
@@ -100,6 +112,9 @@ func runProgram(m Model, env Env) (tea.Model, error) {
 		return env.Program(m)
 	}
 	prog := tea.NewProgram(m)
+	// Diagnostic messages the collection path drains from the child are
+	// delivered back into the program's own message queue.
+	m.diags.emit = prog.Send
 	if env.Fail == nil {
 		return prog.Run()
 	}

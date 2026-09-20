@@ -3,7 +3,6 @@ package app
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
@@ -17,7 +16,7 @@ type outcomeInput struct {
 	integrity searchindex.Integrity // stream completeness
 	report    searchindex.Report    // skipped-record accounting
 	usable    int                   // retained matched-line stops
-	stderr    []byte                // captured stderr, pre-classification
+	stderr    []string              // collected stderr diagnostics, already escaped
 }
 
 // outcome is the fixed product of one completed search, decided once:
@@ -65,20 +64,17 @@ func procFatal(err error) bool {
 	return err != nil && !rgSucceeded(err)
 }
 
-// diagnosticLines classifies the captured stderr into escaped overlay
-// lines regardless of exit code. A fatal process that supplied no stderr
-// gets a generated line naming its exit code or signal rather than an
-// empty overlay. The record accounting follows: the malformed and
-// oversized aggregate counts, a line per recoverable oversized path
-// (escaped to a single line each), and the unknown-type warning —
-// unknown types warn but are not record loss. An incomplete stream
-// closes the list with a note explaining the retained results'
-// provenance.
+// diagnosticLines composes the overlay's escaped diagnostic lines,
+// starting with the collected stderr lines regardless of exit code. A
+// fatal process that supplied no stderr gets a generated line naming
+// its exit code or signal rather than an empty overlay. The record
+// accounting follows: the malformed and oversized aggregate counts, a
+// line per recoverable oversized path (escaped to a single line each),
+// and the unknown-type warning — unknown types warn but are not record
+// loss. An incomplete stream closes the list with a note explaining the
+// retained results' provenance.
 func diagnosticLines(in outcomeInput) []string {
-	var out []string
-	if s := strings.TrimSuffix(string(in.stderr), "\n"); s != "" {
-		out = strings.Split(safepresentation.EscapeDiagnostic(s), "\n")
-	}
+	out := append([]string(nil), in.stderr...)
 	if len(out) == 0 && procFatal(in.procErr) {
 		out = append(out, processDiagnostic(in.procErr))
 	}

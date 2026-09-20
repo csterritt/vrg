@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,6 +66,7 @@ var sinkSafetyTable = []sinkRow{
 	{"panel content", browseContentSink, func(f hostileFixture) []string { return f.wantContent }},
 	{"usage-error stderr", usageErrorSink, pathExpect},
 	{"error overlay", errorOverlaySink, overlayExpect},
+	{"stderr replay", stderrReplaySink, pathExpect},
 	// The generated command-line help has no substitution point — the
 	// application name and every description are fixed — so the row
 	// pins the sink's clean-output contract itself.
@@ -132,9 +134,10 @@ func errorOverlaySink(t *testing.T, f hostileFixture, styled bool) string {
 	idx, integrity := b.Finish()
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = feedStderr(t, m, string(f.data))
 	m, _ = update(t, m, searchResult{
 		index: idx, integrity: integrity,
-		stderr: f.data, err: exitError(2),
+		err: exitError(2),
 	})
 	if !styled {
 		m.theme = theme.Plain()
@@ -156,6 +159,19 @@ func overlayExpect(f hostileFixture) []string {
 	default:
 		return f.wantContent
 	}
+}
+
+// stderrReplaySink collects a load-failure diagnostic embedding the
+// fixture filename and emits it through the replay writer — the
+// post-restoration sink that writes every collected diagnostic to the
+// user's stderr.
+func stderrReplaySink(t *testing.T, f hostileFixture, _ bool) string {
+	t.Helper()
+	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
+	m, _ = update(t, m, loadResult{path: f.data, err: errors.New("denied")})
+	var out bytes.Buffer
+	m.diags.replay(&out)
+	return out.String()
 }
 
 // cliHelpSink renders the Issue 1 generated command-line help, the

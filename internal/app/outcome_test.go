@@ -398,9 +398,10 @@ func TestOutcomeMatrix(t *testing.T) {
 
 			m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
 			m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+			m = feedStderr(t, m, tc.stderr)
 			m, _ = update(t, m, searchResult{
 				index: idx, integrity: integrity, report: b.Report(),
-				stderr: []byte(tc.stderr), err: tc.procErr,
+				err: tc.procErr,
 			})
 
 			if m.state != tc.wantState {

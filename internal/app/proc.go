@@ -1,12 +1,13 @@
 package app
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"os/exec"
 	"sync"
 	"syscall"
+
+	tea "charm.land/bubbletea/v2"
 
 	"vrg/internal/searchindex"
 )
@@ -106,32 +107,35 @@ func (p *reaper) Wait() error {
 // model as a message: the prepared index, the stream-integrity result —
 // assessed separately from process success — the record accounting
 // (malformed, oversized, and unknown-type skips with recovered paths),
-// the captured stderr bytes (unclassified; the outcome decision owns
-// classification), and the child's wait status.
+// and the child's wait status. The child's stderr does not ride this
+// message: each drained stderr line is delivered as its own stderrMsg
+// while collection runs.
 type searchResult struct {
 	index     *searchindex.Index
 	integrity searchindex.Integrity
 	report    searchindex.Report
-	stderr    []byte
 	err       error
 }
 
 // collect drains both pipes concurrently for the whole child lifetime —
 // stdout records feed the index builder, which applies the lifecycle
-// matrix; stderr bytes are buffered — waits for the child, then prepares
-// the index and its integrity result. Neither pipe can fill and block
-// rg, and terminating the child closes both pipes so drainage ends
-// promptly. A non-nil gate is awaited between child exit and index
-// preparation so tests can hold preparation independently of rg exit;
-// ctx cancellation releases a held gate.
-func collect(ctx context.Context, child Child, workdir string, gate <-chan struct{}) searchResult {
+// matrix; each stderr line is handed to send as it is read, so a
+// diagnostic can be collected while rg is still running — waits for the
+// child, then prepares the index and its integrity result. Neither pipe
+// can fill and block rg, and terminating the child closes both pipes so
+// drainage ends promptly. Every stderr send completes before the result
+// is returned, so on the FIFO message channel the model collects all
+// stderr diagnostics before the outcome decision. A non-nil gate is
+// awaited between child exit and index preparation so tests can hold
+// preparation independently of rg exit; ctx cancellation releases a
+// held gate.
+func collect(ctx context.Context, child Child, workdir string, gate <-chan struct{}, send func(tea.Msg)) searchResult {
 	b := searchindex.NewBuilder(workdir)
-	var stderr bytes.Buffer
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_, _ = io.Copy(&stderr, child.Stderr())
+		drainStderr(child.Stderr(), send)
 	}()
 	b.Consume(child.Stdout())
 	wg.Wait()
@@ -147,7 +151,6 @@ func collect(ctx context.Context, child Child, workdir string, gate <-chan struc
 		index:     index,
 		integrity: integrity,
 		report:    b.Report(),
-		stderr:    stderr.Bytes(),
 		err:       err,
 	}
 }

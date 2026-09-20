@@ -238,13 +238,17 @@ func TestStartFailureDiagnosticIsSanitized(t *testing.T) {
 }
 
 // The production path through collect: a real started child's stream is
-// indexed and both pipes are drained.
+// indexed, both pipes are drained, and each stderr line is delivered as
+// a stderrMsg before the result returns.
 func TestCollectIndexesStream(t *testing.T) {
 	child := &fakeChild{
 		stdout: strings.NewReader(validStream),
 		stderr: strings.NewReader("warning text\n"),
 	}
-	res := collect(context.Background(), child, "/w", nil)
+	var sent []tea.Msg
+	res := collect(context.Background(), child, "/w", nil, func(msg tea.Msg) {
+		sent = append(sent, msg)
+	})
 	if res.err != nil {
 		t.Fatalf("collect err = %v", res.err)
 	}
@@ -252,8 +256,11 @@ func TestCollectIndexesStream(t *testing.T) {
 	if len(stops) != 1 || string(stops[0].Path) != "a.txt" || stops[0].Line != 1 {
 		t.Fatalf("index stops = %+v, want a.txt:1", stops)
 	}
-	if string(res.stderr) != "warning text\n" {
-		t.Fatalf("stderr = %q, want %q", res.stderr, "warning text\n")
+	if len(sent) != 1 {
+		t.Fatalf("stderr delivered %d messages, want 1", len(sent))
+	}
+	if msg, ok := sent[0].(stderrMsg); !ok || msg.raw != "warning text\n" {
+		t.Fatalf("stderr message = %#v, want stderrMsg %q", sent[0], "warning text\n")
 	}
 }
 

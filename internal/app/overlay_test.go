@@ -26,9 +26,10 @@ func overlayModel(t *testing.T, records []string, procErr error, stderr string) 
 	idx, integrity := b.Finish()
 	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = feedStderr(t, m, stderr)
 	m, _ = update(t, m, searchResult{
 		index: idx, integrity: integrity,
-		stderr: []byte(stderr), err: procErr,
+		err: procErr,
 	})
 	return m
 }
@@ -142,9 +143,10 @@ func TestOverlayCtrlCExits130(t *testing.T) {
 	idx, integrity := b.Finish()
 	m := New(child, "/w")
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = feedStderr(t, m, "warn\n")
 	m, _ = update(t, m, searchResult{
 		index: idx, integrity: integrity,
-		stderr: []byte("warn\n"), err: exitError(2),
+		err: exitError(2),
 	})
 	if m.overlay == nil {
 		t.Fatal("no overlay open")

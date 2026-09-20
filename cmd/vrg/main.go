@@ -37,8 +37,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 // searchEnv builds the app environment for a search. The VRG_TEST_*
 // variables wire the subprocess-boundary test seams — a preparation
-// gate, a reap side channel, and a controlled-failure trigger — and are
-// inert when unset. stop releases any file watchers the seams started.
+// gate, a reap side channel, a diagnostic-collection acknowledgement
+// side channel, and a controlled-failure trigger — and are inert when
+// unset. stop releases any file watchers the seams started.
 func searchEnv(stderr io.Writer, stop <-chan struct{}) app.Env {
 	env := app.Env{Stderr: stderr}
 	if path := os.Getenv("VRG_TEST_GATE"); path != "" {
@@ -51,6 +52,15 @@ func searchEnv(stderr io.Writer, stop <-chan struct{}) app.Env {
 				status = err.Error()
 			}
 			_ = os.WriteFile(path, []byte(status+"\n"), 0o644)
+		}
+	}
+	if path := os.Getenv("VRG_TEST_COLLECT_ACK"); path != "" {
+		env.OnCollect = func(line string) {
+			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+			if err == nil {
+				_, _ = f.WriteString(line + "\n")
+				_ = f.Close()
+			}
 		}
 	}
 	if path := os.Getenv("VRG_TEST_FAIL_TRIGGER"); path != "" {

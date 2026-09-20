@@ -11,6 +11,7 @@ import (
 	"github.com/clipperhouse/displaywidth"
 
 	"vrg/internal/filebuffer"
+	"vrg/internal/safepresentation"
 	"vrg/internal/searchindex"
 	"vrg/internal/theme"
 	"vrg/internal/viewport"
@@ -61,9 +62,16 @@ type Model struct {
 	state  state
 
 	index   *searchindex.Index
-	stderr  []byte
 	procErr error
 	status  int
+	// diags is the session diagnostic collection: every diagnostic the
+	// model has processed, in collection order, replayed to stderr after
+	// the terminal is restored. It is a shared pointer so Run's cleanup
+	// boundary appends the controlled-failure diagnostic to the same
+	// collection. stderrLines is the subset sourced from the child's
+	// stderr, which the outcome decision shows in an overlay.
+	diags       *diagnostics
+	stderrLines []string
 	// overlay, when non-nil, is the open diagnostic overlay: the modal
 	// error/warning presentation of a completed search.
 	overlay *errOverlay
@@ -93,6 +101,7 @@ func New(child Child, workdir string) Model {
 		state:   stateSearching,
 		ctx:     ctx,
 		cancel:  cancel,
+		diags:   &diagnostics{},
 		buffers: make(map[string]*filebuffer.Buffer),
 		loading: make(map[string]bool),
 		failed:  make(map[string]bool),
@@ -101,10 +110,14 @@ func New(child Child, workdir string) Model {
 }
 
 // Init starts collection and index preparation off the UI update path.
+// Drained stderr lines are delivered as stderrMsg values through the
+// collection's emit — wired to the running program's Send by the
+// default runner — so they are collected as they arrive.
 func (m Model) Init() tea.Cmd {
 	ctx, child, workdir, gate := m.ctx, m.child, m.workdir, m.gate
+	diags := m.diags
 	return func() tea.Msg {
-		return collect(ctx, child, workdir, gate)
+		return collect(ctx, child, workdir, gate, diags.emit)
 	}
 }
 
@@ -122,24 +135,38 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.overlay.scroll = max
 			}
 		}
+	case stderrMsg:
+		if m.state == stateCancelled {
+			// A diagnostic still in flight at the exit decision is never
+			// collected.
+			return m, nil
+		}
+		for _, line := range escapeDiagnosticLines(msg.raw) {
+			m.stderrLines = append(m.stderrLines, line)
+			m.diags.add(line)
+		}
 	case searchResult:
 		if m.state == stateCancelled {
 			// A late completion must not revive a cancelled run.
 			return m, nil
 		}
 		m.index = msg.index
-		m.stderr = msg.stderr
 		m.procErr = msg.err
 		oc := decideOutcome(outcomeInput{
 			procErr:   msg.err,
 			integrity: msg.integrity,
 			report:    msg.report,
 			usable:    msg.index.UsableResults(),
-			stderr:    msg.stderr,
+			stderr:    m.stderrLines,
 		})
 		// The exit status is fixed here, at the outcome decision; only
 		// ctrl+c overrides it later.
 		m.status = oc.status
+		// The stderr prefix of the outcome diagnostics was already
+		// collected line by line; only the generated diagnostics — the
+		// process, record-loss, and integrity lines — join the session
+		// collection at the decision.
+		m.diags.addAll(oc.diagnostics[len(m.stderrLines):])
 		if len(oc.diagnostics) > 0 {
 			m.overlay = &errOverlay{lines: oc.diagnostics}
 		}
@@ -161,6 +188,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.failed[key] = true
 			delete(m.buffers, key)
+			m.diags.add("cannot read " + safepresentation.EscapePath(msg.path) +
+				": " + safepresentation.EscapePath([]byte(msg.err.Error())))
 		} else {
 			m.buffers[key] = msg.buf
 			delete(m.failed, key)

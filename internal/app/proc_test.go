@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"vrg/internal/cli"
 )
 
@@ -53,7 +55,7 @@ printf '%s\n' '{"type":"summary","data":{}}'
 	if err != nil {
 		t.Fatalf("execStarter: %v", err)
 	}
-	out := collect(context.Background(), child, dir, nil)
+	out := collect(context.Background(), child, dir, nil, nil)
 	if out.err != nil {
 		t.Fatalf("collect err = %v", out.err)
 	}
@@ -110,8 +112,14 @@ printf '%s\n' '{"type":"summary","data":{}}'
 	if err != nil {
 		t.Fatalf("execStarter: %v", err)
 	}
+	var stderrBytes int
+	send := func(msg tea.Msg) {
+		if m, ok := msg.(stderrMsg); ok {
+			stderrBytes += len(m.raw)
+		}
+	}
 	done := make(chan searchResult, 1)
-	go func() { done <- collect(context.Background(), child, dir, nil) }()
+	go func() { done <- collect(context.Background(), child, dir, nil, send) }()
 
 	var res searchResult
 	select {
@@ -125,8 +133,8 @@ printf '%s\n' '{"type":"summary","data":{}}'
 	if _, err := os.Stat(doneFile); err != nil {
 		t.Fatalf("fake rg never finished writing both streams: %v", err)
 	}
-	if n := len(res.stderr); n < 1<<20 {
-		t.Fatalf("captured stderr = %d bytes, want at least 1 MiB", n)
+	if stderrBytes < 1<<20 {
+		t.Fatalf("delivered stderr = %d bytes, want at least 1 MiB", stderrBytes)
 	}
 	if n := len(res.index.Stops()); n != 64 {
 		t.Fatalf("index stops = %d, want 64: stdout records were lost", n)
