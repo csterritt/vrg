@@ -43,7 +43,10 @@ var hostileFixtures = []hostileFixture{
 	{"c1 nel", []byte("\xc2\x85"), "\xc2\x85", `\u0085`, []string{`\u0085`}},
 	{"delete", []byte("\x7f"), "\x7f", `^?`, []string{"^?"}},
 	{"standalone cr", []byte("\r"), "\r", `\r`, []string{"^M"}},
-	{"invalid utf-8 path bytes", []byte("\xff\xfe"), "\xff\xfe", `\xff\xfe`, []string{"\uFFFD\uFFFD"}},
+	// The invalid-UTF-8 pair avoids FF FE and FE FF: those byte orders
+	// open a UTF-16 BOM, which Issue 30's encoding detection intercepts
+	// before the panel-content sink sees the bytes.
+	{"invalid utf-8 path bytes", []byte("\xff\xff"), "\xff\xff", `\xff\xff`, []string{"\uFFFD\uFFFD"}},
 	{"embedded filename newline", []byte("evil\nname.txt"), "\nname", `evil\nname.txt`, []string{"evil", "name.txt"}},
 	{"embedded tab", []byte("\t"), "\t", `\t`, nil},
 }

@@ -113,7 +113,11 @@ type Model struct {
 	// each path's latest read-failure diagnostic — the prior-failure
 	// line a re-entry shows in the overlay — and doubles as the
 	// "(unreadable)" placeholder state once no load for the path is in
-	// flight. The matched-line cursor lives in the index; the current
+	// flight. unsupported likewise holds each path's latest
+	// encoding-detection diagnostic: the line a re-entry shows in the
+	// explanatory overlay and the "(unsupported encoding)" placeholder
+	// state once the detected buffer — cached like ordinary content —
+	// has settled. The matched-line cursor lives in the index; the current
 	// file derives from it. vps holds each visited file's saved
 	// vertical viewport under the same key, so a revisited file resumes
 	// from its saved position — a width-independent logical anchor
@@ -142,6 +146,7 @@ type Model struct {
 	loading       map[string]int
 	loadSeq       int
 	failed        map[string]string
+	unsupported   map[string]string
 	notes         map[string]string
 	loader        loaderFunc
 	listTop       int
@@ -172,6 +177,7 @@ func New(child Child, workdir string) Model {
 		revs:        make(map[string]int),
 		loading:     make(map[string]int),
 		failed:      make(map[string]string),
+		unsupported: make(map[string]string),
 		loader:      fileLoader,
 		notes:       make(map[string]string),
 		vps:         make(map[string]*viewport.Viewport),
@@ -279,6 +285,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			line := "cannot read " + safepresentation.EscapePath(msg.path) +
 				": " + safepresentation.EscapePath([]byte(msg.err.Error()))
 			m.failed[key] = line
+			delete(m.unsupported, key)
 			delete(m.buffers, key)
 			delete(m.sources, key)
 			m.diags.add(line)
@@ -302,6 +309,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notes[key] = staleNote
 			} else {
 				delete(m.notes, key)
+			}
+			// Issue 30: a BOM-detected UTF-16/32 file keeps its prepared
+			// source cached like ordinary content — the indexed stops
+			// stay navigable and nothing reloads until r — but presents
+			// the "(unsupported encoding)" placeholder and an
+			// explanatory diagnostic under the same current/non-current
+			// notification split as a read failure.
+			if src, ok := msg.src.(unsupportedNoter); ok && src.Unsupported() != "" {
+				line := "cannot display " + safepresentation.EscapePath(msg.path) +
+					": unsupported encoding " + src.Unsupported()
+				m.unsupported[key] = line
+				m.diags.add(line)
+				if m.state == stateBrowse && key == m.curKey() {
+					m.showFailure(line)
+				}
+			} else {
+				delete(m.unsupported, key)
 			}
 			if key == m.curKey() {
 				// A reload's completion records the anchor-preserving
@@ -492,6 +516,15 @@ func (m Model) navigate(key string) (tea.Model, tea.Cmd) {
 		m, stage := m.ensureStaged()
 		return m, stage
 	}
+	if diag, un := m.unsupported[string(stop.Path)]; un {
+		// Re-entering a detected unsupported file re-shows its
+		// explanatory overlay — the same notification a current-file
+		// detection gives — but mints no reload: the detected buffer
+		// is cached content, stable until r like any other.
+		m.showFailure(diag)
+		m, stage := m.ensureStaged()
+		return m, stage
+	}
 	// The file-change pop-up starts at selection — never at load
 	// completion — with a fresh instance keying its own expiry timer.
 	m.popupSeq++
@@ -637,6 +670,12 @@ const staleNote = "file changed since search"
 // prepared source that reports whether stale-match validation dropped
 // any recorded submatch. *filebuffer.Buffer implements it.
 type staleNoter interface{ Stale() bool }
+
+// unsupportedNoter is the encoding-status seam for Issue 30: a prepared
+// source that reports the name of a BOM-detected encoding the panel
+// does not present — "" for supported content. *filebuffer.Buffer
+// implements it.
+type unsupportedNoter interface{ Unsupported() string }
 
 // loaderFunc reads and prepares one file for display: the resolved raw
 // path and the file's stops in, the prepared source or the read error

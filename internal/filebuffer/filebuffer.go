@@ -21,6 +21,22 @@ type Span struct {
 // view of a file's first line under its default detection.
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
+// unsupportedBOMs are the encoding signatures whose files the panel
+// does not present: rg searches their transcoded views, so the recorded
+// match bytes and offsets have no faithful mapping onto the raw file.
+// The table is checked in order with the longer signatures first, so a
+// BOM subsuming a shorter one classifies correctly — FF FE 00 00 is
+// UTF-32 LE, not UTF-16 LE.
+var unsupportedBOMs = []struct {
+	name string
+	bom  []byte
+}{
+	{"UTF-32 LE", []byte{0xFF, 0xFE, 0x00, 0x00}},
+	{"UTF-32 BE", []byte{0x00, 0x00, 0xFE, 0xFF}},
+	{"UTF-16 LE", []byte{0xFF, 0xFE}},
+	{"UTF-16 BE", []byte{0xFE, 0xFF}},
+}
+
 // Buffer is a prepared file: display-ready source lines with their
 // grapheme-cluster layout plus highlight spans and zero-width markers.
 // Three coordinate views stay separate throughout: the retained raw
@@ -30,6 +46,9 @@ var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 // cells both map onto. Load performs the whole read, decode, and
 // byte→cell mapping so the caller's update path does no full-file work
 // — the prepared Buffer travels inside the load-completion message.
+// A file whose BOM marks an encoding the panel does not present
+// produces a Buffer reporting that encoding through Unsupported and
+// carrying no lines, spans, or markers.
 type Buffer struct {
 	lines    [][]safepresentation.Cell
 	clusters [][]safepresentation.Cluster
@@ -39,6 +58,9 @@ type Buffer struct {
 	targets  map[int]int
 	bom      int
 	stale    bool
+	// unsupported is the detected unsupported encoding's name — "" for
+	// a file the panel can present.
+	unsupported string
 }
 
 // Load reads path — the raw resolved path bytes, never a display string
@@ -52,7 +74,10 @@ type Buffer struct {
 // bytes — range bounds shifted through rawOffset, then byte equality
 // with the recorded match bytes — so a file changed since the search
 // drops only the submatches that no longer hold, keeps the survivors'
-// highlights, and marks the buffer stale.
+// highlights, and marks the buffer stale. A UTF-16/32 BOM instead marks
+// the buffer unsupported and returns it before any line splitting or
+// validation: the recorded submatches' rg-view coordinates have no
+// meaning against the encoded bytes.
 func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 	raw, err := os.ReadFile(string(path))
 	if err != nil {
@@ -62,6 +87,12 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		spans:   make(map[int][]Span),
 		markers: make(map[int][]int),
 		targets: make(map[int]int),
+	}
+	for _, e := range unsupportedBOMs {
+		if bytes.HasPrefix(raw, e.bom) {
+			b.unsupported = e.name
+			return b, nil
+		}
 	}
 	if bytes.HasPrefix(raw, utf8BOM) {
 		b.bom = len(utf8BOM)
@@ -261,8 +292,18 @@ func (b *Buffer) clampedStart(i, rgStart int) int {
 // Stale reports whether stale-match validation dropped any recorded
 // submatch — the buffer-status flag behind the filename row's "file
 // changed since search" note. It is recomputed on every Load, so a
-// reload clears it only when the new content validates fully.
+// reload clears it only when the new content validates fully. An
+// unsupported buffer is never stale: validation does not run against
+// encoded bytes.
 func (b *Buffer) Stale() bool { return b.stale }
+
+// Unsupported reports the name of the encoding the file's BOM marks —
+// "UTF-16 LE", "UTF-16 BE", "UTF-32 LE", or "UTF-32 BE" — when the
+// panel cannot present it, or "" for a supported file. An unsupported
+// buffer holds no lines, highlights, or markers: rg's match offsets
+// refer to the transcoded view, so showing the encoded bytes as file
+// text would misrepresent them.
+func (b *Buffer) Unsupported() string { return b.unsupported }
 
 // TargetCell returns the stop's display target: its 0-based source
 // line and the start cell of its first coverage range — the cell whose

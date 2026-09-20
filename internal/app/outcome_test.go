@@ -80,13 +80,16 @@ type outcomeRow struct {
 	// filesystem state — an unreadable file never changes the status
 	// fixed at the outcome decision. staleAll instead completes each
 	// retained file's load with a buffer whose recorded submatches all
-	// failed Issue 29 validation — stale status is presentation too.
+	// failed Issue 29 validation — stale status is presentation too —
+	// and unsupportedAll completes them with an Issue 30 BOM-detected
+	// unsupported buffer.
 	// postFailContains is asserted on the view after the injected
 	// completions settle; diagsContain names lines the session
 	// collection — the replay's source — must hold.
 	failAll          bool
 	failCurrent      bool
 	staleAll         bool
+	unsupportedAll   bool
 	postFailContains []string
 	diagsContain     []string
 
@@ -472,6 +475,22 @@ func TestOutcomeMatrix(t *testing.T) {
 			postAbsent:   []string{"boom"},
 			final:        "q", wantStatus: 2,
 		},
+		{
+			// Issue 30: every retained file detecting an unsupported
+			// encoding touches only presentation and diagnostics — the
+			// fixed status stays 0.
+			name:             "every retained file unsupported still exits 0",
+			records:          valid,
+			wantState:        stateBrowse,
+			contains:         []string{"a.txt"},
+			absent:           []string{"┌"},
+			unsupportedAll:   true,
+			postFailContains: []string{"cannot display a.txt: unsupported encoding UTF-16 LE"},
+			diagsContain:     []string{"cannot display a.txt: unsupported encoding UTF-16 LE"},
+			dismiss:          "esc", // the encoding overlay, opened on settle
+			postContains:     []string{"a.txt", "(unsupported encoding)"},
+			final:            "q", wantStatus: 0,
+		},
 	}
 
 	for _, tc := range cases {
@@ -516,8 +535,8 @@ func TestOutcomeMatrix(t *testing.T) {
 			// never asked for first mint one — then assert the post-
 			// failure view and the collected-for-replay diagnostics.
 			// Issue 29 rows complete the same way but with a stale
-			// buffer.
-			if tc.failAll || tc.failCurrent || tc.staleAll {
+			// buffer; Issue 30 rows with an unsupported-encoding one.
+			if tc.failAll || tc.failCurrent || tc.staleAll || tc.unsupportedAll {
 				for _, f := range m.files {
 					key := string(f)
 					if tc.failCurrent && key != m.curKey() {
@@ -533,6 +552,13 @@ func TestOutcomeMatrix(t *testing.T) {
 						m = applyLoad(t, m, loadResult{
 							path: f, req: req,
 							src: staleBuffer(t, stopsForPath(m.index, f)),
+						})
+						continue
+					}
+					if tc.unsupportedAll {
+						m = applyLoad(t, m, loadResult{
+							path: f, req: req,
+							src: unsupportedBuffer(t, stopsForPath(m.index, f)),
 						})
 						continue
 					}

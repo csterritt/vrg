@@ -138,15 +138,20 @@ func (m Model) panelRow(r int, curPath []byte, curIdx, panelW, contentH int) str
 		return m.theme.FilenameRule(filenameRule(name, m.notes[key], panelW))
 	}
 	src := m.buffers[key]
-	if src == nil {
+	_, un := m.unsupported[key]
+	if src == nil || un {
 		if r == 1 {
 			// A load in flight reads "Loading…" even for a previously
-			// failed file: its entry retry is what settles the
-			// placeholder to content or "(unreadable)".
+			// failed or unsupported file: its retry or reload is what
+			// settles the placeholder to content, "(unreadable)", or
+			// "(unsupported encoding)". The detected buffer's installed
+			// layout has no rows, so the placeholder stands in.
 			text := "Loading…"
 			if _, flying := m.loading[key]; !flying {
 				if _, bad := m.failed[key]; bad {
 					text = "(unreadable)"
+				} else if un {
+					text = "(unsupported encoding)"
 				}
 			}
 			return padCells(clipCells(text, panelW), panelW)
