@@ -70,8 +70,18 @@ func runVrgFull(t *testing.T, argv0 string, env []string, args ...string) runRes
 
 func runVrgIn(t *testing.T, dir string, args ...string) runResult {
 	t.Helper()
+	return runVrgFullIn(t, dir, nil, args...)
+}
+
+// runVrgFullIn invokes the built binary in dir; env replaces the
+// environment when non-nil.
+func runVrgFullIn(t *testing.T, dir string, env []string, args ...string) runResult {
+	t.Helper()
 	cmd := exec.Command(binPath, args...)
 	cmd.Dir = dir
+	if env != nil {
+		cmd.Env = env
+	}
 	var so, se bytes.Buffer
 	cmd.Stdout = &so
 	cmd.Stderr = &se
@@ -99,13 +109,34 @@ func assertHelpRun(t *testing.T, res runResult, args []string) {
 	if res.stderr != "" {
 		t.Fatalf("vrg %v: stderr not empty: %q", args, res.stderr)
 	}
-	if strings.Contains(res.stdout, "search stub:") {
-		t.Fatalf("vrg %v: help path produced stub output: %q", args, res.stdout)
-	}
 	for _, s := range []string{res.stdout, res.stderr} {
 		if strings.Contains(s, "\x1b[?1049") || strings.Contains(s, "\x9b") {
 			t.Fatalf("vrg %v: output contains terminal control sequences: %q", args, s)
 		}
+	}
+}
+
+// assertStartFailure requires the rg start-failure shape: exit 2, empty
+// stdout, and a single sanitized "vrg:" diagnostic line naming the
+// failure — no usage block and no terminal control bytes, because the
+// TUI is never entered.
+func assertStartFailure(t *testing.T, res runResult, args []string) {
+	t.Helper()
+	if res.code != 2 {
+		t.Fatalf("vrg %v exited %d, want 2 (stdout %q)", args, res.code, res.stdout)
+	}
+	if res.stdout != "" {
+		t.Fatalf("vrg %v: stdout not empty on start failure: %q", args, res.stdout)
+	}
+	diag := strings.TrimSuffix(res.stderr, "\n")
+	if !strings.HasPrefix(diag, "vrg: ") || !strings.Contains(diag, "cannot start rg") {
+		t.Fatalf("vrg %v: stderr does not name the rg start failure: %q", args, res.stderr)
+	}
+	if strings.Contains(res.stderr, "Usage:") {
+		t.Fatalf("vrg %v: start failure emitted usage help: %q", args, res.stderr)
+	}
+	if strings.Contains(diag, "\n") || strings.ContainsAny(diag, "\x1b\x9b") {
+		t.Fatalf("vrg %v: start diagnostic is not a sanitized single line: %q", args, res.stderr)
 	}
 }
 
@@ -226,17 +257,6 @@ func TestCLIOutputSafety(t *testing.T) {
 		t.Fatalf("raw escape byte reached stderr: %q", res.stderr)
 	}
 
-	// The success stub escapes its substitutions too.
-	res = runVrg(t, "pa\x1b[31mt", ".")
-	if res.code != 0 {
-		t.Fatalf("stub run exited %d: %q", res.code, res.stderr)
-	}
-	if strings.Contains(res.stdout, "\x1b") {
-		t.Fatalf("raw escape byte reached stdout stub: %q", res.stdout)
-	}
-	if !strings.Contains(res.stdout, "^[") {
-		t.Fatalf("stub did not show the escaped pattern: %q", res.stdout)
-	}
 }
 
 // The executable boundary: cmd/vrg alone chooses statuses and streams.
@@ -255,6 +275,10 @@ func TestExecutableBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Valid search invocations reach the search path: with no rg on PATH
+	// each produces the start-failure diagnostic (exit 2, no TUI, no
+	// usage block) rather than a help or usage-error result.
+	empty := t.TempDir()
 	searchCases := []struct {
 		name string
 		args []string
@@ -271,22 +295,8 @@ func TestExecutableBoundary(t *testing.T) {
 	}
 	for _, tc := range searchCases {
 		t.Run(tc.name, func(t *testing.T) {
-			res := runVrg(t, tc.args...)
-			if res.code != 0 {
-				t.Fatalf("vrg %v exited %d, want 0 (stderr %q)", tc.args, res.code, res.stderr)
-			}
-			if res.stderr != "" {
-				t.Fatalf("vrg %v: stderr not empty: %q", tc.args, res.stderr)
-			}
-			if !strings.Contains(res.stdout, "search stub:") {
-				t.Fatalf("vrg %v: missing stub output: %q", tc.args, res.stdout)
-			}
+			assertStartFailure(t, runVrgFull(t, "", []string{"PATH=" + empty}, tc.args...), tc.args)
 		})
-	}
-
-	res := runVrg(t, "foo")
-	if res.stdout != "search stub: rg --json --no-config -- foo .\n" {
-		t.Fatalf("default-root stub output = %q, want the exact child argv", res.stdout)
 	}
 
 	errorCases := [][]string{
@@ -315,73 +325,35 @@ func TestExecutableBoundary(t *testing.T) {
 	}
 
 	// stdin rejection must name stdin.
-	res = runVrg(t, "foo", "-")
+	res := runVrg(t, "foo", "-")
 	if !strings.Contains(res.stderr, "stdin") && !strings.Contains(res.stderr, "standard input") {
 		t.Fatalf("stdin root diagnostic does not name stdin: %q", res.stderr)
 	}
 }
 
-// The success stub prints the exact protected child argv: mandatory
-// internal flags, user flags in encounter order with supplied spellings,
-// then -- pattern root.
-func TestChildArgvStub(t *testing.T) {
-	dir := t.TempDir()
-	cases := []struct {
-		name string
-		args []string
-		want string
-	}{
-		{"no flags", []string{"foo"}, "search stub: rg --json --no-config -- foo .\n"},
-		{"combined shorts", []string{"-iw", "foo", "."},
-			"search stub: rg --json --no-config -i -w -- foo .\n"},
-		{"repeated shorts", []string{"-i", "-s", "-i", "foo"},
-			"search stub: rg --json --no-config -i -s -i -- foo .\n"},
-		{"combined repeats", []string{"-isi", "foo"},
-			"search stub: rg --json --no-config -i -s -i -- foo .\n"},
-		{"mixed spellings", []string{"--ignore-case", "-s", "-i", "foo"},
-			"search stub: rg --json --no-config --ignore-case -s -i -- foo .\n"},
-		{"option after pattern", []string{"foo", "-i", "."},
-			"search stub: rg --json --no-config -i -- foo .\n"},
-		{"options interleaved", []string{"foo", "-i", dir, "-s"},
-			"search stub: rg --json --no-config -i -s -- foo " + dir + "\n"},
-		{"unrestricted twice", []string{"-u", "--unrestricted", "foo"},
-			"search stub: rg --json --no-config -u --unrestricted -- foo .\n"},
-		{"empty pattern", []string{"", "."},
-			"search stub: rg --json --no-config --  .\n"},
-		{"literal -- pattern", []string{"--", "--"},
-			"search stub: rg --json --no-config -- -- .\n"},
-		{"protected dash pattern", []string{"--", "-foo"},
-			"search stub: rg --json --no-config -- -foo .\n"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := runVrg(t, tc.args...)
-			if res.code != 0 {
-				t.Fatalf("vrg %v exited %d, want 0 (stderr %q)", tc.args, res.code, res.stderr)
-			}
-			if res.stderr != "" {
-				t.Fatalf("vrg %v: stderr not empty: %q", tc.args, res.stderr)
-			}
-			if res.stdout != tc.want {
-				t.Fatalf("vrg %v stdout = %q, want %q", tc.args, res.stdout, tc.want)
-			}
-		})
+// rg start failure at the process boundary: invoked by explicit path
+// with an rg-free PATH, vrg writes a sanitized stderr diagnostic naming
+// the failure and exits 2 without entering the TUI.
+func TestStartFailureAtBoundary(t *testing.T) {
+	empty := t.TempDir()
+	res := runVrgFull(t, "", []string{"PATH=" + empty}, "foo")
+	assertStartFailure(t, res, []string{"foo"})
+	if strings.Contains(res.stderr, "exec:") && !strings.Contains(res.stderr, `"rg"`) {
+		t.Fatalf("start diagnostic does not identify rg: %q", res.stderr)
 	}
 }
 
-// A regular file literally named "-" validates when addressed as "./-".
+// A regular file literally named "-" validates when addressed as "./-":
+// it reaches the search path, surfacing here as the rg start failure
+// under an rg-free PATH rather than a usage error.
 func TestDashFileRootAtProcessBoundary(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "-"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res := runVrgIn(t, dir, "foo", "./-")
-	if res.code != 0 {
-		t.Fatalf(`vrg foo ./- exited %d, want 0 (stderr %q)`, res.code, res.stderr)
-	}
-	if !strings.Contains(res.stdout, "search stub:") {
-		t.Fatalf("missing stub output: %q", res.stdout)
-	}
+	empty := t.TempDir()
+	res := runVrgFullIn(t, dir, []string{"PATH=" + empty}, "foo", "./-")
+	assertStartFailure(t, res, []string{"foo", "./-"})
 }
 
 // Help assignment spellings that disable help are not help requests: no
