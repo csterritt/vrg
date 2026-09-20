@@ -7,7 +7,45 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 )
+
+// CauseKind identifies the stable kind of one stream-integrity
+// violation — the user-facing diagnostic each cause produces.
+type CauseKind int
+
+const (
+	// CauseDuplicateBegin is a begin for a path that is already open.
+	CauseDuplicateBegin CauseKind = iota
+	// CauseOrphanedMatch is a match for a path that is not open,
+	// including a match after the path's binary-excluding end.
+	CauseOrphanedMatch
+	// CauseOrphanedEnd is an end for a path that is not open.
+	CauseOrphanedEnd
+	// CauseMissingEnd is a file still open when the stream ends.
+	CauseMissingEnd
+	// CauseMissingSummary is a stream that ended without a valid
+	// summary.
+	CauseMissingSummary
+	// CauseExtraSummary is a second valid summary record.
+	CauseExtraSummary
+	// CauseAfterSummary is any other record after the stream's
+	// summary — context included.
+	CauseAfterSummary
+	// CauseUnterminated is a trailing record fragment that never
+	// reached its newline, outside the post-summary state.
+	CauseUnterminated
+)
+
+// IntegrityCause is one structured stream-integrity violation: its
+// stable kind and the raw path bytes the offending record names, where
+// applicable — nil for causes that name no path, such as a missing or
+// extra summary. One offending physical record contributes exactly one
+// cause.
+type IntegrityCause struct {
+	Kind CauseKind
+	Path []byte
+}
 
 // Integrity reports whether the consumed event stream was complete:
 // exactly one summary as the final record and valid paired begin/end
@@ -21,6 +59,12 @@ type Integrity struct {
 	// summary — the summary was absent, lost, or malformed — while any
 	// other lifecycle violation leaves it clear.
 	MissingSummary bool
+	// Causes holds one structured cause per offending physical record:
+	// mid-stream violations in detection order, then the end-of-stream
+	// causes — a missing end per still-open file in unsigned raw-path
+	// order, then the missing summary, then a trailing unterminated
+	// record that was not already counted as a record after summary.
+	Causes []IntegrityCause
 }
 
 // Report is the stream-level record accounting a Builder accumulates
@@ -48,8 +92,8 @@ type Report struct {
 // Per-path open state is tracked over decoded raw path bytes, so the
 // text and bytes encodings of one path are the same file, and multiple
 // files may be open simultaneously when rg interleaves events across
-// parallel searches. context records carry no lifecycle weight in any
-// position. The transition dispositions:
+// parallel searches. context records carry no lifecycle weight before
+// summary. The transition dispositions:
 //
 //	begin(P) while P is not open   — P opens
 //	begin(P) while P is open       — failure (duplicate begin)
@@ -59,23 +103,30 @@ type Report struct {
 //	end(P) while P is open         — P closes; non-null binary_offset
 //	                                excludes P
 //	end(P) while P is not open     — failure (orphaned/duplicate end)
-//	context(P)                     — ignored; no lifecycle effect
+//	context(P) before summary      — ignored; no lifecycle effect
 //	P still open when stream ends  — failure; retained incomplete
 //	exactly one summary, final     — complete; a summary alone is a
 //	                                valid zero-result stream
 //	summary missing                — failure
 //	a second summary               — failure
-//	any non-context record after summary — failure
+//	any record after summary       — failure
 //	trailing unterminated record   — failure, and counted malformed
 type Builder struct {
 	idx *Index
 	// open holds the raw path keys of files between their begin and end.
 	open map[string]struct{}
 	// sawSummary records that the one valid summary has been consumed;
-	// every later non-context record is an integrity failure.
+	// every later record is an integrity failure.
 	sawSummary bool
-	// failed accumulates any lifecycle transition violation.
-	failed bool
+	// causes accumulates one structured integrity cause per offending
+	// record in detection order; Finish appends the end-of-stream
+	// causes. unterminated marks a trailing unterminated fragment seen
+	// outside the post-summary state — its cause is deferred to Finish
+	// so it lands after the missing-end and missing-summary causes; a
+	// post-summary fragment records its after-summary cause at
+	// detection instead.
+	causes       []IntegrityCause
+	unterminated bool
 	// malformed, oversized, and unknown accumulate the Report counts;
 	// oversizedPaths holds each recovered oversized-record path.
 	malformed      int
@@ -116,7 +167,7 @@ func (b *Builder) add(record []byte) error {
 	typ, err := eventType(record)
 	if err != nil {
 		if b.sawSummary {
-			b.failed = true
+			b.cause(CauseAfterSummary, nil)
 		}
 		return err
 	}
@@ -155,7 +206,7 @@ func (b *Builder) addBegin(record []byte) error {
 	}
 	key := string(path)
 	if _, open := b.open[key]; open {
-		b.failed = true
+		b.cause(CauseDuplicateBegin, path)
 		return nil
 	}
 	b.open[key] = struct{}{}
@@ -172,7 +223,7 @@ func (b *Builder) addEnd(record []byte) error {
 	}
 	key := string(path)
 	if _, open := b.open[key]; !open {
-		b.failed = true
+		b.cause(CauseOrphanedEnd, path)
 	} else {
 		delete(b.open, key)
 	}
@@ -194,7 +245,7 @@ func (b *Builder) addMatch(record []byte) error {
 	}
 	key := string(path)
 	if _, open := b.open[key]; !open {
-		b.failed = true
+		b.cause(CauseOrphanedMatch, path)
 		if _, excluded := b.idx.binary[key]; !excluded {
 			b.idx.markIncomplete(path)
 		}
@@ -204,15 +255,26 @@ func (b *Builder) addMatch(record []byte) error {
 
 // postSummary handles a record arriving after the stream's summary: the
 // summary is final, so any record after it is an integrity failure —
-// except context, which carries no lifecycle weight in any position.
-// Post-summary records are not dispatched to lifecycle validation; a
+// context included. Each post-summary record contributes exactly one
+// cause under the precedence rule: a second valid summary is only an
+// extra summary, and every other record is only a record after summary.
+// Post-summary records are not dispatched to lifecycle validation — a
+// post-summary begin cannot open its path nor an end close it — but
+// their per-record schema and index effects still apply, and a
 // schema-malformed one still returns its error so the caller can count
 // it.
 func (b *Builder) postSummary(record []byte, typ string) error {
-	if typ == "context" {
+	if typ == "summary" {
+		if err := checkSummary(record); err != nil {
+			// A malformed record after summary contributes the
+			// after-summary cause plus its malformed count.
+			b.cause(CauseAfterSummary, nil)
+			return err
+		}
+		b.cause(CauseExtraSummary, nil)
 		return nil
 	}
-	b.failed = true
+	b.cause(CauseAfterSummary, nil)
 	switch typ {
 	case "match":
 		_, err := b.idx.addMatch(record)
@@ -226,14 +288,20 @@ func (b *Builder) postSummary(record []byte, typ string) error {
 			b.idx.excludeBinary(path)
 		}
 		return nil
-	case "summary":
-		return checkSummary(record)
+	case "context":
+		return nil
 	default:
 		// An unknown type after summary keeps its unknown-type count;
 		// the ordering violation is the integrity failure above.
 		b.unknown++
 		return nil
 	}
+}
+
+// cause records one structured integrity violation: its kind and the
+// raw path the offending record names, where applicable.
+func (b *Builder) cause(kind CauseKind, path []byte) {
+	b.causes = append(b.causes, IntegrityCause{Kind: kind, Path: path})
 }
 
 // maxRecordPayload is the largest accepted JSON record payload: 64 MiB,
@@ -258,21 +326,27 @@ func (b *Builder) Consume(r io.Reader) {
 		switch {
 		case oversized:
 			b.oversized++
-			if b.sawSummary {
-				b.failed = true
-			}
 			if path, ok := recoverPath(rec); ok {
 				b.oversizedPaths = append(b.oversizedPaths, path)
 			}
+			if b.sawSummary {
+				b.cause(CauseAfterSummary, nil)
+			}
 			if !terminated {
 				b.malformed++
-				b.failed = true
+				if !b.sawSummary {
+					b.unterminated = true
+				}
 			}
 		case terminated:
 			_ = b.Add(rec)
 		case len(rec) > 0:
 			b.malformed++
-			b.failed = true
+			if b.sawSummary {
+				b.cause(CauseAfterSummary, nil)
+			} else {
+				b.unterminated = true
+			}
 		}
 		if err != nil || !terminated {
 			return
@@ -498,15 +572,34 @@ func (b *Builder) Report() Report {
 // Finish prepares the index and reports stream integrity. Files still
 // open when the stream ends are missing their end: their matches are
 // retained with incomplete metadata. A stream without a summary is
-// incomplete; a summary alone is a complete zero-result stream.
+// incomplete; a summary alone is a complete zero-result stream. The
+// end-of-stream causes append after the mid-stream causes in their
+// mandated order: a missing end per still-open file in unsigned
+// raw-path order, then the missing summary, then a trailing
+// unterminated record — unless a valid summary already counted that
+// fragment as a record after summary.
 func (b *Builder) Finish() (*Index, Integrity) {
+	open := make([]string, 0, len(b.open))
 	for key := range b.open {
-		b.failed = true
+		open = append(open, key)
+	}
+	// String comparison is unsigned byte order: the missing-end causes
+	// order by raw path bytes, never by map iteration order.
+	slices.Sort(open)
+	for _, key := range open {
+		b.cause(CauseMissingEnd, []byte(key))
 		b.idx.incomplete[key] = struct{}{}
 	}
 	if !b.sawSummary {
-		b.failed = true
+		b.cause(CauseMissingSummary, nil)
+	}
+	if b.unterminated {
+		b.cause(CauseUnterminated, nil)
 	}
 	b.idx.Finish()
-	return b.idx, Integrity{Complete: !b.failed, MissingSummary: !b.sawSummary}
+	return b.idx, Integrity{
+		Complete:       len(b.causes) == 0,
+		MissingSummary: !b.sawSummary,
+		Causes:         b.causes,
+	}
 }

@@ -245,8 +245,9 @@ func TestFailedProcessGeneratesDiagnostic(t *testing.T) {
 	})
 }
 
-// Stream-integrity failure produces an explanatory note rather than an
-// empty overlay, even when the process exited cleanly with no stderr.
+// Stream-integrity failure produces an explanatory cause line rather
+// than an empty overlay, even when the process exited cleanly with no
+// stderr.
 func TestIntegrityFailureProducesDiagnostic(t *testing.T) {
 	m := overlayModel(t, []string{
 		beginRec("a.txt"),
@@ -256,14 +257,13 @@ func TestIntegrityFailureProducesDiagnostic(t *testing.T) {
 	if m.overlay == nil {
 		t.Fatal("no overlay for an integrity failure")
 	}
-	if v := m.View().Content; !strings.Contains(v, "incomplete") {
+	if v := m.View().Content; !strings.Contains(v, "missing summary record") {
 		t.Fatalf("overlay lacks an integrity diagnostic:\n%s", v)
 	}
 }
 
 // A stream that ends without its summary names the missing summary
-// record as the integrity cause, alongside the generic
-// incomplete-stream note.
+// record as the integrity cause.
 func TestMissingSummaryNamesIntegrityCause(t *testing.T) {
 	m := overlayModel(t, []string{
 		beginRec("a.txt"),

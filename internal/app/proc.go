@@ -105,11 +105,11 @@ func (p *reaper) Wait() error {
 
 // searchResult is the product of one collected search, delivered to the
 // model as a message: the prepared index, the stream-integrity result —
-// assessed separately from process success — the record accounting
-// (malformed, oversized, and unknown-type skips with recovered paths),
-// and the child's wait status. The child's stderr does not ride this
-// message: each drained stderr line is delivered as its own stderrMsg
-// while collection runs.
+// assessed separately from process success and carrying the structured
+// cause list — the record accounting (malformed, oversized, and
+// unknown-type skips with recovered paths), and the child's wait
+// status. The child's stderr does not ride this message: each drained
+// stderr line is delivered as its own stderrMsg while collection runs.
 type searchResult struct {
 	index     *searchindex.Index
 	integrity searchindex.Integrity

@@ -8,12 +8,14 @@ import (
 	"vrg/internal/searchindex"
 )
 
-// outcomeInput is everything the outcome decision consumes. report is
-// the Issue 10 record accounting: malformed and oversized skips are
-// record loss, while unknown-type skips are warnings only.
+// outcomeInput is everything the outcome decision consumes. integrity
+// carries the stream's structured cause list — one record per offending
+// physical record — alongside the completeness verdict. report is the
+// Issue 10 record accounting: malformed and oversized skips are record
+// loss, while unknown-type skips are warnings only.
 type outcomeInput struct {
 	procErr   error                 // the child's wait status
-	integrity searchindex.Integrity // stream completeness
+	integrity searchindex.Integrity // stream completeness and its causes
 	report    searchindex.Report    // skipped-record accounting
 	usable    int                   // retained matched-line stops
 	stderr    []string              // collected stderr diagnostics, already escaped
@@ -64,35 +66,58 @@ func procFatal(err error) bool {
 	return err != nil && !rgSucceeded(err)
 }
 
-// diagnosticLines composes the overlay's escaped diagnostic lines,
-// starting with the collected stderr lines regardless of exit code. A
-// fatal process that supplied no stderr gets a generated line naming
-// its exit code or signal rather than an empty overlay. The record
-// accounting follows: the malformed and oversized aggregate counts, a
-// line per recoverable oversized path (escaped to a single line each),
-// and the unknown-type warning — unknown types warn but are not record
-// loss. An incomplete stream closes the list with its named integrity
-// cause where one is known, then a note explaining the retained
-// results' provenance.
+// diagnosticLines composes the escaped diagnostic lines in the
+// universal component order every branch shares: the process component
+// — the collected stderr lines regardless of exit code, or only for a
+// failed process that supplied none, a generated line naming its exit
+// code or signal; never a process-status line for a 0/1 exit — then
+// one line per structured stream-integrity cause in its order, then the
+// record-loss diagnostics, then the unknown-type warnings. The same
+// list is the overlay's text and, minus the already-collected stderr
+// prefix, joins the session collection replayed to stderr.
 func diagnosticLines(in outcomeInput) []string {
 	out := append([]string(nil), in.stderr...)
 	if len(out) == 0 && procFatal(in.procErr) {
 		out = append(out, processDiagnostic(in.procErr))
 	}
-	out = append(out, recordLossLines(in.report)...)
-	if !in.integrity.Complete {
-		if in.integrity.MissingSummary {
-			out = append(out, "missing summary record")
-		}
-		out = append(out, "the search result stream was incomplete")
+	for _, c := range in.integrity.Causes {
+		out = append(out, integrityLine(c))
 	}
+	out = append(out, recordLossLines(in.report)...)
+	out = append(out, unknownTypeLines(in.report)...)
 	return out
 }
 
-// recordLossLines composes the record-accounting diagnostics: aggregate
-// skip counts for malformed and oversized records, then each recovered
-// oversized path named on its own escaped line, then the unknown-type
-// count.
+// integrityLine renders one structured integrity cause as its stable
+// user-facing line, escaping the raw path it names to a single line.
+func integrityLine(c searchindex.IntegrityCause) string {
+	switch c.Kind {
+	case searchindex.CauseDuplicateBegin:
+		return "duplicate begin for " + safepresentation.EscapePath(c.Path)
+	case searchindex.CauseOrphanedMatch:
+		return "orphaned match for " + safepresentation.EscapePath(c.Path)
+	case searchindex.CauseOrphanedEnd:
+		return "orphaned end for " + safepresentation.EscapePath(c.Path)
+	case searchindex.CauseMissingEnd:
+		return "missing end for " + safepresentation.EscapePath(c.Path)
+	case searchindex.CauseMissingSummary:
+		return "missing summary record"
+	case searchindex.CauseExtraSummary:
+		return "extra summary record"
+	case searchindex.CauseAfterSummary:
+		return "record after summary"
+	case searchindex.CauseUnterminated:
+		return "unterminated final record"
+	default:
+		return "stream integrity violation"
+	}
+}
+
+// recordLossLines composes the record-loss diagnostics in Issue 37's
+// order: the malformed aggregate, the oversized aggregate, then each
+// recovered oversized path named on its own escaped line. Unknown types
+// warn but are not record loss — unknownTypeLines emits them — so the
+// warning can never sit between the malformed and oversized components.
 func recordLossLines(r searchindex.Report) []string {
 	var out []string
 	if r.Malformed > 0 {
@@ -104,10 +129,16 @@ func recordLossLines(r searchindex.Report) []string {
 	for _, p := range r.OversizedPaths {
 		out = append(out, "oversized record skipped for "+safepresentation.EscapePath(p))
 	}
-	if r.UnknownTypes > 0 {
-		out = append(out, fmt.Sprintf("%d unrecognised record types skipped", r.UnknownTypes))
-	}
 	return out
+}
+
+// unknownTypeLines composes the unknown-type warning — the last
+// component of every composition.
+func unknownTypeLines(r searchindex.Report) []string {
+	if r.UnknownTypes == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf("%d unrecognised record types skipped", r.UnknownTypes)}
 }
 
 // skipCount is the aggregate skip-count line for one record class:

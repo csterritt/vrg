@@ -232,7 +232,7 @@ func TestOutcomeMatrix(t *testing.T) {
 				endRec("a.txt", nil),
 			},
 			wantState: stateBrowse, wantOverlay: true,
-			contains:     []string{"incomplete", "a.txt"},
+			contains:     []string{"missing summary record", "a.txt"},
 			dismiss:      "esc",
 			postContains: []string{"a.txt"},
 			final:        "q", wantStatus: 2,
@@ -354,7 +354,7 @@ func TestOutcomeMatrix(t *testing.T) {
 				summaryRec(),
 			},
 			wantState: stateBrowse, wantOverlay: true,
-			contains:     []string{"incomplete", "a.txt"},
+			contains:     []string{"missing end for a.txt", "a.txt"},
 			dismiss:      "esc",
 			postContains: []string{"a.txt"},
 			final:        "q", wantStatus: 2,
@@ -366,7 +366,7 @@ func TestOutcomeMatrix(t *testing.T) {
 				summaryRec(),
 			},
 			wantState: stateFatal, wantOverlay: true,
-			contains: []string{"incomplete"},
+			contains: []string{"missing end for a.txt"},
 			dismiss:  "q", dismissQuits: true,
 			wantStatus: 2,
 		},
@@ -617,6 +617,321 @@ func TestOutcomeMatrix(t *testing.T) {
 			requireQuit(t, cmd, tc.final)
 			if m.status != tc.wantStatus {
 				t.Fatalf("exit status = %d, want %d", m.status, tc.wantStatus)
+			}
+		})
+	}
+}
+
+// streamRecs joins records into the newline-terminated byte stream rg
+// writes on stdout.
+func streamRecs(records ...string) string {
+	var b strings.Builder
+	for _, r := range records {
+		b.WriteString(r)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// consumeStream feeds a raw record stream through a Builder and returns
+// the outcome-decision inputs: the finished index, the integrity result
+// carrying the structured cause list, and the record accounting.
+func consumeStream(t *testing.T, stream string) (*searchindex.Index, searchindex.Integrity, searchindex.Report) {
+	t.Helper()
+	b := searchindex.NewBuilder("/w")
+	b.Consume(strings.NewReader(stream))
+	idx, integrity := b.Finish()
+	return idx, integrity, b.Report()
+}
+
+// outcomeModel completes a search in the model: the raw stream feeds a
+// real Builder so the integrity result carries its structured causes,
+// stderr delivers through stderrMsg exactly as the collection path
+// drains it, and procErr stands in for the child's wait status.
+func outcomeModel(t *testing.T, stream string, procErr error, stderr string) Model {
+	t.Helper()
+	idx, integrity, rep := consumeStream(t, stream)
+	m := New(&fakeChild{stdout: strings.NewReader(""), stderr: strings.NewReader("")}, "/w")
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = feedStderr(t, m, stderr)
+	m, _ = update(t, m, searchResult{
+		index: idx, integrity: integrity, report: rep, err: procErr,
+	})
+	return m
+}
+
+// contextRec builds a context record: a known type with no lifecycle
+// weight before summary.
+func contextRec(path string) string {
+	return fmt.Sprintf(`{"type":"context","data":{"path":{"text":%q},`+
+		`"lines":{"text":"c\n"},"line_number":1,"submatches":[]}}`, path)
+}
+
+// oversizedMatchRec builds a match record for path whose payload
+// exceeds the 64 MiB record limit, padding the lines text. The field
+// order — type first, data.path before data.lines — matches ripgrep's
+// emission order so the path is recoverable before the limit.
+func oversizedMatchRec(path string) string {
+	return fmt.Sprintf(`{"type":"match","data":{"path":{"text":%q},"lines":{"text":"%s"},`+
+		`"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}`,
+		path, strings.Repeat("x", 64<<20))
+}
+
+// wantComposedDiagnostics asserts the complete ordered diagnostic
+// composition reaches both sinks identically: the open overlay's lines
+// and the session collection the exit path replays to stderr.
+func wantComposedDiagnostics(t *testing.T, m Model, want []string) {
+	t.Helper()
+	if m.overlay == nil {
+		t.Fatalf("no overlay open; want diagnostics %q", want)
+	}
+	if got := m.overlay.lines; !slices.Equal(got, want) {
+		t.Fatalf("overlay lines = %q, want %q", got, want)
+	}
+	if got := m.diags.snapshot(); !slices.Equal(got, want) {
+		t.Fatalf("collected diagnostics = %q, want the same %q", got, want)
+	}
+}
+
+// Every stream-integrity cause composes its stable user-facing line —
+// escaped path where applicable — into the overlay and the collected
+// diagnostics, in the universal component order: process component,
+// integrity causes, record-loss components, unknown-type warnings. Each
+// row asserts the complete ordered line slice.
+func TestIntegrityCauseComposedDiagnostics(t *testing.T) {
+	valid := streamRecs(
+		beginRec("a.txt"),
+		matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+		endRec("a.txt", nil),
+		summaryRec(),
+	)
+	// A well-formed match record without its newline: an unterminated
+	// fragment, never dispatched.
+	frag := matchRec("b.txt", "hit\n", 9, 0, 3, "hit")
+
+	cases := []struct {
+		name     string
+		stream   string
+		procErr  error
+		stderr   string
+		want     []string
+		wantExit int
+	}{
+		{
+			"duplicate begin names the file",
+			streamRecs(
+				beginRec("a.txt"), beginRec("a.txt"),
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+				endRec("a.txt", nil), summaryRec()),
+			nil, "",
+			[]string{"duplicate begin for a.txt"}, 2,
+		},
+		{
+			"orphaned match names the file",
+			streamRecs(matchRec("a.txt", "hit\n", 1, 0, 3, "hit"), summaryRec()),
+			nil, "",
+			[]string{"orphaned match for a.txt"}, 2,
+		},
+		{
+			"match after a binary-excluding end names the file",
+			streamRecs(
+				beginRec("a.txt"),
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+				endRec("a.txt", 7),
+				matchRec("a.txt", "hit\n", 2, 0, 3, "hit"),
+				summaryRec()),
+			nil, "",
+			[]string{"orphaned match for a.txt"}, 2,
+		},
+		{
+			"orphaned end names the file",
+			streamRecs(
+				beginRec("a.txt"),
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+				endRec("a.txt", nil), endRec("b.txt", nil),
+				summaryRec()),
+			nil, "",
+			[]string{"orphaned end for b.txt"}, 2,
+		},
+		{
+			"missing end names the file",
+			streamRecs(
+				beginRec("a.txt"),
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+				summaryRec()),
+			nil, "",
+			[]string{"missing end for a.txt"}, 2,
+		},
+		{
+			"missing summary and no process-status line for a clean exit",
+			streamRecs(
+				beginRec("a.txt"),
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+				endRec("a.txt", nil)),
+			nil, "",
+			[]string{"missing summary record"}, 2,
+		},
+		{
+			"missing end and missing summary with exit 1 emit no status line",
+			streamRecs(
+				beginRec("a.txt"),
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit")),
+			exitError(1), "",
+			[]string{"missing end for a.txt", "missing summary record"}, 2,
+		},
+		{
+			"a second summary is only an extra summary",
+			streamRecs(summaryRec(), summaryRec()),
+			nil, "",
+			[]string{"extra summary record"}, 2,
+		},
+		{
+			"a record after summary",
+			valid + matchRec("a.txt", "hit\n", 2, 0, 3, "hit") + "\n",
+			nil, "",
+			[]string{"record after summary"}, 2,
+		},
+		{
+			"a post-summary begin cannot open its file",
+			valid + beginRec("q.txt") + "\n",
+			nil, "",
+			[]string{"record after summary"}, 2,
+		},
+		{
+			"a post-summary context is a record after summary",
+			valid + contextRec("a.txt") + "\n",
+			nil, "",
+			[]string{"record after summary"}, 2,
+		},
+		{
+			"unterminated final record is also counted malformed",
+			streamRecs(
+				beginRec("a.txt"),
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+				endRec("a.txt", nil)) + frag,
+			nil, "",
+			[]string{
+				"missing summary record",
+				"unterminated final record",
+				"1 malformed record skipped",
+			}, 2,
+		},
+		{
+			"a post-summary unterminated fragment is only a record after summary",
+			valid + frag,
+			nil, "",
+			[]string{"record after summary", "1 malformed record skipped"}, 2,
+		},
+		{
+			"a malformed record after summary keeps its malformed count",
+			valid + "{not json\n",
+			nil, "",
+			[]string{"record after summary", "1 malformed record skipped"}, 2,
+		},
+		{
+			"a post-summary oversized record keeps its count and recovered path",
+			streamRecs(summaryRec()) + oversizedMatchRec("big.txt") + "\n",
+			nil, "",
+			[]string{
+				"record after summary",
+				"1 oversized record skipped",
+				"oversized record skipped for big.txt",
+			}, 2,
+		},
+		{
+			"a post-summary unknown type keeps its warning count",
+			streamRecs(summaryRec(), `{"type":"weird","data":{}}`),
+			nil, "",
+			[]string{
+				"record after summary",
+				"1 unrecognised record types skipped",
+			}, 2,
+		},
+		{
+			"fatal composition orders process, integrity, loss, and unknown components",
+			streamRecs(
+				beginRec("a.txt"), beginRec("a.txt"),
+				"{not json",
+				`{"type":"weird","data":{}}`,
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+				endRec("a.txt", nil),
+				summaryRec()),
+			exitError(2), "boom\nwarn2\n",
+			[]string{
+				"boom",
+				"warn2",
+				"duplicate begin for a.txt",
+				"1 malformed record skipped",
+				"1 unrecognised record types skipped",
+			}, 2,
+		},
+		{
+			"nonfatal composition keeps the same component order",
+			streamRecs(
+				beginRec("a.txt"),
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+				"{not json",
+				`{"type":"weird","data":{}}`,
+				endRec("a.txt", nil),
+				summaryRec()),
+			nil, "warn\n",
+			[]string{
+				"warn",
+				"1 malformed record skipped",
+				"1 unrecognised record types skipped",
+			}, 0,
+		},
+		{
+			"a failed process without stderr names its exit code",
+			streamRecs(summaryRec()),
+			exitError(3), "",
+			[]string{"ripgrep exited with code 3"}, 2,
+		},
+		{
+			"a signal death without stderr names the signal",
+			valid,
+			signalError("signal: killed"), "",
+			[]string{"ripgrep terminated: signal: killed"}, 2,
+		},
+		{
+			"a failed process with stderr emits no manufactured status line",
+			streamRecs(summaryRec()),
+			exitError(3), "boom\n",
+			[]string{"boom"}, 2,
+		},
+		{
+			"repeated identical violations emit one line each",
+			streamRecs(
+				matchRec("a.txt", "hit\n", 1, 0, 3, "hit"),
+				matchRec("a.txt", "hit\n", 2, 0, 3, "hit"),
+				matchRec("a.txt", "hit\n", 3, 0, 3, "hit"),
+				summaryRec()),
+			nil, "",
+			[]string{
+				"orphaned match for a.txt",
+				"orphaned match for a.txt",
+				"orphaned match for a.txt",
+			}, 2,
+		},
+		{
+			"missing ends report in unsigned raw-path order",
+			streamRecs(beginRec("b.txt"), beginRec("a.txt"), summaryRec()),
+			nil, "",
+			[]string{"missing end for a.txt", "missing end for b.txt"}, 2,
+		},
+		{
+			"a newline in the named path cannot forge a line break",
+			streamRecs(beginRec("a\nb.txt"), summaryRec()),
+			nil, "",
+			[]string{`missing end for a\nb.txt`}, 2,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := outcomeModel(t, tc.stream, tc.procErr, tc.stderr)
+			wantComposedDiagnostics(t, m, tc.want)
+			if m.status != tc.wantExit {
+				t.Fatalf("exit status = %d, want %d", m.status, tc.wantExit)
 			}
 		})
 	}

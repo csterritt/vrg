@@ -165,9 +165,11 @@ func TestLifecycleTransitionMatrix(t *testing.T) {
 			0,
 		},
 		{
-			"context after summary has no lifecycle effect",
+			// Issue 36: the summary is final — a post-summary context
+			// is an integrity failure like any other record after it.
+			"context after summary fails integrity",
 			[][]byte{beginEvent(t, a), matchA1, endEvent(t, a, nil), summaryEvent(t), contextEvent(t, a)},
-			true,
+			false,
 			[]stopInfo{{"a.txt", 1, false}},
 			0,
 		},
