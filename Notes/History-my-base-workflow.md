@@ -528,3 +528,25 @@ Usage
 Task 049-tidy-dependency-manifests.md
 
 Agent SWE-2
+
+----
+Task 049-tidy-dependency-manifests.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 18 messages
+ Input tokens: 33952 tokens
+ Output tokens: 8856 tokens
+ Cached input tokens: 452324 tokens
+
+----
+Task 050-post-audit-reverification.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 35 messages
+ Input tokens: 62111 tokens
+ Output tokens: 19359 tokens
+ Cached input tokens: 1655950 tokens
