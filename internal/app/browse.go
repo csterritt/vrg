@@ -2,7 +2,9 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -328,6 +330,19 @@ func (m Model) loadCmd(s searchindex.Stop, req int) tea.Cmd {
 		}
 		return loadDoneMsg{path: path, req: req, buf: filebuffer.Prepare(data, stops)}
 	}
+}
+
+// readReason is the reason half of a read-failure diagnostic: a path
+// error unwraps to its bare Err — the errno text carries no path —
+// so the diagnostic's only copy of the filename is the Path-escaped
+// prefix and bytes inside the name can never become a diagnostic
+// boundary (Issue #47). Other errors keep their own text.
+func readReason(err error) error {
+	var pe *os.PathError
+	if errors.As(err, &pe) {
+		return pe.Err
+	}
+	return err
 }
 
 // gutterDigits returns the current file's gutter digit width: the digit

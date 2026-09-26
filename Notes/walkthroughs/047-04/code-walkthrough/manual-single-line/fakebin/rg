@@ -1,0 +1,2 @@
+#!/bin/sh
+cat "/home/chris/vrg/Notes/walkthroughs/047-04/code-walkthrough/manual-single-line/stream.json"

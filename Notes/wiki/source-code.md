@@ -149,7 +149,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `readFile` (the read-phase test seam — nil selects
   `filebuffer.ReadFile`), and the `loadDoneMsg` error branch's
   mark-retain-collect-overlay split on whether the failed path is
-  current; Issue #27 adds `reloading` (the per-path in-flight reread
+  current — the collected line composing `present.Path(path)` with
+  `readReason`'s sanitized reason since Issue #47; Issue #27 adds `reloading` (the per-path in-flight reread
   mark distinguishing reload completions from first loads), replaces
   `pendingReveal` with `pending pendingIntent` (reveal vs. anchor
   intent), the `r` browse key routed to `reload()`, and the
@@ -246,7 +247,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `ensureLoad`/`loadCmd` (one async load per file; read, split,
   escape, and map all off the update path, behind `loadGate` and —
   since Issue #25 — the post-read `mapGate` in tests, with Issue #26's
-  `readFile` seam swapping the read phase),
+  `readFile` seam swapping the read phase), `readReason` (Issue #47:
+  the read-failure reason — a `*os.PathError` unwraps to its bare
+  `Err` so the raw path never repeats inside the diagnostic line),
   `renderBrowse` (raw-path-ordered file list — `FileList` entries with
   `CurrentFile` underline on the current one — painted from the
   `listTop` scrolled window,

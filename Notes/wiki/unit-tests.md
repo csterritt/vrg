@@ -835,6 +835,31 @@ count across the open overlay's lines):
   is already in flight mints nothing: dropped, not queued, per the
   Issue #25 one-load-per-path rule.
 
+`readdiag_test.go` (same package, Issue #47) pins the single-line
+read-failure diagnostic through **real** `os.ReadFile` failures — no
+injected loader: each of the `hostileReadNames` fixtures (embedded
+newline, tab, invalid UTF-8, and ESC) is created as a real file in
+`t.TempDir()`, indexed via `pathRecs`' base64 `bytes` records, its
+worker parked on `loadGate`, removed while gated, and released to a
+genuine `*os.PathError`. `gatedReadFailure` owns the deterministic
+remove-then-release ordering, `wantReadPathError` proves the error is
+the real path error against the resolved name and extracts the
+expected bare `Err` reason, and `wantSingleLineDiagnostic` asserts
+exactly one diagnostic line — `cannot read <present.Path path>:
+<reason>` — in the session collection, the overlay row set,
+`failLines`, and the stderr replay:
+
+- `TestInitialReadFailureIsOneLine` — the startup load's failure.
+- `TestReloadReadFailureIsOneLine` — a successful first load, then the
+  `r` reread gated and failed the same way.
+- `TestReEntryRetryReadFailureIsOneLine` — the first visit fails gated,
+  the fixture is recreated, and the cross-file re-entry's retry parks
+  on a fresh gate for the same removal recipe; each occurrence is one
+  line.
+- `TestReadFailureReasonUnwrapsPathError` — a wrapped `*os.PathError`
+  still unwraps to its path-free `Err`, while a plain error keeps its
+  own text.
+
 `reload_test.go` (same package, Issue #27) pins the explicit-`r`
 contracts through the same gated seams: `loaderModel` and
 `gatedLoaderModel` from `failures_test.go` drive the loads, and the

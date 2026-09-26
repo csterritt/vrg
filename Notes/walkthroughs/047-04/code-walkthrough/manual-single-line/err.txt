@@ -1,0 +1,4 @@
+cannot read bad\tname.txt: no such file or directory
+cannot read bad\nname.txt: no such file or directory
+cannot read bad^[name.txt: no such file or directory
+cannot read bad\xffname.txt: no such file or directory

@@ -209,7 +209,12 @@ Catalog of all wiki pages for the vrg project.
   sequence (prior overlay immediately, exactly one retry, settlement
   without dismissal, second-failure append preserving scroll, away-
   settled retries), and load failures never moving the fixed exit
-  status — all behind the injected `readFile` seam
+  status — all behind the injected `readFile` seam; plus Issue #47's
+  single-line read-failure diagnostic (`present.Path` path plus
+  `readReason`'s `*os.PathError`-unwrapped reason — one failed read is
+  exactly one line in the overlay and the replay, uniform across
+  initial load, `r` reload, and re-entry retry, proven by real
+  gated `os.ReadFile` failures on embedded-byte filenames)
 - [explicit-reload.md](explicit-reload.md) — Issue #27: `r` rereads the
   current file without rerunning rg or touching the stops, duplicate
   presses and re-entry dropped not queued with placeholder settlement

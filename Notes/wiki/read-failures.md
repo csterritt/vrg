@@ -11,18 +11,32 @@ load failure can never move the fixed search-derived exit status.
 
 PRD cross-references: "File loading, cache, reload, and selection
 consistency" (the failure/retry bullets and the mid-session diagnostic
-note) and "Outcome and exit-status contract" (the fixed-status bullet)
-in `Notes/PRD-vrg.md`.
+note), "Outcome and exit-status contract" (the fixed-status bullet),
+and "Text, graphemes, and safe presentation" (the embedded-filename
+rule — escape it first as a single-line filename — which Issue #47
+extends to the failure's reason half) in `Notes/PRD-vrg.md`.
 
 ## Failure notification: current versus non-current
 
 A `loadDoneMsg` carrying an error marks its path in `m.failed`, retains
 the sanitized diagnostic's display lines in `m.failLines[path]`, and
 collects one occurrence into the session diagnostics through
-`CollectDiagnostic` (`cannot read <safe path>: <err>` — the path escaped
-through `present.Path` before `present.Diagnostic` runs over the whole
-line). What happens next depends entirely on whether the failed path is
-current:
+`CollectDiagnostic` (`cannot read <safe path>: <reason>` — the path
+escaped through `present.Path` before `present.Diagnostic` runs over
+the whole line). Since Issue #47
+(`Notes/tasks/047-read-failure-single-line-filenames.md`) the reason is
+sanitized too: `readReason` unwraps a `*os.PathError` to its bare `Err`
+— the errno text carries no path — rather than reusing
+`PathError.Error()`, which embeds the raw resolved path; an embedded
+newline in the filename would otherwise survive `present.Diagnostic`
+as a real line boundary and split one failure into two diagnostic
+lines. The filename appears exactly once, in the `Path`-escaped
+prefix, so one failed read always produces exactly one diagnostic line
+in the overlay row set and the stderr replay alike — and the
+construction is uniform: the initial load, the `r` reload, and the
+re-entry retry all funnel through the same `loadDoneMsg` error branch.
+Non-path errors keep their own text. What happens next depends
+entirely on whether the failed path is current:
 
 - **Current file**: the diagnostic opens through `openOverlay` — the
   Issue #9 modal — which appends one occurrence when an overlay is
@@ -114,6 +128,18 @@ first content row the placeholders occupy), and `overlayOccurrences`.
 
 ## Tests
 
+- `internal/app/readdiag_test.go` — the Issue #47 single-line
+  contract: `TestInitialReadFailureIsOneLine`,
+  `TestReloadReadFailureIsOneLine`, and
+  `TestReEntryRetryReadFailureIsOneLine` drive the four embedded-byte
+  filename cases (newline, tab, invalid UTF-8, ESC) through real
+  `os.ReadFile` failures at every load site — the fixture is indexed,
+  the worker parked on `loadGate`, the file removed, the read released
+  to a genuine `*os.PathError` — asserting exactly one diagnostic line
+  carrying the `present.Path`-escaped path and the unwrapped reason in
+  the overlay row set, `failLines`, the session collection, and the
+  stderr replay; `TestReadFailureReasonUnwrapsPathError` pins the
+  reason sanitation for wrapped path errors and plain errors alike.
 - `internal/app/failures_test.go` — the Issue #26 contracts:
   `TestCurrentFileReadFailureNotifies` covers the current-file overlay,
   the `(unreadable)` placeholder, the filename row still naming the
@@ -156,7 +182,9 @@ See [unit-tests.md](unit-tests.md) § `internal/app`.
 - `internal/app/browse.go` — `entryLoad` (the re-entry sequence: overlay
   plus exactly one retry on a cross-file entry into a failed file),
   `navigate` routing destinations through it and skipping the pop-up for
-  a failed destination, `contentRow`'s `Loading…`-while-loading
+  a failed destination, `readReason` (Issue #47's sanitized reason —
+  the `*os.PathError` unwrap to `Err` the diagnostic composes with the
+  `present.Path` prefix), `contentRow`'s `Loading…`-while-loading
   placeholder clipped to the text width, and `bufferNote` (the real
   `(unreadable)` status note behind the `statusNote` seam).
 - `internal/app/overlay.go` — `openOverlay`'s open-or-append is the

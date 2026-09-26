@@ -1900,3 +1900,38 @@ Sources: `Notes/tasks/046-runtime-error-common-diagnostic-replay.md`,
 `cmd/vrg/main.go`, `cmd/vrg/pty_returnshape_test.go`,
 `cmd/vrg/testhooks_test.go`, `internal/app/app.go`,
 `internal/app/search.go`.
+
+## [2026-09-25] ingest | Issue #47 single-line read-failure diagnostics
+
+Issue #47 (`Notes/tasks/047-read-failure-single-line-filenames.md`)
+fixes read-failure diagnostics on hostile filenames: the `loadDoneMsg`
+error branch in `internal/app/app.go` now composes `cannot read
+<present.Path(path)>: <reason>` where the reason comes from the new
+`readReason` in `internal/app/browse.go` — a `*os.PathError` unwraps
+through `errors.As` to its bare `Err` (the errno text carries no path)
+instead of `PathError.Error()`, which embeds the raw resolved path; a
+newline in the filename previously survived `present.Diagnostic` as a
+real line boundary, splitting one failure into two diagnostic lines.
+Non-path errors keep their own text. The construction is uniform —
+initial load, `r` reload, and the failed-path re-entry retry all share
+the branch — so one failed read is exactly one diagnostic line in the
+overlay row set, `failLines`, the session collection, and the stderr
+replay. Tests: `internal/app/readdiag_test.go` drives real
+`os.ReadFile` failures (index the file, park the worker on `loadGate`,
+remove it, release to a genuine `*os.PathError`) for filenames with
+embedded newline, tab, invalid UTF-8, and ESC bytes at all three load
+sites, plus a wrapped-PathError/plain-error unit pin.
+
+Updated [read-failures](read-failures.md) (the sanitized-reason
+construction and the new test file), [safe-presentation](safe-presentation.md)
+(the Diagnostics contract — escaping the embedded filename is not
+enough when the reason re-embeds the raw path),
+[stderr-replay](stderr-replay.md) (the load-failure line's sanitized
+reason), [source-code](source-code.md) (`readReason` on `browse.go`,
+the `loadDoneMsg` error branch on `app.go`), [unit-tests](unit-tests.md)
+(the `readdiag_test.go` block), and the index.
+Sources: `Notes/tasks/047-read-failure-single-line-filenames.md`,
+`Notes/PRD-vrg.md` (*Text, graphemes, and safe presentation*; *File
+loading, cache, reload, and selection consistency*),
+`internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/readdiag_test.go`.

@@ -334,7 +334,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.failed[key] = true
 			delete(m.encLines, key)
-			d := fmt.Sprintf("cannot read %s: %v", present.Path(msg.path), msg.err)
+			d := fmt.Sprintf("cannot read %s: %v", present.Path(msg.path), readReason(msg.err))
 			m.CollectDiagnostic(d)
 			// The failure's display lines are retained as the prior
 			// failure a cross-file re-entry re-opens before its retry

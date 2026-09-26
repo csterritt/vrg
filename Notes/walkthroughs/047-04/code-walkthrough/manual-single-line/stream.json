@@ -1,0 +1,13 @@
+{"type":"begin","data":{"path":{"bytes":"YmFkCm5hbWUudHh0"}}}
+{"type":"match","data":{"path":{"bytes":"YmFkCm5hbWUudHh0"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}
+{"type":"end","data":{"path":{"bytes":"YmFkCm5hbWUudHh0"},"binary_offset":null}}
+{"type":"begin","data":{"path":{"bytes":"YmFkCW5hbWUudHh0"}}}
+{"type":"match","data":{"path":{"bytes":"YmFkCW5hbWUudHh0"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}
+{"type":"end","data":{"path":{"bytes":"YmFkCW5hbWUudHh0"},"binary_offset":null}}
+{"type":"begin","data":{"path":{"bytes":"YmFk/25hbWUudHh0"}}}
+{"type":"match","data":{"path":{"bytes":"YmFk/25hbWUudHh0"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}
+{"type":"end","data":{"path":{"bytes":"YmFk/25hbWUudHh0"},"binary_offset":null}}
+{"type":"begin","data":{"path":{"bytes":"YmFkG25hbWUudHh0"}}}
+{"type":"match","data":{"path":{"bytes":"YmFkG25hbWUudHh0"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}
+{"type":"end","data":{"path":{"bytes":"YmFkG25hbWUudHh0"},"binary_offset":null}}
+{"type":"summary","data":{}}

@@ -1,0 +1,30 @@
+bad\tname.txt    ── bad^[name.txt (unreadable) ─────────────────────────────────────────────────────
+bad\nname.txt       (unreadable)
+bad^[name.txt
+bad\xffname.txt
+
+
+
+
+
+
+
+
+
+                       ┌────────────────────────────────────────────────────┐
+                       │cannot read bad^[name.txt: no such file or directory│
+                       └────────────────────────────────────────────────────┘
+
+
+
+
+
+
+
+
+
+
+
+
+
+

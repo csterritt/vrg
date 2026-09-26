@@ -37,7 +37,10 @@ Three sources feed the collection:
   incrementally and collecting them again would break exactly-once —
   while `collectDiagnostics` still includes them for the overlay.
 - **Load failures** — a `loadDoneMsg` error collects `cannot read
-  <path>: <err>` through `Model.CollectDiagnostic`. Since Issue #26 the
+  <path>: <reason>` through `Model.CollectDiagnostic`, the reason
+  sanitized by `readReason` (a `*os.PathError` unwraps to its bare
+  `Err`, which never embeds the raw path — Issue #47) so every failure
+  is exactly one line here. Since Issue #26 the
   display side splits on whether the failed path is current: the
   current file's diagnostic opens (or appends to) the overlay as well,
   while a non-current file's is collected with nothing displayed at

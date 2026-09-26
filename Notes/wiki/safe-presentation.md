@@ -70,7 +70,16 @@ DEL take caret notation; C1 takes `\uXXXX`; invalid UTF-8 takes `\xNN`.
 Printable text — including backslash — passes through, so a filename
 embedded via `Path` keeps its single-line escaped form: **escape the
 filename first, then embed it**, and its newline can never become a
-diagnostic paragraph break.
+diagnostic paragraph break. Because `Diagnostic` preserves real line
+boundaries, escaping the filename is not enough when the *reason* can
+carry the raw path back in — a `PathError.Error()` embeds the unescaped
+resolved path, newline included. Issue #47 closes that at the
+composition site: read-failure diagnostics are built as
+`cannot read <Path(path)>: <reason>` where `readReason` unwraps a
+`*os.PathError` to its path-free `Err`, so one failed read always
+yields exactly one diagnostic line at the overlay and the exit replay,
+uniformly across the initial load, `r` reload, and re-entry retry (see
+[read-failures.md](read-failures.md)).
 
 ## Display geometry — the shared cell-width helper
 
