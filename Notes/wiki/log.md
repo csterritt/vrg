@@ -905,3 +905,42 @@ Sources: `Notes/issues/023-zero-width-match-markers.md`,
 zero-width bullets; Testing Decisions → FileBuffer / Viewport),
 `internal/viewport/viewport.go`, `internal/filebuffer/filebuffer.go`,
 `internal/filebuffer/marker_test.go`, `internal/viewport/marker_test.go`.
+
+## [2026-09-24] ingest | Issue #24 file-list layout — width formula, visibility toggle, and status slot
+
+Ingested the completed Issue #24 implementation: the real file-list
+width contract replacing the provisional one. `listWidth` now returns
+the nonnegative minimum of longest sanitized path plus two,
+`floor(0.40 × terminal width)` (as `width*2/5`), and the terminal
+width minus the panel's gutter-plus-ten-plus-reserved-indicator
+minimum, recomputed in `syncLayout` on resize, `w`, load (gutter
+growth), search completion, file crossings, and the list's own
+toggle. `listShow` is the requested-visible preference — `left`/`tab`
+hide, `right`/`shift+tab` show, inert while searching — and a
+zero-width allocation (the `W=20`/gutter 9/reserved 1 example) draws
+no cells without touching it. Every hide/show is a text-width change
+routed through the Issue #17 keyed prepared-layout path, so the
+logical anchor's text stays at the top through `tab`/`shift+tab` and
+gutter-growth round trips. `truncateLeft` was rewritten as a
+cluster-boundary cut that never exceeds its budget
+(`ansi.TruncateLeft` could overflow by a cell on a wide cluster
+straddling the cut), `filenameRule` gained the buffer-status note
+slot — the note wins cells over the path, which truncates to nothing
+so it paints whole; real notes are owned by Issues #26, #29, and #30
+and tests use a synthetic `statusNote` — and `listTop`/`scrollList`
+keep the active entry in the visible window with minimal movement.
+Created [file-list-layout](file-list-layout.md); updated
+[source-code](source-code.md) (`app.go`'s `listShow`/`listTop`/
+`statusNote` and the toggle key cases, `browse.go`'s `listWidth`,
+`scrollList`, `truncateLeft`, and `filenameRule` slot),
+[unit-tests](unit-tests.md) (the new `filelist_test.go` catalog),
+[browse-tracer](browse-tracer.md) (the provisional-width note and the
+status slot),
+[logical-anchor-and-layout](logical-anchor-and-layout.md) (the
+hide/show relayout cause), and the index.
+New test file: `internal/app/filelist_test.go`.
+Sources: `Notes/issues/024-file-list-layout-width-truncation-toggle.md`,
+`Notes/tasks/024-file-list-layout-width-truncation-toggle.md`,
+`Notes/PRD-vrg.md` (File list and layout; Layout and indicators —
+the width bullets), `internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/filelist_test.go`.

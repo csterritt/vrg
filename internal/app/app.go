@@ -78,10 +78,17 @@ type Model struct {
 	// stop while no layout matching the current parameters is
 	// installed; it commits when one installs. listW and textW are the
 	// cached file-list and content widths, recomputed on the update
-	// path so a frame render never rescans the list.
+	// path so a frame render never rescans the list. listShow is the
+	// user's file-list visibility preference — shown initially;
+	// left/tab hide, right/shift+tab show — and a zero-width
+	// allocation draws no cells without touching it. listTop is the
+	// list's scroll offset: the first visible entry index, adjusted
+	// minimally to keep the current file inside the window.
 	pendingReveal bool
 	listW         int
 	textW         int
+	listShow      bool
+	listTop       int
 	// wrap is the wrap-mode flag: on means lines wrap at grapheme
 	// boundaries, off means run-off-edge with the reserved indicator
 	// column. On initially; w toggles.
@@ -110,10 +117,15 @@ type Model struct {
 	// listEntry is the file-list item provider: it renders one entry's
 	// label from its raw path. Production uses the escaped path; tests
 	// substitute a counting fake to prove a frame touches only the
-	// visible window (Issue #17's render-cost guard).
-	listEntry func([]byte) string
-	code      int
-	quit      bool
+	// visible window (Issue #17's render-cost guard). statusNote is
+	// the filename-row buffer-status slot provider: it returns the
+	// current file's status note — the real texts are owned by Issues
+	// #26, #29, and #30 — or "" for none; tests substitute a
+	// synthetic note to pin the slot's truncation.
+	listEntry  func([]byte) string
+	statusNote func([]byte) string
+	code       int
+	quit       bool
 }
 
 // newModel returns a searching model awaiting the collection result on
@@ -135,8 +147,13 @@ func newModel(done <-chan searchDoneMsg, cancel func()) Model {
 		saved:   make(map[string]viewport.Target),
 		theme:   theme.Dark(),
 		// The file-list item provider is the escaped path; tests
-		// substitute a counting fake.
-		listEntry: present.Path,
+		// substitute a counting fake. The filename-row status slot is
+		// empty until Issues #26, #29, and #30 supply real notes.
+		listEntry:  present.Path,
+		statusNote: func([]byte) string { return "" },
+		// The file list is requested visible at startup; left/tab and
+		// right/shift+tab move the preference.
+		listShow: true,
 		// Wrapping is on initially; w toggles run-off-edge and back.
 		wrap: true,
 		// Same fallback the process boundary hands Bubble Tea; a real
@@ -312,6 +329,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.wrap = !m.wrap
 				cmd := m.syncLayout()
 				return m, cmd
+			}
+		case "left", "tab":
+			// left/tab hide the file list; the toggle is a browse key
+			// and a repeated press is a no-op. Hiding is a text-width
+			// change routed through the prepared-layout path so the
+			// logical anchor survives the rewrap.
+			if m.phase == phaseBrowse && m.listShow {
+				m.listShow = false
+				return m, m.syncLayout()
+			}
+		case "right", "shift+tab":
+			// right/shift+tab show the file list — the symmetric
+			// browse-key toggle.
+			if m.phase == phaseBrowse && !m.listShow {
+				m.listShow = true
+				return m, m.syncLayout()
 			}
 		case "q":
 			if m.phase == phaseSearching {

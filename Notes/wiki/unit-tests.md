@@ -474,6 +474,52 @@ uninvoked; `pump` on it delivers the `layoutDoneMsg` completion:
   render-cost guard: a counting `listEntry` fake sees only the
   scrolled window's entries, never the whole list.
 
+`filelist_test.go` (same package, Issue #24) pins the file-list layout
+contracts — the width formula, the visibility toggle, grapheme-safe
+truncation, the filename-row status slot, the scrolled window, and
+anchor preservation through every relayout cause:
+
+- `TestListWidthFormula` — a `Model`-seam table over
+  `listWidth(gutterW, res)`: each of the three terms winning (longest
+  sanitized path plus two, the `floor(0.40 × width)` cap including its
+  odd-width rounding, and `width − (gutter + 10 + reserved)`), gutter
+  growth narrowing the allocation, the ten-cell panel minimum, and
+  zero/pathological widths clamped nonnegative.
+- `TestTruncateLeftGraphemeSafe` — the leading-`…` cut fits the budget
+  exactly and lands only on cluster boundaries: wide characters
+  straddling the cut drop whole, combining clusters and ZWJ sequences
+  are never split, and zero/negative budgets yield empty strings.
+- `TestFilenameRuleStatusSlot` — the note slot wins cells over the
+  path (which left-truncates to nothing so the note paints whole), a
+  too-wide note is dropped rather than clipped, and degenerate widths
+  fall back to dashes.
+- `TestListToggleKeys` / `TestListToggleKeysInertWhileSearching` —
+  shown initially; `tab`/`left` hide and `shift+tab`/`right` show in
+  browse, each press returning the keyed relayout request for the new
+  text width and a repeated press issuing nothing; all four keys are
+  inert while searching.
+- `TestListHideShowPreservesAnchorText` — with the top mid-way through
+  a wrapped line, `tab` then `shift+tab` leaves the same anchor and
+  the same text at the top of the panel.
+- `TestGutterGrowthRelayoutKeepsAnchorText` — a reload with a wider
+  gutter narrows `textW` through a keyed relayout and the anchor's
+  text stays at the top, in both directions of the round trip.
+- `TestListReducedLeavesTenTextCells` — a real five-digit-gutter file
+  at 30 columns in run-off-edge mode leaves the list at twelve cells
+  and the panel at ten text cells plus the reserved indicator column.
+- `TestZeroWidthAllocationKeepsPreference` — the `W=20`, gutter 9,
+  reserved 1 example allocates zero list cells, draws no entries, and
+  leaves `listShow` untouched so the list returns when width allows.
+- `TestListScrollsToKeepActiveVisible` — navigating past the window's
+  end shifts `listTop` minimally; retreating leaves later entries
+  visible until the entry crosses the top edge.
+- `TestListRenderQueriesOnlyVisibleWindow` — deep in a 30-file list,
+  the counting `listEntry` fake is queried for exactly
+  `files[listTop:listTop+height]`.
+- `TestStatusSlotRendersInFilenameRow` — a synthetic `statusNote`
+  joins the filename rule at 80 columns, and at 30 columns the path
+  truncates so the note still paints whole.
+
 `pan_test.go` (same package, Issue #18) drives the horizontal-pan
 keys through `Update`; `panRecords` builds a one-stop record set for a
 file whose first line is the match:

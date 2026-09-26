@@ -236,10 +236,18 @@ func (m Model) reservedW() int {
 	return 1
 }
 
-// listWidth is the provisional file-list width — the longest escaped
-// path plus padding, capped at 40% of the terminal and by the file
-// panel's minimum — pending Issue #24's real formula.
+// listWidth is the file-list width for the current geometry: zero
+// while the list is hidden — a zero-width allocation draws no cells
+// and never changes the visibility preference — else the nonnegative
+// minimum of the longest escaped path plus two cells of padding,
+// floor(0.40 × terminal width), and the terminal width minus the file
+// panel's minimum (gutter + ten text cells + the reserved indicator
+// column). Scanning the entries for the longest runs on the update
+// path only; the frame render uses the cached result.
 func (m Model) listWidth(gutterW, res int) int {
+	if !m.listShow {
+		return 0
+	}
 	maxW := 0
 	for _, f := range m.files {
 		if w := ansi.StringWidth(m.listEntry(f)); w > maxW {
@@ -249,18 +257,41 @@ func (m Model) listWidth(gutterW, res int) int {
 	return max(0, min(min(maxW+2, m.width*2/5), m.width-(gutterW+10+res)))
 }
 
+// scrollList keeps the current file's entry inside the visible list
+// window with minimal movement: the window shifts only when the entry
+// falls outside it, so entries below the active one stay put while
+// retreating. It runs inside syncLayout so navigation, resize, and
+// every other geometry change re-check it.
+func (m *Model) scrollList() {
+	rows := m.height
+	cur := 0
+	if p := m.currentPath(); p != nil {
+		cur = m.fileIdx[string(p)]
+	}
+	switch {
+	case cur < m.listTop:
+		m.listTop = cur
+	case rows > 0 && cur >= m.listTop+rows:
+		m.listTop = cur - rows + 1
+	}
+	m.listTop = min(max(m.listTop, 0), max(0, len(m.files)-rows))
+}
+
 // syncLayout recomputes the content geometry after any state change
-// that can alter it — resize, wrap toggle, search completion, a load
-// changing the gutter, or a file switch — resizes the viewport, and
-// caches the list and text widths so a frame render never rescans the
-// file list. It returns the current file's layout request when its
-// installed rows are missing or stale-keyed; preparation runs off this
-// path and installs on completion.
+// that can alter it — resize, wrap toggle, list hide/show, search
+// completion, a load changing the gutter, or a file switch — resizes
+// the viewport, keeps the list's active entry in view, and caches the
+// list and text widths so a frame render never rescans the file list.
+// It returns the current file's layout request when its installed rows
+// are missing or stale-keyed; preparation runs off this path and
+// installs on completion, resolving the retained logical anchor
+// against the new row model.
 func (m *Model) syncLayout() tea.Cmd {
 	res := m.reservedW()
 	gutterW := m.gutterDigits() + 2
 	m.listW = m.listWidth(gutterW, res)
 	m.textW = max(0, m.width-m.listW-gutterW-res)
+	m.scrollList()
 	m.vp.Resize(m.textW, max(0, m.height-1))
 	return m.ensureLayout()
 }
@@ -393,17 +424,12 @@ func (m Model) renderBrowse() string {
 	listW := m.listW // cached by syncLayout — no per-frame list scan
 	textW := m.textW
 	curIdx := m.fileIdx[string(cur)]
-	// Keep the current entry within the scrolled list window.
-	listTop := 0
-	if curIdx >= m.height {
-		listTop = curIdx - m.height + 1
-	}
 
 	rows := make([]string, m.height)
 	for r := 0; r < m.height; r++ {
 		var sb strings.Builder
 		if listW > 0 {
-			fi := listTop + r
+			fi := m.listTop + r
 			entry := ""
 			if fi < len(m.files) {
 				entry = truncateLeft(m.listEntry(m.files[fi]), listW)
@@ -418,7 +444,7 @@ func (m Model) renderBrowse() string {
 			sb.WriteString(strings.Repeat(" ", max(0, listW-w)))
 		}
 		if r == 0 {
-			sb.WriteString(m.theme.FilenameRule(filenameRule(cur, m.width-listW)))
+			sb.WriteString(m.theme.FilenameRule(filenameRule(cur, m.statusNote(cur), m.width-listW)))
 		} else {
 			sb.WriteString(m.contentRow(r-1, cur, buf, failed, vis, gutterW-2, textW))
 		}
@@ -431,30 +457,59 @@ func (m Model) renderBrowse() string {
 	return strings.Join(rows, "\n")
 }
 
-// truncateLeft keeps the rightmost n cells of s, marking truncation
-// with a leading "…" so basenames stay visible.
+// truncateLeft keeps the rightmost cells of s within a budget of n
+// cells, marking truncation with a leading "…" so basenames stay
+// visible. The cut lands only on a grapheme boundary: a cluster
+// straddling it is dropped whole, so the result never exceeds n cells
+// and never shows half a glyph.
 func truncateLeft(s string, n int) string {
 	if n <= 0 {
 		return ""
 	}
-	if w := ansi.StringWidth(s); w > n {
-		return ansi.TruncateLeft(s, w-n+1, "…")
+	w := ansi.StringWidth(s)
+	if w <= n {
+		return s
 	}
-	return s
+	// The "…" marker takes one cell; the kept suffix fits in n-1.
+	// Whole leading clusters drop until the suffix fits — a cluster
+	// straddling the cut is dropped rather than split.
+	drop := w - n + 1
+	acc, i := 0, 0
+	for i < len(s) && acc < drop {
+		cl, cw := ansi.FirstGraphemeCluster(s[i:], ansi.GraphemeWidth)
+		acc += cw
+		i += len(cl)
+	}
+	return "…" + s[i:]
 }
 
-// filenameRule embeds the escaped current path in a horizontal rule: a
-// short dash run, the path, then dashes to the panel edge. An oversized
-// path is left-truncated so its tail stays visible.
-func filenameRule(path []byte, w int) string {
+// filenameRule embeds the escaped current path in a horizontal rule —
+// a short dash run, the path, then dashes to the panel edge — and
+// carries the buffer-status note in the slot between the path and the
+// trailing dashes. The note wins cells over the path: an oversized
+// path is left-truncated, down to nothing, so the note paints whole
+// where possible; a note that cannot fit even with an empty path is
+// dropped rather than clipped mid-text.
+func filenameRule(path []byte, note string, w int) string {
 	if w <= 0 {
 		return ""
 	}
 	if w <= 4 || path == nil {
 		return strings.Repeat("─", w)
 	}
-	shown := truncateLeft(present.Path(path), w-4)
-	rule := "── " + shown + " "
+	if ansi.StringWidth(note)+4 > w {
+		note = ""
+	}
+	avail := w - 4 // "── " before the path, " " before the dash run
+	if note != "" {
+		avail -= ansi.StringWidth(note) + 1
+	}
+	shown := truncateLeft(present.Path(path), avail)
+	rule := "── " + shown
+	if shown != "" && note != "" {
+		rule += " "
+	}
+	rule += note + " "
 	if rw := ansi.StringWidth(rule); rw < w {
 		rule += strings.Repeat("─", w-rw)
 	}

@@ -1,0 +1,24 @@
+…ame-for-the-list-width-demo.txt── …-long-file-name-for-the-list-width-demo.txt
+…ong-name-for-the-width-demo.txt    NEEDLExxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+…d-file-name-also-quite-long.txt    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+…ter-five-digit-line-numbers.txt    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+                                    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+                                    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+                                 3  tail03
+                                 4  tail04
+                                 5  tail05
+                                 6  tail06
+                                 7  tail07
+                                 8  tail08
+                                 9  tail09
+                                10  tail10
+                                11  tail11
+                                12  tail12
+                                13  tail13
+                                14  tail14
+                                15  tail15
+                                16  tail16
+                                17  tail17
+                                18  tail18
+                                19  tail19
+                                20  tail20

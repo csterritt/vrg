@@ -1,0 +1,24 @@
+── ./a-long-file-name-for-the-list-width-demo.txt ──────────────────────────────
+ 2  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxNEEDLExxxxxxxxxxxxxxxxxxxxxxxxxx
+    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    xxxxxxxxxxxxxxxxxxxxxx
+ 3  tail03
+ 4  tail04
+ 5  tail05
+ 6  tail06
+ 7  tail07
+ 8  tail08
+ 9  tail09
+10  tail10
+11  tail11
+12  tail12
+13  tail13
+14  tail14
+15  tail15
+16  tail16
+17  tail17
+18  tail18
+19  tail19
+20  tail20
+21  tail21

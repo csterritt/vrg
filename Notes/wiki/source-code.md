@@ -67,7 +67,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   a base-state no-op, `c` in browse toggles the theme between its dark
   and light schemes (Issue #7), `n`/`p` in browse step the matched-line
   cursor through `navigate` (Issue #13), `,`/`.`/`<`/`>`/`[`/`]` in
-  browse pan horizontally through `Model.pan` (Issue #18), and once
+  browse pan horizontally through `Model.pan` (Issue #18),
+  `left`/`tab` hide and `right`/`shift+tab` show the file list
+  (Issue #24), and once
   `quit` is set `Update`
   discards all messages so a late completion cannot revive a cancelled
   UI; every view wraps the frame in `theme.Base`, composites the
@@ -91,6 +93,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   keeping `View()` off the whole file list, the `layoutDoneMsg`
   install-only-on-match case, and layout requests on the resize, `w`,
   load-completion, and search-completion paths;
+  Issue #24 adds `listShow` (the requested-visible preference —
+  `left`/`tab` hide, `right`/`shift+tab` show, both browse-phase keys
+  whose presses route through `syncLayout` like every other
+  text-width change), `listTop` (the list window's first visible
+  entry), and `statusNote` (the filename-row buffer-status provider,
+  returning "" until Issues #26, #29, and #30 supply real notes);
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
   diagnostics box; Issue #15 adds the pop-up state (`popupID`,
@@ -141,10 +149,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   path), `ensureLoad`/`loadCmd` (one async load per file; read, split,
   escape, and map all off the update path, behind `loadGate` in tests),
   `renderBrowse` (raw-path-ordered file list — `FileList` entries with
-  `CurrentFile` underline on the current one — scrolled into view,
+  `CurrentFile` underline on the current one — painted from the
+  `listTop` scrolled window,
   `FilenameRule`, `Loading…`/`(unreadable)` placeholders — path sinks
   via `present.Path`; each row padded to the frame edge so `Base`'s
-  background covers it), `filenameRule`, `contentRow` (`Gutter`-styled
+  background covers it), `filenameRule` (Issue #24: the path joined by
+  a buffer-status note slot that wins cells over the path, which
+  left-truncates to nothing so the note paints whole; a note too wide
+  alone is dropped), `contentRow` (`Gutter`-styled
   right-justified number + two spaces over the viewport's visible-row
   slice), and `renderCells` (inverse-video
   spans over escaped `present.Cell`s via `Match`/`CurrentMatch`,
@@ -165,7 +177,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   wrap mode) install contract, `ensureLayout`/`layoutCmd` issue the
   worker command, and `renderBrowse` consumes the cached widths and
   paints the file list through `listEntry` only for its visible
-  window. Issue #13 adds `navigate` (the `n`/`p` cursor step:
+  window. Issue #24 gives `listWidth` the real three-term formula and
+  its `listShow` gate (see
+  [file-list-layout.md](file-list-layout.md)), adds `scrollList` (the
+  minimal-movement active-entry scroll, run inside `syncLayout`), and
+  rewrites `truncateLeft` as a grapheme-boundary cut that never
+  exceeds its budget. Issue #13 adds `navigate` (the `n`/`p` cursor step:
   strict no-op on zero/one stops, restyle within a file, and on a
   file crossing the departing anchor is saved, the destination's
   matching-key rows and saved anchor installed, and `ensureLoad`

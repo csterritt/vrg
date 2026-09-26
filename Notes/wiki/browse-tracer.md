@@ -22,12 +22,16 @@ safe presentation", and "Module Design" in `Notes/PRD-vrg.md`.
   scrolls just enough to keep it visible. The list is passive: the
   underlined entry derives from the matched-line cursor and no key
   selects a file directly (Issue #13; see
-  [match-navigation.md](match-navigation.md)). Width is provisional: the
-  longest escaped path plus padding, capped at 40% of the terminal and
-  by the file panel's minimum — Issue #24 owns the real formula.
+  [match-navigation.md](match-navigation.md)). Issue #24 owns the
+  width — the nonnegative minimum of the longest sanitized path plus
+  two, `floor(0.40 × terminal width)`, and the width minus the panel's
+  gutter-plus-ten-plus-indicator minimum — plus the `left`/`tab` hide
+  and `right`/`shift+tab` show toggle and the grapheme-safe leading-`…`
+  truncation: see [file-list-layout.md](file-list-layout.md).
 - **Right pane — file panel.** Row 0 is the *filename rule*: `──`, the
-  escaped current path, then dashes to the panel edge, painted through
-  `theme.FilenameRule`; an oversized
+  escaped current path, the buffer-status note slot (Issue #24 — real
+  notes arrive with Issues #26, #29, and #30), then dashes to the
+  panel edge, painted through `theme.FilenameRule`; an oversized
   path is left-truncated with a leading `…` so the basename tail stays
   visible. Rows below carry the current file's content. There are **no
   other panel borders** — no box drawing, no separator column between
@@ -165,7 +169,9 @@ follows an unescaped ESC.
   intent since Issue #17), `reservedW` (Issue #16's
   zero-or-one indicator column),
   `renderBrowse`, `filenameRule`, `contentRow` (Issue #16 blank
-  continuation gutters), `renderCells`.
+  continuation gutters), `renderCells`; Issue #24 adds `listWidth`
+  (the real three-term formula and the `listShow` gate), `scrollList`,
+  `truncateLeft`, and the filename rule's status-note slot.
 - `internal/app/app.go` — `phaseBrowse`, buffer/loading/failed maps,
   the `rows`/`reqKey`/`revs` layout bookkeeping and `saved` anchors
   (Issue #17), the Issue #16 `wrap` flag (`w` toggles), `fileIdx`/

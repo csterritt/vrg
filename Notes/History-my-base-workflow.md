@@ -240,3 +240,14 @@ Usage
  Input tokens: 258162 tokens
  Output tokens: 41177 tokens
  Cached input tokens: 3308262 tokens
+
+----
+Task 024-file-list-layout-width-truncation-toggle.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 83 messages
+ Input tokens: 190007 tokens
+ Output tokens: 84909 tokens
+ Cached input tokens: 9572791 tokens

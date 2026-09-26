@@ -34,7 +34,7 @@ Catalog of all wiki pages for the vrg project.
   right-justified gutter, inverse-video matches), async prepared-buffer
   loading with `Loading…`, the safe-presentation core's path/content
   rules and byte→cell maps, the provisional tab form, the no-style
-  sink-safety method, and the provisional list width pending Issue #24
+  sink-safety method, and the Issue #24 file-list layout
 - [safe-presentation.md](safe-presentation.md) — Issue #6: the shared
   `internal/present` utility (`Path`/`LineOf`/`Diagnostic`), the
   canonical per-sink-class escaping contracts, the `cli.Escape`
@@ -161,6 +161,15 @@ Catalog of all wiki pages for the vrg project.
   wrap row, marker extents in the paintable-boundary maximum, markers
   as reveal targets and indicator inputs, and the terminator-only `$`
   marker's ordinary-rule treatment
+- [file-list-layout.md](file-list-layout.md) — Issue #24: the
+  three-term list width (longest sanitized path plus two,
+  `floor(0.40 × terminal width)`, terminal minus gutter-plus-ten-plus-
+  reserved-indicator), the `left`/`tab` hide and `right`/`shift+tab`
+  show preference surviving zero-width allocations, grapheme-safe
+  leading-`…` truncation, the filename-row buffer-status note slot
+  (real notes owned by Issues #26, #29, #30), minimal-movement list
+  scrolling, and every width change routed through the Issue #17
+  prepared-layout path preserving the logical anchor
 
 ## Catalogs
 

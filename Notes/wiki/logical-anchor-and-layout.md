@@ -98,7 +98,8 @@ longer runs inside `Update`. Like file loads, it runs in a worker
 - **`syncLayout` recomputes the geometry** (list width, text width,
   viewport resize) after any parameter change — window resize, wrap
   toggle, search completion, a load changing the gutter, a file
-  crossing — and returns `ensureLayout`'s request when the current
+  crossing, and since Issue #24 the file list's hide/show toggle —
+  and returns `ensureLayout`'s request when the current
   file's installed layout is missing or stale-keyed. `ensureLayout`
   drops repeat requests for a key already in flight rather than
   queueing them.
@@ -201,6 +202,8 @@ the pending intent commits),
 [match-navigation.md](match-navigation.md) (the cursor steps the
 intent follows),
 [cancellation-and-cleanup.md](cancellation-and-cleanup.md) (the exit
-paths that stay live while a worker is held), and
+paths that stay live while a worker is held),
 [browse-tracer.md](browse-tracer.md) (the frame this work keeps
-cheap).
+cheap), and [file-list-layout.md](file-list-layout.md) (the Issue #24
+width changes — hide/show, gutter growth, mode flips — that route
+through this relayout path).
