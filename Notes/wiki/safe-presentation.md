@@ -37,14 +37,15 @@ cell marks — `Lead` on a cluster's first cell, `Cont` on a multi-cell
 unit's trailing cells — the shared segmentation/width policy the
 Issue #16 row model wraps on (see [wrap-mode.md](wrap-mode.md)); a
 cluster mixing printable and dangerous forms falls back to per-rune
-rules so no control byte survives verbatim. A zero-width unit joins
-the previous cell's text — a combining mark extends its base — except
-at line start, where it takes a provisional `Lead` cell of its own on
-a `◌` (U+25CC) dotted-circle base so a standalone cluster is always
-one visible cell — a bare mark would merge into the previous terminal
-cell and paint nothing (the Issue #21
-fallback; see
-[grapheme-highlight-expansion.md](grapheme-highlight-expansion.md)).
+rules so no control byte survives verbatim. A zero-width rune inside
+a cluster joins the previous cell's text — a combining mark extends
+the base its cluster provides — while a zero-width unit that *is* a
+new cluster is standalone and takes a real `Lead` cell of its own on
+a `◌` (U+25CC) dotted-circle base: Issue #43 generalized the Issue #21
+line-start fallback to every standalone cluster — after a caret
+escape, a tab expansion, another standalone cluster — so the
+invisible cluster always paints one visible cell (see
+[standalone-cluster-fallback.md](standalone-cluster-fallback.md)).
 Every emitted unit records
 per-byte `lo`/`hi` cell maps; `Line.Span(start, end)` maps a raw byte
 range to its display `Span` — interior bytes expand to their whole

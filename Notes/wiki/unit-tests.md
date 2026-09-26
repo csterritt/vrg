@@ -275,12 +275,17 @@ contracts of the shared utility:
 
 - `TestLineText` — content rules: invalid UTF-8 → U+FFFD, C0/DEL
   caret notation, `\u0085`-style C1 forms, LF/CRLF never displayed,
-  standalone CR → `^M`, and a standalone combining mark's `◌́`
-  fallback cell (Issue #21).
-- `TestLineWidth` — cell counts for escape forms and wide clusters.
+  standalone CR → `^M`, and the Issue #43 standalone-cluster fallback:
+  a standalone combining mark paints `◌́` at line start or mid-line
+  (after a caret escape or a tab), a standalone zero-width separator
+  after a wide glyph paints `◌\u2028`, adjacent standalone marks share
+  one cell, and a mark on an invalid byte keeps its U+FFFD base.
+- `TestLineWidth` — cell counts for escape forms, wide clusters, and
+  the fallback cell counting like any other cell.
 - `TestLineSpan` — byte→cell maps for escaped forms, including
-  an ESC byte's match covering both `^[` cells and marker positions on
-  removed terminator bytes.
+  an ESC byte's match covering both `^[` cells, marker positions on
+  removed terminator bytes, and a standalone mark's bytes mapping to
+  exactly its fallback cell with the following cluster on the next.
 - `TestLineTabStops` — Issue #16's structural expansion: no raw tab
   survives, expansion cells land on the next multiple of eight
   source-display columns (the positions Issue #5 deferred), and the
@@ -328,8 +333,9 @@ shared grapheme-policy source:
   trailing cells, across ASCII, wide, combining, and caret-escape
   units.
 - `TestLeadingCombiningCluster` — a standalone combining mark at line
-  start takes a provisional cell of its own on a `◌` dotted-circle
-  base (Issue #21's visible fallback), still a boundary.
+  start takes the `◌` dotted-circle fallback cell of its own (the
+  Issue #21 provisional form, generalized to mid-line positions by
+  Issue #43), still a `Lead` boundary.
 - `TestTabStopCells` — the tab expands to the next eight-column stop
   as one cluster (first expansion cell leads), and the recorded
   submatch on the tab byte highlights the whole expansion.
@@ -338,17 +344,33 @@ shared grapheme-policy source:
 highlight spans:
 
 - `TestSpansExpandToWholeClusters` — the `Load`-level table: a
-  combining-only match covers the whole base cluster; a mark's
-  zero-width cluster borrowing an escape's trailing cell, a tab
-  expansion cell, or a wide glyph's trailing cell expands over the
-  whole host cluster; a mark joined to a replaced invalid byte's own
-  cell stays one cell; interior bytes of a wide pair or an emoji ZWJ
-  sequence cover both cells; and a standalone combining mark at line
-  start keeps its provisional fallback cell — never zero cells.
+  combining-only match covers the whole base cluster; a mark joined
+  to a replaced invalid byte's cell stays one cell; interior bytes of
+  a wide pair or an emoji ZWJ sequence cover both cells; and — Issue
+  #43 — a standalone mark after a caret escape, a tab expansion, or a
+  wide glyph highlights exactly its own `◌` fallback cell, never
+  expanding into the neighbouring cluster.
 - `TestClusterSpanBoundaries` — the cell-space expansion itself over
   `Lead` marks: start inside, end inside, and strictly interior ranges
   all expand to the whole cluster while whole-cluster, neighbouring,
   line-end, and marker spans pass through.
+
+`fallback_test.go` (same package, Issue #43) pins the standalone
+combining-cluster fallback cell end to end:
+
+- `TestStandaloneFallbackCells` — the cell table: a standalone mark
+  after a caret escape, a tab expansion, a zero-width separator after
+  a wide glyph, adjacent standalone marks sharing one cell, separate
+  standalone clusters taking separate cells, and a mark on an invalid
+  byte keeping its U+FFFD base — each a `Lead`-marked `◌`-prefixed
+  cell with `Text` carrying the `◌` prefix.
+- `TestStandaloneFallbackByteMapping` — the `◌` prefix is
+  display-only: the fallback cell's span resolves to the cluster's
+  original source bytes and the following cluster maps to the next
+  cell.
+- `TestStandaloneFallbackSpanIsOneCell` — a match covering the
+  standalone cluster highlights exactly the fallback cell, nothing
+  adjacent.
 
 `lines_test.go` (same package, Issue #22) pins the structural line
 contracts and the raw-file/rg-line coordinate split:
@@ -373,17 +395,19 @@ contracts and the raw-file/rg-line coordinate split:
   raw byte 3, highlighting the fallback cell, not the hidden BOM.
 - `TestBOMOnlyFile` — a BOM-only file is one zero-display line.
 - `TestNonLeadingFEFFIsContent` — U+FEFF mid-line and at a later
-  line's start is ordinary content: it joins the previous cell or
-  takes the `◌` fallback cell, matches, and highlights normally.
+  line's start is ordinary content: a standalone zero-width cluster,
+  it takes the `◌\ufeff` fallback cell in either position, matches,
+  and highlights normally.
 
 `marker_test.go` (same package, Issue #23) pins the zero-width marker
 positions through `Load`:
 
 - `TestZeroWidthMarkerPositions` — empty submatches validate like any
   other and map to marker spans: BOL on text and empty lines,
-  mid-line, at EOL, positions inside a wide pair and a ZWJ cluster
-  landing on the cluster's start cell, and positions on or covering
-  LF/CRLF terminator bytes landing on the display end-of-line column.
+  mid-line, at EOL, positions inside a wide pair, a ZWJ cluster, and
+  a standalone fallback cluster landing on the cluster's start cell,
+  and positions on or covering LF/CRLF terminator bytes landing on the
+  display end-of-line column.
 - `TestMarkersOnEveryLine` — `^`-style per-line markers accumulate on
   every line of a multi-line file, empty lines included.
 
@@ -696,6 +720,11 @@ decomposed combining marks throughout:
   interior width, leading-`…` truncation, and centring hold for wide
   and decomposed combining paths — `present.Path` output is not
   assumed free of combining marks.
+- `TestComposedViewStandaloneMarkFallbackCell` (Issue #43) — a
+  standalone combining mark after a caret escape paints the `◌́`
+  fallback cell with its match highlight, the following cluster on
+  the next cell, and the same one-cell geometry survives horizontal
+  panning.
 
 `guard_test.go` (same package, Issue #39) is the mechanical policy
 guard:
@@ -1109,11 +1138,11 @@ installing the viewport at a terminal-derived width fails:
 - `TestHRevealWideClusterMatchPaintsBothCells` — a match starting on
   a two-cell CJK glyph reveals to `start + 2 − text width` so both
   cells of the first glyph paint at the right edge.
-- `TestHRevealMidClusterMatchPaintsWholeCluster` (Issue #21) — `n` to
-  a match recorded mid-cluster (a combining mark borrowing an escape
-  cluster's trailing cell) keeps the offset because the expanded
-  target cell is visible, and the painted span covers the whole
-  cluster — both escape cells inverse.
+- `TestHRevealStandaloneMatchPaintsFallbackCell` (Issue #43) — `n` to
+  a match recorded on a standalone combining mark keeps the offset
+  because the fallback target cell is visible, and the painted span
+  covers exactly that one `◌́` cell — no borrowing of the preceding
+  escape's cells.
 
 `cluster_test.go` (same package, Issue #21) pins `renderCells` blank
 safety directly:
@@ -1159,11 +1188,11 @@ locates the gutter's first trailing space:
   column.
 - `TestUniformLinesEveryGutterUnderscore` — the Issue #18
   uniform-lines geometry signposts `_` on every visible line.
-- `TestMidClusterMatchCountsFromClusterStart` (Issue #21) — the
-  indicator tests consume the expanded spans: a match recorded on a
-  combining mark mid-cluster paints its clipped row as the expanded
-  `[cluster start, cluster end)` span, and once that whole cluster
-  stands left of the window the gutter upgrades to `*`.
+- `TestStandaloneMarkMatchCountsFromFallbackCell` (Issue #43) — the
+  indicator tests consume the fallback spans: a match on a standalone
+  combining mark paints its clipped row as the one-cell fallback span
+  and upgrades to `*` only once that whole cell stands left of the
+  window.
 - `matchRecJSON` — the record helper for lines carrying raw control
   bytes, which JSON-escapes the `lines` text (`\x01` → `\u0001`).
 
@@ -1665,8 +1694,9 @@ segmentation that records every per-line `Cells`/`Spans` query:
   counts, ASCII packing, a wide cluster unfit for the row's remainder
   moving whole and leaving a blank, a combining cluster kept whole, an
   over-wide cluster splitting across rows with its clipped lead
-  blanked, and the tab expansion moving whole or splitting like any
-  oversized cluster.
+  blanked, the tab expansion moving whole or splitting like any
+  oversized cluster, and — Issue #43 — the standalone-mark `◌́`
+  fallback cell consuming a real wrap cell and boundary.
 - `TestWrapRowLineAndContinuation` — every rendered row reports its
   source line and `Cont` flag; scroll units stay rendered rows.
 - `TestRunOffEdgeRowModel` — one row per line carrying full cells for

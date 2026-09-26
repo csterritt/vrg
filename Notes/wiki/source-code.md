@@ -478,11 +478,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   legal wrap boundary), `Cont` (trailing cells of a multi-cell
   unit), and — Issue #21 — `Blank` (a substituted filler cell the row
   and clip layers mark, never produced by `LineOf` and never a match
-  cell); a standalone zero-width cluster takes a provisional `Lead`
-  cell on a `◌` (U+25CC) dotted-circle base so it is always a visible
-  cell — the shared segmentation/width policy Viewport consumes.
+  cell); — Issue #43 — a standalone zero-width cluster anywhere in
+  the line takes a `Lead` cell on a `◌` (U+25CC) dotted-circle base
+  followed by its own bytes so it is always a visible cell (a
+  printable ASCII byte followed by a non-ASCII byte takes the cluster
+  path so `e`+mark emits as one cluster), while a zero-width rune
+  inside a cluster still joins the previous cell — the shared
+  segmentation/width policy Viewport consumes.
   Grapheme-aware via `x/ansi`. See [safe-presentation.md](safe-presentation.md),
   [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
+  [standalone-cluster-fallback.md](standalone-cluster-fallback.md),
   [line-terminators-and-bom.md](line-terminators-and-bom.md),
   and [wrap-mode.md](wrap-mode.md).
 - `internal/present/cellwidth.go` — Issue #39's shared ANSI-aware

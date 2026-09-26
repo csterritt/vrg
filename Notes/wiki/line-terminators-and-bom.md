@@ -74,10 +74,9 @@ views:
   on `hit` is raw byte 6 — the LF — and maps to the end-of-line
   marker position.
 - Lines after the first are unshifted, and a U+FEFF anywhere but the
-  file's leading bytes is ordinary content — mid-line it joins the
-  previous cell as a zero-width cluster, at a later line's start it
-  takes the usual `◌` fallback cell, and its bytes match and highlight
-  normally.
+  file's leading bytes is ordinary content — a standalone zero-width
+  cluster mid-line or at a later line's start takes the `◌` fallback
+  cell (Issue #43), and its bytes match and highlight normally.
 
 The same `bytes`-vs-`text` JSON encodings feed the same path — the
 recorded `Submatch.Bytes` are compared against the shifted raw range.

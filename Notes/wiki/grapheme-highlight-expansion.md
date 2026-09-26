@@ -24,32 +24,45 @@ first cell, an end inside walks forward to the next boundary, and a
 strictly interior range expands both ways. Marker positions
 (`Start == End`) are already cell-precise and pass through.
 
-The cases the extra layer exists for are the **zero-width clusters**
-`LineOf` joins into a host cell's text: a standalone combining mark
-after an escape borrows the escape's trailing cell (`a\x01́` — a match
-on the mark's bytes expands to both `^A` cells), one after a tab
-borrows the last expansion cell (expanding over the whole tab cluster),
-and a zero-width rune after a wide glyph borrows its trailing cell. A
-combining-only match inside a base cluster (`café` decomposed — the
-mark's own zero-width cluster joined to the `e` cell) highlights the
+The cases the extra layer exists for are the **zero-width runes**
+`LineOf` joins into a host cell's text *inside* one cluster: a mark
+the policy attaches to a replaced invalid byte composes onto the
+U+FFFD cell, and a combining-only match inside a base cluster
+(`café` decomposed — the mark in the `e◌́` cluster) highlights the
 whole cluster, so the visible `é` glyph is what paints. Emoji ZWJ
 sequences are one cluster under the shared `x/ansi` policy
 (`👨‍👩‍👧` is two cells), so a match on inner emoji bytes covers both
 cells; the same holds for a wide pair like `世` — a two-cell glyph is
 never split by a highlight boundary.
 
+Since Issue #43 a zero-width unit that *is* a whole cluster — a
+standalone combining mark after a caret escape, a tab expansion, or
+another standalone cluster — is no longer a host-borrowing case at
+all: it paints its own `◌`-based fallback cell (see the next section
+and
+[standalone-cluster-fallback.md](standalone-cluster-fallback.md)), so
+a match on its bytes is that one cell exactly — no expansion.
+
 ## Fallback cells
 
 A cluster with no base or independent visible cell still gets a
-highlightable cell: `emit` gives a zero-width unit at line start a
-**provisional cell of its own on a `◌` (U+25CC) dotted-circle base**
-(the standard base for an isolated combining mark). A bare mark would
-merge into the previous terminal cell and paint nothing — the base
-keeps the cluster in its own `Lead` cell, so a standalone combining
-mark's match is one visible highlighted cell — never a zero-cell
-highlight. Mid-line zero-width units join the previous cell's text and
-byte-map onto it, which is what makes their partial matches expand
-outward.
+highlightable cell: `emit` gives a **standalone** zero-width unit —
+a new grapheme cluster with no base — a **cell of its own on a `◌`
+(U+25CC) dotted-circle base followed by the cluster's own bytes**
+(the standard base for an isolated combining mark). Issue #43
+generalized the Issue #21 line-start provisional fallback to every
+standalone position — after an escape, a tab expansion, or another
+standalone cluster — and recorded it as the permanent representation
+(`Notes/decisions/043-combining-cluster-fallback-cell.md`; see
+[standalone-cluster-fallback.md](standalone-cluster-fallback.md)). A
+bare mark would merge into the previous terminal cell and paint
+nothing — the base keeps the cluster in its own `Lead` cell, so a
+standalone combining mark's match is one visible highlighted cell —
+never a zero-cell highlight. The `◌` prefix is display-only: the
+byte→cell map still resolves the cell to the cluster's original
+source bytes. Zero-width *runes* inside a cluster still join the
+previous cell's text and byte-map onto it, which is what makes their
+partial matches expand outward.
 
 ## Blanks are never match cells
 
@@ -95,12 +108,16 @@ down; nothing downstream re-derives or narrows the recorded bytes:
 - `internal/filebuffer/expand_test.go` — `clusterSpan`'s cell-space
   boundary table (start inside, end inside, strictly interior, whole
   cluster, neighbour, line end, marker passthrough) and the end-to-end
-  `Load` table: combining-only match, mark on an escape's trailing
-  cell, mark on a tab expansion cell, zero-width rune on a wide
-  glyph's trailing cell, mark joined to a replaced invalid byte,
-  interior byte of a wide pair, interior bytes of a ZWJ sequence, and
-  the standalone-mark fallback cell (`◌́`, also pinned by
-  `TestLeadingCombiningCluster` and `TestLineText`).
+  `Load` table: combining-only match inside a base cluster, a mark
+  joined to a replaced invalid byte, interior bytes of a wide pair or
+  an emoji ZWJ sequence, and — Issue #43 — standalone clusters after
+  an escape, a tab expansion, a wide glyph, or at line start each
+  highlighting exactly their own `◌` fallback cell (`◌́`, also pinned
+  by `TestLeadingCombiningCluster` and `TestLineText`).
+- `internal/filebuffer/fallback_test.go` — Issue #43's dedicated
+  table: the fallback's cells and text per predecessor kind, the
+  byte→cell mapping resolving the cell to the cluster's original
+  source bytes, and the one-cell match span.
 - `internal/viewport/blanks_test.go` — the wrap row's substituted lead
   cell is `Blank`-marked under a covering span (continuation rows keep
   unmarked `Cont` cells) and `clipRow`'s edge-split blanks are marked
@@ -109,11 +126,16 @@ down; nothing downstream re-derives or narrows the recorded bytes:
   blank and a clip-edge split blank unstyled while a marker on a blank
   still paints its inverse space.
 - `internal/app/indicators_test.go` — Issue #20's tests now consume
-  the expanded spans: a match recorded mid-cluster counts hidden-left
-  once its cluster start is hidden (`TestMidClusterMatchCountsFromClusterStart`).
-- `internal/app/reveal_horizontal_test.go` — `n` to a mid-cluster match reveals
-  and paints the whole expanded cluster
-  (`TestHRevealMidClusterMatchPaintsWholeCluster`).
+  the expanded spans: a match on a standalone mark counts hidden-left
+  once its fallback cell is hidden
+  (`TestStandaloneMarkMatchCountsFromFallbackCell`).
+- `internal/app/reveal_horizontal_test.go` — `n` to a standalone-mark
+  match reveals and paints exactly the fallback cell
+  (`TestHRevealStandaloneMatchPaintsFallbackCell`).
+- `internal/app/cellmodel_test.go` — Issue #43's composed-output pin:
+  `TestComposedViewStandaloneMarkFallbackCell` renders the
+  highlighted `◌́` cell with the following cluster in the next cell,
+  under panning too.
 
 See [unit-tests.md](unit-tests.md) § `internal/filebuffer`,
 `internal/viewport`, and `internal/app`.

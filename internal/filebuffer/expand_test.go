@@ -11,10 +11,9 @@ import (
 // cluster expands outward to the whole cluster's cells, so a
 // highlight never splits a glyph. Single-unit clusters — a wide rune,
 // an emoji ZWJ sequence — already map whole through the byte→cell map;
-// the visible expansion covers the zero-width clusters that borrow a
-// mid-cluster fallback cell: a standalone combining mark joins the
-// trailing cell of the escape or tab expansion before it, and a match
-// on it highlights the whole host cluster.
+// a standalone zero-width cluster instead receives the Issue #43
+// fallback cell of its own, so a match on it highlights exactly that
+// cell with nothing to expand into.
 func TestSpansExpandToWholeClusters(t *testing.T) {
 	dir := t.TempDir()
 	for _, tc := range []struct {
@@ -27,21 +26,22 @@ func TestSpansExpandToWholeClusters(t *testing.T) {
 		// the 'e' cell, so a combining-only match covers that whole
 		// cell — the entire é glyph.
 		{"combining-only match in a base cluster", "café\n", 4, 6, present.Span{Start: 3, End: 4}},
-		// "a^Áx": the mark's zero-width cluster borrows the escape's
-		// trailing cell — a mid-cluster cell — so the match expands
-		// left over the whole ^A cluster.
-		{"mark on an escape's trailing cell", "a\x01́x\n", 2, 4, present.Span{Start: 1, End: 3}},
-		// The same match continuing past the cluster expands its
-		// start only; the end was already a boundary.
-		{"mark plus following text", "a\x01́x\n", 2, 5, present.Span{Start: 1, End: 4}},
-		// "a\t́b": the mark joins the last of the tab's expansion
-		// cells, so the match expands over the whole tab cluster.
-		{"mark on a tab expansion cell", "a\t́b\n", 2, 4, present.Span{Start: 1, End: 8}},
-		// A zero-width cluster after a wide rune borrows its trailing
-		// cell: the match expands over both of the glyph's cells.
-		{"zero-width rune on a wide glyph's trailing cell", "x世\u2028y\n", 4, 7, present.Span{Start: 1, End: 3}},
-		// The same borrow onto a replaced invalid byte lands on that
-		// cell's own cluster — one cell, nothing to expand.
+		// "a^Áx": the mark's standalone zero-width cluster takes
+		// the ◌ fallback cell after the ^A escape's two cells, so the
+		// match covers exactly that one cell.
+		{"standalone mark after an escape", "a\x01́x\n", 2, 4, present.Span{Start: 3, End: 4}},
+		// The same match continuing past the fallback cell covers the
+		// following cluster as well.
+		{"standalone mark plus following text", "a\x01́x\n", 2, 5, present.Span{Start: 3, End: 5}},
+		// "a\t́b": the mark's fallback cell stands at cell 8, after
+		// the tab's seven expansion cells.
+		{"standalone mark after a tab expansion", "a\t́b\n", 2, 4, present.Span{Start: 8, End: 9}},
+		// A standalone zero-width rune after a wide glyph takes its
+		// own fallback cell rather than the glyph's trailing cell.
+		{"standalone zero-width rune after a wide glyph", "x世\u2028y\n", 4, 7, present.Span{Start: 3, End: 4}},
+		// A mark uniseg attaches to a replaced invalid byte is not
+		// standalone — it composes onto the U+FFFD base, so the match
+		// lands on that cell's own cluster.
 		{"mark joins a replaced byte's own cell", "a\xff́x\n", 2, 4, present.Span{Start: 1, End: 2}},
 		// A match inside a two-cell cluster covers both cells — a
 		// wide pair is never split by a highlight boundary.
@@ -49,9 +49,8 @@ func TestSpansExpandToWholeClusters(t *testing.T) {
 		// The emoji ZWJ sequence is one two-cell cluster under the
 		// shared policy: a match on an inner emoji covers both cells.
 		{"interior bytes of a ZWJ sequence", "a👨‍👩‍👧b\n", 8, 12, present.Span{Start: 1, End: 3}},
-		// A standalone combining cluster at line start takes a
-		// provisional cell of its own on a dotted-circle base, so its
-		// highlight is one visible cell — never zero cells.
+		// A standalone combining cluster at line start takes the same
+		// fallback cell — one visible cell, never zero cells.
 		{"standalone mark gets a fallback cell", "́x\n", 0, 2, present.Span{Start: 0, End: 1}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

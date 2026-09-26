@@ -79,6 +79,12 @@ func TestWrapRowModel(t *testing.T) {
 			[]string{"abc", "世x"}},
 		{"combining cluster stays whole", "abécd\n", 4,
 			[]string{"abéc", "d"}},
+		// The Issue #43 fallback cell counts like any other cell: the
+		// standalone mark's ◌́ cell is a real wrap cell and cluster
+		// boundary, so the row holding ^A ends full and the fallback
+		// leads the next row.
+		{"standalone fallback cell wraps like any cell", "ab\x01́cd\n", 4,
+			[]string{"ab^A", "◌́cd"}},
 		// A cluster wider than the text width cannot fit any row: it
 		// fills whole rows as a last-resort split, its clipped portion
 		// rendering blank.

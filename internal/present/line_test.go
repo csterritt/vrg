@@ -39,6 +39,11 @@ func TestLineText(t *testing.T) {
 		{"tab expansion", "a\tb\n", "a       b"},
 		{"combining cluster", "e\u0301x\n", "e\u0301x"},
 		{"standalone combining mark", "\u0301x\n", "\u25cc\u0301x"},
+		{"standalone mark mid-line", "a\x01\u0301x\n", "a^A\u25cc\u0301x"},
+		{"standalone mark after a tab", "a\t\u0301b\n", "a       \u25cc\u0301b"},
+		{"mark on invalid byte keeps its base", "a\xff\u0301x\n", "a\ufffd\u0301x"},
+		{"standalone zero-width separator", "x\u4e16\u2028y\n", "x\u4e16\u25cc\u2028y"},
+		{"two standalone marks share one fallback", "\u0301\u0302x\n", "\u25cc\u0301\u0302x"},
 		{"printable unicode", "héllö→世\n", "héllö→世"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -67,6 +72,8 @@ func TestLineWidth(t *testing.T) {
 		{"standalone cr", "a\rb\n", 4},
 		{"wide rune", "世x\n", 3},
 		{"combining cluster", "e\u0301x\n", 2},
+		{"standalone mark mid-line", "a\x01\u0301x\n", 5},
+		{"standalone separator", "x\u4e16\u2028y\n", 5},
 		{"tab expands to the next stop", "a\tb\n", 9},
 		{"tab at a stop takes eight", "12345678\tb\n", 17},
 	} {
@@ -102,6 +109,10 @@ func TestLineSpan(t *testing.T) {
 		{"wide rune interior byte", "世x\n", 1, 2, Span{0, 2}},
 		{"combining only", "e\u0301x\n", 1, 3, Span{0, 1}},
 		{"standalone mark covers its fallback cell", "\u0301x\n", 0, 2, Span{0, 1}},
+		{"standalone mark mid-line", "a\x01\u0301x\n", 2, 4, Span{3, 4}},
+		{"next byte after a fallback cell", "a\x01\u0301x\n", 4, 5, Span{4, 5}},
+		{"mark on invalid byte's cell", "a\xff\u0301x\n", 2, 4, Span{1, 2}},
+		{"position inside a standalone cluster", "a\x01\u0301x\n", 3, 3, Span{3, 3}},
 		{"crlf terminator-only match", "hit\r\n", 3, 5, Span{3, 3}},
 		{"lf terminator-only match", "hit\n", 3, 4, Span{3, 3}},
 		{"zero-width inside terminator", "hit\r\n", 4, 4, Span{3, 3}},

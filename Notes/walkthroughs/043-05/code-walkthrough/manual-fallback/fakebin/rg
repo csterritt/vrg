@@ -1,0 +1,11 @@
+#!/bin/sh
+# The raw mark bytes are 0xcc 0x81 (U+0301): line 1 submatch [2,4),
+# line 2 [0,2); line 3 matches "fe◌́" at [3,7) inside the base cluster.
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"f.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"a\u0001́x\n"},"line_number":1,"submatches":[{"match":{"text":"́"},"start":2,"end":4}]}}' \
+'{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"́lead\n"},"line_number":2,"submatches":[{"match":{"text":"́"},"start":0,"end":2}]}}' \
+'{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"café\n"},"line_number":3,"submatches":[{"match":{"text":"fé"},"start":3,"end":7}]}}' \
+'{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}' \
+'{"type":"summary","data":{}}'
+exit 0

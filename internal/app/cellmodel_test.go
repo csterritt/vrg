@@ -318,3 +318,57 @@ func TestPopupWideAndCombiningPathGeometry(t *testing.T) {
 			suffix, wide)
 	}
 }
+
+// A standalone combining mark — its own zero-width cluster after the
+// ^A escape — paints the recorded Issue #43 fallback: one cell holding
+// U+25CC plus the mark's bytes. The following cluster stands on the
+// next cell with no overlap, a match covering the mark highlights
+// exactly the fallback cell and nothing adjacent, and horizontal
+// panning counts the fallback like any other cell.
+func TestComposedViewStandaloneMarkFallbackCell(t *testing.T) {
+	dir := t.TempDir()
+	// ab | ^A | ◌́ fallback (mark bytes 3–4) | cd
+	l1 := "ab\x01́cd"
+	writeWorkFile(t, dir, "a.txt", l1+"\n")
+	m, cmd := browseModel(t, dir, 80, 24,
+		`{"type":"begin","data":{"path":{"text":"a.txt"}}}`,
+		matchRecJSON("a.txt", l1, 1, subJSON("́", 3, 5)),
+		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
+		`{"type":"summary","data":{}}`,
+	)
+	m = settle(t, m, cmd)
+
+	// The current matched line styles the fallback cell inverse +
+	// underline; the escape's cells before it and the following text
+	// stay in the base colours.
+	v := m.View().Content
+	if !strings.Contains(v, "A\x1b[30;47;4m◌́\x1b[24;37;40mc") {
+		t.Fatalf("fallback cell not painted as exactly one highlighted cell: %q", v)
+	}
+
+	// Cell layout: the fallback cell is its own painted cluster and
+	// every following cluster stands on its own later cell.
+	row := frameLines(m)[1]
+	col := textCol(m)
+	for i, want := range []string{"a", "b", "^", "A", "◌́", "c", "d"} {
+		if got := cellAt(row, col+i); got != want {
+			t.Fatalf("text cell %d = %q, want %q", i, got, want)
+		}
+	}
+
+	// Run-off-edge mode: panning right by one column counts the
+	// fallback as a real cell — the window simply starts at 'b' — and
+	// the match still styles exactly it.
+	m = pump(t, m, keyPress("w"))
+	m.vp.SetOffset(1)
+	row = frameLines(m)[1]
+	if got := cellAt(row, col); got != "b" {
+		t.Fatalf("first painted cell at offset 1 = %q, want \"b\"", got)
+	}
+	if got := cellAt(row, col+3); got != "◌́" {
+		t.Fatalf("fallback cell at offset 1 = %q, want the ◌́ cluster", got)
+	}
+	if v := m.View().Content; !strings.Contains(v, "\x1b[30;47;4m◌́\x1b[24;37;40m") {
+		t.Fatalf("panned view lacks the fallback-cell highlight: %q", v)
+	}
+}

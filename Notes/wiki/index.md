@@ -288,6 +288,15 @@ Catalog of all wiki pages for the vrg project.
   (process → integrity → record-loss aggregates and per-path details →
   unknown warnings) shared by overlay and replay, stderr suppressing
   the generated line, and no process-status line for exit 0/1
+- [standalone-cluster-fallback.md](standalone-cluster-fallback.md) —
+  Issue #43: a standalone zero-width grapheme cluster anywhere in a
+  line paints one real cell — U+25CC DOTTED CIRCLE plus the cluster's
+  original bytes — with the one-cell occupancy structural rather than
+  measured, the `◌` prefix display-only against the source-byte
+  mapping, the ASCII/cluster-path boundary keeping `lead` zero-width
+  emits standalone-only, and ordinary propagation through spans,
+  wrapping, clipping, panning, and highlighting with no downstream
+  special-casing
 
 ## Catalogs
 

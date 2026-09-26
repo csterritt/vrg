@@ -236,10 +236,9 @@ func TestBOMOnlyFile(t *testing.T) {
 }
 
 // U+FEFF anywhere but the file's leading bytes is ordinary content,
-// never treated as a BOM: mid-line it joins the previous cell as a
-// zero-width cluster, and at a later line's start it takes the usual
-// standalone-cluster fallback cell — its bytes match and highlight
-// like any other content.
+// never treated as a BOM: a standalone zero-width cluster, mid-line
+// or at a later line's start, it takes the Issue #43 fallback cell —
+// its bytes match and highlight like any other content.
 func TestNonLeadingFEFFIsContent(t *testing.T) {
 	dir := t.TempDir()
 	b := load(t, writeFile(t, dir, "f", "a\ufeffb\n\ufeffz\n"),
@@ -255,14 +254,14 @@ func TestNonLeadingFEFFIsContent(t *testing.T) {
 				{Start: 0, End: 3, Bytes: []byte("\xef\xbb\xbf")},
 			},
 		})
-	if got := b.Text(0); got != "a\ufeffb" {
-		t.Fatalf("Text(0) = %q, want %q — the FEFF joins the a cell", got, "a\ufeffb")
+	if got := b.Text(0); got != "a◌\ufeffb" {
+		t.Fatalf("Text(0) = %q, want %q — the FEFF takes a fallback cell", got, "a◌\ufeffb")
 	}
-	if n := len(b.Cells(0)); n != 2 {
-		t.Fatalf("len(Cells(0)) = %d, want 2", n)
+	if n := len(b.Cells(0)); n != 3 {
+		t.Fatalf("len(Cells(0)) = %d, want 3", n)
 	}
-	if got := b.Spans(0); len(got) != 1 || got[0] != (present.Span{Start: 0, End: 1}) {
-		t.Fatalf("Spans(0) = %+v, want the a cell %+v", got, present.Span{Start: 0, End: 1})
+	if got := b.Spans(0); len(got) != 1 || got[0] != (present.Span{Start: 1, End: 2}) {
+		t.Fatalf("Spans(0) = %+v, want the fallback cell %+v", got, present.Span{Start: 1, End: 2})
 	}
 	if got := b.Text(1); got != "◌\ufeffz" {
 		t.Fatalf("Text(1) = %q, want %q — a line-initial FEFF is content, not a BOM",

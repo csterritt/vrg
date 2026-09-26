@@ -44,10 +44,12 @@ func TestCellClusterBoundaries(t *testing.T) {
 }
 
 // A standalone combining mark at line start has no base cell to join:
-// it takes a provisional cell of its own on a dotted-circle base — a
-// visible cell, still a cluster boundary — so a highlight on the
-// mark's bytes paints a real cell rather than a bare mark a terminal
-// would merge into the previous cell.
+// it takes the Issue #43 fallback cell of its own on a dotted-circle
+// base — a visible cell, still a cluster boundary — so a highlight on
+// the mark's bytes paints a real cell rather than a bare mark a
+// terminal would merge into the previous cell. The same fallback
+// covers standalone clusters mid-line; fallback_test.go exercises the
+// general rule.
 func TestLeadingCombiningCluster(t *testing.T) {
 	dir := t.TempDir()
 	b := load(t, writeFile(t, dir, "f", "́x\n"))

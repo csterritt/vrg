@@ -103,12 +103,18 @@ var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
 // LineOf escapes one raw source line — including any trailing LF or
 // CRLF terminator — into display cells with a byte→cell map. Invalid
-// UTF-8 becomes U+FFFD while retaining its raw-byte mapping; C0
-// controls and DEL take caret notation except that LF and CRLF are
-// never displayed (terminators map to the end-of-line position) and a
-// standalone CR becomes ^M; C1 controls take \uXXXX; tab expands with
-// space cells to the next multiple of eight source-display columns as
-// one cluster.
+// UTF-8 becomes U+FFFD while retaining its raw-byte mapping — a mark
+// the grapheme policy attaches to the invalid byte's cluster composes
+// onto that replacement glyph — C0 controls and DEL take caret
+// notation except that LF and CRLF are never displayed (terminators
+// map to the end-of-line position) and a standalone CR becomes ^M; C1
+// controls take \uXXXX; tab expands with space cells to the next
+// multiple of eight source-display columns as one cluster. A cluster
+// the grapheme policy reports as its own zero-width unit — a
+// standalone combining mark or other baseless cluster — paints the
+// Issue #43 fallback: one cell holding U+25CC DOTTED CIRCLE followed
+// by the cluster's own bytes, still mapping to the original source
+// bytes.
 func LineOf(raw []byte) Line {
 	return lineOf(raw, 0)
 }
@@ -135,19 +141,20 @@ func lineOf(raw []byte, hidden int) Line {
 
 	// emit records one unit covering raw bytes [start,end) as width
 	// display cells carrying text; lead marks whether the unit begins
-	// a new grapheme cluster. A zero-width unit joins the previous
-	// cell's text — a combining mark extends its base — or takes a
-	// provisional cell of its own at line start on a dotted-circle
-	// base, so a standalone invisible cluster is a real painted cell
-	// rather than a bare mark the terminal would merge into the cell
-	// before it.
+	// a new grapheme cluster. A zero-width unit inside a cluster joins
+	// the previous cell's text — a combining mark extends the base its
+	// cluster provides — while a zero-width unit that *is* a new
+	// cluster is standalone: it takes a real cell of its own on a
+	// dotted-circle base — U+25CC followed by the cluster's own bytes,
+	// Issue #43's recorded fallback — so the invisible cluster paints
+	// one visible cell rather than merging into whatever precedes it.
 	emit := func(start, end int, text string, width int, lead bool) {
 		if width <= 0 {
 			c := len(l.cells) - 1
-			if c < 0 {
+			if c < 0 || lead {
+				c = len(l.cells)
 				text = "◌" + text
-				l.cells = append(l.cells, Cell{Text: text, Lead: lead})
-				c = 0
+				l.cells = append(l.cells, Cell{Text: text, Lead: true})
 			} else {
 				l.cells[c].Text += text
 			}
@@ -171,7 +178,14 @@ func lineOf(raw []byte, hidden int) Line {
 	i := hidden
 	for i < len(raw) {
 		c := raw[i]
-		if c < utf8.RuneSelf {
+		// ASCII control bytes and terminators are single-byte units,
+		// as is a printable ASCII byte followed by another ASCII byte
+		// or the end of the line. A printable ASCII byte followed by a
+		// non-ASCII byte may open a longer grapheme cluster — "e"
+		// continuing with a combining mark — so it falls through to
+		// the cluster path, which emits the whole cluster as one unit.
+		if c < utf8.RuneSelf && (c < 0x20 || c == 0x7f ||
+			i+1 == len(raw) || raw[i+1] < utf8.RuneSelf) {
 			switch {
 			case c == '\n':
 				// Line terminator: no display, maps to end of line.
@@ -201,11 +215,6 @@ func lineOf(raw []byte, hidden int) Line {
 			continue
 		}
 		r, size := utf8.DecodeRune(raw[i:])
-		if r == utf8.RuneError && size == 1 {
-			emit(i, i+1, "\ufffd", 1, true)
-			i++
-			continue
-		}
 		cl, w := ansi.FirstGraphemeCluster(raw[i:], ansi.GraphemeWidth)
 		if len(cl) == size && r >= 0x80 && r < 0xa0 {
 			emit(i, i+size, fmt.Sprintf(`\u%04x`, r), 6, true)

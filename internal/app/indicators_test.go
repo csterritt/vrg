@@ -404,16 +404,17 @@ func TestWrapModeDrawsNoIndicatorsOrReservedColumn(t *testing.T) {
 	}
 }
 
-// A match whose recorded bytes start mid-cluster is indicator-counted
-// from the cluster-expanded span FileBuffer hands down: the viewport's
-// clipped row carries the whole cluster's cells, and once the expanded
-// span stands entirely left of the window the gutter shows "*".
-func TestMidClusterMatchCountsFromClusterStart(t *testing.T) {
+// A match on a standalone combining mark is indicator-counted from
+// the Issue #43 fallback cell FileBuffer hands down: the mark's own
+// one-cell cluster paints in the window like any other cell, and once
+// the fallback cell stands entirely left of the window the gutter
+// shows "*".
+func TestStandaloneMarkMatchCountsFromFallbackCell(t *testing.T) {
 	dir := t.TempDir()
 	// Ten x's + \x01 + ́ + forty x's: the ^A escape is the two-cell
-	// cluster at cells 10–11 and the combining mark — its own
-	// zero-width cluster — borrows the escape's trailing cell, so the
-	// recorded mark at bytes 11–13 expands to cells 10–12.
+	// cluster at cells 10–11 and the mark — a standalone zero-width
+	// cluster — takes the one-cell ◌́ fallback at cell 12, so the
+	// recorded mark at bytes 11–13 maps to span [12,13).
 	l1 := strings.Repeat("x", 10) + "\x01" + "́" + strings.Repeat("x", 40)
 	writeWorkFile(t, dir, "a.txt", l1+"\n")
 	recs := append(fileRecs("a.txt",
@@ -421,25 +422,25 @@ func TestMidClusterMatchCountsFromClusterStart(t *testing.T) {
 	), `{"type":"summary","data":{}}`)
 	m := indModel(t, dir, recs...)
 
-	// Offset 10 paints the whole cluster; the row's clipped span is
-	// the expanded [10,12) → [0,2), not the recorded mark's [1,2).
+	// Offset 10 paints the fallback cell; the row's clipped span is
+	// [12,13) → [2,3).
 	m.vp.SetOffset(10)
 	r, ok := visRow(m, 0)
 	if !ok {
 		t.Fatal("line 1 has no visible row")
 	}
-	if !slices.Equal(r.Spans, []present.Span{{Start: 0, End: 2}}) {
-		t.Fatalf("clipped spans = %+v, want the cluster-expanded [{0 2}]", r.Spans)
+	if !slices.Equal(r.Spans, []present.Span{{Start: 2, End: 3}}) {
+		t.Fatalf("clipped spans = %+v, want the fallback cell's [{2 3}]", r.Spans)
 	}
 	if got := cellAt(frameLines(m)[1], indCol(m)); got != "_" {
-		t.Fatalf("gutter at offset 10 = %q, want \"_\" — the expanded match paints", got)
+		t.Fatalf("gutter at offset 10 = %q, want \"_\" — the fallback match paints", got)
 	}
 
-	// Offset 12 leaves the whole expanded span left of the window —
+	// Offset 13 leaves the whole fallback span left of the window —
 	// the match counts as entirely hidden left.
-	m.vp.SetOffset(12)
+	m.vp.SetOffset(13)
 	if got := cellAt(frameLines(m)[1], indCol(m)); got != "*" {
-		t.Fatalf("gutter at offset 12 = %q, want \"*\"", got)
+		t.Fatalf("gutter at offset 13 = %q, want \"*\"", got)
 	}
 }
 

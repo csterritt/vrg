@@ -37,6 +37,10 @@ func TestZeroWidthMarkerPositions(t *testing.T) {
 		// The emoji ZWJ sequence is one two-cell cluster starting at
 		// cell 1: an interior position marks cell 1.
 		{"inside a zwj cluster", "a👨‍👩‍👧b\n", 6, 6, present.Span{Start: 1, End: 1}},
+		// A position inside a standalone combining cluster lands on
+		// its fallback cell — the cluster's start: byte 3 of
+		// "a\x01́x\n" is the mark's second byte.
+		{"inside a standalone fallback cluster", "a\x01́x\n", 3, 3, present.Span{Start: 3, End: 3}},
 		// A position on removed terminator bytes — or solely covering
 		// them — is an end-of-line marker: byte 4 of "hit\r\n" is the
 		// LF, bytes 3–5 the whole CRLF; all land on display column 3.

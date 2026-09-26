@@ -430,12 +430,12 @@ func TestMarkerTargetCommitPaintsMarkerCell(t *testing.T) {
 	}
 }
 
-// An async mid-cluster target commits the Issue #21 expanded start
+// An async standalone-cluster target commits the Issue #43 fallback
 // cell: n during the layout gap selects the stop whose recorded
-// submatch opens mid-cluster — the combining mark on the ^A escape —
-// and the install's minimal horizontal reveal paints the whole
-// two-cell cluster flush with the right edge.
-func TestClusterTargetCommitPaintsWholeCluster(t *testing.T) {
+// submatch is a combining mark with no base, and the install's minimal
+// horizontal reveal paints the one-cell fallback flush with the right
+// edge.
+func TestClusterTargetCommitPaintsFallbackCell(t *testing.T) {
 	dir := t.TempDir()
 	l2 := strings.Repeat("x", 300) + "\x01" + "́"
 	writeWorkFile(t, dir, "a.txt", "hit\n"+l2+"\n")
@@ -450,7 +450,7 @@ func TestClusterTargetCommitPaintsWholeCluster(t *testing.T) {
 	m, lay := update(t, m, cmdMsgs(cmd)[0]) // loaded; layout held
 
 	// The selection moves while the layout is pending: the reveal is
-	// owed to the newest stop — the mid-cluster match on line 2.
+	// owed to the newest stop — the standalone mark on line 2.
 	m, _ = update(t, m, keyPress("n"))
 	if s, _ := m.currentStop(); s.Line != 2 {
 		t.Fatalf("n during the gap selected %+v, want a.txt:2", s)
@@ -460,20 +460,21 @@ func TestClusterTargetCommitPaintsWholeCluster(t *testing.T) {
 	}
 
 	m = settle(t, m, lay)
-	// The recorded mark maps into the ^A cluster at cells 300–301, so
-	// the expanded start cell is 300 and the offset puts both cells in
-	// the window's last two columns.
-	want := 302 - m.wantTextW()
+	// The recorded mark maps to its own fallback cell at cell 302 —
+	// after the ^A escape's cells 300–301 — so the expanded start
+	// cell is 302 and the offset paints it at the window's last
+	// column.
+	want := 303 - m.wantTextW()
 	if m.vp.Offset() != want {
-		t.Fatalf("offset after the cluster commit = %d, want %d = 302 − %d",
+		t.Fatalf("offset after the cluster commit = %d, want %d = 303 − %d",
 			m.vp.Offset(), want, m.wantTextW())
 	}
 	r, ok := visRow(m, 1)
 	if !ok {
 		t.Fatal("line 2 has no visible row after the commit")
 	}
-	if len(r.Cells) != m.wantTextW() || r.Cells[m.wantTextW()-2].Text != "^A" || !r.Cells[m.wantTextW()-1].Cont {
-		t.Fatalf("line-2 row's last cells = %+v, want ^A painted whole at the right edge",
+	if len(r.Cells) != m.wantTextW() || r.Cells[m.wantTextW()-1].Text != "◌́" {
+		t.Fatalf("line-2 row's last cells = %+v, want the ◌́ fallback cell at the right edge",
 			r.Cells[max(0, len(r.Cells)-3):])
 	}
 }

@@ -1735,3 +1735,51 @@ Sources: `Notes/tasks/042-dropped-reload-no-intent-mutation.md`,
 `Notes/PRD-vrg.md` (*File loading, cache, reload, and selection
 consistency*; *Navigation, viewport, and logical anchors*),
 `internal/app/browse.go`, `internal/app/admission_test.go`.
+
+## [2026-09-25] ingest | Issue #43 standalone combining-cluster fallback cell
+
+Issue #43 (`Notes/tasks/043-combining-cluster-fallback-cell.md`;
+recorded representation in
+`Notes/decisions/043-combining-cluster-fallback-cell.md`) generalized
+the Issue #21 line-start provisional fallback into a permanent rule
+for every standalone zero-width grapheme cluster: such a cluster
+paints one real terminal cell holding U+25CC DOTTED CIRCLE followed by
+the cluster's original bytes. The one-cell occupancy is structural —
+`emit` appends exactly one `Cell` regardless of what a width call
+returns — and the `◌` prefix is display-only, so the byte→cell map
+still resolves the cell to the cluster's original source bytes and a
+mark-only match highlights exactly that cell.
+
+The distinguishing fix lives in `lineOf`'s segmentation boundary: a
+printable ASCII byte followed by a non-ASCII byte now takes the
+grapheme-cluster path, so `e`+U+0301 emits as the single cluster the
+shared policy reports and a `lead` zero-width emit is standalone by
+construction — after a caret escape, a tab expansion, a `^M`, or
+another standalone cluster. The eager `\ufffd` fast-path emit was
+removed so an invalid byte flows through its real cluster, keeping a
+mark the policy attaches to it composing onto the U+FFFD base. A
+mid-line U+FEFF and a zero-width U+2028 separator now take fallback
+cells of their own.
+
+Everything downstream consumes the fallback as an ordinary `Lead`
+cell: `Line.Text`/`Width`/`Span`, FileBuffer's validated-submatch
+mapping and `clusterSpan` (a mark match has nothing to expand into),
+viewport wrap/clip/pan, and the app's `renderCells`, indicators, and
+minimal reveal. Tests formerly encoding the borrowed-cell behaviour
+were rewritten to the fallback geometry.
+
+New page: [standalone-cluster-fallback](standalone-cluster-fallback.md).
+Updated [safe-presentation](safe-presentation.md) (the generalized
+zero-width rule), [grapheme-highlight-expansion](grapheme-highlight-expansion.md)
+(standalone clusters no longer borrow hosts; the fallback section and
+test roster), [line-terminators-and-bom](line-terminators-and-bom.md)
+(mid-line FEFF takes the fallback cell), [unit-tests](unit-tests.md)
+(present/filebuffer/viewport/app catalogs incl. `fallback_test.go`),
+[source-code](source-code.md) (`line.go`), and the index.
+New files: `internal/filebuffer/fallback_test.go`;
+`Notes/walkthroughs/043-05/` holds the walkthrough.
+Sources: `Notes/tasks/043-combining-cluster-fallback-cell.md`,
+`Notes/decisions/043-combining-cluster-fallback-cell.md`,
+`Notes/PRD-vrg.md` (*Text, graphemes, and safe presentation*),
+`internal/present/line.go`, `internal/filebuffer/fallback_test.go`,
+`internal/app/cellmodel_test.go`.
