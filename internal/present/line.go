@@ -97,6 +97,10 @@ func (l Line) Span(start, end int) Span {
 	return Span{pos(start), l.hi[end-1]}
 }
 
+// utf8BOM is the UTF-8 byte order mark: invisible at the start of a
+// file, where rg removes its three bytes from first-line data.
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
 // LineOf escapes one raw source line — including any trailing LF or
 // CRLF terminator — into display cells with a byte→cell map. Invalid
 // UTF-8 becomes U+FFFD while retaining its raw-byte mapping; C0
@@ -106,6 +110,26 @@ func (l Line) Span(start, end int) Span {
 // space cells to the next multiple of eight source-display columns as
 // one cluster.
 func LineOf(raw []byte) Line {
+	return lineOf(raw, 0)
+}
+
+// LineOfBOM escapes a raw source line known to open with the file's
+// leading UTF-8 BOM: the BOM's three bytes stay in Raw — the raw-file
+// view — but produce no display, mapping to the line-start position.
+// rg removes the BOM from first-line data, so only a file's first line
+// qualifies; a U+FEFF anywhere else is ordinary content and takes
+// LineOf.
+func LineOfBOM(raw []byte) Line {
+	if !bytes.HasPrefix(raw, utf8BOM) {
+		return LineOf(raw)
+	}
+	return lineOf(raw, len(utf8BOM))
+}
+
+// lineOf is LineOf's body: the first hidden raw bytes produce no
+// display and map to the line-start position, which is how the leading
+// UTF-8 BOM stays in the raw-file view without painting.
+func lineOf(raw []byte, hidden int) Line {
 	l := Line{raw: bytes.Clone(raw), lo: make([]int, len(raw)), hi: make([]int, len(raw))}
 	var b strings.Builder
 
@@ -144,7 +168,7 @@ func LineOf(raw []byte) Line {
 		}
 	}
 
-	i := 0
+	i := hidden
 	for i < len(raw) {
 		c := raw[i]
 		if c < utf8.RuneSelf {
@@ -217,10 +241,11 @@ func LineOf(raw []byte) Line {
 		i += len(cl)
 	}
 
-	// Unmapped bytes are removed terminator bytes; they map to the
-	// end-of-line position.
+	// Unmapped bytes past the hidden prefix are removed terminator
+	// bytes; they map to the end-of-line position. The hidden prefix
+	// itself keeps its zero-value mapping to the line-start position.
 	eol := len(l.cells)
-	for j := range l.lo {
+	for j := hidden; j < len(l.lo); j++ {
 		if l.hi[j] == 0 {
 			l.lo[j], l.hi[j] = eol, eol
 		}

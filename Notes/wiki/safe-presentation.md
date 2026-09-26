@@ -53,7 +53,12 @@ range covering only removed terminator bytes or a zero-width position
 yields a marker span (`Start == End`). Issue #21 adds a third cell
 mark, `Blank`, never produced here: the row and clip layers mark the
 filler cells they substitute for split clusters so a covering
-highlight never styles them.
+highlight never styles them. Issue #22 adds
+`LineOfBOM` — the same escaper run over a hidden prefix: a file's
+first line keeps its leading UTF-8 BOM in `Raw` while the three bytes
+paint nothing and map to the line-start position, the raw-file half of
+the coordinate split described in
+[line-terminators-and-bom.md](line-terminators-and-bom.md).
 
 **Diagnostics** — `present.Diagnostic(s string) string` renders
 diagnostic text while preserving the message's own line structure: LF

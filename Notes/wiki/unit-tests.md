@@ -273,6 +273,32 @@ highlight spans:
   all expand to the whole cluster while whole-cluster, neighbouring,
   line-end, and marker spans pass through.
 
+`lines_test.go` (same package, Issue #22) pins the structural line
+contracts and the raw-file/rg-line coordinate split:
+
+- `TestTerminatorsUndisplayed` — LF, CRLF, and mixed terminators
+  produce no display text, with unterminated-final-line and blank-line
+  cases.
+- `TestStandaloneCREscapes` — a CR not followed by LF is `^M` content,
+  not a terminator.
+- `TestEmptyFile` — zero source lines behind the minimum one-digit
+  slot: a three-cell gutter.
+- `TestTerminatorBytesMapToDisplayEOL` — terminator bytes and
+  zero-width positions (byte 4 of `hit\r\n`, the terminator-only
+  match) map to the display end-of-line position.
+- `TestSpanAcrossTerminatorHighlightsTextOnly` — a span covering text
+  plus terminator maps to the visible text alone.
+- `TestLeadingUTF8BOM` — the BOM paints nothing; rg offset 0 validates
+  against raw byte 3 and highlights cells 0–2; the shifted end-of-line
+  position is a marker; line 2 is unshifted.
+- `TestBOMShiftMapsRGOffsetsToRawBytes` — a second, content U+FEFF
+  after the file BOM proves the three-byte shift: rg offset 0 names
+  raw byte 3, highlighting the fallback cell, not the hidden BOM.
+- `TestBOMOnlyFile` — a BOM-only file is one zero-display line.
+- `TestNonLeadingFEFFIsContent` — U+FEFF mid-line and at a later
+  line's start is ordinary content: it joins the previous cell or
+  takes the `◌` fallback cell, matches, and highlights normally.
+
 ## internal/app
 
 `model_test.go` (same package) drives `Update` directly:

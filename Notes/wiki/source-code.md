@@ -289,7 +289,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   space cells to the next multiple of eight source-display columns as
   one cluster, replacing the provisional `→`) with per-byte `lo`/`hi`
   byte→cell maps and `Span` range→cell mapping including zero-width
-  markers; `Cell` carries `Lead` (a cluster's first cell, the only
+  markers; — Issue #22 — `LineOfBOM` is the same escaper over a
+  hidden-prefix variant (`lineOf(raw, hidden)`): a file's first line
+  keeps its leading UTF-8 BOM in `Raw` while the three bytes paint
+  nothing and map to the line-start position; `Cell` carries `Lead`
+  (a cluster's first cell, the only
   legal wrap boundary), `Cont` (trailing cells of a multi-cell
   unit), and — Issue #21 — `Blank` (a substituted filler cell the row
   and clip layers mark, never produced by `LineOf` and never a match
@@ -298,6 +302,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   cell — the shared segmentation/width policy Viewport consumes.
   Grapheme-aware via `x/ansi`. See [safe-presentation.md](safe-presentation.md),
   [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
+  [line-terminators-and-bom.md](line-terminators-and-bom.md),
   and [wrap-mode.md](wrap-mode.md).
 - `internal/present/doc.go` — the shared all-sink utility contract.
 
@@ -316,9 +321,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   without re-segmenting. Issue #21 adds `clusterSpan`: each validated
   submatch's mapped span expands outward to `Lead` cluster boundaries,
   so `Spans` hands down the cluster-expanded spans highlighting,
-  reveal, and the hidden-match indicators all consume. See
-  [wrap-mode.md](wrap-mode.md) and
-  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md).
+  reveal, and the hidden-match indicators all consume. Issue #22 adds
+  the structural line rules and the coordinate split: LF/CRLF
+  terminate lines with their bytes retained in each line's raw view,
+  and a leading UTF-8 BOM sends line one through `LineOfBOM` and
+  shifts that line's rg submatch offsets by three into the raw view
+  before validating. See
+  [wrap-mode.md](wrap-mode.md),
+  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
+  and
+  [line-terminators-and-bom.md](line-terminators-and-bom.md).
 
 ## internal/viewport
 

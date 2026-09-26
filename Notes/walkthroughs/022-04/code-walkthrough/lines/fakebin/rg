@@ -1,0 +1,7 @@
+#!/bin/sh
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"./a.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"./a.txt"},"lines":{"text":"foo\n"},"line_number":1,"submatches":[{"match":{"text":"foo"},"start":0,"end":3}]}}' \
+'{"type":"end","data":{"path":{"text":"./a.txt"},"binary_offset":null}}' \
+'{"type":"summary","data":{}}'
+exit 0

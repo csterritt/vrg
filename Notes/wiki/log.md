@@ -833,3 +833,38 @@ Decisions → FileBuffer), `internal/filebuffer/filebuffer.go`,
 `internal/filebuffer/expand_test.go`, `internal/viewport/blanks_test.go`,
 `internal/app/cluster_test.go`, `internal/app/indicators_test.go`,
 `internal/app/hreveal_test.go`.
+
+## [2026-09-24] ingest | Issue #22 line terminators, empty file, and UTF-8 BOM
+
+Ingested the completed Issue #22 implementation: FileBuffer's
+structural line handling with raw-file and rg-line coordinate
+separation. LF and CRLF terminate lines without being displayed while
+every line's original bytes — terminators included — stay in the raw
+view for byte-coordinate mapping and Issue #29's later validation; a
+missing final newline still yields the final line, a trailing newline
+invents no phantom line, and an empty file has zero source lines
+behind the minimum one-digit gutter slot (three cells). A standalone
+CR is not a terminator and escapes as `^M`. Removed terminator bytes
+and zero-width positions map to the display end-of-line position
+(byte 4 of `hit\r\n` → column 3), a terminator-only match yields an
+end-of-line marker position, and a span covering text plus terminator
+highlights the visible text only. For a leading UTF-8 BOM, `Load`
+detects `EF BB BF` at file start, escapes line one through the new
+`present.LineOfBOM` — `lineOf(raw, hidden)` keeps the BOM's three
+bytes in `Raw` while painting nothing and mapping them to the
+line-start position — and shifts that line's rg submatch offsets by
+three into the raw view before validating and mapping, so rg offset 0
+names raw byte 3; later lines and non-leading U+FEFF are unaffected.
+Created [line-terminators-and-bom](line-terminators-and-bom.md);
+updated [source-code](source-code.md) (`lineOf` hidden prefix /
+`LineOfBOM`, `Load`'s BOM detection and offset shift),
+[unit-tests](unit-tests.md) (new `lines_test.go` catalog),
+[safe-presentation](safe-presentation.md) (`LineOfBOM`), and the
+index. New test file: `internal/filebuffer/lines_test.go` (the
+structural-line and BOM contract tables).
+Sources: `Notes/issues/022-line-terminators-final-line-empty-file-utf8-bom.md`,
+`Notes/tasks/022-line-terminators-final-line-empty-file-utf8-bom.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; Encodings
+and stale-content validation; Testing Decisions → FileBuffer),
+`internal/filebuffer/filebuffer.go`, `internal/present/line.go`,
+`internal/filebuffer/lines_test.go`.

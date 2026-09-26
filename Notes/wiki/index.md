@@ -144,6 +144,15 @@ Catalog of all wiki pages for the vrg project.
   `Cell.Blank`-marked wrap/clip fillers never painted as match cells,
   and the expanded span as the single source for highlight, reveal,
   and indicator visibility
+- [line-terminators-and-bom.md](line-terminators-and-bom.md) —
+  Issue #22: LF/CRLF as undisplayed terminators with retained raw
+  bytes, standalone CR → `^M`, the unterminated final line and no
+  phantom trailing line, the empty file's zero lines behind a
+  three-cell gutter, terminator bytes and zero-width positions mapping
+  to display end-of-line, text-plus-terminator spans highlighting the
+  visible text only, and the leading UTF-8 BOM invisible with its
+  three-byte raw-file/rg-line coordinate shift — non-leading U+FEFF
+  staying ordinary content
 
 ## Catalogs
 

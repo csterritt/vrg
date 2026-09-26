@@ -19,28 +19,45 @@ type Buffer struct {
 	digits int                    // gutter digit width, minimum 1
 }
 
+// utf8BOM is the UTF-8 byte order mark: invisible at the start of a
+// file, where rg removes its three bytes from first-line data.
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
 // Load reads path and prepares its display-ready content and validated
 // highlights. The whole read, split, escape, and map happens here — the
 // caller delivers the finished Buffer as its completion message so no
 // full-file work lands on the UI update path.
 //
 // Each stop's submatches are checked against the line's raw bytes:
-// out-of-bounds ranges and text mismatches are dropped. Stale marking
-// is Issue #29's; UTF-16/32 classification is Issue #30's; UTF-8 BOM
-// adjustment is Issue #22's.
+// out-of-bounds ranges and text mismatches are dropped. A leading
+// UTF-8 BOM splits the first line's coordinate views: its raw bytes
+// retain the BOM while rg's first-line data omits it, so rg offsets on
+// that line shift by its length into the raw view before validating
+// and mapping. Stale marking is Issue #29's; UTF-16/32 classification
+// is Issue #30's.
 func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 	data, err := os.ReadFile(string(path))
 	if err != nil {
 		return nil, err
 	}
 	b := &Buffer{spans: make(map[int][]present.Span)}
+	bom := 0
+	if bytes.HasPrefix(data, utf8BOM) {
+		bom = len(utf8BOM)
+	}
 	for rest := data; len(rest) > 0; {
+		// Only the file's first line can carry the BOM: LineOfBOM
+		// keeps its bytes in the raw view while painting nothing.
+		escape := present.LineOf
+		if bom > 0 && len(b.lines) == 0 {
+			escape = present.LineOfBOM
+		}
 		i := bytes.IndexByte(rest, '\n')
 		if i < 0 {
-			b.lines = append(b.lines, present.LineOf(rest))
+			b.lines = append(b.lines, escape(rest))
 			break
 		}
-		b.lines = append(b.lines, present.LineOf(rest[:i+1]))
+		b.lines = append(b.lines, escape(rest[:i+1]))
 		rest = rest[i+1:]
 	}
 	b.digits = len(strconv.Itoa(max(len(b.lines), 1)))
@@ -50,15 +67,20 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 			continue
 		}
 		ln := b.lines[li]
+		adj := 0
+		if li == 0 {
+			adj = bom
+		}
 		for _, sm := range st.Submatches {
-			if sm.Start < 0 || sm.End > len(ln.Raw()) || sm.Start > sm.End {
+			start, end := sm.Start+adj, sm.End+adj
+			if start < 0 || end > len(ln.Raw()) || start > end {
 				continue
 			}
-			if !bytes.Equal(ln.Raw()[sm.Start:sm.End], sm.Bytes) {
+			if !bytes.Equal(ln.Raw()[start:end], sm.Bytes) {
 				continue
 			}
 			b.spans[li] = append(b.spans[li],
-				clusterSpan(ln.Cells(), ln.Span(sm.Start, sm.End)))
+				clusterSpan(ln.Cells(), ln.Span(start, end)))
 		}
 	}
 	return b, nil
