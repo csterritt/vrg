@@ -15,8 +15,10 @@ from the index: every stop collected from that file's earlier `match`
 records is removed, and the raw path joins `Index.excluded`, a set — so
 the `BinaryExcluded()` tally counts each file once no matter how many
 excluding ends arrive. Once a path is excluded, later match records for
-it are dropped too (binary exclusion takes precedence over retention;
-the full lifecycle matrix is Issue #9's). An `end` with `binary_offset:
+it are dropped too — binary exclusion takes precedence over the Issue #9
+orphan-retention rule, and applies even to an orphaned `end` (see
+[error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md)
+for the full lifecycle matrix). An `end` with `binary_offset:
 null` — the ordinary case — excludes nothing, and an excluding `end`
 for a file with no collected matches still counts the file.
 
@@ -33,8 +35,15 @@ results of 1, and the browse list shows only the retained file.
 ## The no-results screen
 
 When a completed search has zero usable results the model enters
-`phaseNoResults` instead of `phaseBrowse`: no load command runs and the
-ordinary exit status fixes at 1 at that moment. `renderNoResults`
+`phaseNoResults` instead of `phaseBrowse` — unless the outcome is fatal
+(fatal process result or integrity failure), where the diagnostics
+overlay stands alone as `phaseFatal`. The screen branch, overlay
+decision, and exit status all come from `decideOutcome`, Issue #9's
+pure outcome function documented in
+[error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md):
+the `searchDoneMsg` branch no longer decides on `len(m.stops)` alone.
+No load command runs on this screen and the ordinary exit status fixes
+at 1 at completion. `renderNoResults`
 composes the message centred horizontally on the frame's middle row,
 clipped to the frame width, every row padded so `theme.Base` covers the
 screen — the same full-width padding as
@@ -49,9 +58,12 @@ Keys on this screen: `q` quits through the ordinary path with the fixed
 status 1 (the process boundary's terminate-and-reap cleanup from
 [cancellation-and-cleanup.md](cancellation-and-cleanup.md) still runs),
 `Esc` is a no-op, and `ctrl+c` overrides the fixed status with 130 via
-`cancelled()`. Fatal conditions (other exit codes, signals, integrity
-failures) and warning overlays are Issue #9's — `searchDoneMsg.waitErr`
-and `stderr` remain unconsumed cargo until then.
+`cancelled()`. Since Issue #9 the screen can sit beneath a warning
+overlay — captured stderr under a benign exit opens the modal overlay
+first, and `q`/`Esc` dismiss it to reveal this screen — and a fatal
+outcome with zero usable results replaces it entirely with the
+fatal-only overlay, where either dismissal key quits at status 2. See
+[error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md).
 
 ## Real-rg nuance
 
@@ -83,7 +95,8 @@ exit 1 without touching cancellation, `Esc` as a no-op, and `ctrl+c` →
 - `internal/searchindex/index.go` — `excluded` set, `exclude`, and
   `BinaryExcluded`; `Add` dispatches on end/match records.
 - `internal/app/app.go` — `phaseNoResults`, the `binarySkipped` field,
-  and the usable-results branch in `Update`.
+  and the `searchDoneMsg` outcome branch in `Update` (driven by
+  `decideOutcome` since Issue #9).
 - `internal/app/noresults.go` — `renderNoResults`, the centred
   composition.
 - `internal/app/noresults_test.go` — the outcome tests above.

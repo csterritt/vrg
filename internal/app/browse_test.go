@@ -36,8 +36,12 @@ func TestCompletionTransitionsToBrowse(t *testing.T) {
 	writeWorkFile(t, dir, "a.txt", "alpha\nbeta\n")
 	writeWorkFile(t, dir, "b.txt", "hit\n")
 	m, _ := browseModel(t, dir, 80, 24,
+		`{"type":"begin","data":{"path":{"text":"b.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"b.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		`{"type":"end","data":{"path":{"text":"b.txt"},"binary_offset":null}}`,
+		`{"type":"begin","data":{"path":{"text":"a.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"beta\n"},"line_number":2,"submatches":[{"match":{"text":"beta"},"start":0,"end":4}]}}`,
+		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
 	v := m.View().Content
@@ -62,7 +66,9 @@ func TestLoadCompletionRendersContent(t *testing.T) {
 	dir := t.TempDir()
 	writeWorkFile(t, dir, "a.txt", "alpha\nhit beta\n")
 	m, cmd := browseModel(t, dir, 80, 24,
+		`{"type":"begin","data":{"path":{"text":"a.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"hit beta\n"},"line_number":2,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
 	if cmd == nil {
@@ -97,7 +103,9 @@ func TestMatchRendersInverse(t *testing.T) {
 	dir := t.TempDir()
 	writeWorkFile(t, dir, "a.txt", "a hit\n")
 	m, cmd := browseModel(t, dir, 80, 24,
+		`{"type":"begin","data":{"path":{"text":"a.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"a hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":2,"end":5}]}}`,
+		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
 	m2, _ := update(t, m, cmd())
@@ -118,7 +126,9 @@ func TestGatedLoadKeepsResponsive(t *testing.T) {
 	m.loadGate = gate
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, searchDoneMsg{index: fixtureIndex(t, dir,
+		`{"type":"begin","data":{"path":{"text":"a.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"payload\n"},"line_number":1,"submatches":[{"match":{"text":"payload"},"start":0,"end":7}]}}`,
+		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)})
 	if cmd == nil {
@@ -170,7 +180,9 @@ func TestCtrlCWhileLoadGateHeld(t *testing.T) {
 	m := newModel(nil, func() { cancelled = true })
 	m.loadGate = gate
 	m, cmd := update(t, m, searchDoneMsg{index: fixtureIndex(t, dir,
+		`{"type":"begin","data":{"path":{"text":"a.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"x\n"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}`,
+		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)})
 	done := make(chan tea.Msg, 1)
@@ -201,7 +213,9 @@ func TestQOnBrowseExitsZero(t *testing.T) {
 	dir := t.TempDir()
 	writeWorkFile(t, dir, "a.txt", "x\n")
 	m, _ := browseModel(t, dir, 80, 24,
+		`{"type":"begin","data":{"path":{"text":"a.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"x\n"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}`,
+		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
 	m2, cmd := update(t, m, keyPress("q"))
@@ -218,7 +232,9 @@ func TestEscOnBrowseIsNoOp(t *testing.T) {
 	dir := t.TempDir()
 	writeWorkFile(t, dir, "a.txt", "x\n")
 	m, _ := browseModel(t, dir, 80, 24,
+		`{"type":"begin","data":{"path":{"text":"a.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"x\n"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}`,
+		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
 	m2, cmd := update(t, m, escPress())
@@ -235,7 +251,9 @@ func TestEscOnBrowseIsNoOp(t *testing.T) {
 func TestLoadFailureShowsUnreadable(t *testing.T) {
 	dir := t.TempDir()
 	m, _ := browseModel(t, dir, 80, 24,
+		`{"type":"begin","data":{"path":{"text":"gone.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"gone.txt"},"lines":{"text":"x\n"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}`,
+		`{"type":"end","data":{"path":{"text":"gone.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
 	m2, _ := update(t, m, loadDoneMsg{path: []byte("gone.txt"), err: os.ErrNotExist})
@@ -252,8 +270,12 @@ func TestBrowseRendering(t *testing.T) {
 	writeWorkFile(t, dir, "a.txt", "one\ntwo\nthree\n")
 	writeWorkFile(t, dir, "b.txt", "x\n")
 	m, cmd := browseModel(t, dir, 80, 24,
+		`{"type":"begin","data":{"path":{"text":"b.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"b.txt"},"lines":{"text":"x\n"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}`,
+		`{"type":"end","data":{"path":{"text":"b.txt"},"binary_offset":null}}`,
+		`{"type":"begin","data":{"path":{"text":"a.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"two\n"},"line_number":2,"submatches":[{"match":{"text":"two"},"start":0,"end":3}]}}`,
+		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
 	m2, _ := update(t, m, cmd())
@@ -293,7 +315,9 @@ func TestColourToggleFlipsViewStyling(t *testing.T) {
 	dir := t.TempDir()
 	writeWorkFile(t, dir, "a.txt", "a hit\n")
 	m, cmd := browseModel(t, dir, 80, 24,
+		`{"type":"begin","data":{"path":{"text":"a.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"a hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":2,"end":5}]}}`,
+		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
 	m, _ = update(t, m, cmd())
@@ -323,8 +347,10 @@ func TestCurrentLineMatchUnderlined(t *testing.T) {
 	dir := t.TempDir()
 	writeWorkFile(t, dir, "a.txt", "hit one\nplain\nhit two\n")
 	m, cmd := browseModel(t, dir, 80, 24,
+		`{"type":"begin","data":{"path":{"text":"a.txt"}}}`,
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"hit one\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"hit two\n"},"line_number":3,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
 	m, _ = update(t, m, cmd())

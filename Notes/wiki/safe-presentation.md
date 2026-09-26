@@ -72,13 +72,16 @@ set restructured as a shared, extensible table:
   standalone CR, invalid UTF-8 path bytes, and an embedded filename
   newline. Each carries the bytes to inject, the raw bytes forbidden
   verbatim in output, the distinctive post-ESC payload, and the
-  independently written escaped forms a path-bearing or content sink
-  must show.
+  independently written escaped forms a path-bearing, content, or
+  diagnostic sink must show (`wantPath`/`wantText`/`wantDiag`).
 - **Sink rows** (`sinkSafetySinks`): file-list entry, filename rule,
   panel content, usage-error stderr (the `cli.Parse` diagnostic plus
-  `cli.HelpText()` composition `run` writes), and CLI-help stdout —
+  `cli.HelpText()` composition `run` writes), CLI-help stdout —
   the generated command-line help is its own sink, distinct from the
-  Issue #31 TUI help dialog that adds its own row later.
+  Issue #31 TUI help dialog that adds its own row later — and, since
+  Issue #9, the **error overlay**: the fixture bytes ride in as captured
+  child stderr and the check asserts the `Diagnostic`-escaped
+  `wantDiag` forms inside the border.
 - **Method**: each fixture × sink renders through the real composition
   path under `theme.Plain` — the no-style path where no escape byte may
   legitimately appear — and asserts on the **raw output before any ANSI
@@ -91,9 +94,11 @@ set restructured as a shared, extensible table:
 
 **Later-sink ownership**: each issue that introduces a new sink routes
 it through `internal/present` and adds a `sinkSafetySinks` row without
-duplicating fixtures — Issue #9 (error overlay), Issue #11 (stderr
-replay), Issue #15 (file-change pop-up), Issue #31 (TUI help dialog
-substitutions), Issue #34 (any generated README/help text).
+duplicating fixtures — Issue #9 (error overlay — delivered; see
+[error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md)),
+Issue #11 (stderr replay), Issue #15 (file-change pop-up), Issue #31
+(TUI help dialog substitutions), Issue #34 (any generated README/help
+text).
 
 ## Regression surface
 

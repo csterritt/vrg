@@ -40,9 +40,29 @@ survive intact via the `bytes` form.
 `match` value plus integer `start`/`end` satisfying
 `0 <= start <= end <= len(decoded lines)`. Integers must fit `int64` —
 floats, strings, and exponents are malformed. Violations return an error
-wrapping `ErrMalformed`; skipping and counting them is Issue #10's, and
-cross-record lifecycle integrity (begin/end pairing, summary
-cross-checks) is Issue #9's — the parser deliberately stays per-record.
+wrapping `ErrMalformed`; skipping and counting them is Issue #10's.
+Cross-record lifecycle integrity — begin/end pairing, summary
+positioning — is validated since Issue #9 inside `Index` itself, so the
+parser deliberately stays per-record.
+
+## Stream lifecycle validation
+
+Since Issue #9, `Index` validates the stream's lifecycle as records are
+`Add`ed: per-path open state keyed on decoded raw path bytes (so `text`
+and `bytes` encodings of one path agree), independent state for
+interleaved open files, and summary positioning. `Feed(stream)`
+consumes the collected stdout, skipping schema-failing records
+(counting them is Issue #10's) and flagging a trailing unterminated
+record as both malformed-positioned and stream-incomplete. The full
+transition matrix — duplicate `begin`, orphaned `match` (retained, with
+`Stop.Incomplete` set), orphaned `end`, `missing end` sealing at
+`Prepare`, missing/second `summary`, records after summary — and the
+diagnostics it produces are documented in
+[error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md),
+as is binary exclusion's precedence over orphan retention.
+`IntegrityFailures()` returns the stream-integrity diagnostics, kept
+separate from the child's exit status so the app assesses them
+independently.
 
 ## Stops
 

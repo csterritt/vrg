@@ -236,3 +236,44 @@ index. Sources:
 Outcome and exit-status contract), `internal/searchindex/index.go`,
 `internal/searchindex/searchindex_test.go`, `internal/app/app.go`,
 `internal/app/noresults.go`, `internal/app/noresults_test.go`.
+
+## [2026-09-23] ingest | Issue #9 error overlay and fatal outcomes
+
+Ingested the completed Issue #9 implementation. `internal/searchindex`
+gained lifecycle validation: `Index.Feed` consumes the collected stream
+(skipping schema-failing records — their counting stays Issue #10's —
+and flagging a trailing unterminated record), per-path `open`/`incomplete`
+state tracks the begin/end matrix over decoded raw path bytes with
+binary exclusion taking precedence over orphan retention, `seal`
+applies the end-of-stream rules once inside `Prepare`, and
+`IntegrityFailures()` reports stream integrity separately from process
+success; `Stop.Incomplete` marks stops with damaged file metadata.
+`internal/app` gained `overlay.go`: the pure `decideOutcome` function
+(wait error × stderr × integrity failures × usable results, record-loss
+count passed through unused), `collectDiagnostics` (generated
+code-or-signal line + sanitized stderr + integrity failures through
+`present.Diagnostic`), the modal `overlay` (`up`/`down` scroll,
+`q`/`Esc` dismissal — `Esc` exits 2 only in the fatal no-results case
+where nothing underlies it — `ctrl+c` → 130, other keys ignored), and
+the centred `theme.Overlay` compositing. The fixed status is decided
+once at completion — 2 fatal, 0 usable results, 1 intact empty — and
+overridden only by `ctrl+c`. Created
+[error-overlay-and-fatal-outcomes](error-overlay-and-fatal-outcomes.md);
+updated
+[searchindex-records-and-stops](searchindex-records-and-stops.md)
+(lifecycle validation section), [no-results-and-binary-exclusion](
+no-results-and-binary-exclusion.md) (exclusion precedence, the
+`decideOutcome` branch, warning overlay),
+[safe-presentation](safe-presentation.md) (the `error overlay` sink
+row, `wantDiag` expectations), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. Sources:
+`Notes/issues/009-error-overlay-and-fatal-outcomes.md`,
+`Notes/tasks/009-error-overlay-and-fatal-outcomes.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity;
+Outcome and exit-status contract; Colours, overlays, and key
+precedence), `internal/searchindex/index.go`,
+`internal/searchindex/lifecycle_test.go`, `internal/app/overlay.go`,
+`internal/app/app.go`, `internal/app/search.go`,
+`internal/app/outcome_test.go`, `internal/app/overlay_test.go`,
+`internal/app/sinksafety_test.go`, `cmd/vrg/pty_test.go`,
+`cmd/vrg/main_test.go`.

@@ -1,0 +1,4 @@
+#!/bin/sh
+echo "warn" >&2
+printf '%s\n' '{"type":"summary","data":{}}'
+exit 0

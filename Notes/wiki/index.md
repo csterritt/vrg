@@ -46,6 +46,13 @@ Catalog of all wiki pages for the vrg project.
   stops (`LineCount`), and the centred "No results found" screen with
   its "(N binary files skipped)" suffix — `q` → 1, `Esc` no-op,
   `ctrl+c` → 130
+- [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md) —
+  Issue #9: the stream lifecycle transition matrix (`Feed`,
+  `IntegrityFailures`, `Stop.Incomplete`), the pure `decideOutcome`
+  function and the full outcome table, the modal diagnostics overlay
+  (scroll, `q`/`Esc` dismissal, fatal-only `Esc` exit, `ctrl+c`
+  override), stderr classification with generated code-or-signal
+  diagnostics, and the fixed-status rule
 - [theme-and-colour-toggle.md](theme-and-colour-toggle.md) — Issue #7:
   the dark/light schemes (white-on-black / black-on-white), the
   in-memory `c` toggle, the named style set (base, gutter, true-inverse

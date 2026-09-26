@@ -40,6 +40,14 @@ type pty struct {
 
 func openPTY(t *testing.T) *pty {
 	t.Helper()
+	return openPTYSize(t, 80, 24)
+}
+
+// openPTYSize opens a pseudo-terminal pair at the given dimensions: a
+// large terminal lets a test observe a tall diagnostics overlay's head
+// and tail in a single frame without scrolling.
+func openPTYSize(t *testing.T, cols, rows uint16) *pty {
+	t.Helper()
 	mfd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		t.Skipf("pseudo-terminal unavailable: %v", err)
@@ -59,7 +67,7 @@ func openPTY(t *testing.T) *pty {
 	}
 	t.Cleanup(func() { slave.Close() })
 	if err := unix.IoctlSetWinsize(int(slave.Fd()), unix.TIOCSWINSZ,
-		&unix.Winsize{Row: 24, Col: 80}); err != nil {
+		&unix.Winsize{Row: rows, Col: cols}); err != nil {
 		t.Fatalf("set winsize: %v", err)
 	}
 	return &pty{master: master, slave: slave, before: termiosOf(t, slave)}
@@ -86,7 +94,13 @@ type ptyRun struct {
 
 func startVrgPTY(t *testing.T, env []string, args ...string) *ptyRun {
 	t.Helper()
-	p := openPTY(t)
+	return startVrgPTYSize(t, env, 80, 24, args...)
+}
+
+// startVrgPTYSize is startVrgPTY on a PTY of the given dimensions.
+func startVrgPTYSize(t *testing.T, env []string, cols, rows uint16, args ...string) *ptyRun {
+	t.Helper()
+	p := openPTYSize(t, cols, rows)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 	cmd := exec.CommandContext(ctx, binPath, args...)
@@ -149,6 +163,25 @@ func (r *ptyRun) send(t *testing.T, keys string) {
 	if _, err := r.pty.master.WriteString(keys); err != nil {
 		t.Fatalf("writing %q to PTY: %v", keys, err)
 	}
+}
+
+// waitForGrowth blocks until the captured stream has grown past since —
+// evidence the model handled the sent key and emitted a fresh frame,
+// used where dismissal replaces marker text the buffer already holds.
+func (r *ptyRun) waitForGrowth(t *testing.T, since int) {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(r.output()) > since {
+			return
+		}
+		select {
+		case <-r.readDone:
+			t.Fatalf("session ended before a new frame; output: %q", r.output())
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	t.Fatalf("timed out waiting for a new frame; output: %q", r.output())
 }
 
 // waitExit waits for the process to exit and returns its code and the
@@ -488,4 +521,94 @@ func TestControlledFailureDiagnosticOnStderr(t *testing.T) {
 		t.Fatalf("reap side channel = %q, want the killed wait status", got)
 	}
 	pidIsGone(t, pid)
+}
+
+// fakeRgExit3Script signals readiness, emits one complete valid result
+// stream, then exits 3 — a fatal process outcome over usable results.
+const fakeRgExit3Script = `#!/bin/sh
+echo $$ > "$VRG_CAPTURE_DIR/ready"
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"f.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}' \
+'{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}' \
+'{"type":"summary","data":{}}'
+exit 3
+`
+
+// A fake rg exiting non-zero after its handshake with usable results in
+// the stream: the error overlay opens over browse naming the exit
+// status, the first q dismisses to browse, the second quits with the
+// fixed fatal status 2.
+func TestPTYNonZeroExitBrowseOverlayExits2(t *testing.T) {
+	fakeDir, capDir := writeFakeRg(t, fakeRgExit3Script)
+	r := startVrgPTY(t, ptyEnv(fakeDir, capDir), "foo")
+	pid := awaitReadyPID(t, capDir) // the handshake: the child ran
+	r.waitFor(t, "exit status 3")   // the generated diagnostic in the overlay
+	before := len(r.output())
+	r.send(t, "q")             // dismiss the overlay, revealing browse
+	r.waitForGrowth(t, before) // the dismissal re-rendered the frame
+	r.send(t, "q")             // quit from browse with the fixed status
+	code, out := r.waitExit(t)
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2; output: %q", code, out)
+	}
+	if !strings.Contains(out, "f.txt") {
+		t.Fatalf("browse view never appeared: %q", out)
+	}
+	assertDisplayRestored(t, out)
+	pidIsGone(t, pid)
+}
+
+// fakeRgFloodScript signals readiness, writes over 1 MiB to stderr
+// interleaved with a valid stdout stream — a head marker, ~525 padded
+// lines, and a tail marker — then exits 0. The stderr text is a warning
+// diagnostic: vrg shows it in the overlay.
+const fakeRgFloodScript = `#!/bin/sh
+echo $$ > "$VRG_CAPTURE_DIR/ready"
+chunk=$(printf '%1999s' '' | tr ' ' 'e')
+echo "ERRHEAD-MARKER" >&2
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"f0.txt"}}}'
+i=0
+while [ "$i" -lt 175 ]; do printf '%s\n' "$chunk" >&2; i=$((i+1)); done
+printf '%s\n' '{"type":"match","data":{"path":{"text":"f0.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}'
+i=0
+while [ "$i" -lt 175 ]; do printf '%s\n' "$chunk" >&2; i=$((i+1)); done
+printf '%s\n' '{"type":"end","data":{"path":{"text":"f0.txt"},"binary_offset":null}}'
+i=0
+while [ "$i" -lt 175 ]; do printf '%s\n' "$chunk" >&2; i=$((i+1)); done
+printf '%s\n' '{"type":"summary","data":{}}'
+echo "ERRTAIL-MARKER" >&2
+: > "$VRG_CAPTURE_DIR/writes-done"
+exit 0
+`
+
+// The stderr-content fixture: over 1 MiB of stderr interleaved with a
+// valid stdout stream. On a large terminal the whole warning overlay
+// fits in one frame, so both the head and the tail of the captured
+// stderr are visible at once; dismissal reveals the browse view built
+// from the complete stdout stream, and exit status stays 0.
+func TestPTYStderrContentOverlayHeadAndTail(t *testing.T) {
+	fakeDir, capDir := writeFakeRg(t, fakeRgFloodScript)
+	r := startVrgPTYSize(t, ptyEnv(fakeDir, capDir), 2100, 640, "foo")
+	awaitReadyPID(t, capDir)
+	r.waitFor(t, "ERRTAIL-MARKER")
+	out := r.output()
+	if !strings.Contains(out, "ERRHEAD-MARKER") {
+		t.Fatalf("overlay lacks the head of captured stderr: %.2000q", out)
+	}
+	before := len(out)
+	r.send(t, "q") // dismiss the warning overlay
+	r.waitForGrowth(t, before)
+	r.send(t, "q") // quit from browse
+	code, out := r.waitExit(t)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 for a warning over clean results; output: %q", code, out)
+	}
+	if !strings.Contains(out, "f0.txt") {
+		t.Fatalf("browse view lacks the streamed file — stdout incomplete: %q", out)
+	}
+	if _, err := os.Stat(filepath.Join(capDir, "writes-done")); err != nil {
+		t.Fatalf("child handshake missing: %v", err)
+	}
+	assertDisplayRestored(t, out)
 }

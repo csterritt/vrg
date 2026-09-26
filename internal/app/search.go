@@ -41,8 +41,8 @@ type Config struct {
 
 // searchDoneMsg delivers the finished collection to the model: the
 // prepared index, the buffered child stderr, and the child's wait error
-// (nil for a clean exit). Stderr classification and process-outcome
-// effects are Issue #9's; here they are cargo.
+// (nil for a clean exit). The model's outcome decision classifies all
+// three independently — see decideOutcome in overlay.go.
 type searchDoneMsg struct {
 	index   *searchindex.Index
 	stderr  []byte
@@ -143,19 +143,12 @@ func collect(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Reader, cfg C
 	}
 }
 
-// prepareIndex decodes the collected record stream into the index and
-// prepares it. Malformed records are skipped; their counting is Issue
-// #10's and lifecycle integrity is Issue #9's.
+// prepareIndex feeds the collected record stream through the index and
+// prepares it: decoding, lifecycle validation, and binary exclusion all
+// happen inside Feed. Record-loss counting is Issue #10's.
 func prepareIndex(workdir string, stream []byte) *searchindex.Index {
 	ix := searchindex.New(workdir)
-	for _, line := range bytes.Split(stream, []byte("\n")) {
-		if len(bytes.TrimSpace(line)) == 0 {
-			continue
-		}
-		if rec, err := searchindex.DecodeRecord(line); err == nil {
-			ix.Add(rec)
-		}
-	}
+	ix.Feed(stream)
 	ix.Prepare()
 	return ix
 }

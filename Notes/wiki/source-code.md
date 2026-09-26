@@ -14,7 +14,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   waits for its reap. Status selection: `tea.ErrInterrupted` → 130,
   other `Run` errors → sanitized `vrg:` diagnostic on stderr after
   terminal restoration and exit 2, otherwise the final model's
-  `ExitCode` (0 summary quit, 130 cancellation); rg start failure →
+  `ExitCode` (the fixed search status — 0/1/2 per the Issue #9 outcome
+  table — or 130 cancellation); rg start failure →
   sanitized diagnostic, exit 2, no TUI; usage error → sanitized
   diagnostic plus the generated usage block, exit 2. Boundary error
   text renders through `present.Diagnostic` since Issue #6.
@@ -34,25 +35,47 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `Reaped`), `collect` (concurrent stdout/stderr drainage for the whole
   child lifetime, then `Wait` with reap reporting, then cancellation-
   aware gated index preparation — a cancelled gate abandons the build),
-  and `prepareIndex` (decode + index build). See
+  and `prepareIndex` (feeds the stream through `Index.Feed` so decoding
+  and lifecycle validation happen inside the index, then `Prepare`).
+  The delivered `searchDoneMsg` carries the index, captured stderr, and
+  the wait error the model's outcome decision consumes. See
   [search-spawn-and-searching-screen.md](search-spawn-and-searching-screen.md)
   and [cancellation-and-cleanup.md](cancellation-and-cleanup.md).
 - `internal/app/app.go` — the Bubble Tea `Model`: `phaseSearching` renders
   `Searching…` until the prepared index arrives (spanning post-exit
-  preparation); a done message with zero usable results (retained stops
-  after filtering) enters `phaseNoResults` and fixes `ExitCode` at 1,
-  otherwise `phaseBrowse` renders the two-pane browse view and `q` quits
-  with `ExitCode` 0; `ctrl+c` in any state or `q` while searching
-  cancels (kills the child context, `ExitCode` 130), `Esc` is a no-op,
-  `c` in browse toggles the theme between its dark and light schemes
-  (Issue #7), and once `quit` is set `Update` discards all messages so a
-  late completion cannot revive a cancelled UI; every view wraps the
-  frame in `theme.Base` and sets `AltScreen` for the exit restoration
+  preparation); a done message resolves the Issue #9 `decideOutcome`
+  decision — `phaseBrowse` (two-pane browse, load command issued),
+  `phaseNoResults` (centred empty screen), or `phaseFatal` (no
+  underlying screen) — fixes `ExitCode` once, and opens the diagnostics
+  `overlay` whenever the completion carries diagnostics; an open
+  overlay owns the keyboard via `overlayKey` (`up`/`down` scroll,
+  `q`/`Esc` dismiss — quitting outright under `phaseFatal` — `ctrl+c`
+  cancels, other keys ignored); `ctrl+c` in any state or `q` while
+  searching cancels (kills the child context, `ExitCode` 130), `Esc` is
+  a base-state no-op, `c` in browse toggles the theme between its dark
+  and light schemes (Issue #7), and once `quit` is set `Update`
+  discards all messages so a late completion cannot revive a cancelled
+  UI; every view wraps the frame in `theme.Base`, composites the
+  overlay while open, and sets `AltScreen` for the exit restoration
   sequence; resize handled in any state.
   Issue #5 state: `stops`/`files`/`cursor`, the `bufs`/`loading`/
   `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam;
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
-  on the no-results screen.
+  on the no-results screen; Issue #9 adds `overlay`, the open
+  diagnostics box.
+- `internal/app/overlay.go` — the Issue #9 outcome contract:
+  `decideOutcome` (the pure function of wait error, stderr, integrity
+  failures, usable results, and the unused-until-#10 record-loss count
+  returning screen, overlay flag, fixed status, and diagnostic lines),
+  `processFatal` (any wait error but benign exit 1), and
+  `collectDiagnostics` (generated code-or-signal line, sanitized
+  stderr, integrity failures — all through `present.Diagnostic`); the
+  modal `overlay` state, `overlayKey`, `overlayLayout` (hard-wrapped
+  interior sized from the frame), `renderOverlay` (the centred
+  `theme.Overlay` box composited over the base frame by cell-exact
+  `ansi.Truncate`/`ansi.Cut` splicing), and `renderBlank` (the frame
+  under a fatal-only overlay). See
+  [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md).
 - `internal/app/noresults.go` — `renderNoResults` (Issue #8): the
   centred "No results found" message on the frame's middle row, with
   "(N binary files skipped)" appended when exclusion emptied the list,
@@ -91,8 +114,17 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `binary_offset` drops the file's stops and marks its raw path in the
   `excluded` set (later matches for it drop too), `BinaryExcluded()`
   returns the distinct-file tally, and `LineCount()` is the
-  usable-results value — retained stops after filtering. See
-  [no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md).
+  usable-results value — retained stops after filtering. Issue #9 adds
+  lifecycle validation: `Feed` consumes the collected stream (skipping
+  schema-failing records, flagging a trailing unterminated record),
+  `open`/`incomplete` track per-path lifecycle over raw path bytes,
+  `seal` applies the end-of-stream rules once inside `Prepare`, and
+  `IntegrityFailures()` returns the diagnostics kept separate from
+  process success; `Stop.Incomplete` marks stops with damaged file
+  metadata. See
+  [no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md)
+  and
+  [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md).
 
 ## internal/cli
 

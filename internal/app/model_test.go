@@ -294,7 +294,9 @@ func TestLateCompletionAfterCancellationDoesNotRevive(t *testing.T) {
 	m := newModel(make(chan searchDoneMsg), func() {})
 	m2, _ := update(t, m, keyPress("q"))
 	m3, cmd := update(t, m2, searchDoneMsg{index: fixtureIndex(t, "/w",
+		`{"type":"begin","data":{"path":{"text":"a"}}}`,
 		`{"type":"match","data":{"path":{"text":"a"},"lines":{"text":"x\n"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}`,
+		`{"type":"end","data":{"path":{"text":"a"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)})
 	if cmd != nil {

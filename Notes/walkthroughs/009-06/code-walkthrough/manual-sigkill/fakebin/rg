@@ -1,0 +1,5 @@
+#!/bin/sh
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"f1.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"f1.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}'
+kill -9 $$

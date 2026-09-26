@@ -24,6 +24,10 @@ const (
 	// after a complete search whose usable results — retained stops
 	// after binary exclusion — are zero. Its fixed exit status is 1.
 	phaseNoResults
+	// phaseFatal is a fatal outcome with no usable results: there is
+	// no underlying screen to return to, so the diagnostics overlay
+	// stands alone and dismissing it quits.
+	phaseFatal
 )
 
 // Model is the Bubble Tea application model: it owns the search
@@ -51,8 +55,11 @@ type Model struct {
 	// binarySkipped is the distinct count of files dropped by binary
 	// exclusion, reported on the no-results screen.
 	binarySkipped int
-	code          int
-	quit          bool
+	// overlay is the open diagnostics overlay, nil when none is up. It
+	// owns the keyboard while open.
+	overlay *overlay
+	code    int
+	quit    bool
 }
 
 // newModel returns a searching model awaiting the collection result on
@@ -85,15 +92,18 @@ func (m Model) Init() tea.Cmd {
 
 // Update applies one message. Resize is handled in any state so the UI
 // stays responsive during collection and loads; a search-done message
-// moves the model to the browse view and starts the current file's
-// load — or to the no-results screen with fixed status 1 when usable
-// results (retained stops after filtering) are zero; a load-done
-// message stores the prepared buffer without any full-file work here;
-// q quits a completed state with its fixed exit status. ctrl+c in
-// any state — and q while searching, which covers the post-exit
-// preparation window — cancel the search and exit 130. Esc is a
-// base-state no-op. Once the model has committed to quitting, late
-// messages (including completions racing cancellation) are discarded.
+// resolves the outcome — browse, no-results, or a fatal overlay, with
+// the diagnostics overlay opening whenever the completion carries
+// diagnostics — and starts the current file's load when browse is the
+// underlying screen; a load-done message stores the prepared buffer
+// without any full-file work here; q quits a completed state with its
+// fixed exit status. An open overlay owns the keyboard: up/down scroll,
+// q and Esc dismiss (quitting outright when nothing underlies it),
+// other keys are ignored. ctrl+c in any state — and q while searching,
+// which covers the post-exit preparation window — cancel the search and
+// exit 130. Esc is a base-state no-op. Once the model has committed to
+// quitting, late messages (including completions racing cancellation)
+// are discarded.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.quit {
 		return m, nil
@@ -104,18 +114,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.relayout()
 	case searchDoneMsg:
 		m.index = msg.index
+		var failures []string
 		if m.index != nil {
 			m.stops = m.index.Stops()
 			m.binarySkipped = m.index.BinaryExcluded()
+			failures = m.index.IntegrityFailures()
 		}
-		if len(m.stops) == 0 {
-			// No usable results: the ordinary status fixes at 1 and
-			// the centred no-results screen replaces browse.
-			m.phase = phaseNoResults
-			m.code = 1
+		o := decideOutcome(msg.waitErr, msg.stderr, failures, len(m.stops), 0)
+		m.code = o.code
+		m.phase = o.screen
+		if o.overlay {
+			m.overlay = &overlay{lines: o.diags}
+		}
+		if m.phase != phaseBrowse {
 			return m, nil
 		}
-		m.phase = phaseBrowse
 		m.files = distinctPaths(m.stops)
 		m.cursor = 0
 		m.relayout()
@@ -130,6 +143,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.relayout()
 	case tea.KeyPressMsg:
+		if m.overlay != nil {
+			return m.overlayKey(msg.String())
+		}
 		switch msg.String() {
 		case "ctrl+c":
 			return m.cancelled(), tea.Quit
@@ -165,18 +181,27 @@ func (m Model) cancelled() Model {
 // screen, cursor visible). During the whole collection and post-exit
 // preparation span the screen is "Searching…"; afterwards it is the
 // two-pane browse view or, with no usable results, the centred
-// no-results screen. The theme's base style wraps each frame so the
-// active scheme's colours cover the screen.
+// no-results screen — or a blank frame when a fatal outcome left no
+// underlying screen — with the diagnostics overlay composited on top
+// while open. The theme's base style wraps each frame so the active
+// scheme's colours cover the screen.
 func (m Model) View() tea.View {
-	var v tea.View
+	var base string
 	switch m.phase {
 	case phaseBrowse:
-		v = tea.NewView(m.theme.Base(m.renderBrowse()))
+		base = m.renderBrowse()
 	case phaseNoResults:
-		v = tea.NewView(m.theme.Base(m.renderNoResults()))
+		base = m.renderNoResults()
+	case phaseFatal:
+		// No underlying screen: a blank frame hosts the overlay.
+		base = renderBlank(m.width, m.height)
 	default:
-		v = tea.NewView(m.theme.Base("Searching…\n"))
+		base = "Searching…\n"
 	}
+	if m.overlay != nil {
+		base = m.renderOverlay(base)
+	}
+	v := tea.NewView(m.theme.Base(base))
 	v.AltScreen = true
 	return v
 }

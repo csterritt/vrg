@@ -17,11 +17,12 @@ import (
 // the Issue #5 fixture set generalized for every sink. inject carries
 // the hostile bytes; sinks embed them in whichever input they consume
 // (a filename for path-bearing sinks, a matched content line for the
-// panel sink, a root operand for the usage-error sink). forbidden lists
-// raw bytes that must never survive verbatim in the sink's output;
-// payload is the fixture's distinctive post-ESC form, asserted never to
-// follow an unescaped ESC under styles. wantPath and wantText are the
-// escaped substrings filename-bearing and content sinks must show.
+// panel sink, a root operand for the usage-error sink, stderr text for
+// the diagnostics-overlay sink). forbidden lists raw bytes that must
+// never survive verbatim in the sink's output; payload is the fixture's
+// distinctive post-ESC form, asserted never to follow an unescaped ESC
+// under styles. wantPath, wantText, and wantDiag are the escaped
+// substrings filename-bearing, content, and diagnostic sinks must show.
 type hostileFixture struct {
 	name      string
 	inject    string
@@ -29,6 +30,7 @@ type hostileFixture struct {
 	payload   string
 	wantPath  []string
 	wantText  []string
+	wantDiag  []string
 }
 
 // hostileFixtures is the shared fixture set every sink row drives: OSC,
@@ -43,6 +45,7 @@ var hostileFixtures = []hostileFixture{
 		payload:   "]0;pwned",
 		wantPath:  []string{`f^[]0;pwned^G.txt`},
 		wantText:  []string{`1  pre ^[]0;pwned^G post`},
+		wantDiag:  []string{`pre^[]0;pwned^Gpost`},
 	},
 	{
 		name:      "csi erase",
@@ -51,6 +54,7 @@ var hostileFixtures = []hostileFixture{
 		payload:   "[2J",
 		wantPath:  []string{`f^[[2J.txt`},
 		wantText:  []string{`1  pre ^[[2J post`},
+		wantDiag:  []string{`pre^[[2Jpost`},
 	},
 	{
 		name:      "c0 controls",
@@ -58,6 +62,7 @@ var hostileFixtures = []hostileFixture{
 		forbidden: []string{"\x07", "\x08", "\x1b"},
 		wantPath:  []string{`f^G^H^[.txt`},
 		wantText:  []string{`1  pre ^G^H^[ post`},
+		wantDiag:  []string{`pre^G^H^[post`},
 	},
 	{
 		name:      "c1 nel",
@@ -65,6 +70,7 @@ var hostileFixtures = []hostileFixture{
 		forbidden: []string{"\xc2\x85", "\x85"},
 		wantPath:  []string{`f\u0085.txt`},
 		wantText:  []string{`1  pre \u0085 post`},
+		wantDiag:  []string{`pre\u0085post`},
 	},
 	{
 		name:      "delete",
@@ -72,6 +78,7 @@ var hostileFixtures = []hostileFixture{
 		forbidden: []string{"\x7f"},
 		wantPath:  []string{`f^?.txt`},
 		wantText:  []string{`1  pre ^? post`},
+		wantDiag:  []string{`pre^?post`},
 	},
 	{
 		name:      "standalone carriage return",
@@ -79,6 +86,7 @@ var hostileFixtures = []hostileFixture{
 		forbidden: []string{"\r"},
 		wantPath:  []string{`f\r.txt`},
 		wantText:  []string{`1  pre ^M post`},
+		wantDiag:  []string{`pre^Mpost`},
 	},
 	{
 		name:      "invalid utf-8 path bytes",
@@ -86,15 +94,18 @@ var hostileFixtures = []hostileFixture{
 		forbidden: []string{"\xff", "\xfe"},
 		wantPath:  []string{`f\xff\xfe.txt`},
 		wantText:  []string{"1  pre \ufffd\ufffd post"},
+		wantDiag:  []string{`pre\xff\xfepost`},
 	},
 	{
 		name:   "embedded filename newline",
 		inject: "\n",
 		// A raw newline is legitimate frame and stderr structure, so the
 		// fixture forbids no byte: the escaped-form and structure checks
-		// prove it never survived inside a name.
+		// prove it never survived inside a name. In a diagnostic the
+		// newline is a real line boundary, splitting the text in two.
 		wantPath: []string{`f\n.txt`},
 		wantText: []string{"1  pre ", "2   post"},
+		wantDiag: []string{"pre", "post"},
 	},
 }
 
@@ -162,6 +173,23 @@ var sinkSafetySinks = []sinkRow{
 			for _, w := range fx.wantText {
 				if !strings.Contains(raw, w) {
 					t.Fatalf("panel content lacks escaped form %q: %q", w, raw)
+				}
+			}
+		},
+	},
+	{
+		name:   "error overlay",
+		tui:    true,
+		styled: true,
+		render: func(t *testing.T, fx hostileFixture, styled bool) string {
+			return renderOverlaySink(t, fx, styled)
+		},
+		check: func(t *testing.T, fx hostileFixture, raw string) {
+			// The hostile bytes ride in as captured stderr; the overlay
+			// shows their Diagnostic-escaped form inside the border.
+			for _, w := range fx.wantDiag {
+				if !strings.Contains(raw, w) {
+					t.Fatalf("overlay diagnostic lacks escaped form %q: %q", w, raw)
 				}
 			}
 		},
@@ -276,6 +304,7 @@ func renderBrowseSink(t *testing.T, fx hostileFixture, inName bool, styled bool)
 		line = content[:i+1]
 	}
 	ix := searchindex.New(dir)
+	ix.Add(searchindex.Record{Kind: searchindex.KindBegin, Path: []byte(name)})
 	ix.Add(searchindex.Record{
 		Kind:       searchindex.KindMatch,
 		Path:       []byte(name),
@@ -283,6 +312,8 @@ func renderBrowseSink(t *testing.T, fx hostileFixture, inName bool, styled bool)
 		Line:       []byte(line),
 		Submatches: []searchindex.Submatch{{Start: start, End: end, Bytes: sub}},
 	})
+	ix.Add(searchindex.Record{Kind: searchindex.KindEnd, Path: []byte(name)})
+	ix.Add(searchindex.Record{Kind: searchindex.KindSummary})
 	ix.Prepare()
 
 	m := newModel(nil, nil)
@@ -292,6 +323,30 @@ func renderBrowseSink(t *testing.T, fx hostileFixture, inName bool, styled bool)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, searchDoneMsg{index: ix})
 	m, _ = update(t, m, cmd())
+	return m.View().Content
+}
+
+// renderOverlaySink drives the fixture through the diagnostics
+// overlay's real composition path at 80x24: a valid one-match stream, a
+// fatal child exit, and stderr carrying "pre<inject>post" — the overlay
+// opens over browse and the raw View() content is returned. styled
+// selects real styling; false renders through theme.Plain.
+func renderOverlaySink(t *testing.T, fx hostileFixture, styled bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	writeWorkFile(t, dir, "f.txt", "hit\n")
+	ix := fixtureIndex(t, dir, recsOneMatch...)
+
+	m := newModel(nil, nil)
+	if !styled {
+		m.theme = theme.Plain()
+	}
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = update(t, m, searchDoneMsg{
+		index:   ix,
+		stderr:  []byte("pre" + fx.inject + "post\n"),
+		waitErr: exitErr(t, 3),
+	})
 	return m.View().Content
 }
 

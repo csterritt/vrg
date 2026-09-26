@@ -109,6 +109,28 @@ and base64 `{"bytes"}` encodings freely:
   received `match`-event count: four match events for a binary-excluded
   file plus one retained stop yield 1.
 
+`lifecycle_test.go` (external package) is the Issue #9 lifecycle
+coverage:
+
+- `TestLifecycleMatrix` — the single transition-matrix table driving
+  record lists through `Add` or raw streams through `Feed`, asserting
+  `IntegrityFailures` substrings in order, retained-stop count,
+  `Incomplete` count, and the `BinaryExcluded` tally. Rows cover every
+  transition: `begin` open/closed, `match` open/orphaned (never opened,
+  after `end`), `end` open/orphaned/duplicate — including an orphaned
+  binary `end` still excluding — `context` inert in any position, a
+  file open at stream end, summary positioning (alone = complete
+  zero-result stream, missing, second, records after it — including
+  malformed bytes), the trailing unterminated record's double
+  disposition mid-stream and after a complete stream, `text`/`bytes`
+  path-identity agreement (including non-UTF-8), interleaved open files
+  pairing independently, and binary exclusion's precedence over orphan
+  retention.
+- `TestFeedDecodesTheWholeStream` — a complete newline-terminated
+  stream is intact and indexes one stop.
+- `TestEmptyStreamIntegrity` — an empty stream reports the missing
+  summary.
+
 ## internal/present
 
 `present_test.go` (same package) covers the path and diagnostic
@@ -239,6 +261,37 @@ outcome; `exitErr` builds a real `*exec.ExitError` child wait error and
 - `TestCtrlCOnNoResultsExits130` — `ctrl+c` overrides the fixed status
   with 130.
 
+`outcome_test.go` (same package) holds the Issue #9 outcome-transition
+matrix — the single table (`outcomeMatrix`) owning every outcome row so
+later issues extend it with rows rather than duplicating the decision:
+
+- `TestOutcomeMatrix` — drives each row's records + `code` (`exitErr`
+  for codes, `sigErr` — a real SIGKILLed child — for signal death) +
+  `stderr` through `searchDoneMsg`, asserting the initial screen and
+  overlay state, the overlay's diagnostic substrings, the dismissal
+  key's post-dismissal state (or quit-at-2 for the fatal-only overlay),
+  and the final exit status. Rows cover rg 0/1 clean results and empty
+  streams, fatal codes and signal deaths with and without usable
+  results, missing-summary/orphaned-end/open-at-end integrity
+  failures, stderr warnings over browse and no-results, all-binary
+  after a warning, and `ctrl+c` → 130 from browse, no-results, and an
+  open overlay.
+
+`overlay_test.go` (same package) pins the Issue #9 modal overlay:
+
+- `TestOverlayScrollsWithUpDown` — head visible first, tail only after
+  scrolling, clamped at both ends.
+- `TestOverlayDismissKeys` — `q` and `Esc` each dismiss a non-fatal
+  overlay to the underlying screen.
+- `TestOverlayCtrlCExits130` — cancellation beats the fixed status.
+- `TestOverlayIgnoresOtherKeys` — `x`, `n`, `c`, digits, arrows, tab,
+  enter all inert; `c` never reaches the colour toggle.
+- `TestOverlayWrapsUnbrokenDiagnostic` — a 300-cell diagnostic wraps
+  inside the border; no frame row exceeds the terminal width.
+- `TestFailedProcessWithoutStderrGetsGeneratedDiagnostic` — a failed
+  child with empty stderr still yields a diagnostic naming its exit
+  status or signal.
+
 `sinksafety_test.go` (same package) holds the Issue #6 shared
 sink-safety table:
 
@@ -246,8 +299,11 @@ sink-safety table:
   C0, C1, DEL, standalone CR, invalid UTF-8 path bytes, embedded
   filename newline) driven through every sink's real composition path:
   file-list entry, filename rule, panel content, usage-error stderr
-  (`cli.Parse` diagnostic + `cli.HelpText()` composition), and CLI-help
-  stdout. Under `theme.Plain` (the no-style composition path) the raw
+  (`cli.Parse` diagnostic + `cli.HelpText()` composition), CLI-help
+  stdout, and — since Issue #9 — the `error overlay` row, where the
+  fixture rides in as captured child stderr over a fatal exit and the
+  check asserts the `Diagnostic`-escaped `wantDiag` forms inside the
+  border. Under `theme.Plain` (the no-style composition path) the raw
   output — asserted before any ANSI stripping — must contain no fixture
   control byte verbatim and none of the universal set
   (`\x1b`, `\x07`, `\x9b`, `\xc2\x85`, bare `\r`); TUI rows pin the
@@ -330,9 +386,13 @@ stdout/stderr/status separately:
   argv (combined expansion, mixed aliases, empty/`-`/`--`/`-foo`
   patterns), exact working directory, empty stderr, exit 0.
 - `TestDualPipeDrainageAtBoundary` — a shell fake rg floods stderr with
-  16 × 64 KiB while emitting 16 valid matches; the browse view shows
-  the file, a `writes-done` handshake file proves the child finished
-  both pipes, and the child's stderr never reaches vrg's own stderr.
+  16 × 64 KiB while emitting a valid begin/match/end/summary stream;
+  the captured stderr opens the warning overlay (escaped NULs read as
+  `^@`, the first step's marker), `q` dismisses it to the browse view
+  (the second step's `f.txt` marker), `q` quits at 0, a `writes-done`
+  handshake file proves the child finished both pipes, and the child's
+  stderr never reaches vrg's own stderr. `runVrgTUISteps` drives the
+  marker/key step sequence; `runVrgTUI` is the one-step wrapper.
 - `TestStartFailureNoRipgrep` — rg-free PATH: exit 2, empty stdout (no
   TUI), and a sanitized `vrg:` diagnostic naming the failure with no
   raw control bytes.
@@ -381,3 +441,15 @@ where to write `ready`; the `VRG_TEST_*` seams come from
   stdin pipe) with the fail fifo: exit 2, stderr carries the sanitized
   `vrg:` diagnostic exactly once, stdout carries none, and the child is
   still reaped.
+- `TestPTYNonZeroExitBrowseOverlayExits2` (Issue #9) —
+  `fakeRgExit3Script` signals `ready`, emits a complete valid stream,
+  and exits 3: the error overlay opens over browse naming `exit status
+  3`, the first `q` dismisses it, the second quits at the fixed status
+  2, and the child is reaped.
+- `TestPTYStderrContentOverlayHeadAndTail` (Issue #9) —
+  `fakeRgFloodScript` interleaves over 1 MiB of stderr (head marker,
+  ~525 padded lines, tail marker) with a valid stdout stream; on a
+  2100×640 PTY (`openPTYSize`/`startVrgPTYSize`) the whole warning
+  overlay fits one frame, so both `ERRHEAD-MARKER` and `ERRTAIL-MARKER`
+  are visible at once, dismissal reveals the complete browse view, and
+  the exit status stays 0 — a warning, not a failure.

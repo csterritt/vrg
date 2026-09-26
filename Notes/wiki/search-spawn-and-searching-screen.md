@@ -29,8 +29,11 @@ stderr, the collector waits for both drains to finish, then calls
 complete first). Neither pipe can fill and block rg: a child flooding
 stderr at MiB scale while streaming valid records neither deadlocks nor
 loses stdout bytes. Stderr is buffered whole and carried on the
-completion message as cargo — classification and outcome effects are
-Issue #9's. Because killing the child closes both pipes, cancellation
+completion message — since Issue #9 the model classifies it (warning
+diagnostic under a benign exit, part of the error diagnostics under a
+fatal one) inside `decideOutcome`; see
+[error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md).
+Because killing the child closes both pipes, cancellation
 ends drainage promptly — see
 [cancellation-and-cleanup.md](cancellation-and-cleanup.md) for the
 Issue #4 contract (the collector now reports the reaped wait status on

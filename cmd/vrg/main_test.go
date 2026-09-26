@@ -244,11 +244,24 @@ func searchEnv(fakeDir, capDir string) []string {
 	}
 }
 
+// tuiStep is one scripted interaction with the running TUI: wait until
+// marker has appeared in the captured stdout, then write keys to stdin.
+type tuiStep struct{ marker, keys string }
+
 // runVrgTUI runs the built binary with a controlled stdin pipe: it
 // watches stdout for the browse view's filename marker, sends q once it
-// appears, and returns after the process exits. The context deadline
-// bounds the run so a wedged search fails rather than hangs.
+// appears, and returns after the process exits.
 func runVrgTUI(t *testing.T, workdir string, env []string, args ...string) runResult {
+	t.Helper()
+	return runVrgTUISteps(t, workdir, env, []tuiStep{{marker: "f.txt", keys: "q"}}, args...)
+}
+
+// runVrgTUISteps runs the built binary driving a sequence of marker/key
+// steps: each step's keys are written once its marker has appeared in
+// the captured stdout, letting a test dismiss an overlay before the
+// underlying screen's marker can appear. The context deadline bounds
+// the run so a wedged search fails rather than hangs.
+func runVrgTUISteps(t *testing.T, workdir string, env []string, steps []tuiStep, args ...string) runResult {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -275,14 +288,14 @@ func runVrgTUI(t *testing.T, workdir string, env []string, args ...string) runRe
 	go func() {
 		var buf bytes.Buffer
 		tmp := make([]byte, 8192)
-		sent := false
+		step := 0
 		for {
 			n, rerr := stdout.Read(tmp)
 			if n > 0 {
 				buf.Write(tmp[:n])
-				if !sent && bytes.Contains(buf.Bytes(), []byte("f.txt")) {
-					_, _ = stdin.Write([]byte("q"))
-					sent = true
+				if step < len(steps) && bytes.Contains(buf.Bytes(), []byte(steps[step].marker)) {
+					_, _ = stdin.Write([]byte(steps[step].keys))
+					step++
 				}
 			}
 			if rerr != nil {
@@ -433,21 +446,30 @@ func TestSearchLifecycleAtBoundary(t *testing.T) {
 // A fake rg writing well over pipe capacity to stderr while streaming a
 // valid stdout stream neither deadlocks vrg nor loses the stream: the
 // post-write handshake file proves the child finished both pipes before
-// exiting, and every match lands in the index shown by the browse view.
+// exiting, the captured stderr opens the warning overlay (its escaped
+// NUL bytes read as ^@), and dismissing it reveals the browse view —
+// every match landed in the index. Exit status is still 0: rg exited
+// cleanly and the stream was intact.
 func TestDualPipeDrainageAtBoundary(t *testing.T) {
 	flood := `#!/bin/sh
+printf '%s\n' '{"type":"begin","data":{"path":{"text":"f.txt"}}}'
 i=1
 while [ "$i" -le 16 ]; do
   head -c 65536 /dev/zero >&2
   printf '%s\n' '{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hit\n"},"line_number":'"$i"',"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}'
   i=$((i+1))
 done
-printf '%s\n' '{"type":"summary","data":{}}'
+printf '%s\n' \
+'{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}' \
+'{"type":"summary","data":{}}'
 : > "$VRG_CAPTURE_DIR/writes-done"
 exit 0
 `
 	fakeDir, capDir := writeFakeRg(t, flood)
-	res := runVrgTUI(t, t.TempDir(), searchEnv(fakeDir, capDir), "hit")
+	res := runVrgTUISteps(t, t.TempDir(), searchEnv(fakeDir, capDir), []tuiStep{
+		{marker: "^@", keys: "q"},    // the warning overlay over browse
+		{marker: "f.txt", keys: "q"}, // the revealed browse view
+	}, "hit")
 	if res.code != 0 {
 		t.Fatalf("vrg exited %d under stderr flood, want 0 (stderr %q)", res.code, res.stderr)
 	}
