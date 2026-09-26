@@ -114,6 +114,13 @@ Catalog of all wiki pages for the vrg project.
   intent committing for the newest stop, cached-file stale-layout
   navigation with its fast path, and the visible-range render-cost
   guarantees for rows and list entries
+- [horizontal-panning.md](horizontal-panning.md) — Issue #18: the six
+  pan units (1, 10, `max(1, floor(text width / 2))` columns), the
+  visible-lines extent policy with its paintable-boundary maximum and
+  unpaintable-cluster exception, re-clamping on every visible-set
+  change with no restoration, wrap-mode dormancy and re-entry
+  clamping, the file-change offset reset, and grapheme-safe clipping
+  with split-cluster blanking and span translation
 
 ## Catalogs
 

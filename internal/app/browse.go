@@ -118,6 +118,9 @@ func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 		// zero value is the top of the file — a first visit).
 		m.vp.SetRows(m.currentRows())
 		m.vp.SetAnchor(m.saved[string(step.Stop.Path)])
+		// The horizontal offset resets to zero on file change, ahead
+		// of the Issue #19 horizontal reveal.
+		m.vp.SetOffset(0)
 		pop = m.openPopup(step.Stop.Path)
 	}
 	// The destination reveal commits against installed rows or is
@@ -341,6 +344,35 @@ func (m *Model) scroll(key string) {
 		m.vp.PageDown()
 	}
 	m.saved[string(cur)] = m.vp.Anchor()
+}
+
+// pan applies one horizontal pan key to the current file's viewport:
+// ,/. one column, </> ten columns, [/] max(1, floor(text width / 2)).
+// Panning exists only in run-off-edge mode — the viewport keeps the
+// offset dormant under a wrap model — and is a no-op outside browse
+// and on the loading/unreadable placeholders, like scroll.
+func (m *Model) pan(key string) {
+	if m.phase != phaseBrowse {
+		return
+	}
+	cur := m.currentPath()
+	if cur == nil || m.bufs[string(cur)] == nil {
+		return
+	}
+	switch key {
+	case ",":
+		m.vp.Left()
+	case ".":
+		m.vp.Right()
+	case "<":
+		m.vp.TenLeft()
+	case ">":
+		m.vp.TenRight()
+	case "[":
+		m.vp.HalfLeft()
+	case "]":
+		m.vp.HalfRight()
+	}
 }
 
 // renderBrowse composes the two-pane frame: the file list on the left

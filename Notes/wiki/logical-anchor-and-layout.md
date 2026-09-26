@@ -26,7 +26,11 @@ anchor is the real reading position; the top is derived from it:
   anchor under the installed row model — `Rows.RowOf(anchor)` — then
   clamps to valid content. `Resize` and `SetRows` both resolve, so a
   width change or a swapped row model lands the top on the row holding
-  the anchor's text, not the row with the same former ordinal.
+  the anchor's text, not the row with the same former ordinal. Since
+  Issue #18 every resolve and every scroll clamp also re-clamps the
+  horizontal pan offset — a changed visible row set re-evaluates the
+  extent maximum; see
+  [horizontal-panning.md](horizontal-panning.md).
 - `Row.Start` (Issue #17 addition) records the display-column offset
   where a rendered row begins, so a wrapped continuation row maps back
   to `(line, mid-line cell)` — `loc(i)` converts a row to its logical
@@ -189,6 +193,8 @@ See [unit-tests.md](unit-tests.md) § `internal/viewport` and
 
 See also: [viewport-scrolling.md](viewport-scrolling.md) (the scroll
 units and clamps built on this position),
+[horizontal-panning.md](horizontal-panning.md) (the Issue #18 offset
+that re-clamps on every resolve),
 [destination-reveal.md](destination-reveal.md) (the reveal contract
 the pending intent commits),
 [wrap-mode.md](wrap-mode.md) (the keyed row model the guards consume),

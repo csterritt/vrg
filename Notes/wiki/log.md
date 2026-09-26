@@ -642,3 +642,51 @@ Resources and responsiveness), `internal/viewport/viewport.go`,
 `internal/app/browse.go`, `internal/viewport/anchor_test.go`,
 `internal/app/anchor_test.go`, `internal/app/layout_test.go`,
 `internal/app/model_test.go`, `internal/app/scroll_test.go`.
+## [2026-09-23] ingest | Issue #18 horizontal panning in run-off-edge mode
+
+Ingested the completed Issue #18 implementation: `Viewport` gained
+`off`, a horizontal pan offset in display cells, driven by the six pan
+keys — `,`/`.` one column, `<`/`>` ten, `[`/`]`
+`max(1, floor(text width / 2))` — clamped to `[0, max(0, S)]` under
+the visible-lines extent policy, where S is the paintable boundary of
+the widest *currently rendered* source line: the largest cell index
+whose grapheme cluster also fits the text width, so the maximum always
+leaves one whole cluster painted and never half a glyph (a widest line
+with no fitting cluster reports 0 — the documented exception renders
+clipping blanks). `clampOff` runs inside `clamp` and `resolve`, so
+scrolling, reveals, resizes (including list hide/show and gutter
+growth reaching the viewport as width changes), row-model swaps, and
+wrap-toggle re-entry all re-clamp, and every pan recomputes the
+maximum from the visible rows — the loss is permanent, never restored
+when a wider line returns. `Rows` gained `Wrap()`, gating panning to
+run-off-edge models: under wrap the offset is dormant and retained,
+re-clamped on re-entry. `navigate`'s `FileChanged` branch and the
+current-path `loadDoneMsg` reset the offset to zero before the
+pending/Issue #19 reveal. `Visible()` clips each run-off-edge row to
+`[off, off+width)` via `clipRow` — out-of-window cells dropped, spans
+translated into window cells (markers following their cell), and a
+cluster split by either clip edge painting its in-window cells blank,
+the same policy as wrap-mode's split-cluster blanking. Created
+[horizontal-panning](horizontal-panning.md); updated
+[viewport-scrolling](viewport-scrolling.md) (`Rows.Wrap`, clipped
+`Visible`), [wrap-mode](wrap-mode.md) (panning lands, dormant offset,
+re-entry clamp), [destination-reveal](destination-reveal.md) (the
+offset reset joins the entry sequence),
+[match-navigation](match-navigation.md) (file-crossing reset),
+[logical-anchor-and-layout](logical-anchor-and-layout.md) (re-clamp on
+every resolve/clamp), [browse-tracer](browse-tracer.md) (clipped rows
+feed `contentRow`), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. New test files:
+`internal/viewport/pan_test.go` (pan units, extent policy,
+retention/reset, paintable boundary, re-clamp triggers, split-cluster
+blanking, span translation, hidden-left geometry, visible-rows-only
+cost guard) and `internal/app/pan_test.go` (key wiring, wrap-mode
+no-op, `w w` retention, `n`/`p` reset, half-clipped CJK blank,
+maximum leaves the final cluster whole).
+Sources: `Notes/issues/018-horizontal-panning.md`,
+`Notes/tasks/018-horizontal-panning.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors; Layout
+and indicators), `internal/viewport/viewport.go`,
+`internal/viewport/rows.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/viewport/pan_test.go`,
+`internal/app/pan_test.go`.

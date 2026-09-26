@@ -47,6 +47,12 @@ type Rows interface {
 	// Run-off-edge, a target's row is its source line; wrap mode's
 	// many-to-one mapping lands the row covering the target cell.
 	RowOf(t Target) int
+	// Wrap reports the mode the model was prepared for: true for
+	// wrap, false for run-off-edge. Horizontal panning and the extent
+	// clamp apply only to a run-off-edge model — under a wrap model
+	// the offset is dormant: retained, applied to no rendering, and
+	// re-clamped when a run-off-edge model next installs.
+	Wrap() bool
 }
 
 // Viewport owns the current file's vertical reading position: the
@@ -60,14 +66,18 @@ type Rows interface {
 // below EOF; content shorter than the viewport pins the top to 0 and
 // leaves its unused rows naturally. With no prepared rows (the loading
 // and unreadable placeholders) every scroll is a no-op, reveal is
-// inert, and queries stay empty. Horizontal panning arrives with
-// Issues 18–19.
+// inert, and queries stay empty. The horizontal pan offset is separate
+// state: under a run-off-edge model it is clamped to the visible-lines
+// extent — recomputed from the visible rows on every pan and every
+// visible-set change — while under a wrap model it is dormant, kept
+// for the next re-entry. Horizontal reveal arrives with Issue 19.
 type Viewport struct {
 	width  int // text columns available to content
 	height int // content rows
 	rows   Rows
 	top    int    // first visible rendered row
 	anchor Target // logical reading position: source line + display column
+	off    int    // horizontal pan offset: the first painted column
 }
 
 // Resize sets the content-area dimensions in cells and re-resolves the
@@ -137,6 +147,34 @@ func (v *Viewport) PageDown() { v.scroll(v.height) }
 // PageUp scrolls a full page — the content height — up.
 func (v *Viewport) PageUp() { v.scroll(-v.height) }
 
+// Offset returns the horizontal pan offset in display cells — the
+// first column a run-off-edge frame paints. Under a wrap model the
+// value is dormant: retained for the next run-off-edge re-entry.
+func (v *Viewport) Offset() int { return v.off }
+
+// SetOffset replaces the horizontal pan offset — the file-change reset
+// drives it with 0 — clamped to the visible-lines extent when the
+// installed model is run-off-edge and stored dormant under wrap.
+func (v *Viewport) SetOffset(off int) {
+	v.off = max(off, 0)
+	v.clampOff()
+}
+
+// Left pans one column left; Right pans one column right.
+func (v *Viewport) Left()  { v.pan(-1) }
+func (v *Viewport) Right() { v.pan(1) }
+
+// TenLeft pans ten columns left; TenRight pans ten columns right.
+func (v *Viewport) TenLeft()  { v.pan(-10) }
+func (v *Viewport) TenRight() { v.pan(10) }
+
+// HalfLeft pans max(1, floor(text width / 2)) columns left; HalfRight
+// pans the same right.
+func (v *Viewport) HalfLeft()  { v.pan(-v.halfW()) }
+func (v *Viewport) HalfRight() { v.pan(v.halfW()) }
+
+func (v *Viewport) halfW() int { return max(1, v.width/2) }
+
 // Reveal makes the rendered row containing the target visible and
 // reports whether the viewport moved — the caller replaces the file's
 // saved vertical state only on a move. A target row already inside the
@@ -162,6 +200,78 @@ func (v *Viewport) Reveal(t Target) bool {
 }
 
 func (v *Viewport) half() int { return max(1, v.height/2) }
+
+// pan moves the horizontal offset by delta columns, clamped to
+// [0, max(0, S)] where S is the paintable-boundary maximum of the
+// widest currently rendered source line — recomputed from the visible
+// rows on every pan, never cached. Under a wrap model or with no
+// prepared rows panning is a no-op.
+func (v *Viewport) pan(delta int) {
+	if v.rows == nil || v.rows.Wrap() {
+		return
+	}
+	v.off = min(max(v.off+delta, 0), v.maxOffset())
+}
+
+// clampOff applies the visible-lines extent clamp to the stored
+// offset. It runs on every change that can alter the visible row set —
+// scroll, reveal, resize, and a row-model swap including wrap-toggle
+// re-entry — so the offset is always valid for the rows now visible;
+// the loss is permanent, never restored when a wider line returns.
+// Under a wrap model the offset is dormant and left alone; with no
+// prepared rows the placeholder maximum is 0.
+func (v *Viewport) clampOff() {
+	if v.rows != nil && v.rows.Wrap() {
+		return
+	}
+	v.off = min(max(v.off, 0), v.maxOffset())
+}
+
+// maxOffset returns the maximum valid horizontal offset under the
+// visible-lines extent policy: the paintable-boundary maximum of the
+// widest currently rendered source line — the largest cell index at
+// which one of its grapheme clusters starts that also fits within the
+// text width, so at that offset the whole cluster still paints and
+// clamping alone can never blank the text area or draw half a glyph.
+// Among equally wide lines the smallest boundary wins so every widest
+// line keeps a fully painted cluster; a widest line with no cluster
+// fitting the text width — and an empty or all-empty view — gives 0.
+func (v *Viewport) maxOffset() int {
+	s, widest := 0, -1
+	for i := v.top; i < v.count() && i < v.top+v.height; i++ {
+		e, p := lineExtent(v.rows.Row(i), v.width)
+		if e > widest {
+			widest, s = e, p
+		} else if e == widest {
+			s = min(s, p)
+		}
+	}
+	return max(0, s)
+}
+
+// lineExtent returns the content extent and the paintable boundary of
+// a run-off-edge row's source line at text width w: the extent is the
+// line's display width in cells; the boundary is the largest cell
+// index where a cluster starts whose own cell width fits within w, so
+// it is fully paintable at that offset. A line whose final cluster
+// cannot fit starting inside it reports the last fitting cluster's
+// start; a line with no cluster fitting w at all reports 0.
+// End-of-line marker cells join both values with Issue #23 — a marker
+// extends the extent by one cell and is itself a paintable cell.
+func lineExtent(r Row, w int) (extent, paintable int) {
+	extent = len(r.Cells)
+	for i := 0; i < extent; {
+		e := i + 1
+		for e < extent && !r.Cells[e].Lead {
+			e++
+		}
+		if e-i <= w {
+			paintable = i
+		}
+		i = e
+	}
+	return extent, paintable
+}
 
 // scroll moves the top row by delta rendered rows, clamped to valid
 // content. A scroll that moves replaces the logical anchor with the
@@ -195,20 +305,27 @@ func (v *Viewport) loc(i int) Target {
 func (v *Viewport) resolve() {
 	if v.count() == 0 {
 		v.top = 0
-		return
+	} else {
+		want := v.rows.RowOf(v.anchor)
+		v.top = min(max(want, 0), v.maxTop())
+		if v.top != want {
+			v.anchor = v.loc(v.top)
+		}
 	}
-	want := v.rows.RowOf(v.anchor)
-	v.top = min(max(want, 0), v.maxTop())
-	if v.top != want {
-		v.anchor = v.loc(v.top)
-	}
+	// The resolve may have changed the visible row set — a resize, a
+	// row-model swap, wrap-toggle re-entry — so the horizontal offset
+	// re-clamps against it.
+	v.clampOff()
 }
 
 // clamp keeps the top row within valid content: at least 0, and no
 // further than the last full page. Content shorter than the viewport
 // has maxTop 0, pinning the top and leaving unused rows naturally.
+// Every clamp also re-clamps the horizontal offset: a moved top is a
+// changed visible set.
 func (v *Viewport) clamp() {
 	v.top = min(max(v.top, 0), v.maxTop())
+	v.clampOff()
 }
 
 func (v *Viewport) maxTop() int { return max(0, v.count()-v.height) }
@@ -222,15 +339,86 @@ func (v *Viewport) count() int {
 
 // Visible returns the prepared rows a frame paints — the visible range
 // only, so the provider is queried once per shown row, never O(N) over
-// the buffer.
+// the buffer. Under a run-off-edge model each row is clipped to the
+// pan offset and text width with grapheme-safe blanking; under a wrap
+// model the offset is dormant and rows pass through unclipped.
 func (v *Viewport) Visible() []Row {
 	n := min(v.count()-v.top, v.height)
 	if n <= 0 {
 		return nil
 	}
+	clip := !v.rows.Wrap()
 	out := make([]Row, n)
 	for i := range out {
-		out[i] = v.rows.Row(v.top + i)
+		r := v.rows.Row(v.top + i)
+		if clip {
+			r = clipRow(r, v.off, v.width)
+		}
+		out[i] = r
 	}
 	return out
+}
+
+// clipRow returns a run-off-edge row's painted form at horizontal
+// offset off in a text area w cells wide: the line's cells
+// [off, off+w), its spans translated into window cells and clipped to
+// the window, and Start advanced to the first painted column. A
+// grapheme cluster split by either clip edge paints its in-window
+// cells blank — never a half glyph.
+func clipRow(r Row, off, w int) Row {
+	off, w = max(off, 0), max(w, 0)
+	if off == 0 && len(r.Cells) <= w {
+		return r
+	}
+	lo := min(off, len(r.Cells))
+	hi := min(off+w, len(r.Cells))
+	cells := r.Cells[lo:hi]
+
+	// A cluster split by the left edge contributes only Cont cells;
+	// one split by the right edge runs past hi. Either way its
+	// in-window cells paint blank.
+	var cp []present.Cell
+	blank := func(from, to int) {
+		if cp == nil {
+			cp = make([]present.Cell, len(cells))
+			copy(cp, cells)
+		}
+		for i := from; i < to; i++ {
+			cp[i] = present.Cell{Text: " "}
+		}
+	}
+	if lo < hi && r.Cells[lo].Cont {
+		e := lo + 1
+		for e < hi && r.Cells[e].Cont {
+			e++
+		}
+		blank(0, e-lo)
+	}
+	if hi > lo && hi < len(r.Cells) && r.Cells[hi].Cont {
+		s := hi - 1
+		for s > lo && r.Cells[s].Cont {
+			s--
+		}
+		blank(s-lo, hi-lo)
+	}
+	if cp != nil {
+		cells = cp
+	}
+
+	var spans []present.Span
+	for _, s := range r.Spans {
+		if s.Start == s.End {
+			if s.Start >= off && s.Start < off+w {
+				spans = append(spans, present.Span{Start: s.Start - off, End: s.Start - off})
+			}
+			continue
+		}
+		if a, b := max(s.Start, off), min(s.End, off+w); a < b {
+			spans = append(spans, present.Span{Start: a - off, End: b - off})
+		}
+	}
+	r.Start += off
+	r.Cells = cells
+	r.Spans = spans
+	return r
 }

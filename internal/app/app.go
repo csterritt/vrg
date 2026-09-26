@@ -258,7 +258,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The current file's saved anchor already sits in the
 		// viewport — set when the file became current — so the
 		// prepared layout resolves it on install and the pending
-		// reveal commits over it.
+		// reveal commits over it. The load-completion entry sequence
+		// also resets the horizontal offset to zero before that
+		// reveal.
+		m.vp.SetOffset(0)
 		cmd := m.syncLayout()
 		return m, cmd
 	case layoutDoneMsg:
@@ -318,6 +321,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "up", "down", "u", "d", "pgup", "pgdown":
 			m.scroll(msg.String())
+		case ",", ".", "<", ">", "[", "]":
+			m.pan(msg.String())
 		case "n", "p":
 			// Matched-line navigation is a browse key; during
 			// searching ordinary keys stay inert.

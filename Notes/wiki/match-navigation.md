@@ -68,8 +68,10 @@ actual transition ends in `reveal()` — see
   file's logical anchor into `m.saved`, recompute the layout geometry
   (the destination's gutter may differ), install the destination's
   cached rows only while their key matches the current parameters —
-  Issue #17's fast path — and `SetAnchor` its saved position, top of
-  file on a first visit. A stale-keyed or missing cached layout gets
+  Issue #17's fast path — `SetAnchor` its saved position, top of
+  file on a first visit, and — Issue #18 — reset the horizontal pan
+  offset to zero before the reveal (see
+  [horizontal-panning.md](horizontal-panning.md)). A stale-keyed or missing cached layout gets
   a keyed preparation request; the saved-anchor restore resolves when
   it installs and the carried reveal intent then commits for the
   newest selected stop — see

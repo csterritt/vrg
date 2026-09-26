@@ -70,7 +70,11 @@ sequence, per the PRD's file-change rule:
    (`SetAnchor(m.saved[path])` — a logical anchor since Issue #17), or
    from the **top of the file** on a first visit — the absent map
    entry is the zero-valued anchor.
-2. **Apply the destination reveal** over that starting point: a saved
+2. **Reset the horizontal offset** (`SetOffset(0)` — Issue #18; see
+   [horizontal-panning.md](horizontal-panning.md)) ahead of the Issue
+   #19 horizontal reveal; the load-completion entry sequence resets it
+   the same way.
+3. **Apply the destination reveal** over that starting point: a saved
    position that already shows the target survives untouched; one that
    hides it is overridden by the one-third placement.
 
@@ -89,8 +93,10 @@ stop — the behavior Issue #28 formalizes. A same-file step keeps the
 current viewport and simply reveals the new stop against it — pending
 likewise when a rewrap is still in flight.
 
-Horizontal reveal of the target cell is Issue #19's; nothing here
-pans left or right.
+Horizontal *reveal* of the target cell is Issue #19's; the reset half
+landed with Issue #18's panning (see
+[horizontal-panning.md](horizontal-panning.md)) — nothing here pans
+the target itself yet.
 
 ## Tests
 

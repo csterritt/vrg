@@ -1,0 +1,24 @@
+a.txt  ── a.txt ────────────────────────────────────────────────────────────────
+b.txt   1  -a
+        2  3456789abcdefghijxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+        3   ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+        4  0000004
+        5  0000005
+        6  0000006
+        7  0000007
+        8  0000008
+        9  0000009
+       10  0000010
+       11  0000011
+       12  0000012
+       13  0000013
+       14  0000014
+       15  0000015
+       16  0000016
+       17  0000017
+       18  0000018
+       19  0000019
+       20  0000020
+       21  0000021
+       22  0000022
+       23  0000023

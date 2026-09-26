@@ -44,6 +44,10 @@ safe presentation", and "Module Design" in `Notes/PRD-vrg.md`.
   #7; see [theme-and-colour-toggle.md](theme-and-colour-toggle.md)),
   driven by the byte→cell maps (below) so a
   match covering an ESC byte highlights both cells of its `^[` form.
+  In run-off-edge mode the rows `Visible()` returns are already
+  clipped to the horizontal pan offset — grapheme clusters split by a
+  clip edge paint blank, and spans arrive in window cells (Issue #18;
+  see [horizontal-panning.md](horizontal-panning.md)).
 - **Frame.** `View` wraps the composed frame in `theme.Base` and each
   row is padded to the frame edge, so the active scheme's background
   covers the whole screen; `c` toggles the scheme (Issue #7).
@@ -140,8 +144,10 @@ follows an unescaped ESC.
   ranges dropped), `LineCount`, `GutterWidth`/`GutterDigits`, `Text`,
   `Cells`, `Spans`.
 - `internal/viewport/viewport.go` — Issue #12: `Row`/`Rows` prepared
-  content, clamped `top`, the six scroll units, and `Visible`. See
-  [viewport-scrolling.md](viewport-scrolling.md).
+  content, clamped `top`, the six scroll units, and `Visible` — which
+  since Issue #18 clips run-off-edge rows to the pan offset. See
+  [viewport-scrolling.md](viewport-scrolling.md) and
+  [horizontal-panning.md](horizontal-panning.md).
 - `internal/viewport/rows.go` — Issue #16's `Source`/`Key`/`Prepare`/
   `Model`: the swappable row model feeding the viewport — wrap mode's
   grapheme-boundary packing with blank continuation gutters, or

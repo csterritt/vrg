@@ -174,3 +174,14 @@ Usage
  Input tokens: 341779 tokens
  Output tokens: 61630 tokens
  Cached input tokens: 10467017 tokens
+
+----
+Task 018-horizontal-panning.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 77 messages
+ Input tokens: 175118 tokens
+ Output tokens: 59498 tokens
+ Cached input tokens: 8477829 tokens

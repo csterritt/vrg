@@ -29,8 +29,11 @@ and 71 under "Wrapping, indicators, and text display" in
   completion is discarded by the install guard. The retained anchor
   resolves against whichever model installs, restoring the logical
   column. In run-off-edge mode each source line is one rendered row
-  carrying its full cells for the frame to clip — there is no
-  horizontal panning yet (Issues #18–19 own pan).
+  carrying its full cells for the frame to clip — Issue #18 owns the
+  horizontal panning over it (see
+  [horizontal-panning.md](horizontal-panning.md): the offset is
+  dormant under a wrap model and re-clamped on re-entry, and Issue #19
+  owns the horizontal reveal).
 - **Text width** is `panel width − gutter width − reserved indicator
   width`, where `reservedW()` returns **0 in wrap mode and 1 in
   run-off-edge mode** — the rightmost indicator column is reserved now
@@ -143,7 +146,8 @@ See [unit-tests.md](unit-tests.md) for the full catalog.
 
 - `internal/viewport/rows.go` — `Source`, `Key`, `Model`, `Prepare`,
   `Row` (Issue #17 adds `Start`, the row's logical location),
-  `RowOf`, `wrapLine`.
+  `RowOf`, `wrapLine`, `Model.Wrap` (Issue #18 — the viewport reads
+  the mode off the installed model to gate panning and clipping).
 - `internal/viewport/viewport.go` — `Row.Cont`; `Rows`/`Target` doc
   updates for the many-to-one mapping; Issue #17's `anchor` resolves
   the effective top through the installed model.
@@ -159,6 +163,8 @@ See [unit-tests.md](unit-tests.md) for the full catalog.
 
 See also: [logical-anchor-and-layout.md](logical-anchor-and-layout.md)
 (the async preparation and install-guard contract built on this key),
+[horizontal-panning.md](horizontal-panning.md) (the Issue #18 panning
+that activates only under this model's run-off-edge form),
 [viewport-scrolling.md](viewport-scrolling.md) (the rendered-
 row position this model feeds),
 [destination-reveal.md](destination-reveal.md) (the `RowOf` seam this

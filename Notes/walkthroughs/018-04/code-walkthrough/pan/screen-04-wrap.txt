@@ -1,0 +1,24 @@
+a.txt  ── a.txt ────────────────────────────────────────────────────────────────
+b.txt   1  hit-a
+        2  0123456789abcdefghijxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+           xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+           xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+           xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+           xxxxxxxxxxxxxxxxxxxxxxxx
+        3  ab世ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+           ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+           ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+           ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+           ccccccccccccccccccc
+        4  s000000004
+        5  s000000005
+        6  s000000006
+        7  s000000007
+        8  s000000008
+        9  s000000009
+       10  s000000010
+       11  s000000011
+       12  s000000012
+       13  s000000013
+       14  s000000014
+       15  s000000015

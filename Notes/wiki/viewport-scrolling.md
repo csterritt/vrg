@@ -111,7 +111,11 @@ Rendering no longer scans the buffer per frame:
   [logical-anchor-and-layout.md](logical-anchor-and-layout.md).
 - `Viewport.Visible()` materializes only the visible slice —
   `min(height, count − top)` rows — so the provider's `Row` is queried
-  once per shown row and never for rows outside the frame. The
+  once per shown row and never for rows outside the frame. Since
+  Issue #18 a run-off-edge model's rows are also *clipped* to the
+  `[offset, offset + width)` window with grapheme-safe blanking before
+  they leave `Visible()` — see
+  [horizontal-panning.md](horizontal-panning.md). The
   counting-fake tests (`TestVisibleQueriesOnlyVisibleRows`,
   `TestRenderQueriesOnlyVisibleRows`) pin this render-cost guard.
 - `renderBrowse` takes the `Visible()` slice once per frame and
@@ -121,9 +125,13 @@ Rendering no longer scans the buffer per frame:
 ## Files
 
 - `internal/viewport/viewport.go` — `Row` (with `Start`), `Target`,
-  the `Rows` provider interface (now with `RowOf`), and `Viewport`
+  the `Rows` provider interface (`RowOf` since Issue #14, `Wrap` since
+  Issue #18), and `Viewport`
   (`Resize`, `SetRows`, `SetAnchor`/`Anchor`, `SetTop`/`Top`,
-  `Height`, the six scroll methods, `Reveal`, `Visible`, `resolve`).
+  `Height`, the six scroll methods, `Reveal`, `Visible`, `resolve`,
+  plus Issue #18's `off`/`Offset`/`SetOffset`, the six pan methods,
+  and the visible-lines extent clamp — see
+  [horizontal-panning.md](horizontal-panning.md)).
 - `internal/app/browse.go` — `Model.scroll`, `Model.reveal`,
   `syncLayout`/`ensureLayout`'s keyed layout requests and installs,
   `contentRow` over the visible slice (continuation rows behind a
@@ -137,6 +145,8 @@ Rendering no longer scans the buffer per frame:
 
 See also: [logical-anchor-and-layout.md](logical-anchor-and-layout.md)
 (the Issue #17 anchor and prepared-layout contract),
+[horizontal-panning.md](horizontal-panning.md) (the Issue #18 offset
+and extent clamp alongside this position),
 [destination-reveal.md](destination-reveal.md) (the Issue #14
 reveal contract built on this position),
 [browse-tracer.md](browse-tracer.md) (the two-pane view this

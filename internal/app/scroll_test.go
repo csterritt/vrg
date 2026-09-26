@@ -53,6 +53,9 @@ func (r *countingRows) Row(i int) viewport.Row {
 // row is its source line.
 func (r *countingRows) RowOf(t viewport.Target) int { return t.Line }
 
+// Wrap reports run-off-edge mode for the counting fake.
+func (r *countingRows) Wrap() bool { return false }
+
 // down and up move the viewport's top row by one rendered row; the
 // rendered frame tracks it and the matched-line cursor does not move.
 func TestDownUpMoveOneRenderedRow(t *testing.T) {

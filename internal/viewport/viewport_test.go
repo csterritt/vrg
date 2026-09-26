@@ -23,6 +23,9 @@ func (r *countingRows) Row(i int) Row {
 // row is its source line.
 func (r *countingRows) RowOf(t Target) int { return t.Line }
 
+// Wrap reports run-off-edge mode for the counting fake.
+func (r *countingRows) Wrap() bool { return false }
+
 func rowsN(n int) *countingRows { return &countingRows{n: n} }
 
 // Each scroll unit moves the top row by its contracted amount over a

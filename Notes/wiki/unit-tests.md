@@ -419,6 +419,25 @@ uninvoked; `pump` on it delivers the `layoutDoneMsg` completion:
   render-cost guard: a counting `listEntry` fake sees only the
   scrolled window's entries, never the whole list.
 
+`pan_test.go` (same package, Issue #18) drives the horizontal-pan
+keys through `Update`; `panRecords` builds a one-stop record set for a
+file whose first line is the match:
+
+- `TestPanKeysMoveOffset` — `,`/`.` one column, `<`/`>` ten, `[`/`]`
+  `max(1, floor(text width / 2))` of the actual `m.textW`, all moving
+  `m.vp.Offset()` in run-off-edge mode.
+- `TestPanKeysNoOpInWrapMode` — every pan key inert under wrap: the
+  offset stays 0 and the wrapped frame is byte-identical.
+- `TestPanOffsetSurvivesWrapToggle` — `w w` through the async layout
+  swap retains a valid offset.
+- `TestPanOffsetResetsOnFileChange` — `n` into another file starts at
+  offset 0 and `p` back does not restore the old value.
+- `TestHalfClippedGlyphPaintsBlank` — a CJK cluster split by the left
+  clip edge paints a blank cell, not a half glyph, in the real frame.
+- `TestPanToMaximumPaintsFinalCluster` — panning to the visible-lines
+  maximum stops at the final cluster's start so it paints whole, and
+  further pans do nothing.
+
 `nav_test.go` (same package) covers the Issue #13 `n`/`p` navigation
 wiring; `twoFileModel` lands the model in browse on a.txt:1 with stops
 a.txt:1, a.txt:3, b.txt:2 (records emitted b.txt-first) and b.txt
@@ -756,6 +775,52 @@ segmentation that records every per-line `Cells`/`Spans` query:
 - `TestVisibleRowsNeverWrapsOffscreenLines` — the render-cost guard:
   after `Prepare`, a frame queries `Cells`/`Spans` only for the lines
   behind its visible rows — never O(N) per frame.
+
+`pan_test.go` (same package, Issue #18) pins the horizontal-pan and
+visible-lines extent contracts against `lineSource`-backed prepared
+models:
+
+- `TestPanUnits` — the per-key table: `Left`/`Right` one column,
+  `TenLeft`/`TenRight` ten, `HalfLeft`/`HalfRight`
+  `max(1, floor(width/2))` including odd widths and the width-1
+  floor, clamped at 0 and at the 300-cell fixture's 299 maximum.
+- `TestSetOffsetClamps` — the stored-offset entry point clamps to
+  `[0, S]`; the file-change reset drives it with 0.
+- `TestPanNoOpInWrapMode` — every pan unit inert under a wrap model;
+  the dormant offset neither moves nor leaks into the wrapped rows.
+- `TestPanWithoutContentIsNoOp` — no prepared rows → pans do nothing.
+- `TestOffsetRetainedThroughWrapToggle` /
+  `TestWrapReentryClampsToNewVisibleSet` /
+  `TestWrapReentryClampsAfterWidthChange` — `w w` retention, re-entry
+  clamping against a visible set that changed while wrapped (a scroll
+  or a width change re-fitting clusters), and no restoration.
+- `TestExtentFollowsWidestVisibleLine` — the mixed-width policy: 299
+  while the 300-cell line is visible, 9 once it scrolls out, permanent
+  loss on scroll-back.
+- `TestExtentEmptyViewsClampToZero` — placeholder, empty buffer, and
+  all-empty visible lines all clamp to 0.
+- `TestPaintableBoundaryStopsAtFinalCluster` — a two-cell final
+  cluster makes the maximum its start, and at that offset both cells
+  paint whole.
+- `TestPaintableBoundaryUnfittableFinalCluster` — a final cluster
+  wider than the text width falls back to the last fitting cluster's
+  start; a line with no fitting cluster reports 0, the documented
+  exception where the window paints clipping blanks.
+- `TestReclampOnVisibleSetChanges` — vertical scroll, moving reveal,
+  width resize (also how list hide/show and gutter growth arrive), and
+  a row-model swap each re-clamp; a pan recomputes the maximum from
+  the now-visible rows.
+- `TestSplitClusterClipsToBlankCells` — a clip edge inside a two-cell
+  cluster paints blanks at either edge; whole inside the window it
+  paints whole.
+- `TestClipTranslatesSpans` — coverage spans shift and clip to the
+  window; marker spans follow their cell and vanish when clipped away.
+- `TestUniformLinesAllHiddenLeft` — every visible line can have
+  hidden-left text at a nonzero offset while still painting — the
+  geometry Issue #20's `_` indicators require.
+- `TestExtentQueriesOnlyVisibleRows` — the render-cost guard: a pan
+  queries only the visible rows' lines; a scroll touches only the new
+  window — never a whole-buffer scan.
 
 ## internal/theme
 

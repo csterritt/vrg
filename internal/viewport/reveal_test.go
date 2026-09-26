@@ -26,6 +26,9 @@ func (r *mappingRows) RowOf(t Target) int {
 	return r.rowOf(t)
 }
 
+// Wrap reports run-off-edge mode for the mapping fake.
+func (r *mappingRows) Wrap() bool { return false }
+
 // An already-visible target row never scrolls: every position inside
 // the visible window — first, middle, and last row — leaves the top
 // unchanged and reports no movement.

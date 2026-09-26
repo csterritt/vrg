@@ -71,6 +71,9 @@ func Prepare(src Source, k Key) Model {
 // Key returns what the model was prepared for.
 func (m Model) Key() Key { return m.key }
 
+// Wrap reports the model's layout mode — the key's wrap flag.
+func (m Model) Wrap() bool { return m.key.Wrap }
+
 // Len returns the total rendered-row count.
 func (m Model) Len() int { return len(m.rows) }
 

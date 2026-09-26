@@ -66,7 +66,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   searching cancels (kills the child context, `ExitCode` 130), `Esc` is
   a base-state no-op, `c` in browse toggles the theme between its dark
   and light schemes (Issue #7), `n`/`p` in browse step the matched-line
-  cursor through `navigate` (Issue #13), and once `quit` is set `Update`
+  cursor through `navigate` (Issue #13), `,`/`.`/`<`/`>`/`[`/`]` in
+  browse pan horizontally through `Model.pan` (Issue #18), and once
+  `quit` is set `Update`
   discards all messages so a late completion cannot revive a cancelled
   UI; every view wraps the frame in `theme.Base`, composites the
   overlay while open, and sets `AltScreen` for the exit restoration
@@ -176,13 +178,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   newest stop. Issue #15 opens the file-change pop-up inside the
   `FileChanged`
   branch — selection time, before the destination loads — and batches
-  its instance-keyed expiry command with the load. See
+  its instance-keyed expiry command with the load. Issue #18 adds
+  `pan` (the six pan keys routed to `Viewport` units under the same
+  loaded-buffer gate as `scroll`) and the file-entry offset reset:
+  `navigate`'s `FileChanged` branch and the current-path
+  `loadDoneMsg` both `SetOffset(0)` ahead of the reveal. See
   [browse-tracer.md](browse-tracer.md),
   [match-navigation.md](match-navigation.md),
   [destination-reveal.md](destination-reveal.md),
   [file-change-popup.md](file-change-popup.md),
   [viewport-scrolling.md](viewport-scrolling.md),
   [wrap-mode.md](wrap-mode.md),
+  [horizontal-panning.md](horizontal-panning.md),
   [logical-anchor-and-layout.md](logical-anchor-and-layout.md),
   [safe-presentation.md](safe-presentation.md), and
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
@@ -317,8 +324,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   hidden target → `row − floor(height/3)` top, clamped; reports
   whether the top moved); `Anchor`/`SetAnchor` are the logical entry
   points, `SetTop` the ordinal one; `Visible` queries the provider
-  only for the shown range. Panning remains Issues 18–19.
+  only for the shown range. Issue #18 adds `off`, the horizontal pan
+  offset: `Offset`/`SetOffset` and the six pan units
+  (`Left`/`Right` one column, `TenLeft`/`TenRight` ten,
+  `HalfLeft`/`HalfRight` `max(1, floor(width/2))`) clamp to
+  `[0, max(0, S)]` where `maxOffset` recomputes the widest *visible*
+  line's paintable boundary on every pan; `clampOff` re-clamps inside
+  `clamp` and `resolve` so every visible-set change re-evaluates it;
+  `Rows.Wrap` gates panning to run-off-edge models (dormant, retained
+  under wrap); and `Visible` runs each run-off-edge row through
+  `clipRow`, which drops out-of-window cells, translates spans into
+  window cells, and blanks a cluster split by either clip edge.
+  Horizontal reveal remains Issue #19.
   See [viewport-scrolling.md](viewport-scrolling.md),
+  [horizontal-panning.md](horizontal-panning.md),
   [destination-reveal.md](destination-reveal.md),
   [logical-anchor-and-layout.md](logical-anchor-and-layout.md), and
   [wrap-mode.md](wrap-mode.md).
@@ -332,7 +351,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   an extra row for an end-of-line marker past a full final row — runs
   in a worker command since Issue #17), and
   `Model` (`Len`/`Row`/`RowOf` — `Row` materializes cells and
-  row-local spans per query, blanking a split cluster's clipped lead).
+  row-local spans per query, blanking a split cluster's clipped lead;
+  Issue #18 adds `Wrap`, reporting the key's mode so the viewport can
+  gate panning and clipping).
 
 ## internal/theme
 
