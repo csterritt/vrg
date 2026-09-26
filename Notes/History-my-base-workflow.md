@@ -482,3 +482,14 @@ Usage
  Input tokens: 158857 tokens
  Output tokens: 74986 tokens
  Cached input tokens: 10412641 tokens
+
+----
+Task 046-runtime-error-common-diagnostic-replay.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 54 messages
+ Input tokens: 140033 tokens
+ Output tokens: 41090 tokens
+ Cached input tokens: 5351066 tokens

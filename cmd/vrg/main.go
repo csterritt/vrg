@@ -36,22 +36,62 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 }
 
+// diagSnapshot is the process boundary's own copy of the session
+// diagnostic collection: the model feeds it through Config.OnCollect as
+// each diagnostic is collected, so it survives whatever final model —
+// or none — program.Run() returns. Collection happens only inside
+// Update, so the snapshot is complete once Run() has returned; reading
+// it afterwards needs no synchronisation.
+type diagSnapshot []string
+
+// collect appends one sanitized diagnostic line to the snapshot.
+func (s *diagSnapshot) collect(d string) { *s = append(*s, d) }
+
+// replay writes the snapshot to w, one line per collected occurrence in
+// collection order — the common writer every controlled exit funnels
+// through; there is no separate direct write.
+func (s diagSnapshot) replay(w io.Writer) {
+	for _, d := range s {
+		fmt.Fprintln(w, d)
+	}
+}
+
+// finalModelDiagnostic names the invalid-final-model condition: Run()
+// returned no model vrg can read — nil, or a model of an unexpected
+// type. A failing return shape is never a silent exit, so this
+// diagnostic joins the replayed snapshot in place of the missing
+// model's collection.
+func finalModelDiagnostic(fm tea.Model) string {
+	if fm == nil {
+		return "vrg: program returned a nil final model"
+	}
+	return "vrg: program returned an unexpected final model"
+}
+
 // runSearch spawns rg from the invocation working directory and runs the
 // TUI. A start failure is a sanitized stderr diagnostic and exit 2
-// before the TUI exists. Every controlled exit — ordinary quit,
-// cancellation, program error — funnels through one cleanup boundary:
-// the child is terminated and reaped before the status is decided, then
-// the session diagnostic collection is replayed to stderr exactly once,
-// after the terminal has been restored. A controlled failure's own
-// diagnostic joins the collection first — the common writer serves
-// every controlled exit and there is no separate direct write.
+// before the TUI exists. Every Run() return shape — ordinary quit,
+// cancellation, program error, absent or wrong-type final model —
+// funnels through one shutdown sequence: Run() returns with the
+// terminal already restored, the child is terminated and reaped before
+// the status is decided, and only then does the diagnostic snapshot
+// replay to stderr — session diagnostics in collection order, then the
+// invalid-final-model diagnostic when applicable, then the runtime
+// error exactly once. Every failing shape is a controlled application
+// failure: exit 2, matching the startup-failure convention.
 func runSearch(res cli.Result, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(stderr, "vrg: %s\n", present.Diagnostic(err.Error()))
 		return 2
 	}
-	cfg := app.Config{Rg: "rg", Argv: res.ChildArgv, Workdir: wd}
+	var snap diagSnapshot
+	cfg := app.Config{
+		Rg:        "rg",
+		Argv:      res.ChildArgv,
+		Workdir:   wd,
+		OnCollect: snap.collect,
+	}
 	progCtx, cleanup := wireTestHooks(&cfg)
 	defer cleanup()
 	sess, err := app.Start(context.Background(), cfg)
@@ -62,7 +102,7 @@ func runSearch(res cli.Result, stderr io.Writer) int {
 	// runProgram is the program-runner boundary: the untagged build
 	// delegates straight to tea.NewProgram().Run(); the vrg_testhooks
 	// build can substitute the returned (final model, error) tuple.
-	fm, err := runProgram(sess.Model(), progCtx)
+	fm, runErr := runProgram(sess.Model(), progCtx)
 
 	// Run returned, so the display and input modes are already restored.
 	// Terminate the child if it is still running and wait for the
@@ -70,25 +110,29 @@ func runSearch(res cli.Result, stderr io.Writer) int {
 	sess.Cancel()
 	<-sess.Reaped()
 
-	// fm is the last model Update produced; its session collection
-	// holds every diagnostic processed before the exit. A nil model on
-	// an early program error simply has an empty collection.
-	model, _ := fm.(app.Model)
+	model, ok := fm.(app.Model)
 	switch {
-	case err == nil:
-		model.ReplayTo(stderr)
+	case runErr == nil && ok:
+		snap.replay(stderr)
 		return model.ExitCode()
-	case errors.Is(err, tea.ErrInterrupted):
+	case ok && errors.Is(runErr, tea.ErrInterrupted):
 		// Interrupt arrives here when ctrl+c was a real SIGINT rather
 		// than a raw-mode keystroke the model handled.
-		model.ReplayTo(stderr)
+		snap.replay(stderr)
 		return 130
 	default:
-		// A controlled application failure: its diagnostic enters the
-		// session collection and the common post-restoration writer
-		// replays everything — exactly once across both mechanisms.
-		model.CollectDiagnostic("vrg: " + err.Error())
-		model.ReplayTo(stderr)
+		// A controlled application failure. Session diagnostics
+		// replay from the snapshot even when the final-model
+		// assertion failed; the model-shape and runtime-error
+		// diagnostics join the snapshot so the single writer replays
+		// everything — exactly once across both mechanisms.
+		if !ok {
+			snap.collect(finalModelDiagnostic(fm))
+		}
+		if runErr != nil {
+			snap.collect(present.Diagnostic("vrg: " + runErr.Error()))
+		}
+		snap.replay(stderr)
 		return 2
 	}
 }

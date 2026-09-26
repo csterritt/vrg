@@ -247,10 +247,10 @@ func TestProductionBinaryHasNoTestHooks(t *testing.T) {
 // VRG_TEST_RUN_ERROR select the (final model, error) shape the real
 // program.Run() boundary returns; the matrix proves both halves reach
 // the executable's actual post-Run() site unchanged — the model half by
-// whether the session's collected diagnostic is replayed, the error
-// half by the "vrg: <text>" diagnostic and exit 2. The baseline run
-// shows the real tuple: q while searching exits 130 with the collected
-// warning replayed.
+// the invalid-final-model diagnostic only a substituted model produces,
+// the error half by the "vrg: <text>" diagnostic and exit 2. The
+// baseline run shows the real tuple: q while searching exits 130 with
+// the collected warning replayed.
 func TestTaggedRunnerSeamSelectsReturnShape(t *testing.T) {
 	bin := buildVrgVariant(t, "vrg_testhooks")
 
@@ -291,30 +291,30 @@ func TestTaggedRunnerSeamSelectsReturnShape(t *testing.T) {
 			want: []string{"warn one", "vrg: boom"},
 		},
 		{
+			// The session snapshot survives the substituted model:
+			// the collected diagnostic still replays, then the
+			// invalid-model diagnostic, then the runtime error.
 			name: "nil model with error",
 			env:  []string{"VRG_TEST_RUN_FINAL_MODEL=nil", "VRG_TEST_RUN_ERROR=boom"},
 			code: 2,
-			want: []string{"vrg: boom"},
-			// A nil final model cannot carry the collected
-			// diagnostic: its absence proves the injected model
-			// reached the real return site.
-			unwanted: []string{"warn one"},
+			want: []string{"warn one", "vrg: program returned a nil final model", "vrg: boom"},
 		},
 		{
-			name:     "invalid model with error",
-			env:      []string{"VRG_TEST_RUN_FINAL_MODEL=invalid", "VRG_TEST_RUN_ERROR=boom"},
-			code:     2,
-			want:     []string{"vrg: boom"},
-			unwanted: []string{"warn one"},
+			name: "invalid model with error",
+			env:  []string{"VRG_TEST_RUN_FINAL_MODEL=invalid", "VRG_TEST_RUN_ERROR=boom"},
+			code: 2,
+			want: []string{"warn one", "vrg: program returned an unexpected final model", "vrg: boom"},
 		},
 		{
 			// The real tuple here exits 130; the injected nil model
-			// carries exit code 0 — the difference pins the nil
-			// model, not a quit, as what Run() returned.
-			name:     "nil model without error",
-			env:      []string{"VRG_TEST_RUN_FINAL_MODEL=nil"},
-			code:     0,
-			unwanted: []string{"warn one", "vrg:"},
+			// takes the unified failure path — exit 2 with the
+			// retained diagnostic and the invalid-model diagnostic —
+			// the difference pins the nil model, not a quit, as what
+			// Run() returned.
+			name: "nil model without error",
+			env:  []string{"VRG_TEST_RUN_FINAL_MODEL=nil"},
+			code: 2,
+			want: []string{"warn one", "vrg: program returned a nil final model"},
 		},
 	}
 	for _, tc := range cases {

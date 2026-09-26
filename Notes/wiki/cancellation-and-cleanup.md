@@ -66,13 +66,21 @@ injected test failure — after the child has started runs the same
 cleanup (terminate, reap, restore), exits 2, and its sanitized
 `vrg:`-prefixed diagnostic reaches stderr **exactly once, after terminal
 restoration**. Since Issue #11 the failure diagnostic no longer writes
-directly: `runSearch` collects it into the session diagnostic collection
-(`model.CollectDiagnostic`) and the common post-restoration replay
-writer emits it alongside every earlier diagnostic in collection order —
-exactly-once holds across what were previously two mechanisms. The
-injectable hook is `VRG_TEST_FAIL_TRIGGER`: a fifo whose first writer's
-close cancels the program context, surfacing as a `Run` error. See
+directly: it joins the session diagnostic collection and the common
+post-restoration replay writer emits it alongside every earlier
+diagnostic in collection order — exactly-once holds across what were
+previously two mechanisms. The injectable hook is
+`VRG_TEST_FAIL_TRIGGER`: a fifo whose first writer's close cancels the
+program context, surfacing as a `Run` error. See
 [stderr-replay.md](stderr-replay.md).
+
+Since Issue #46 **every** `Run()` return shape funnels through that one
+sequence — the boundary replays its own `diagSnapshot` (fed by
+`Config.OnCollect`), so a nil or wrong-type final model cannot strand
+the collected diagnostics; such a shape earns the
+invalid-final-model diagnostic and, like any non-interrupt `Run()`
+error, exits 2. See
+[runtime-error-shutdown.md](runtime-error-shutdown.md).
 
 ## Test seams and the PTY harness
 

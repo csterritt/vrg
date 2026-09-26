@@ -2047,13 +2047,31 @@ a temp dir with or without the tag:
   artifact carries every manifest name, then the
   `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` matrix runs against a
   blocked fake rg — baseline exits 130 with `warn one` replayed, the
-  error override exits 2 with `vrg: boom`, the `nil`/`invalid` final
-  models still replay `vrg: boom` but drop `warn one` (proving the
-  injected model reached the real post-`Run()` site), and `nil` model
-  without error exits 0 where the real model would exit 130.
+  error override exits 2 with `vrg: boom`, and since Issue #46 the
+  `nil`/`invalid` final models still replay the collected `warn one`
+  (the boundary snapshot survives the substituted model) plus the
+  invalid-final-model diagnostic — the `nil`-without-error shape exits
+  2 where the real model would exit 130, pinning the injected tuple as
+  what reached the post-`Run()` branches.
 - `TestTaggedInjectionSeams` — `VRG_TEST_DIAGNOSTIC_TRIGGER` +
   `VRG_TEST_DIAGNOSTIC_TEXT` land the line in the session collection
   (acknowledged, then replayed once at the 130 exit), and
   `VRG_TEST_FAIL_TRIGGER` + `VRG_TEST_FAIL_DIAGNOSTIC` inject the
   controlled failure: exit 2, the diagnostic exactly once, the child
   reaped per `VRG_TEST_REAP`.
+
+`pty_returnshape_test.go` (same Linux-only PTY harness, Issue #46)
+holds `TestPTYRunReturnShapes` — the unified shutdown contract for
+every `program.Run()` return shape, driven through the
+`VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` runner seam on a real
+PTY lifecycle (`fakeRgWarnBlockScript`: `warn one` collected and
+acknowledged through `VRG_TEST_COLLECT_ACK`, then `q` ends the real
+program and the seam substitutes the tuple). The matrix covers the
+three contract shapes — valid model + `Run()` error, nil or invalid
+model + `Run()` error, and nil or invalid model + nil error — each
+asserting exit 2, the post-restoration replay in contract order
+(session diagnostics → the invalid-final-model diagnostic → the
+runtime error, each exactly once across the whole stream), the
+`killed` reap status and gone pid, and both halves of terminal
+restoration. See
+[runtime-error-shutdown.md](runtime-error-shutdown.md).

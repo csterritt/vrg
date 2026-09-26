@@ -1864,3 +1864,39 @@ Sources: `Notes/tasks/045-remove-test-hooks-from-production-binary.md`,
 Decisions*), `cmd/vrg/seams.go`, `cmd/vrg/seams_testhooks.go`,
 `cmd/vrg/main.go`, `cmd/vrg/testhooks_test.go`,
 `internal/app/search.go`.
+
+## [2026-09-25] ingest | Issue #46 unified runtime-error shutdown and diagnostic replay
+
+Issue #46 (`Notes/tasks/046-runtime-error-common-diagnostic-replay.md`)
+routes every `program.Run()` return shape through one shutdown sequence
+in `cmd/vrg/main.go`. `Config.OnCollect` (new `internal/app` seam,
+wired to `Model.onCollect` invoked from `collect`) feeds the process
+boundary's `diagSnapshot` as each diagnostic is collected, so session
+diagnostics reach stderr independently of the final-model type
+assertion — the nil/wrong-type model shapes that previously dropped the
+collection and could exit 0. The ordered sequence: `Run()` returns with
+the terminal restored → `sess.Cancel()` + `<-sess.Reaped()` → snapshot
+replay (session diagnostics in collection order, then
+`finalModelDiagnostic`'s invalid-final-model line when applicable, then
+the runtime error exactly once). Every failing shape exits 2, extending
+the controlled-failure convention to runtime errors. Tests:
+`cmd/vrg/pty_returnshape_test.go` (`TestPTYRunReturnShapes`, the full
+matrix on the real PTY lifecycle through the Issue #45
+`VRG_TEST_RUN_*` runner seam) plus the updated
+`TestTaggedRunnerSeamSelectsReturnShape` expectations; no new hook
+names joined the manifest.
+
+Created [runtime-error-shutdown](runtime-error-shutdown.md). Updated
+[stderr-replay](stderr-replay.md) (the snapshot replacing the
+model-carried replay), [cancellation-and-cleanup](cancellation-and-cleanup.md)
+(the unified return-shape sequence and exit-2 extension),
+[test-hook-build-topology](test-hook-build-topology.md) (Issue #46's
+runner-seam consumption), [source-code](source-code.md) (`main.go`
+shutdown contract, `Config.OnCollect`), [unit-tests](unit-tests.md)
+(the `pty_returnshape_test.go` matrix, updated seam-test contract), and
+the index.
+Sources: `Notes/tasks/046-runtime-error-common-diagnostic-replay.md`,
+`Notes/PRD-vrg.md` (*Outcome and exit-status contract*),
+`cmd/vrg/main.go`, `cmd/vrg/pty_returnshape_test.go`,
+`cmd/vrg/testhooks_test.go`, `internal/app/app.go`,
+`internal/app/search.go`.

@@ -64,16 +64,17 @@ const (
 // carries the collector's incremental stderr lines and diagAck is the
 // test-only acknowledgement seam — both nil in plain unit-test models.
 type Model struct {
-	phase   phase
-	cancel  func()
-	done    <-chan searchDoneMsg
-	diagCh  <-chan string
-	diagAck io.Writer
-	diags   []string
-	index   stopIndex
-	stops   []searchindex.Stop
-	files   [][]byte       // distinct raw paths in index order
-	fileIdx map[string]int // raw path → its files index
+	phase     phase
+	cancel    func()
+	done      <-chan searchDoneMsg
+	diagCh    <-chan string
+	diagAck   io.Writer
+	onCollect func(string)
+	diags     []string
+	index     stopIndex
+	stops     []searchindex.Stop
+	files     [][]byte       // distinct raw paths in index order
+	fileIdx   map[string]int // raw path → its files index
 	// fileStops is the immutable per-file stop grouping and
 	// longestEntryW the widest list entry's painted cell width — both
 	// built once from the materialized stop list at search completion,
@@ -522,13 +523,19 @@ func (m Model) cancelled() Model {
 }
 
 // collect appends an already-sanitized diagnostic line to the session
-// collection and reports the acknowledgement side channel when one is
+// collection, reports the acknowledgement side channel when one is
 // wired — one acknowledgement per collected diagnostic, the evidence
-// the PTY harness waits for before sending an exit key.
+// the PTY harness waits for before sending an exit key — and feeds the
+// process boundary's snapshot through onCollect when one is wired, so
+// collected diagnostics reach stderr independently of the final-model
+// type assertion (Issue #46).
 func (m *Model) collect(d string) {
 	m.diags = append(m.diags, d)
 	if m.diagAck != nil {
 		fmt.Fprintln(m.diagAck, "collected")
+	}
+	if m.onCollect != nil {
+		m.onCollect(d)
 	}
 }
 

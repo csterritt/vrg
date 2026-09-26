@@ -53,6 +53,14 @@ type Config struct {
 	// trigger. Delivery ends when the channel closes or the session is
 	// cancelled.
 	DiagInject <-chan string
+	// OnCollect, when non-nil, is invoked with each diagnostic line as
+	// the model collects it into the session collection — the process
+	// boundary's snapshot feed. Because collection happens only inside
+	// Update, the callback runs on the program's event loop and the
+	// boundary reads its snapshot after Run() returns, so no
+	// synchronisation is needed. The snapshot survives independently
+	// of whatever final model Run() returns (Issue #46).
+	OnCollect func(string)
 }
 
 // searchDoneMsg delivers the finished collection to the model: the
@@ -147,6 +155,7 @@ func Start(ctx context.Context, cfg Config) (*Session, error) {
 	m := newModel(done, cancel)
 	m.diagCh = diags
 	m.diagAck = cfg.DiagAck
+	m.onCollect = cfg.OnCollect
 	return &Session{model: m, cancel: cancel, reaped: reaped}, nil
 }
 

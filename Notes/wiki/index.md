@@ -80,6 +80,15 @@ Catalog of all wiki pages for the vrg project.
   processed-versus-in-flight shutdown boundary, `ReplayTo` on the common
   post-restoration writer for every controlled exit, controlled-failure
   unification, and the `VRG_TEST_COLLECT_ACK` acknowledgement seam
+- [runtime-error-shutdown.md](runtime-error-shutdown.md) — Issue #46:
+  the boundary-owned diagnostic snapshot fed by `Config.OnCollect`
+  (decoupling replay from the final-model type assertion), the single
+  ordered shutdown sequence for every `Run()` return shape (terminal
+  restoration → child terminate/reap → session diagnostics →
+  invalid-final-model diagnostic → runtime error exactly once), the
+  exit-2 convention extended to runtime errors and nil/wrong-type
+  models, and the `VRG_TEST_RUN_*` tagged-runner injection the PTY
+  matrix drives
 - [viewport-scrolling.md](viewport-scrolling.md) — Issue #12: the
   rendered-row scroll units (one row, `max(1, floor(h/2))` half page,
   full content-height page), BOF/EOF clamping with no avoidable blank
@@ -305,8 +314,8 @@ Catalog of all wiki pages for the vrg project.
   seam boundaries (`wireTestHooks` option/process wiring and the
   `runProgram` program-runner wrapper), the explicit nine-name hook
   manifest and why fixture variables are excluded, the `TestMain`
-  tagged build, the untagged-artifact boundary test, and the
-  Issues #46/#48 extension rule
+  tagged build, the untagged-artifact boundary test, Issue #46's
+  consumption of the runner seam, and the Issue #48 extension rule
 
 ## Catalogs
 

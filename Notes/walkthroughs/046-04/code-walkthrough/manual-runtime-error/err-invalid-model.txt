@@ -1,0 +1,2 @@
+warn one
+vrg: program returned an unexpected final model

@@ -65,19 +65,29 @@ is set, `Update` discards everything as before.
 
 `runSearch` keeps the Issue #4 ordering: `Program.Run` returns (display
 and termios already restored), `Cancel` + `<-Reaped()` settle the
-child, then `model.ReplayTo(stderr)` writes each collected line in
-collection order — one `Fprintln` per collected occurrence, sanitized
-at collection time and emitted verbatim. No persistent log is written;
-the collection lives only in the model.
+child, then the session collection replays to stderr — one `Fprintln`
+per collected occurrence, sanitized at collection time and emitted
+verbatim. No persistent log is written.
+
+Since Issue #46 the replayed lines come from the boundary's own
+**diagnostic snapshot**, not the returned model: `Config.OnCollect`
+feeds `runSearch`'s `diagSnapshot` each line as `Model.collect` takes
+it, so session diagnostics reach stderr even when `Run()` returns a nil
+or wrong-type final model that could never carry them. `Model.diags`/
+`ReplayTo` still serve the in-model collection the unit tests exercise.
+The single ordered replay — session diagnostics in collection order,
+then the invalid-final-model diagnostic when applicable, then the
+runtime error — and the per-shape exit statuses are documented in
+[runtime-error-shutdown.md](runtime-error-shutdown.md).
 
 The same writer serves **every** controlled exit — ordinary quit (the
 final model's `ExitCode`), `tea.ErrInterrupted` (130), and controlled
-failure (2). A controlled failure's diagnostic now enters the
-collection via `model.CollectDiagnostic("vrg: " + err.Error())` **before**
-`ReplayTo` runs, so it appears exactly once, after the earlier
-diagnostics, in collection order — the separate direct `Fprintf` the
-Issue #4 failure path had is gone, and exactly-once holds across what
-were previously two mechanisms.
+failure (2), which since Issue #46 includes every `Run()` runtime
+error and invalid final-model shape. A failure's own diagnostic joins
+the snapshot **before** replay runs, so it appears exactly once, after
+the earlier diagnostics, in collection order — the separate direct
+`Fprintf` the Issue #4 failure path had is gone, and exactly-once
+holds across what were previously two mechanisms.
 
 ## Sanitization
 
@@ -129,20 +139,23 @@ assumed the first command result was the completion. See
 
 ## Files
 
-- `internal/app/app.go` — `Model.diags`/`diagCh`/`diagAck`, `awaitEvent`,
-  the `diagMsg` branch, `collect`/`CollectDiagnostic`/`ReplayTo`.
-- `internal/app/search.go` — `Config.DiagAck`, `diagMsg`, the
-  unbuffered diagnostic channel, the stderr line-forwarding drain.
+- `internal/app/app.go` — `Model.diags`/`diagCh`/`diagAck`/`onCollect`,
+  `awaitEvent`, the `diagMsg` branch,
+  `collect`/`CollectDiagnostic`/`ReplayTo`.
+- `internal/app/search.go` — `Config.DiagAck`/`OnCollect`, `diagMsg`,
+  the unbuffered diagnostic channel, the stderr line-forwarding drain.
 - `internal/app/overlay.go` — the `collectDiagnostics`/`completionDiagnostics`
   split (`processDiagnostic`, `streamDiagnostics`).
-- `cmd/vrg/main.go` — `runSearch`'s post-restoration `ReplayTo` on all
-  three exit branches; `CollectDiagnostic` replacing the direct failure
-  write.
+- `cmd/vrg/main.go` — `runSearch`'s post-restoration snapshot replay on
+  every `Run()` return-shape branch; `diagSnapshot` replacing the
+  model-carried write (Issue #46).
 - `cmd/vrg/seams_testhooks.go` — `VRG_TEST_COLLECT_ACK` → `Config.DiagAck`
   (Issue #45; `vrg_testhooks`-only).
 
 See also: [cancellation-and-cleanup.md](cancellation-and-cleanup.md)
 (the cleanup boundary replay joins),
+[runtime-error-shutdown.md](runtime-error-shutdown.md) (the Issue #46
+snapshot and unified return-shape sequence),
 [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md)
 (the display-side diagnostic list), and
 [safe-presentation.md](safe-presentation.md) (the sanitization utility

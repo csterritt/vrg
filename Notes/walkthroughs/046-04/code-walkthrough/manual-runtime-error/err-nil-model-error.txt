@@ -1,0 +1,3 @@
+warn one
+vrg: program returned a nil final model
+vrg: boom

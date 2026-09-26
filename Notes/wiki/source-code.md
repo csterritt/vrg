@@ -9,16 +9,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   help → exit 0 (help already on stdout), search → `runSearch` starts an
   `app.Session` and runs the Bubble Tea program through the
   `runProgram` seam boundary (`WithInput(os.Stdin)`,
-  `WithWindowSize(80, 24)` fallback for piped output). After `Run`
-  returns, every controlled exit funnels through one cleanup boundary:
-  `sess.Cancel()` terminates a still-running child, `<-sess.Reaped()`
-  waits for its reap, then `model.ReplayTo(stderr)` writes the session
-  diagnostic collection — every diagnostic the final model processed —
-  to stderr exactly once, after terminal restoration (Issue #11).
-  Status selection: `tea.ErrInterrupted` → 130, other `Run` errors →
-  the `vrg:` diagnostic joins the collection via `CollectDiagnostic`
-  before `ReplayTo` (no separate direct write) and exit 2, otherwise the
-  final model's
+  `WithWindowSize(80, 24)` fallback for piped output). `Config.OnCollect`
+  feeds the boundary's `diagSnapshot` every collected diagnostic as the
+  model takes it, so the replay survives whatever final model `Run()`
+  returns (Issue #46). After `Run` returns, every return shape funnels
+  through one shutdown sequence: `sess.Cancel()` terminates a
+  still-running child, `<-sess.Reaped()` waits for its reap, then the
+  snapshot replays to stderr exactly once, after terminal restoration
+  (Issues #11/#46) — session diagnostics in collection order, then
+  `finalModelDiagnostic` for an absent or wrong-type final model, then
+  the runtime error once. Status selection: `tea.ErrInterrupted` → 130,
+  every other failing shape — `Run` error or invalid final model →
+  exit 2, otherwise the final model's
   `ExitCode` (the fixed search status — 0/1/2 per the Issue #9 outcome
   table — or 130 cancellation); rg start failure →
   sanitized diagnostic, exit 2, no TUI; usage error → sanitized
@@ -45,8 +47,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 - `internal/app/search.go` — the subprocess seam: `Config` (rg
   executable, protected argv, invocation working directory, `Drained`/
   `PrepareGate`/`ReapReport` test hooks, — Issue #11 — `DiagAck`,
-  the collection-acknowledgement side channel, and — Issue #45 —
-  `DiagInject`, the session-diagnostic injection channel), `Start`
+  the collection-acknowledgement side channel, — Issue #45 —
+  `DiagInject`, the session-diagnostic injection channel, and —
+  Issue #46 — `OnCollect`, the callback feeding the process boundary's
+  diagnostic snapshot as the model collects), `Start`
   (spawns
   `exec.CommandContext` in the working directory with the child leading
   its own process group — `SysProcAttr.Setpgid`, and `cmd.Cancel`

@@ -78,9 +78,17 @@ the `VRG_TEST_RUN_*` tuple matrix against the tagged build at the real
 `Run()` boundary, and `TestTaggedInjectionSeams` covers the diagnostic
 and failure triggers.
 
+Issue #46 consumed the runner seam for its return-shape matrix:
+`pty_returnshape_test.go` injects the three `Run()` shapes through the
+tagged binary on a real PTY lifecycle — diagnostics collected and
+acknowledged before `q` ends the program — and asserts the unified
+shutdown contract (terminal restoration, child reap, ordered snapshot
+replay, exit 2 on every failing shape). See
+[runtime-error-shutdown.md](runtime-error-shutdown.md).
+
 ## Extension rule
 
-Issues #46 and #48 consume this seam: new hooks ride the same
+Issue #48 consumes this seam next: new hooks ride the same
 `vrg_testhooks` mechanism and join the manifest — the production binary
 gains no hooks, no env-var reads beyond legitimate production ones, and
 no watcher code; the only watchers (`fifoReleased`, `diagInjected`) live
