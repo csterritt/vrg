@@ -87,13 +87,14 @@ type Model struct {
 	saved  map[string]viewport.Target
 	// pending is the deferred intent owed to the current file's
 	// viewport while no layout matching the current parameters is
-	// installed: intentReveal reveals the newest selected stop;
-	// intentAnchor — recorded when an explicit reload's load
-	// completes — keeps the retained logical anchor with no reveal.
-	// It commits when a matching layout installs through the Issue
-	// #17 path; superseded and non-current installs cannot consume
-	// it, and Issue #28 generalizes the seam into the full
-	// reveal-versus-reload arbitration for all load completions.
+	// installed — the second half of the two-stage load-completion
+	// contract (Issue #28): intentReveal reveals the newest selected
+	// stop's final display target; intentAnchor — recorded when an
+	// explicit reload's load completes undisturbed — keeps the
+	// retained logical anchor with no reveal. Any navigation during
+	// the load replaces the anchor intent with the reveal. The intent
+	// commits when a matching layout installs through the Issue #17
+	// path; superseded and non-current installs cannot consume it.
 	// reloading marks each raw path whose in-flight load is an r
 	// reread, so its completion records the anchor intent rather than
 	// a first load's reveal. listW and textW are the cached file-list

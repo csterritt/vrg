@@ -76,8 +76,12 @@ replaces the boolean `pendingReveal`:
   happened inside `SetRows`' resolve, so it only clears.
 
 This generic pending-intent seam is owned by Issue #27; Issue #28
-generalizes it into the full two-stage reveal-versus-reload
-arbitration for all load completions.
+completed the reveal-versus-reload arbitration on top of it for all
+load completions — any navigation during the load, including
+away-and-back sequences that end on the starting cursor, replaces the
+anchor intent with the entry reveal, so navigation intent rather than
+cursor equality decides the commit. See
+[load-completion-reveal.md](load-completion-reveal.md).
 
 ## Failure replaces content
 
@@ -123,7 +127,20 @@ refresh are explicitly out of scope.
   revision-superseded case: a held pre-reload layout released after the
   reload completes is discarded without touching the panel or the
   anchor); `TestNavigationDuringReloadOverridesAnchor` (a selection
-  made during the load wins over the anchor intent).
+  made during the load wins over the anchor intent). Issue #28 adds
+  the transition contracts:
+  `TestReloadAnchorIntentSurvivesTheLayoutGap` (the anchor intent held
+  through the layout gap commits with no reveal);
+  `TestReloadSameFileAwayAndBackCommitsEntryReveal` and
+  `TestReloadCrossFileAwayAndBackCommitsEntryReveal` (away-and-back
+  ending on the initial cursor still reveals — navigation intent, not
+  cursor equality, decides; the cross-file return shows `Loading…`
+  with the saved anchor dormant);
+  `TestReloadLateOldRevisionLayoutIsInert` and
+  `TestReloadLateOldRevisionLayoutAfterNavigation` (old- and
+  new-revision layouts completing out of order — the new revision's
+  install commits the anchor or the reveal, and the late old-revision
+  layout consumes nothing).
 
 See [unit-tests.md](unit-tests.md) § `internal/app`.
 

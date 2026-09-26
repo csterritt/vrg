@@ -57,10 +57,13 @@ implements the contract:
 - **No content → the intent is carried.** With no rows matching the
   current parameters (uncached file, or a stale-keyed layout mid-
   rewrap since Issue #17) the reveal cannot run: `reveal()` sets the
-  model's `pendingReveal` and the intent commits when a matching
+  model's pending reveal intent and the intent commits when a matching
   layout installs — reading the live cursor, so the *newest* selected
-  stop is revealed. See
-  [logical-anchor-and-layout.md](logical-anchor-and-layout.md).
+  stop is revealed. Issue #28 pins the whole two-stage sequence: the
+  load completion makes no row-based decision, and the commit runs
+  only against a matching installed layout. See
+  [logical-anchor-and-layout.md](logical-anchor-and-layout.md) and
+  [load-completion-reveal.md](load-completion-reveal.md).
 
 ## The starting-viewport sequence on entry
 
@@ -85,14 +88,18 @@ parameters (the Issue #17 fast path), the saved anchor becomes the
 reading position, and `reveal()` runs over it — or pends. When the
 destination is uncached or its cached layout is stale-keyed, a
 prepared-layout request is issued; the `layoutDoneMsg` install
-resolves the retained anchor and `commitReveal` runs the pending
+resolves the retained anchor and `commitIntent` runs the pending
 intent — the startup-after-load trigger flows through the same path
 (the load's `syncLayout` requests the layout; its install commits the
 reveal). Because the intent reads the live cursor at commit time,
 navigation taken while a worker is held reveals the *latest* selected
-stop — the behavior Issue #28 formalizes. A same-file step keeps the
-current viewport and simply reveals the new stop against it — pending
-likewise when a rewrap is still in flight.
+stop — Issue #28 formalizes this as the load-completion contract:
+obsolete layouts arriving meanwhile are discarded without consuming
+the intent, and the committed target is the final display cell — the
+cluster-expanded first-submatch start or the zero-width marker cell
+(see [load-completion-reveal.md](load-completion-reveal.md)). A
+same-file step keeps the current viewport and simply reveals the new
+stop against it — pending likewise when a rewrap is still in flight.
 
 Horizontal *reveal* of the target cell landed with Issue #19 on this
 same `Reveal` seam: after the vertical placement — including its

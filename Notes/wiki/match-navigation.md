@@ -119,6 +119,8 @@ Issue #14 added in `internal/app/reveal_test.go`. See
 
 See also: [logical-anchor-and-layout.md](logical-anchor-and-layout.md)
 (the anchor handoff and pending reveal intent a crossing carries),
+[load-completion-reveal.md](load-completion-reveal.md) (the Issue #28
+arbitration letting mid-load navigation redirect the commit),
 [async-load-isolation.md](async-load-isolation.md) (the load the
 crossing may start and the mid-load navigation contract),
 [destination-reveal.md](destination-reveal.md) (the reveal

@@ -115,7 +115,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `pendingReveal` with `pending pendingIntent` (reveal vs. anchor
   intent), the `r` browse key routed to `reload()`, and the
   `loadDoneMsg` success branch's `SetRows(nil)` plus anchor-intent
-  recording for reload completions;
+  recording for reload completions; Issue #28 pins the two-stage
+  contract on that branch — the success path performs no row-based
+  decision (geometry recompute plus the keyed layout request only),
+  and the pending intent — reveal for the newest stop or the reload
+  anchor — commits solely through the `layoutDoneMsg` install guard;
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
   diagnostics box; Issue #15 adds the pop-up state (`popupID`,
@@ -232,7 +236,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `reload()` (the `r` handler: drop the cached buffer, re-open the
   prior-failure overlay for a failed path, mint exactly one request
   through the shared bookkeeping, mark it in `reloading`; a press
-  against an in-flight load is dropped not queued). Issue #18 adds
+  against an in-flight load is dropped not queued). Issue #28
+  completes the seam's arbitration: any navigation during a load —
+  including away-and-back ending on the starting cursor — leaves the
+  reveal intent standing, and `commitIntent` discharges whichever
+  intent survives only on a matching layout install. Issue #18 adds
   `pan` (the six pan keys routed to `Viewport` units under the same
   loaded-buffer gate as `scroll`) and the file-entry offset reset:
   `navigate`'s `FileChanged` branch and the current-path
@@ -254,6 +262,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [horizontal-panning.md](horizontal-panning.md),
   [logical-anchor-and-layout.md](logical-anchor-and-layout.md),
   [explicit-reload.md](explicit-reload.md),
+  [load-completion-reveal.md](load-completion-reveal.md),
   [safe-presentation.md](safe-presentation.md), and
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
 - `internal/app/popup.go` — the Issue #15 file-change pop-up:

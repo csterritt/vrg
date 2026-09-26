@@ -151,9 +151,10 @@ const (
 	// stop — the navigation and first-load intent.
 	intentReveal
 	// intentAnchor keeps the retained logical anchor with no reveal —
-	// recorded by an explicit reload's load completion (Issue #27).
-	// Issue #28 generalizes this seam into the full
-	// reveal-versus-reload arbitration for all load completions.
+	// recorded by an explicit reload's load completion (Issue #27)
+	// when no navigation intervened; any navigation during the load
+	// replaces it with intentReveal — the reveal-versus-reload
+	// arbitration of Issue #28.
 	intentAnchor
 )
 

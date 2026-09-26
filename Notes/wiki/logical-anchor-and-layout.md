@@ -125,8 +125,15 @@ the install still leaves no current rows. Issue #27 turned the boolean
 into `pending pendingIntent` (`intentNone`/`intentReveal`/
 `intentAnchor`) so an explicit reload can carry "keep the anchor, no
 reveal" instead, and renamed the committer `commitIntent`; the
-reveal intent's newest-stop semantics are unchanged. See
-[explicit-reload.md](explicit-reload.md).
+reveal intent's newest-stop semantics are unchanged. Issue #28 then
+pinned the full two-stage contract on the seam: the load completion
+performs no row-based decision (it computes the post-load gutter and
+text width and requests the keyed layout), the intent survives every
+obsolete install unmolested, and the commit — reveal for the newest
+stop, or the anchor intent's silent clear — runs only against a
+matching installed row model. See
+[explicit-reload.md](explicit-reload.md) and
+[load-completion-reveal.md](load-completion-reveal.md).
 
 ## Cached-file navigation
 
@@ -181,6 +188,13 @@ A frame touches only what it paints:
   cached-file navigation requests a stale layout and commits intent
   on install while the matching-layout fast path commits immediately;
   and the list-entry render-cost guard.
+- `internal/app/completion_test.go` — Issue #28's two-stage contract:
+  the separately gated stages, no row decision at load completion,
+  obsolete layouts never consuming the intent, resize and list-toggle
+  supersession committing at the final width, startup and
+  saved-viewport commits, marker and cluster-expanded targets, and
+  non-current/pop-up isolation. See
+  [load-completion-reveal.md](load-completion-reveal.md).
 
 See [unit-tests.md](unit-tests.md) § `internal/viewport` and
 `internal/app`.

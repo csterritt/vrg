@@ -44,9 +44,14 @@ A completion accepted for a non-current path updates only that path's
 entries — `bufs`, `revs`, and the stale-keyed `rows`/`reqKey` — and
 returns without touching the viewport, the saved anchors, or the
 visible panel. Only when the completed path is the current one does
-the handler reset the horizontal offset and run `syncLayout` so the
-prepared layout installs and the pending reveal commits (Issue #14's
-destination reveal; the latest-target rule is Issue #28's).
+the handler reset the horizontal offset, drop the viewport's rows,
+and run `syncLayout` — recomputing the text width with the new
+gutter and the list's visibility participating — so the prepared
+layout request covers the post-load parameters. The completion itself
+makes no row-based decision: the pending intent — the newest stop's
+reveal, or a reload's anchor intent — commits only when a matching
+layout installs (Issue #28's two-stage contract; see
+[load-completion-reveal.md](load-completion-reveal.md)).
 
 ## One load per path, session retention
 

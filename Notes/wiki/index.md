@@ -193,6 +193,15 @@ Catalog of all wiki pages for the vrg project.
   revisions discarding superseded prepared layouts, and the
   `pendingIntent` seam committing a reveal for the newest stop or an
   anchor-preserving no-reveal — generalized by Issue #28
+- [load-completion-reveal.md](load-completion-reveal.md) — Issue #28:
+  the two-stage load-completion contract — stage 1 installs the buffer,
+  bumps the revision, and requests the layout keyed to the post-load
+  (path, revision, text width, wrap) with no row-based decision; the
+  carried intent — newest-selection reveal or undisturbed-reload
+  anchor — survives obsolete layouts and commits only on a matching
+  install; navigation during the load wins over cursor equality;
+  marker and cluster-expanded targets, saved-viewport revisits, and
+  non-current/pop-up isolation
 
 ## Catalogs
 

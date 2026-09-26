@@ -514,3 +514,195 @@ func TestNavigationDuringReloadOverridesAnchor(t *testing.T) {
 		t.Fatalf("reveal after reload lacks the line-200 match: %q", v)
 	}
 }
+
+// The reload's completion stage records the anchor intent when
+// nothing navigated during the load: the layout gap shows the
+// placeholder with the intent held, and the matching install restores
+// the logical anchor — the match stays scrolled off, no reveal runs.
+func TestReloadAnchorIntentSurvivesTheLayoutGap(t *testing.T) {
+	dir := t.TempDir()
+	recs := append(fileWithStops(t, dir, "a.txt", 100, 1), recSummary)
+	m, cmd := browseModel(t, dir, 80, 24, recs...)
+	m = settle(t, m, cmd)
+	m.vp.SetTop(30) // the match scrolled off-screen
+
+	m, load := update(t, m, keyPress("r"))
+	if m.pending != intentNone {
+		t.Fatalf("pressing r set pending=%d before the load completed", m.pending)
+	}
+	m, lay := update(t, m, cmdMsgs(load)[0])
+	if m.pending != intentAnchor {
+		t.Fatalf("pending after the reload's completion = %d, want the anchor intent", m.pending)
+	}
+	if m.revs["a.txt"] != 2 {
+		t.Fatalf("content revision = %d, want 2", m.revs["a.txt"])
+	}
+	// The buffer is installed but its rows are not: the gap paints no
+	// content and moves no viewport — the anchor waits for the install.
+	if v := ansi.Strip(m.View().Content); strings.Contains(v, "hit00001") {
+		t.Fatalf("the layout gap painted rows without a layout: %q", v)
+	}
+	if m.vp.Anchor() != (viewport.Target{Line: 30}) {
+		t.Fatalf("the layout gap lost the anchor: %v", m.vp.Anchor())
+	}
+	m = settle(t, m, lay)
+	if m.vp.Top() != 30 || m.vp.Anchor() != (viewport.Target{Line: 30}) {
+		t.Fatalf("anchor commit left top=%d anchor=%v, want 30/(30,0)",
+			m.vp.Top(), m.vp.Anchor())
+	}
+	if v := ansi.Strip(m.View().Content); strings.Contains(v, "hit00001") {
+		t.Fatalf("the anchor commit revealed the scrolled-off match: %q", v)
+	}
+}
+
+// Navigation during the reload replaces the anchor intent — even when
+// the away-and-back ends on the same cursor it started from. n then p
+// inside the load's flight returns the selection to a.txt:5, but the
+// commit reveals it anyway: navigation intent, not cursor equality,
+// decides.
+func TestReloadSameFileAwayAndBackCommitsEntryReveal(t *testing.T) {
+	dir := t.TempDir()
+	recs := append(fileWithStops(t, dir, "a.txt", 300, 5, 200), recSummary)
+	m, cmd := browseModel(t, dir, 80, 24, recs...)
+	m = settle(t, m, cmd)
+	m.vp.SetTop(50) // the line-5 match scrolled off-screen
+
+	m, load := update(t, m, keyPress("r"))
+	m, _ = update(t, m, keyPress("n")) // a.txt:200, same file
+	m, _ = update(t, m, keyPress("p")) // a.txt:5 — the cursor is back
+	if s, _ := m.currentStop(); s.Line != 5 {
+		t.Fatalf("cursor after the away-and-back = %+v, want a.txt:5", s)
+	}
+
+	// The completion sees the reveal intent the navigation left and
+	// does not overwrite it with the anchor intent.
+	m, lay := update(t, m, cmdMsgs(load)[0])
+	if m.pending != intentReveal {
+		t.Fatalf("pending after the navigated reload = %d, want the reveal intent", m.pending)
+	}
+	m = settle(t, m, lay)
+	if m.vp.Top() != 0 {
+		t.Fatalf("top after the commit = %d, want 0 — the entry reveal, not the anchor's 50", m.vp.Top())
+	}
+	if v := m.View().Content; !strings.Contains(v, "\x1b[30;47;4mhit\x1b[24;37;40m00005") {
+		t.Fatalf("committed view lacks the line-5 match: %q", v)
+	}
+}
+
+// Cross-file away-and-back: A → file B → A while A's reload is in
+// flight. The return shows the placeholder, and the completion commits
+// the entry reveal for the stop that is — again — the cursor.
+func TestReloadCrossFileAwayAndBackCommitsEntryReveal(t *testing.T) {
+	dir := t.TempDir()
+	var recs []string
+	recs = append(recs, fileWithStops(t, dir, "a.txt", 300, 5)...)
+	recs = append(recs, fileWithStops(t, dir, "b.txt", 60, 2)...)
+	recs = append(recs, recSummary)
+	m, cmd := browseModel(t, dir, 80, 24, recs...)
+	m = settle(t, m, cmd)
+	m.vp.SetTop(50) // the line-5 match scrolled off-screen
+
+	m, load := update(t, m, keyPress("r"))
+	m, _ = update(t, m, keyPress("n")) // → b.txt:2
+	if s, _ := m.currentStop(); string(s.Path) != "b.txt" {
+		t.Fatalf("n during the reload = %+v, want b.txt:2", s)
+	}
+	m, _ = update(t, m, keyPress("p")) // → a.txt:5
+	if s, _ := m.currentStop(); string(s.Path) != "a.txt" || s.Line != 5 {
+		t.Fatalf("p during the reload = %+v, want a.txt:5", s)
+	}
+	if v := m.View().Content; !strings.Contains(v, "Loading…") {
+		t.Fatalf("return to the reloading file lacks the placeholder: %q", v)
+	}
+	// The saved anchor is restored as the starting viewport — dormant
+	// at top 0 until rows install.
+	if m.vp.Anchor() != (viewport.Target{Line: 50}) {
+		t.Fatalf("return restored anchor=%v, want the saved (50, 0)", m.vp.Anchor())
+	}
+
+	m, lay := update(t, m, cmdMsgs(load)[0])
+	if m.pending != intentReveal {
+		t.Fatalf("pending after the navigated reload = %d, want the reveal intent", m.pending)
+	}
+	m = settle(t, m, lay)
+	if m.vp.Top() != 0 {
+		t.Fatalf("top after the commit = %d, want the entry reveal's 0, not the anchor's 50", m.vp.Top())
+	}
+	if v := m.View().Content; !strings.Contains(v, "\x1b[30;47;4mhit\x1b[24;37;40m00005") {
+		t.Fatalf("committed view lacks the line-5 match: %q", v)
+	}
+}
+
+// A layout prepared before the reload — for the superseded revision —
+// completes late: it is discarded without consuming the reload's
+// intent, and the new revision's install commits the anchor.
+func TestReloadLateOldRevisionLayoutIsInert(t *testing.T) {
+	dir := t.TempDir()
+	recs := append(fileWithStops(t, dir, "a.txt", 100, 1), recSummary)
+	m, cmd := browseModel(t, dir, 80, 24, recs...)
+	m = settle(t, m, cmd)
+	m.vp.SetTop(30)
+
+	// A resize mid-flight holds a layout for revision 1 at the new
+	// width; the reload then replaces the content.
+	m, lay1 := update(t, m, tea.WindowSizeMsg{Width: 100, Height: 24})
+	m, load := update(t, m, keyPress("r"))
+	m, lay2 := update(t, m, cmdMsgs(load)[0])
+	if m.revs["a.txt"] != 2 {
+		t.Fatalf("content revision = %d, want 2", m.revs["a.txt"])
+	}
+	if m.pending != intentAnchor {
+		t.Fatalf("pending after the reload's completion = %d, want the anchor intent", m.pending)
+	}
+
+	// The new revision's install commits first: the anchor resolves at
+	// the new width and the top restores — no reveal runs.
+	m = settle(t, m, lay2)
+	if m.vp.Top() != 30 {
+		t.Fatalf("top after the new-revision install = %d, want the anchor's 30", m.vp.Top())
+	}
+	if m.pending != intentNone {
+		t.Fatalf("pending after the commit = %d", m.pending)
+	}
+
+	// The old revision's layout arrives late: inert — the committed
+	// viewport and cleared intent are untouched.
+	for _, msg := range cmdMsgs(lay1) {
+		m = pump(t, m, msg)
+	}
+	if m.vp.Top() != 30 || m.pending != intentNone {
+		t.Fatalf("the late old-revision layout changed the commit: top=%d pending=%d",
+			m.vp.Top(), m.pending)
+	}
+}
+
+// The same out-of-order delivery after navigation: the new revision's
+// install commits the entry reveal, and the late old-revision layout
+// cannot rewind it.
+func TestReloadLateOldRevisionLayoutAfterNavigation(t *testing.T) {
+	dir := t.TempDir()
+	recs := append(fileWithStops(t, dir, "a.txt", 300, 5, 200), recSummary)
+	m, cmd := browseModel(t, dir, 80, 24, recs...)
+	m = settle(t, m, cmd)
+	m.vp.SetTop(30)
+
+	m, lay1 := update(t, m, tea.WindowSizeMsg{Width: 100, Height: 24})
+	m, load := update(t, m, keyPress("r"))
+	m, _ = update(t, m, keyPress("n")) // a.txt:200 during the reload
+	m, lay2 := update(t, m, cmdMsgs(load)[0])
+	if m.pending != intentReveal {
+		t.Fatalf("pending after the navigated reload = %d, want the reveal intent", m.pending)
+	}
+
+	m = settle(t, m, lay2)
+	if m.vp.Top() != 192 {
+		t.Fatalf("top after the new-revision install = %d, want the revealed 192", m.vp.Top())
+	}
+	for _, msg := range cmdMsgs(lay1) {
+		m = pump(t, m, msg)
+	}
+	if m.vp.Top() != 192 || m.pending != intentNone {
+		t.Fatalf("the late old-revision layout rewound the commit: top=%d pending=%d",
+			m.vp.Top(), m.pending)
+	}
+}

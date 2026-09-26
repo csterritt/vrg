@@ -641,6 +641,69 @@ layout worker is held by retaining the command `pump` would run:
   guard without touching the panel or the anchor.
 - `TestNavigationDuringReloadOverridesAnchor` — a selection made
   during the in-flight load commits its reveal over the anchor intent.
+- `TestReloadAnchorIntentSurvivesTheLayoutGap` (Issue #28) — the
+  reload's completion records `intentAnchor`, the gap paints no rows,
+  and the matching install restores the anchor with no reveal.
+- `TestReloadSameFileAwayAndBackCommitsEntryReveal` (Issue #28) —
+  `n` then `p` inside the reload's flight ends on the starting cursor,
+  yet the commit runs the entry reveal: navigation intent, not cursor
+  equality, decides.
+- `TestReloadCrossFileAwayAndBackCommitsEntryReveal` (Issue #28) —
+  A→B→A during the reload: the return shows `Loading…` with the saved
+  anchor dormant, and the commit reveals the re-selected stop.
+- `TestReloadLateOldRevisionLayoutIsInert` and
+  `TestReloadLateOldRevisionLayoutAfterNavigation` (Issue #28) —
+  old- and new-revision layouts completing out of order: the new
+  revision's install commits the anchor or the reveal, and the late
+  old-revision layout rewinds nothing.
+
+`completion_test.go` (same package, Issue #28) pins the two-stage
+load-completion contract, driving each stage separately — the load
+command's message through `Update`, the layout command held and
+invoked on the test's schedule:
+
+- `TestLoadCompletionMakesNoRowDecision` — stage 1 installs the
+  buffer, bumps the revision, grows the gutter, and recomputes the
+  text width without moving the top, anchor, or offset or consuming
+  the reveal intent; the layout request is keyed to the grown
+  gutter's width; the matching install then commits the reveal.
+- `TestNavigationDuringLayoutGapCommitsNewestTarget` — `n`/`p` while
+  the layout is held move the cursor immediately with the top fixed;
+  the install reveals the newest selection, not the one current when
+  the load completed.
+- `TestResizeBetweenStagesCommitsAtNewWidth` — a resize landing
+  between the stages supersedes the held layout; the intent survives
+  the discard and commits against the new width's row model (a
+  wrap-changing first line makes the widths distinguishable).
+- `TestListToggleBetweenStagesCommitsAtFinalWidth` — hiding the file
+  list between the stages is likewise a width change the commit
+  honors.
+- `TestObsoleteLayoutsNeverConsumeTheIntent` — wrong-width,
+  wrong-mode, wrong-revision, and wrong-path completions are all
+  discarded with the intent and the frame untouched.
+- `TestStartupHiddenTargetCommitsOnInstall` — a startup target hidden
+  from top 0 lands at `floor(23/3)` on install, then the first `n`
+  advances to the second stop.
+- `TestStartupVisibleTargetKeepsTopZero` — an already-visible startup
+  target keeps top 0 through both stages and writes no saved state.
+- `TestSavedViewportRevisitCommitsOnLoad` — a revisit during the
+  file's reload starts from the saved anchor; a target inside the
+  restored window leaves the top alone on commit.
+- `TestSavedViewportRevisitHiddenTargetMoves` — the same revisit with
+  a saved top that hides the target applies the one-third placement
+  on commit and rewrites the saved state.
+- `TestMarkerTargetCommitPaintsMarkerCell` — a terminator-only `$`
+  target far down a run-off-edge file reveals its row and moves the
+  offset so the marker cell paints as the last text cell.
+- `TestClusterTargetCommitPaintsWholeCluster` — `n` during the gap
+  selects a mid-cluster target; the commit's minimal reveal paints
+  the whole `^A` escape cluster flush with the right edge.
+- `TestNonCurrentCompletionLeavesPanelUntouched` — a departed file's
+  load completion and keyed layout completion update only its cache:
+  the current panel stays byte-identical and its intent survives.
+- `TestPopupUnaffectedByCompletionStages` — the file-change pop-up
+  keeps its instance through both the destination's load completion
+  and the layout install that commits the reveal under it.
 
 `pan_test.go` (same package, Issue #18) drives the horizontal-pan
 keys through `Update`; `panRecords` builds a one-stop record set for a

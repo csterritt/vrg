@@ -1066,3 +1066,49 @@ Sources: `Notes/issues/027-explicit-reload-r.md`,
 `Notes/PRD-vrg.md` (File loading, cache, reload, and selection
 consistency), `internal/app/app.go`, `internal/app/browse.go`,
 `internal/app/reload_test.go`.
+
+## [2026-09-24] ingest | Issue #28 load completion — two-stage contract and the latest-target commit
+
+Ingested the completed Issue #28 work: the two-stage load-completion
+contract is pinned end to end on the Issue #27 `pendingIntent` seam.
+Stage 1 — the `loadDoneMsg` success branch for the current path —
+installs the buffer, bumps the content revision, drops the viewport's
+rows and stale-keys the old revision's layout and requests, resets the
+horizontal offset, and recomputes the text width (grown gutter plus
+Issue #24 list visibility participating) before requesting the keyed
+layout — performing no row-based decision itself. Stage 2: the intent
+lives in the model, so obsolete `layoutDoneMsg`s (wrong width, mode,
+revision, or path) are discarded without consuming it, and
+`commitIntent` runs only on a matching install — `intentReveal`
+revealing the newest selected stop's final display target
+(cluster-expanded first-submatch start cell, or the zero-width /
+terminator-only marker cell) read live from `currentStop()` and the
+newest buffer; `intentAnchor` resolving the retained anchor with no
+reveal. Navigation during a load — same-file or cross-file
+away-and-back ending on the starting cursor — leaves the reveal intent
+standing, so navigation intent rather than cursor equality decides the
+commit. Starting viewports follow the file-change sequence: first
+visits (including startup) from top 0, revisits from the saved anchor,
+visible targets never scrolling. The file-change pop-up is untouched
+by either stage. Created
+[load-completion-reveal](load-completion-reveal.md); updated
+[explicit-reload](explicit-reload.md) (the completed arbitration and
+the new transition tests),
+[logical-anchor-and-layout](logical-anchor-and-layout.md) (the
+pinned two-stage contract and the new test file),
+[destination-reveal](destination-reveal.md) (the commit-time target
+and obsolete-layout survival),
+[async-load-isolation](async-load-isolation.md) (the current-path
+completion's stage-1 boundary),
+[match-navigation](match-navigation.md) (cross-reference),
+[source-code](source-code.md) (`app.go`'s two-stage branch and
+`browse.go`'s arbitration),
+[unit-tests](unit-tests.md) (the `completion_test.go` catalog and the
+new `reload_test.go` cases), and the index.
+New test file: `internal/app/completion_test.go`.
+Sources: `Notes/issues/028-load-completion-reveal-latest-target.md`,
+`Notes/tasks/028-load-completion-reveal-latest-target.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency; Navigation, viewport, and logical anchors),
+`internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/completion_test.go`, `internal/app/reload_test.go`.
