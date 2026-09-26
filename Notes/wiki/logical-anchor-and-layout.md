@@ -86,7 +86,13 @@ longer runs inside `Update`. Like file loads, it runs in a worker
   content revision (`revs`, bumped on every successful load), the
   current text width, and the wrap mode. `reqKey` records the latest
   requested key per path; `rows` caches each path's `installed{key,
-  rows}` — the model with the key it was built for.
+  rows}` — the model with the key it was built for. Issue #38 pinned
+  that the key's `Width` is always the layout-derived text width —
+  panel width (terminal minus list width) minus the gutter and the
+  reserved right-indicator column — computed once in `syncLayout`,
+  never re-derived from the raw terminal width at an install site;
+  see
+  [file-list-layout.md](file-list-layout.md#terminal-panel-and-text-widths).
 - **Install only on match.** A `layoutDoneMsg` installs only while
   its key equals the model's *current* `layoutKey` for that path.
   Out-of-order completions across successive resizes (W1→W2→W3) and
@@ -98,8 +104,9 @@ longer runs inside `Update`. Like file loads, it runs in a worker
   remaining supersession source, the content revision: a layout keyed
   to a pre-`r` revision is discarded the same way (see
   [explicit-reload.md](explicit-reload.md)).
-- **`syncLayout` recomputes the geometry** (list width, text width,
-  viewport resize) after any parameter change — window resize, wrap
+- **`syncLayout` recomputes the geometry** (list width, panel and
+  text widths, viewport resize) after any parameter change — window
+  resize, wrap
   toggle, search completion, a load changing the gutter, a file
   crossing, and since Issue #24 the file list's hide/show toggle —
   and returns `ensureLayout`'s request when the current

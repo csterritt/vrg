@@ -1528,3 +1528,45 @@ Sources: `Notes/tasks/037-oversized-record-aggregate-anonymous-diagnostics.md`,
 oversized bullets, *Resources and responsiveness* 64 MiB bullets),
 `internal/searchindex/index.go`, `internal/app/overlay.go`,
 `internal/app/app.go`, the new and updated test files.
+## [2026-09-25] ingest | Issue #38 viewport content-panel text width
+
+Issue #38 (`Notes/tasks/038-viewport-content-panel-width.md`) pinned
+the terminal→panel→text width chain: the panel width is the terminal
+width minus the file list's allocated cells, and the text width —
+the width `layoutKey` carries, `viewport.Prepare` wraps and clips
+against, and every viewport install site (resize, wrap toggle,
+load/search completion, file crossing, list hide/show, cache hits)
+uses — is the panel width minus the buffer gutter minus the mode's
+reserved right-indicator column (one run-off-edge, zero wrap). The
+audit confirmed `syncLayout`'s single computation already governs all
+install sites; `internal/app/browse.go` now names `panelW` explicitly
+and `internal/app/app.go`'s field comment distinguishes the three
+widths. The horizontal-reveal tests moved from
+`internal/app/hreveal_test.go` to `internal/app/reveal_horizontal_test.go`,
+where the `wantTextW()` helper recomputes expectations from the
+layout chain rather than the cached `m.textW`; new coverage includes
+list-hidden re-measure, wrap mode's zero reservation, resize
+re-measurement, and `TestComposedViewContentStaysInsidePanel` (no
+rendered row exceeds the terminal width, panned content stays inside
+the panel, the reserved indicator sits at the panel's right edge).
+`pan_test.go`, `layout_test.go`'s `wantKey`, and
+`completion_test.go`'s offset expectations consume `wantTextW()` too.
+Updated [file-list-layout](file-list-layout.md) (new *Terminal, panel,
+and text widths* section),
+[logical-anchor-and-layout](logical-anchor-and-layout.md) (the key's
+`Width` contract), [minimal-horizontal-reveal](minimal-horizontal-reveal.md)
+and [unit-tests](unit-tests.md) (the renamed file and new tests),
+[hidden-content-indicators](hidden-content-indicators.md) (the
+reserved column's placement basis),
+[grapheme-highlight-expansion](grapheme-highlight-expansion.md) (the
+renamed test file), [source-code](source-code.md) (`syncLayout`'s
+chain and the `textW` field), and the index.
+New files: `internal/app/reveal_horizontal_test.go` (replacing
+`hreveal_test.go`); `Notes/walkthroughs/038-04/` holds the
+walkthrough.
+Sources: `Notes/tasks/038-viewport-content-panel-width.md`,
+`Notes/PRD-vrg.md` (*File list and layout*, *Layout and indicators*,
+*Navigation, viewport, and logical anchors*),
+`internal/app/browse.go`, `internal/app/app.go`,
+`internal/app/reveal_horizontal_test.go`, `internal/app/pan_test.go`,
+`internal/app/layout_test.go`, `internal/app/completion_test.go`.

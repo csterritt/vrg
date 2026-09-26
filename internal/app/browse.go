@@ -409,7 +409,13 @@ func (m *Model) syncLayout() tea.Cmd {
 	res := m.reservedW()
 	gutterW := m.gutterDigits() + 2
 	m.listW = m.listWidth(gutterW, res)
-	m.textW = max(0, m.width-m.listW-gutterW-res)
+	// The three widths stay distinct: the terminal width is m.width,
+	// the panel width is the terminal minus the list's cells, and the
+	// text width is the panel minus the gutter and the reserved
+	// right-indicator column — the width the layout key carries and
+	// the viewport installs.
+	panelW := max(0, m.width-m.listW)
+	m.textW = max(0, panelW-gutterW-res)
 	m.scrollList()
 	m.vp.Resize(m.textW, max(0, m.height-1))
 	return m.ensureLayout()

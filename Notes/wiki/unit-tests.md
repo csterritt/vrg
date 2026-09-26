@@ -961,9 +961,15 @@ leading `hit`:
   shows `Loading…` at top 0, then the load's top-of-file start plus
   reveal lands the target a third down.
 
-`hreveal_test.go` (same package, Issue #19) drives the horizontal
-reveal triggers through `Update` in run-off-edge mode, on fixtures
-whose matches sit far right of the text area:
+`reveal_horizontal_test.go` (same package, Issues #19 and #38) drives
+the horizontal reveal triggers through `Update` in run-off-edge mode,
+on fixtures whose matches sit far right of the text area. Since Issue
+#38 every expected offset, clip, and indicator position is computed
+from `wantTextW()` — the terminal width minus the file list's
+allocated width, the buffer gutter, and the mode's reserved
+right-indicator column — recomputed from `m.width` and the
+`listWidth` formula rather than the cached `m.textW`, so a regression
+installing the viewport at a terminal-derived width fails:
 
 - `TestHRevealSameFileNScrollsRightMinimal` — `n` to a hidden-right
   match sets `m.vp.Offset()` to `start − (text width − 1)` and the
@@ -977,6 +983,21 @@ whose matches sit far right of the text area:
   when the layout installs.
 - `TestHRevealAfterFileChangeReset` — a file crossing resets the
   departed offset to 0, then reveals the destination's match.
+- `TestHRevealListHiddenRemeasuresPanelWidth` (Issue #38) — with the
+  list hidden the panel — and the reveal's offset — follows the
+  current layout state, not the raw terminal width.
+- `TestHRevealWrapModeReservesNoIndicatorColumn` (Issue #38) — wrap
+  mode reserves nothing: the installed layout key's width is the
+  panel minus the gutter alone and wrap rows fill to the panel's last
+  cell.
+- `TestHRevealResizeRemeasuresTextWidth` (Issue #38) — growing and
+  shrinking the terminal each re-measure the reveal's offset from the
+  new text width.
+- `TestComposedViewContentStaysInsidePanel` (Issue #38) — after
+  panning right no rendered row exceeds the terminal width, panned
+  content never bleeds under the file list, the gutter indicator sits
+  at the list-derived column, and the reserved indicator column is
+  the panel's right edge outside the text area.
 - `TestHRevealWideClusterMatchPaintsBothCells` — a match starting on
   a two-cell CJK glyph reveals to `start + 2 − text width` so both
   cells of the first glyph paint at the right edge.

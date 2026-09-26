@@ -28,7 +28,7 @@ func TestPanKeysMoveOffset(t *testing.T) {
 	m = settle(t, m, cmd)
 	m = pump(t, m, keyPress("w"))
 
-	half := max(1, m.textW/2)
+	half := max(1, m.wantTextW()/2)
 	for _, s := range []struct {
 		key  string
 		want int

@@ -104,13 +104,22 @@ early and the dormant offset is untouched.
   combined vertical+horizontal move, and wrap-mode dormancy.
   `pan_test.go`'s `moving_reveal` subtest now targets cell 9 so its
   painted landing proves the reveal leaves a clamped offset alone.
-- `internal/app/hreveal_test.go` — the triggers through `Update`:
-  same-file `n` scrolling right minimally with the match start on the
-  last text column, `p` back landing on the target column, an
-  already-visible match moving nothing, the startup reveal applying
-  horizontally (run-off-edge from before the completion), the
+- `internal/app/reveal_horizontal_test.go` — the triggers through
+  `Update`: same-file `n` scrolling right minimally with the match
+  start on the last text column, `p` back landing on the target
+  column, an already-visible match moving nothing, the startup reveal
+  applying horizontally (run-off-edge from before the completion), the
   file-change reset-then-reveal sequence, and a CJK match painting
-  both cells of its first glyph at the right edge.
+  both cells of its first glyph at the right edge. Since Issue #38
+  every expected offset and painted position is computed from
+  `wantTextW()` — the terminal-minus-list-minus-gutter-minus-reserved
+  chain — rather than the cached `m.textW`, and the file adds the
+  list-hidden re-measure, wrap mode's zero-reservation layout key and
+  full-width wrap rows, resize re-measurement in both directions, and
+  `TestComposedViewContentStaysInsidePanel` (no rendered row exceeds
+  the terminal width, panned content never bleeds under the list, and
+  the reserved indicator column is the panel's right edge outside the
+  text area).
 
 See [unit-tests.md](unit-tests.md) § `internal/viewport` and
 `internal/app`.

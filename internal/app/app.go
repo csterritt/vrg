@@ -109,8 +109,10 @@ type Model struct {
 	// reread, so its completion records the anchor intent rather than
 	// a first load's reveal. listW and textW are the cached file-list
 	// and content widths, recomputed on the update path so a frame
-	// render never rescans the list. listShow is the user's file-list
-	// visibility preference — shown initially; left/tab hide,
+	// render never rescans the list; textW is the panel width —
+	// terminal minus listW — minus the gutter and the reserved
+	// indicator column, the width the layout key carries. listShow is
+	// the user's file-list visibility preference — shown initially; left/tab hide,
 	// right/shift+tab show — and a zero-width allocation draws no
 	// cells without touching it. listTop is the list's scroll offset:
 	// the first visible entry index, adjusted minimally to keep the

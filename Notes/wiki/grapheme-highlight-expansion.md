@@ -111,7 +111,7 @@ down; nothing downstream re-derives or narrows the recorded bytes:
 - `internal/app/indicators_test.go` — Issue #20's tests now consume
   the expanded spans: a match recorded mid-cluster counts hidden-left
   once its cluster start is hidden (`TestMidClusterMatchCountsFromClusterStart`).
-- `internal/app/hreveal_test.go` — `n` to a mid-cluster match reveals
+- `internal/app/reveal_horizontal_test.go` — `n` to a mid-cluster match reveals
   and paints the whole expanded cluster
   (`TestHRevealMidClusterMatchPaintsWholeCluster`).
 

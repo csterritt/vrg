@@ -413,10 +413,10 @@ func TestMarkerTargetCommitPaintsMarkerCell(t *testing.T) {
 	if m.vp.Top() != 52 {
 		t.Fatalf("top after the marker commit = %d, want 52", m.vp.Top())
 	}
-	want := 299 - m.textW
+	want := 299 - m.wantTextW()
 	if m.vp.Offset() != want {
 		t.Fatalf("offset after the marker commit = %d, want %d = 299 − %d",
-			m.vp.Offset(), want, m.textW)
+			m.vp.Offset(), want, m.wantTextW())
 	}
 	r, ok := visRow(m, 59)
 	if !ok {
@@ -463,16 +463,16 @@ func TestClusterTargetCommitPaintsWholeCluster(t *testing.T) {
 	// The recorded mark maps into the ^A cluster at cells 300–301, so
 	// the expanded start cell is 300 and the offset puts both cells in
 	// the window's last two columns.
-	want := 302 - m.textW
+	want := 302 - m.wantTextW()
 	if m.vp.Offset() != want {
 		t.Fatalf("offset after the cluster commit = %d, want %d = 302 − %d",
-			m.vp.Offset(), want, m.textW)
+			m.vp.Offset(), want, m.wantTextW())
 	}
 	r, ok := visRow(m, 1)
 	if !ok {
 		t.Fatal("line 2 has no visible row after the commit")
 	}
-	if len(r.Cells) != m.textW || r.Cells[m.textW-2].Text != "^A" || !r.Cells[m.textW-1].Cont {
+	if len(r.Cells) != m.wantTextW() || r.Cells[m.wantTextW()-2].Text != "^A" || !r.Cells[m.wantTextW()-1].Cont {
 		t.Fatalf("line-2 row's last cells = %+v, want ^A painted whole at the right edge",
 			r.Cells[max(0, len(r.Cells)-3):])
 	}
@@ -522,7 +522,7 @@ func TestNonCurrentCompletionLeavesPanelUntouched(t *testing.T) {
 	if m.pending != intentReveal {
 		t.Fatal("a.txt's layout completion consumed b.txt's intent")
 	}
-	if inst, ok := m.rows["a.txt"]; !ok || inst.key.Width != m.textW {
+	if inst, ok := m.rows["a.txt"]; !ok || inst.key.Width != m.wantTextW() {
 		t.Fatal("a.txt's layout did not cache for its parameters")
 	}
 

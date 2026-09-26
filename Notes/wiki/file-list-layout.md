@@ -43,6 +43,39 @@ list's own hide/show toggle — all inside `syncLayout`, which also
 resizes the viewport and issues the current file's layout request when
 its installed rows are missing or stale-keyed.
 
+## Terminal, panel, and text widths
+
+Issue #38 (`Notes/tasks/038-viewport-content-panel-width.md`) pinned
+the three-width chain the panel layout is built on and that every
+viewport install site must honour:
+
+- **Terminal width** — `m.width`, the frame's full cell count.
+- **Panel width** — the terminal width minus the file list's
+  allocated cells (`m.width − m.listW`): the columns right of the
+  list block. The list's own `longest + 2` padding supplies the
+  visual separation; the layout draws no separate divider column.
+- **Text width** — the panel width minus the buffer gutter
+  (`gutterDigits() + 2`) minus the reserved right-indicator column
+  (`reservedW()`: one in run-off-edge mode, zero in wrap). This is
+  `m.textW`, the width `layoutKey` carries and `Viewport.Resize`
+  installs.
+
+The single computation lives in `syncLayout` — `panelW := max(0,
+m.width-m.listW)` then `m.textW = max(0, panelW-gutterW-res)` — and
+governs everything downstream: `vp.Resize(m.textW, …)`, `layoutKey`'s
+`Width` (which the `layoutDoneMsg` and `currentRows` install guards
+compare against), the wrap row packing in `viewport.Prepare`,
+run-off-edge clipping, `,`/`.`/`<`/`>`/`[`/`]` panning and the
+visible-lines extent clamp, the minimal horizontal reveal, and both
+hidden-content indicators — the gutter `_`/`*` at the list-derived
+column and the reserved `*` at the panel's right edge, outside the
+text area. Resize and the list's hide/show re-measure through the
+same path, so pan and reveal state always tracks the current panel
+width. Issue #38's tests compute their expected positions from this
+chain (`wantTextW()`) rather than the cached `m.textW`, so a
+regression deriving the viewport width from the raw terminal width —
+or dropping the gutter or reserved terms — fails.
+
 ## Requested-visible versus allocated width
 
 `listShow` is the user's visibility preference — shown initially,

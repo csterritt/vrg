@@ -110,7 +110,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   load), `reqKey` (latest requested key per path) — plus
   `pending` (the newest-stop reveal intent awaiting a matching
   layout — `pendingIntent` since Issue #27), the `listW`/`textW`/`fileIdx` caches and `listEntry` seam
-  keeping `View()` off the whole file list, the `layoutDoneMsg`
+  keeping `View()` off the whole file list (Issue #38 pins `textW` as
+  the panel width — terminal minus `listW` — minus the gutter and the
+  reserved right-indicator column, the width `layoutKey` carries and
+  every viewport install site uses), the `layoutDoneMsg`
   install-only-on-match case, and layout requests on the resize, `w`,
   load-completion, and search-completion paths;
   Issue #24 adds `listShow` (the requested-visible preference —
@@ -255,7 +258,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   adds `layoutDoneMsg`/`installed` (the keyed prepared-layout
   completion and its cached form) and moves preparation off the
   update path: `syncLayout` recomputes the geometry after any
-  parameter change (list width, text width, viewport resize) — and
+  parameter change (list width, panel and text widths — Issue #38
+  names the chain `panelW = width − listW`, `textW = panelW − gutter
+  − reserved`, the single computation every viewport install site
+  shares — and viewport resize) — and
   since Issue #33 early-returns while the too-small gate is up, so a
   below-minimum resize records dimensions without touching the
   viewport's anchor, the list window, or layout requests, deferring

@@ -171,7 +171,10 @@ Catalog of all wiki pages for the vrg project.
   leading-`…` truncation, the filename-row buffer-status note slot
   (real notes owned by Issues #26, #29, #30), minimal-movement list
   scrolling, and every width change routed through the Issue #17
-  prepared-layout path preserving the logical anchor
+  prepared-layout path preserving the logical anchor; plus Issue
+  #38's terminal→panel→text width chain (`textW = panelW − gutter −
+  reserved`, the single computation the layout key and every viewport
+  install site share)
 - [async-load-isolation.md](async-load-isolation.md) — Issue #25:
   navigation live while a file loads, load completions keyed by raw
   path plus minted request identity installing only on match, panel

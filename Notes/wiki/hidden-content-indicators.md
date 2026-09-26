@@ -52,7 +52,13 @@ The column never overwrites text: `contentRow` pads the painted cells
 to the text width and emits the indicator as the cell after them, so a
 match ending on the last text cell still paints its final glyph beside
 a `*` earned by a farther match. In wrap mode `reservedW()` is 0 — no
-column exists and nothing is appended.
+column exists and nothing is appended. Issue #38 pinned the width the
+padding and placement are computed against: the layout-derived text
+width (panel minus gutter minus this reserved column — see
+[file-list-layout.md](file-list-layout.md#terminal-panel-and-text-widths)),
+so the indicator always lands on the panel's right edge outside the
+text area and panned content never bleeds under or past the file list
+(`TestComposedViewContentStaysInsidePanel`).
 
 ## Visibility basis
 

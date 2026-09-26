@@ -14,12 +14,10 @@ import (
 // model's current parameters — the same formula the install guard
 // applies.
 func (m Model) wantKey(path string) viewport.Key {
-	res := m.reservedW()
-	gutterW := m.gutterDigits() + 2
 	return viewport.Key{
 		Path:  path,
 		Rev:   m.revs[path],
-		Width: max(0, m.width-m.listWidth(gutterW, res)-gutterW-res),
+		Width: m.wantTextW(),
 		Wrap:  m.wrap,
 	}
 }
