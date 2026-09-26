@@ -7,17 +7,23 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 - `cmd/vrg/main.go` — thin process boundary. `run` calls `cli.Parse` with
   `os.Stat` injected and maps the explicit result kind to stream/status:
   help → exit 0 (help already on stdout), search → escaped stub line
-  (`search stub: pattern=… root=…`), exit 0, usage error → sanitized
-  diagnostic on stderr, exit 2.
+  printing the child argv (`search stub: rg --json --no-config … --
+  pattern root`), exit 0, usage error → sanitized diagnostic plus the
+  generated usage block on stderr, exit 2.
 
 ## internal/cli
 
 - `internal/cli/cli.go` — the Issue #1 CLI foundation and the sole
-  `mow.cli` v1.2.0 adapter. Contains the shared `optionDecls`/`argDecls`
-  table (parser config + raw-token recognition + generated help), the
-  ordered `scanArgs` preflight, `renderHelp`, `checkRoot`, the `Escape`
-  sanitizer, and the `Result`/`Kind`/`ErrorKind`/`Env` contract.
-  See [cli-foundation.md](cli-foundation.md).
+  `mow.cli` v1.2.0 adapter, extended by Issue #2. Contains the shared
+  `optionDecls`/`argDecls` table (parser config + raw-token recognition +
+  generated help; the search-flag allow-list lives only here), the
+  ordered `scanArgs`/`scanOption`/`expandOption` preflight (encounter-
+  order flag records, combined-short expansion, cumulative `-u` cap,
+  lexical `=` rejection), `renderHelp`, `checkRoot`, the `Escape`
+  sanitizer, and the `Result`/`Kind`/`ErrorKind`/`Env` contract —
+  `Result.ChildArgv` is the exact rg argument vector. See
+  [cli-foundation.md](cli-foundation.md) and
+  [cli-flags-and-child-argv.md](cli-flags-and-child-argv.md).
 
 ## Package boundaries awaiting their issues
 

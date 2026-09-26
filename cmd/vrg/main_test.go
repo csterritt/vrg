@@ -280,15 +280,15 @@ func TestExecutableBoundary(t *testing.T) {
 	}
 
 	res := runVrg(t, "foo")
-	if !strings.Contains(res.stdout, `root="."`) && !strings.Contains(res.stdout, "root=.") {
-		t.Fatalf("default root missing from stub output: %q", res.stdout)
+	if !strings.HasSuffix(res.stdout, "-- foo .\n") {
+		t.Fatalf("default-root child argv missing from stub output: %q", res.stdout)
 	}
 
 	errorCases := [][]string{
 		{"--"},            // missing pattern
 		{"a", "b", "c"},   // excess operands
 		{"--unsupported"}, // unsupported option
-		{"foo", "-x"},     // unsupported short option
+		{"foo", "-z"},     // unsupported short option
 		{"foo", "/nonexistent-vrg-root"},
 		{"foo", "-"}, // stdin root
 		{"foo", "/dev/null"},
@@ -322,16 +322,98 @@ func TestDashFileRootAtProcessBoundary(t *testing.T) {
 	}
 }
 
-// Help assignment spellings that disable help are not help requests: no
-// help reaches stdout. The eventual status is Issue 2's and is not pinned.
-func TestHelpAssignmentSpellingsAreNotHelp(t *testing.T) {
+// Help assignment spellings are rejected like every other "=" form: no
+// help reaches stdout and the process exits 2 with a usage diagnostic.
+func TestHelpAssignmentSpellingsAreUsageErrorsAtBoundary(t *testing.T) {
 	for _, args := range [][]string{
 		{"foo", "--help=false"},
 		{"foo", "-h=false"},
+		{"foo", "--help=true"},
 	} {
 		res := runVrg(t, args...)
 		if strings.Contains(res.stdout, "Usage:") {
-			t.Fatalf("vrg %v emitted help for a help-disabling spelling: %q", args, res.stdout)
+			t.Fatalf("vrg %v emitted help for an assignment spelling: %q", args, res.stdout)
 		}
+		assertUsageError(t, res, args)
+	}
+}
+
+// The stub prints the exact protected child argv: rg, the mandatory
+// internal flags, the user's flags in encounter order with supplied
+// spellings, --, pattern, root.
+func TestChildArgvStub(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"foo"}, "search stub: rg --json --no-config -- foo .\n"},
+		{[]string{"-iw", "foo", dir}, "search stub: rg --json --no-config -i -w -- foo " + dir + "\n"},
+		{[]string{"-i", "-s", "-i", "foo"}, "search stub: rg --json --no-config -i -s -i -- foo .\n"},
+		{[]string{"-isi", "foo"}, "search stub: rg --json --no-config -i -s -i -- foo .\n"},
+		{[]string{"--ignore-case", "-s", "-i", "foo"}, "search stub: rg --json --no-config --ignore-case -s -i -- foo .\n"},
+		{[]string{"foo", "-i", dir, "-s"}, "search stub: rg --json --no-config -i -s -- foo " + dir + "\n"},
+		{[]string{"-u", "--unrestricted", "foo"}, "search stub: rg --json --no-config -u --unrestricted -- foo .\n"},
+		{[]string{"-uu", "foo"}, "search stub: rg --json --no-config -u -u -- foo .\n"},
+		{[]string{"", "."}, "search stub: rg --json --no-config --  .\n"},
+		{[]string{"-", "."}, "search stub: rg --json --no-config -- - .\n"},
+		{[]string{"--", "--"}, "search stub: rg --json --no-config -- -- .\n"},
+		{[]string{"--", "-foo"}, "search stub: rg --json --no-config -- -foo .\n"},
+	}
+	for _, tc := range cases {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			res := runVrg(t, tc.args...)
+			if res.code != 0 {
+				t.Fatalf("vrg %v exited %d, want 0 (stderr %q)", tc.args, res.code, res.stderr)
+			}
+			if res.stderr != "" {
+				t.Fatalf("vrg %v: stderr not empty: %q", tc.args, res.stderr)
+			}
+			if res.stdout != tc.want {
+				t.Fatalf("vrg %v: stdout = %q, want %q", tc.args, res.stdout, tc.want)
+			}
+		})
+	}
+}
+
+// Issue 2 usage-error classes at the process boundary: exit 2, empty
+// stdout, and one sanitized diagnostic line plus the generated usage
+// block on stderr.
+func TestFlagAndArgvUsageErrors(t *testing.T) {
+	for _, args := range [][]string{
+		{"-e", "foo"},
+		{"foo", "-e"},
+		{"--type", "go", "foo"},
+		{"--type=go", "foo"},
+		{"-uuu", "foo"},
+		{"-u", "-uu", "foo"},
+		{"-iuuu", "foo"},
+		{"--unrestricted", "-uu", "foo"},
+		{"--ignore-case=false", "foo"},
+		{"-i=false", "foo"},
+		{"--unrestricted=false", "foo"},
+		{"-foo"},
+		{"foo", "-i", "--", "--help"}, // post-terminator --help is a (nonexistent) root, not help
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			assertUsageError(t, runVrg(t, args...), args)
+		})
+	}
+}
+
+// Help precedence at the process boundary with flags present: one help
+// copy on stdout, empty stderr, exit 0, no child argv, no TUI.
+func TestHelpWithSearchFlags(t *testing.T) {
+	for _, args := range [][]string{
+		{"-i", "--help"},
+		{"-ih", "foo"},
+		{"-i", "-s", "--help"},
+		{"-uuu", "--help"},
+		{"-e", "--help"},
+		{"foo", ".", "--help"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			assertHelpRun(t, runVrg(t, args...), args)
+		})
 	}
 }

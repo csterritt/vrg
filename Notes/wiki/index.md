@@ -11,6 +11,9 @@ Catalog of all wiki pages for the vrg project.
 - [cli-foundation.md](cli-foundation.md) — Issue #1 CLI: mow.cli adapter,
   emission-prevention output strategy, shared declarations, preflight,
   help/positional/root/sanitization contracts
+- [cli-flags-and-child-argv.md](cli-flags-and-child-argv.md) — Issue #2:
+  flag allow-list, ordered exact-spelling forwarding, combined shorts,
+  cumulative `-u` cap, `=` rejection, `--` protection, exact child argv
 
 ## Catalogs
 
