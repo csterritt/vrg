@@ -74,3 +74,35 @@ Design), `internal/searchindex/record.go`, `internal/searchindex/index.go`,
 `internal/app/search.go`, `internal/app/model_test.go`,
 `internal/app/subprocess_test.go`, `cmd/vrg/main.go`,
 `cmd/vrg/main_test.go`.
+
+## [2026-09-23] ingest | Issue #4 cancellation, child cleanup, and terminal restoration
+
+Ingested the completed Issue #4 implementation: `internal/app` gained
+`Session` (`Model`/`Cancel`/`Reaped`, returned by `Start`) and
+`Config.ReapReport` (the reap-evidence side channel written after
+`cmd.Wait`); `collect` now reports the wait status, abandons a held
+`PrepareGate`, and skips index preparation on cancellation. The `Model`
+gains `cancelled`/`quit` handling: `ctrl+c` in any state and `q` while
+searching (including the post-exit gate-held window) kill the child
+context and exit 130, `q` on the summary still exits 0, `Esc` stays a
+searching no-op, and `quit` rejects late completions so a cancelled UI
+cannot revive; every `View` sets `AltScreen` for the exit restoration
+sequence. `cmd/vrg` gained `hooks.go` (`VRG_TEST_REAP_FILE`,
+`VRG_TEST_GATE_FIFO`, `VRG_TEST_FAIL_FIFO`) and `runSearch` now routes
+every controlled exit through one boundary: `Cancel`, `<-Reaped()`, then
+status selection (`ErrInterrupted` → 130, `Run` error → single
+post-restoration sanitized `vrg:` diagnostic + exit 2, else the model's
+`ExitCode`). Created
+[cancellation-and-cleanup](cancellation-and-cleanup.md); updated
+[source-code](source-code.md), [unit-tests](unit-tests.md) (new
+cancellation model tests, `TestCancelTerminatesAndReapsChild`, the
+`TestPTY*` harness group), [search-spawn-and-searching-screen](
+search-spawn-and-searching-screen.md) (drainage and boundary updates),
+and the index. New test files: `cmd/vrg/pty_test.go` (PTY harness,
+fake-rg block/stream scripts, termios equality). Sources:
+`Notes/issues/004-cancellation-child-cleanup-terminal-restore.md`,
+`Notes/tasks/004-cancellation-child-cleanup-terminal-restore.md`,
+`Notes/PRD-vrg.md` (Outcome and exit-status contract; Module Design →
+App), `internal/app/app.go`, `internal/app/search.go`,
+`internal/app/model_test.go`, `internal/app/subprocess_test.go`,
+`cmd/vrg/main.go`, `cmd/vrg/hooks.go`, `cmd/vrg/pty_test.go`.

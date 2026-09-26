@@ -6,27 +6,45 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 
 - `cmd/vrg/main.go` — thin process boundary. `run` calls `cli.Parse` with
   `os.Stat` injected and maps the explicit result kind to stream/status:
-  help → exit 0 (help already on stdout), search → `runSearch` spawns rg
-  and runs the Bubble Tea program (`WithInput(os.Stdin)`,
-  `WithWindowSize(80, 24)` fallback for piped output), exit code from the
-  final model; rg start failure → sanitized `vrg:` diagnostic on stderr,
-  exit 2, no TUI; usage error → sanitized diagnostic plus the generated
-  usage block on stderr, exit 2.
+  help → exit 0 (help already on stdout), search → `runSearch` starts an
+  `app.Session` and runs the Bubble Tea program (`WithInput(os.Stdin)`,
+  `WithWindowSize(80, 24)` fallback for piped output). After `Run`
+  returns, every controlled exit funnels through one cleanup boundary:
+  `sess.Cancel()` terminates a still-running child and `<-sess.Reaped()`
+  waits for its reap. Status selection: `tea.ErrInterrupted` → 130,
+  other `Run` errors → sanitized `vrg:` diagnostic on stderr after
+  terminal restoration and exit 2, otherwise the final model's
+  `ExitCode` (0 summary quit, 130 cancellation); rg start failure →
+  sanitized diagnostic, exit 2, no TUI; usage error → sanitized
+  diagnostic plus the generated usage block, exit 2.
+- `cmd/vrg/hooks.go` — the env-var test seams applied to `app.Config`:
+  `VRG_TEST_REAP_FILE` (reap-evidence side channel → `ReapReport`),
+  `VRG_TEST_GATE_FIFO` (boundary `PrepareGate`), `VRG_TEST_FAIL_FIFO`
+  (controlled-failure hook → `Program` context cancellation). No-op
+  when unset.
 
 ## internal/app
 
 - `internal/app/search.go` — the subprocess seam: `Config` (rg
   executable, protected argv, invocation working directory, `Drained`/
-  `PrepareGate` test hooks), `Start` (spawns `exec.CommandContext` in the
-  working directory, fails synchronously before the TUI), `collect`
-  (concurrent stdout/stderr drainage for the whole child lifetime, then
-  `Wait`, then gated index preparation), and `prepareIndex` (decode +
-  index build). See
-  [search-spawn-and-searching-screen.md](search-spawn-and-searching-screen.md).
+  `PrepareGate`/`ReapReport` test hooks), `Start` (spawns
+  `exec.CommandContext` in the working directory, fails synchronously
+  before the TUI, returns a `Session` owning the model plus `Cancel`/
+  `Reaped`), `collect` (concurrent stdout/stderr drainage for the whole
+  child lifetime, then `Wait` with reap reporting, then cancellation-
+  aware gated index preparation — a cancelled gate abandons the build),
+  and `prepareIndex` (decode + index build). See
+  [search-spawn-and-searching-screen.md](search-spawn-and-searching-screen.md)
+  and [cancellation-and-cleanup.md](cancellation-and-cleanup.md).
 - `internal/app/app.go` — the Bubble Tea `Model`: `phaseSearching` renders
   `Searching…` until the prepared index arrives (spanning post-exit
   preparation), `phaseSummary` renders `N files, M matched lines` and
-  `q` quits with `ExitCode` 0; resize handled in any state.
+  `q` quits with `ExitCode` 0; `ctrl+c` in any state or `q` while
+  searching cancels (kills the child context, `ExitCode` 130), `Esc` is
+  a searching-only no-op, and once `quit` is set `Update` discards all
+  messages so a late completion cannot revive a cancelled UI; every view
+  sets `AltScreen` for the exit restoration sequence; resize handled in
+  any state.
 
 ## internal/searchindex
 

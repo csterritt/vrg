@@ -23,6 +23,12 @@ Catalog of all wiki pages for the vrg project.
   directory, concurrent dual-pipe drainage, `Searching…` across
   collection and post-exit preparation, interim summary, `q` → exit 0,
   start failure → sanitized diagnostic + exit 2
+- [cancellation-and-cleanup.md](cancellation-and-cleanup.md) — Issue #4:
+  `ctrl+c`/`q` cancellation through the gate-held preparation window,
+  exit 130, terminate-and-reap on every controlled exit, reap-evidence
+  side channel, display + termios restoration, the single
+  post-restoration stderr diagnostic, the `VRG_TEST_*` seams, and the
+  fake-rg/PTY harness
 
 ## Catalogs
 

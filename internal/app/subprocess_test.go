@@ -5,11 +5,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // TestMain doubles the test binary as the fake rg child: when
@@ -69,6 +74,20 @@ func fakeRgMain(mode string) int {
 			os.WriteFile(filepath.Join(dir, "writes-done"), []byte("done"), 0o644)
 		}
 		return 0
+	case "block":
+		// Readiness handshake: the file carries the child's pid so the
+		// test can later prove the process is gone, not merely unknown.
+		if dir != "" {
+			os.WriteFile(filepath.Join(dir, "ready"),
+				[]byte(strconv.Itoa(os.Getpid())), 0o644)
+		}
+		// Block on signal delivery: uncatchable SIGKILL still ends the
+		// process, and the parked channel keeps the runtime's deadlock
+		// detector quiet.
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch)
+		<-ch
+		return 0
 	}
 	return 2
 }
@@ -85,7 +104,7 @@ func TestChildArgvAndWorkingDirectory(t *testing.T) {
 	t.Setenv("VRG_FAKE_DIR", out)
 
 	argv := []string{"--json", "--no-config", "-i", "-w", "--", "pat tern", "sub dir"}
-	m, err := Start(context.Background(), Config{
+	sess, err := Start(context.Background(), Config{
 		Rg:      fakeRg(),
 		Argv:    argv,
 		Workdir: work,
@@ -93,7 +112,7 @@ func TestChildArgvAndWorkingDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	awaitMsg(t, m, 10*time.Second)
+	awaitMsg(t, sess.Model(), 10*time.Second)
 
 	gotArgv, err := os.ReadFile(filepath.Join(out, "argv"))
 	if err != nil {
@@ -124,7 +143,7 @@ func TestDualPipeBackpressure(t *testing.T) {
 	t.Setenv("VRG_FAKE_RG", "flood")
 	t.Setenv("VRG_FAKE_DIR", out)
 
-	m, err := Start(context.Background(), Config{
+	sess, err := Start(context.Background(), Config{
 		Rg:      fakeRg(),
 		Argv:    []string{"--json", "--no-config", "--", "x", "."},
 		Workdir: work,
@@ -132,7 +151,7 @@ func TestDualPipeBackpressure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	msg := awaitMsg(t, m, 30*time.Second)
+	msg := awaitMsg(t, sess.Model(), 30*time.Second)
 	res, ok := msg.(searchDoneMsg)
 	if !ok {
 		t.Fatalf("completion message = %T, want searchDoneMsg", msg)
@@ -152,6 +171,73 @@ func TestDualPipeBackpressure(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(out, "writes-done")); err != nil {
 		t.Fatalf("child handshake missing: %v", err)
+	}
+}
+
+// awaitReadyPID polls the fake rg's readiness handshake — a file named
+// "ready" carrying the child's pid — and returns that pid.
+func awaitReadyPID(t *testing.T, dir string) int {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if b, err := os.ReadFile(filepath.Join(dir, "ready")); err == nil {
+			pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+			if err != nil {
+				t.Fatalf("ready file = %q, want a pid: %v", b, err)
+			}
+			return pid
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("fake rg did not signal readiness within budget")
+	return 0
+}
+
+// Cancelling while the child is still running terminates it, ends
+// drainage promptly, and leaves it reaped: the reap side channel carries
+// the killed wait status and the child's pid is gone — not a zombie, not
+// an orphan.
+func TestCancelTerminatesAndReapsChild(t *testing.T) {
+	work := t.TempDir()
+	out := t.TempDir()
+	t.Setenv("VRG_FAKE_RG", "block")
+	t.Setenv("VRG_FAKE_DIR", out)
+	var reap bytes.Buffer
+	sess, err := Start(context.Background(), Config{
+		Rg:         fakeRg(),
+		Argv:       []string{"--json", "--no-config", "--", "x", "."},
+		Workdir:    work,
+		ReapReport: &reap,
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	pid := awaitReadyPID(t, out)
+
+	m := sess.Model()
+	m2, cmd := update(t, m, keyPress("q"))
+	if cmd == nil {
+		t.Fatal("q while searching returned no command, want tea.Quit")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("q while searching command = %T, want tea.QuitMsg", cmd())
+	}
+	if m2.ExitCode() != 130 {
+		t.Fatalf("ExitCode = %d, want 130", m2.ExitCode())
+	}
+
+	// The child is reaped promptly: killing it closes both pipes, so
+	// drainage and Wait end without waiting for further output.
+	select {
+	case <-sess.Reaped():
+	case <-time.After(10 * time.Second):
+		t.Fatal("child was not reaped within budget after cancellation")
+	}
+	if got := reap.String(); !strings.Contains(got, "killed") {
+		t.Fatalf("reap report = %q, want it to carry the killed wait status", got)
+	}
+	if err := syscall.Kill(pid, 0); err != syscall.ESRCH {
+		t.Fatalf("child pid %d still exists after reap (err=%v)", pid, err)
 	}
 }
 

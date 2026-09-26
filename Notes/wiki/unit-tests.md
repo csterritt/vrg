@@ -113,6 +113,18 @@ and base64 `{"bytes"}` encodings freely:
   child has exited and both pipes are drained, `PrepareGate` still holds
   preparation, the view stays `Searching…`, and releasing the gate
   delivers the summary.
+- `TestQWhileSearchingCancels` — `q` during searching returns `tea.Quit`
+  with `ExitCode` 130 and fires the session cancel.
+- `TestQDuringGateHeldPreparationCancels` — `q` in the post-exit
+  gate-held window cancels: the collector abandons the gate, never
+  prepares an index, and the model is already committed to quitting.
+- `TestCtrlCCancelsFromAnyState` — `ctrl+c` cancels from both searching
+  and summary, always `ExitCode` 130.
+- `TestEscDuringSearchingIsNoOp` — `Esc` during searching leaves the
+  model unchanged and does not cancel.
+- `TestLateCompletionAfterCancellationDoesNotRevive` — a `searchDoneMsg`
+  delivered after cancellation cannot revive the UI; the model stays
+  quitting at 130.
 
 `subprocess_test.go` re-executes the test binary as fake rg via
 `TestMain` (`VRG_FAKE_RG` mode, `VRG_FAKE_DIR` artifacts):
@@ -127,6 +139,10 @@ and base64 `{"bytes"}` encodings freely:
   exiting.
 - `TestStartFailure` — explicit missing path and PATH-lookup failure
   both error from `Start` with control-byte-free diagnostics.
+- `TestCancelTerminatesAndReapsChild` — `Session.Cancel` against a
+  `block` fake rg: the child pid disappears (`ESRCH`), `Reaped` closes
+  promptly, and `ReapReport` receives the `signal: killed` wait status —
+  proving vrg's own `Wait` path ran.
 
 ## cmd/vrg (subprocess boundary)
 
@@ -174,3 +190,41 @@ stdout/stderr/status separately:
 - `TestHelpWithSearchFlags` — help precedence with flags present
   (`-i --help`, `-ih foo`, `-i -s --help`, `-uuu --help`, `-e --help`,
   `foo . --help`): exit 0, one help copy, empty stderr.
+
+`pty_test.go` (Linux-only, `//go:build linux`) runs the real binary on a
+real PTY: `openPTY` allocates `/dev/ptmx`, grants/unlocks the slave, and
+the child runs in a new session with the slave as controlling terminal
+for stdin/stdout/stderr while the master captures all bytes. Fake-rg
+shell scripts (installed by `writeFakeRg` from `main_test.go`):
+`fakeRgBlockScript` writes its pid to a `ready` file then `exec sleep
+3600`; `fakeRgStreamScript` writes its pid, emits a complete one-match
+record stream, and exits 0. The `VRG_CAPTURE_DIR` env tells the scripts
+where to write `ready`; the `VRG_TEST_*` seams come from
+`cmd/vrg/hooks.go`:
+
+- `TestPTYQWhileSearchingExits130` — `q` against a blocked fake rg:
+  exit 130, child pid gone (`ESRCH`), the `VRG_TEST_REAP_FILE` side
+  channel reports `killed`, the captured stream carries the
+  display-restoration sequences (`\x1b[?1049l` leave-alt-screen,
+  `\x1b[?25h` show-cursor), and `waitExit` asserts the slave's termios
+  equals its pre-launch value.
+- `TestPTYCtrlCWhileSearchingExits130` — same assertions driven by the
+  raw `ctrl+c` byte through the PTY.
+- `TestPTYSIGINTWhileSearchingExits130` — a real `SIGINT` signal to the
+  process (surfacing as `tea.ErrInterrupted`): exit 130, child reaped,
+  termios restored.
+- `TestPTYQDuringGateHeldPreparationExits130` — fake rg emits and exits
+  while `VRG_TEST_GATE_FIFO` holds index preparation; the reap file
+  already shows `exit status 0` when `q` cancels from the gate-held
+  window: exit 130, no interim summary rendered, termios restored.
+- `TestPTYOrdinaryExitReapsChild` — `SIGTERM` ends the program without
+  a cancellation key while the fake rg still runs: exit 0, child reaped
+  (`killed`), terminal restored — the ordinary path cleans up too.
+- `TestPTYControlledFailureExits2` — `VRG_TEST_FAIL_FIFO` injects a
+  program error mid-search: exit 2, child reaped, termios restored, and
+  the `vrg:` diagnostic appears in the PTY stream only after the
+  restoration sequences, exactly once.
+- `TestControlledFailureDiagnosticOnStderr` — pipe-mode run (held-open
+  stdin pipe) with the fail fifo: exit 2, stderr carries the sanitized
+  `vrg:` diagnostic exactly once, stdout carries none, and the child is
+  still reaped.

@@ -54,6 +54,16 @@ func keyPress(s string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Text: s, Code: []rune(s)[0]}
 }
 
+// ctrlCPress is the message a raw-mode terminal delivers for ctrl+c.
+func ctrlCPress() tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
+}
+
+// escPress is the message a bare Escape keypress delivers.
+func escPress() tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: tea.KeyEscape}
+}
+
 // A completed model for summary-phase tests: the search finished with a
 // prepared index and the model shows the interim summary.
 func completedModel(t *testing.T, files int) Model {
@@ -68,7 +78,7 @@ func completedModel(t *testing.T, files int) Model {
 		)
 	}
 	recs = append(recs, `{"type":"summary","data":{}}`)
-	m := newModel(nil)
+	m := newModel(nil, nil)
 	m, _ = update(t, m, searchDoneMsg{index: fixtureIndex(t, "/w", recs...)})
 	return m
 }
@@ -76,7 +86,7 @@ func completedModel(t *testing.T, files int) Model {
 // The searching screen covers collection: while the completion channel
 // is silent the model renders "Searching…" and nothing else.
 func TestSearchingScreenShownWhileCollecting(t *testing.T) {
-	m := newModel(make(chan searchDoneMsg))
+	m := newModel(make(chan searchDoneMsg), nil)
 	if got := m.View().Content; !strings.Contains(got, "Searching…") {
 		t.Fatalf("searching view = %q, want it to contain \"Searching…\"", got)
 	}
@@ -86,7 +96,7 @@ func TestSearchingScreenShownWhileCollecting(t *testing.T) {
 // collection: the model stores the new dimensions and stays in the
 // searching state.
 func TestResizeDuringSearching(t *testing.T) {
-	m := newModel(make(chan searchDoneMsg))
+	m := newModel(make(chan searchDoneMsg), nil)
 	m2, _ := update(t, m, tea.WindowSizeMsg{Width: 120, Height: 40})
 	if m2.width != 120 || m2.height != 40 {
 		t.Fatalf("dimensions = %dx%d, want 120x40", m2.width, m2.height)
@@ -105,7 +115,7 @@ func TestCompletionTransitionsToSummary(t *testing.T) {
 		`{"type":"match","data":{"path":{"text":"b"},"lines":{"text":"z\n"},"line_number":2,"submatches":[{"match":{"text":"z"},"start":0,"end":1}]}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m := newModel(nil)
+	m := newModel(nil, nil)
 	m2, _ := update(t, m, searchDoneMsg{index: ix})
 	got := m2.View().Content
 	if !strings.Contains(got, "2 files, 3 matched lines") {
@@ -141,7 +151,7 @@ func TestGateHoldsSearchingAfterRgExit(t *testing.T) {
 	t.Setenv("VRG_FAKE_DIR", out)
 	drained := make(chan struct{})
 	gate := make(chan struct{})
-	m, err := Start(context.Background(), Config{
+	sess, err := Start(context.Background(), Config{
 		Rg:          os.Args[0],
 		Argv:        []string{"--json", "--no-config", "--", "foo", "."},
 		Workdir:     work,
@@ -151,6 +161,7 @@ func TestGateHoldsSearchingAfterRgExit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
+	m := sess.Model()
 
 	// The child has fully exited and both pipes are drained; the gate is
 	// still holding index preparation.
@@ -173,5 +184,145 @@ func TestGateHoldsSearchingAfterRgExit(t *testing.T) {
 	m2, _ := update(t, m, msg)
 	if got := m2.View().Content; !strings.Contains(got, "matched line") {
 		t.Fatalf("view after gate release = %q, want interim summary", got)
+	}
+}
+
+// q while collection is incomplete cancels the search: the model
+// signals the child's termination, quits, and settles on exit 130.
+func TestQWhileSearchingCancels(t *testing.T) {
+	cancelled := false
+	m := newModel(make(chan searchDoneMsg), func() { cancelled = true })
+	m2, cmd := update(t, m, keyPress("q"))
+	if cmd == nil {
+		t.Fatal("q while searching returned no command, want tea.Quit")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("q while searching command = %T, want tea.QuitMsg", cmd())
+	}
+	if m2.ExitCode() != 130 {
+		t.Fatalf("ExitCode = %d, want 130", m2.ExitCode())
+	}
+	if !cancelled {
+		t.Fatal("q while searching did not signal child termination")
+	}
+}
+
+// q pressed after rg has exited but while index preparation is still
+// gate-held is cancellation, not a browse quit: exit 130, and the
+// collector abandons the held gate promptly rather than leaking.
+func TestQDuringGateHeldPreparationCancels(t *testing.T) {
+	work := t.TempDir()
+	out := t.TempDir()
+	t.Setenv("VRG_FAKE_RG", "echo")
+	t.Setenv("VRG_FAKE_DIR", out)
+	drained := make(chan struct{})
+	gate := make(chan struct{})
+	sess, err := Start(context.Background(), Config{
+		Rg:          fakeRg(),
+		Argv:        []string{"--json", "--no-config", "--", "foo", "."},
+		Workdir:     work,
+		Drained:     drained,
+		PrepareGate: gate,
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	m := sess.Model()
+
+	// The child has exited and both pipes are drained; preparation is
+	// still gate-held, so the app is still searching.
+	select {
+	case <-drained:
+	case <-time.After(10 * time.Second):
+		t.Fatal("child did not exit and drain within budget")
+	}
+	m2, cmd := update(t, m, keyPress("q"))
+	if cmd == nil {
+		t.Fatal("q during gate-held preparation returned no command, want tea.Quit")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("q during gate-held preparation command = %T, want tea.QuitMsg", cmd())
+	}
+	if m2.ExitCode() != 130 {
+		t.Fatalf("ExitCode = %d, want 130", m2.ExitCode())
+	}
+
+	// Cancellation abandons the gate: the collector finishes without the
+	// gate ever being released, and a cancelled collection prepares no
+	// index.
+	select {
+	case msg := <-m.done:
+		if msg.index != nil {
+			t.Fatal("cancelled collection still prepared an index")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("collection did not end promptly after cancellation")
+	}
+}
+
+// ctrl+c cancels from any state: while searching and on the interim
+// summary it quits with exit 130 after signalling the child.
+func TestCtrlCCancelsFromAnyState(t *testing.T) {
+	for _, name := range []string{"searching", "summary"} {
+		t.Run(name, func(t *testing.T) {
+			cancelled := false
+			var m Model
+			if name == "summary" {
+				m = completedModel(t, 1)
+				m.cancel = func() { cancelled = true }
+			} else {
+				m = newModel(make(chan searchDoneMsg), func() { cancelled = true })
+			}
+			m2, cmd := update(t, m, ctrlCPress())
+			if cmd == nil {
+				t.Fatal("ctrl+c returned no command, want tea.Quit")
+			}
+			if _, ok := cmd().(tea.QuitMsg); !ok {
+				t.Fatalf("ctrl+c command = %T, want tea.QuitMsg", cmd())
+			}
+			if m2.ExitCode() != 130 {
+				t.Fatalf("ExitCode = %d, want 130", m2.ExitCode())
+			}
+			if !cancelled {
+				t.Fatal("ctrl+c did not signal child termination")
+			}
+		})
+	}
+}
+
+// Esc during searching is a no-op: no state change, no command, no quit.
+func TestEscDuringSearchingIsNoOp(t *testing.T) {
+	m := newModel(make(chan searchDoneMsg), nil)
+	m2, cmd := update(t, m, escPress())
+	if cmd != nil {
+		t.Fatalf("Esc while searching produced a command %T, want none", cmd)
+	}
+	if m2.phase != phaseSearching || m2.quit || m2.ExitCode() != 0 {
+		t.Fatalf("Esc while searching changed state: phase=%d quit=%v code=%d",
+			m2.phase, m2.quit, m2.ExitCode())
+	}
+	if got := m2.View().Content; !strings.Contains(got, "Searching…") {
+		t.Fatalf("view after Esc = %q, still want \"Searching…\"", got)
+	}
+}
+
+// A search completion that arrives after cancellation must not revive
+// the UI: the model stays quit at exit 130 and never reaches the
+// summary.
+func TestLateCompletionAfterCancellationDoesNotRevive(t *testing.T) {
+	m := newModel(make(chan searchDoneMsg), func() {})
+	m2, _ := update(t, m, keyPress("q"))
+	m3, cmd := update(t, m2, searchDoneMsg{index: fixtureIndex(t, "/w",
+		`{"type":"match","data":{"path":{"text":"a"},"lines":{"text":"x\n"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}`,
+		`{"type":"summary","data":{}}`,
+	)})
+	if cmd != nil {
+		t.Fatalf("late completion produced a command %T, want none", cmd)
+	}
+	if !m3.quit || m3.ExitCode() != 130 {
+		t.Fatalf("late completion revived the UI: quit=%v code=%d", m3.quit, m3.ExitCode())
+	}
+	if m3.phase != phaseSearching {
+		t.Fatalf("late completion moved phase to %d, want it unchanged", m3.phase)
 	}
 }

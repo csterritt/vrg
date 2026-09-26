@@ -31,8 +31,11 @@ stderr at MiB scale while streaming valid records neither deadlocks nor
 loses stdout bytes. Stderr is buffered whole and carried on the
 completion message as cargo — classification and outcome effects are
 Issue #9's. Because killing the child closes both pipes, cancellation
-(Issue #4) will end drainage promptly; the structure already funnels
-through `CommandContext`.
+ends drainage promptly — see
+[cancellation-and-cleanup.md](cancellation-and-cleanup.md) for the
+Issue #4 contract (the collector now reports the reaped wait status on
+the `ReapReport` side channel before abandoning a cancelled gate and
+index build).
 
 ## Searching state
 
@@ -59,8 +62,12 @@ the interim result screen; the real browser replaces it in later issues.
 stdin rather than opening `/dev/tty` on a pipe, and
 `tea.WithWindowSize(80, 24)` as a fallback frame size — real terminals
 override it via the initial resize, but a piped output reports no size
-and would otherwise render nothing. The final model's `ExitCode` is the
-process status.
+and would otherwise render nothing. After `Run` returns, every
+controlled exit terminates and reaps the child before the status is
+decided — see
+[cancellation-and-cleanup.md](cancellation-and-cleanup.md). The final
+model's `ExitCode` is the process status (130 on cancellation,
+`ErrInterrupted` also maps to 130).
 
 ## Tests
 

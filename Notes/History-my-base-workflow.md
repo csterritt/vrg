@@ -20,3 +20,14 @@ Usage
  Input tokens: 119747 tokens
  Output tokens: 37219 tokens
  Cached input tokens: 7437812 tokens
+
+----
+Task 004-cancellation-child-cleanup-terminal-restore.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 60 messages
+ Input tokens: 84326 tokens
+ Output tokens: 34209 tokens
+ Cached input tokens: 4297486 tokens
