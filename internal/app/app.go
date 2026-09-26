@@ -60,11 +60,20 @@ type Model struct {
 	failed  map[string]bool
 	loading map[string]bool
 	// rows holds each loaded file's prepared rendered-row model — built
-	// when its load completes and reinstalled on the viewport when the
-	// layout changes. saved holds each file's vertical viewport state —
-	// the top rendered row — for revisits (Issue #13).
+	// when its load completes and rebuilt when the layout or wrap mode
+	// changes; revs is each path's content revision, bumped on every
+	// successful load, and prepW/prepWrap record the layout the cached
+	// models were prepared for. saved holds each file's vertical
+	// viewport state — the top rendered row — for revisits (Issue #13).
 	rows     map[string]viewport.Rows
+	revs     map[string]int
+	prepW    int
+	prepWrap bool
 	saved    map[string]int
+	// wrap is the wrap-mode flag: on means lines wrap at grapheme
+	// boundaries, off means run-off-edge with the reserved indicator
+	// column. On initially; w toggles.
+	wrap     bool
 	theme    theme.Theme
 	vp       viewport.Viewport
 	loadGate <-chan struct{}
@@ -104,8 +113,11 @@ func newModel(done <-chan searchDoneMsg, cancel func()) Model {
 		failed:  make(map[string]bool),
 		loading: make(map[string]bool),
 		rows:    make(map[string]viewport.Rows),
+		revs:    make(map[string]int),
 		saved:   make(map[string]int),
 		theme:   theme.Dark(),
+		// Wrapping is on initially; w toggles run-off-edge and back.
+		wrap: true,
 		// Same fallback the process boundary hands Bubble Tea; a real
 		// terminal's first resize overrides it.
 		width:  80,
@@ -206,7 +218,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			m.bufs[key] = msg.buf
-			m.rows[key] = bufferRows{buf: msg.buf}
+			m.revs[key]++
+			// The new content's row model is stale-keyed; relayout
+			// rebuilds it for the current layout.
+			delete(m.rows, key)
 		}
 		m.relayout()
 		if bytes.Equal(msg.path, m.currentPath()) {
@@ -238,6 +253,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// ordinary keys are inert.
 			if m.phase == phaseBrowse {
 				m.theme = m.theme.Toggle()
+			}
+		case "w":
+			// The wrap toggle is a browse key: it flips between wrap
+			// and run-off-edge modes, changing the reserved indicator
+			// width and therefore the text width every cached row
+			// model is rebuilt for.
+			if m.phase == phaseBrowse {
+				m.wrap = !m.wrap
+				m.relayout()
 			}
 		case "q":
 			if m.phase == phaseSearching {

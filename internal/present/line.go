@@ -15,7 +15,13 @@ type Cell struct {
 	// escape form, or "" for the trailing cell of a wide cluster, whose
 	// first cell's glyph already occupies it.
 	Text string
-	// Cont marks the trailing cell of a two-cell cluster.
+	// Lead marks the first display cell of a grapheme cluster — the
+	// only legal wrap boundary. A cluster producing several units (the
+	// fallback per-rune escapes of a cluster mixing printable and
+	// dangerous forms) leads only on its first unit.
+	Lead bool
+	// Cont marks a trailing cell of a multi-cell unit — a wide cluster
+	// or a multi-cell escape — whose lead cell's text covers it.
 	Cont bool
 }
 
@@ -90,23 +96,24 @@ func (l Line) Span(start, end int) Span {
 // UTF-8 becomes U+FFFD while retaining its raw-byte mapping; C0
 // controls and DEL take caret notation except that LF and CRLF are
 // never displayed (terminators map to the end-of-line position) and a
-// standalone CR becomes ^M; C1 controls take \uXXXX; tab renders as the
-// provisional single-cell → placeholder pending Issue 16's stop
-// expansion.
+// standalone CR becomes ^M; C1 controls take \uXXXX; tab expands with
+// space cells to the next multiple of eight source-display columns as
+// one cluster.
 func LineOf(raw []byte) Line {
 	l := Line{raw: bytes.Clone(raw), lo: make([]int, len(raw)), hi: make([]int, len(raw))}
 	var b strings.Builder
 
 	// emit records one unit covering raw bytes [start,end) as width
-	// display cells carrying text. A zero-width unit joins the previous
+	// display cells carrying text; lead marks whether the unit begins
+	// a new grapheme cluster. A zero-width unit joins the previous
 	// cell's text — a combining mark extends its base — or takes a
 	// provisional cell of its own at line start.
-	emit := func(start, end int, text string, width int) {
+	emit := func(start, end int, text string, width int, lead bool) {
 		b.WriteString(text)
 		if width <= 0 {
 			c := len(l.cells) - 1
 			if c < 0 {
-				l.cells = append(l.cells, Cell{Text: text})
+				l.cells = append(l.cells, Cell{Text: text, Lead: lead})
 				c = 0
 			} else {
 				l.cells[c].Text += text
@@ -117,7 +124,7 @@ func LineOf(raw []byte) Line {
 			return
 		}
 		c := len(l.cells)
-		l.cells = append(l.cells, Cell{Text: text})
+		l.cells = append(l.cells, Cell{Text: text, Lead: lead})
 		for k := 1; k < width; k++ {
 			l.cells = append(l.cells, Cell{Cont: true})
 		}
@@ -136,50 +143,63 @@ func LineOf(raw []byte) Line {
 			case c == '\r' && i+1 < len(raw) && raw[i+1] == '\n':
 				i++ // CRLF terminator: both bytes map to end of line.
 			case c == '\r':
-				emit(i, i+1, "^M", 2)
+				emit(i, i+1, "^M", 2, true)
 			case c == '\t':
-				emit(i, i+1, "→", 1)
+				// Tab expands to the next multiple of eight
+				// source-display columns: one cluster of space cells.
+				// The source column is len(l.cells), independent of
+				// gutter and horizontal pan.
+				n := 8 - len(l.cells)%8
+				l.lo[i], l.hi[i] = len(l.cells), len(l.cells)+n
+				for k := 0; k < n; k++ {
+					l.cells = append(l.cells, Cell{Text: " ", Lead: k == 0})
+				}
+				b.WriteString(strings.Repeat(" ", n))
 			case c < 0x20:
-				emit(i, i+1, "^"+string(c+'@'), 2)
+				emit(i, i+1, "^"+string(c+'@'), 2, true)
 			case c == 0x7f:
-				emit(i, i+1, "^?", 2)
+				emit(i, i+1, "^?", 2, true)
 			default:
-				emit(i, i+1, string(c), 1)
+				emit(i, i+1, string(c), 1, true)
 			}
 			i++
 			continue
 		}
 		r, size := utf8.DecodeRune(raw[i:])
 		if r == utf8.RuneError && size == 1 {
-			emit(i, i+1, "\ufffd", 1)
+			emit(i, i+1, "\ufffd", 1, true)
 			i++
 			continue
 		}
 		cl, w := ansi.FirstGraphemeCluster(raw[i:], ansi.GraphemeWidth)
 		if len(cl) == size && r >= 0x80 && r < 0xa0 {
-			emit(i, i+size, fmt.Sprintf(`\u%04x`, r), 6)
+			emit(i, i+size, fmt.Sprintf(`\u%04x`, r), 6, true)
 		} else if printableCluster(cl) {
-			emit(i, i+len(cl), string(cl), w)
+			emit(i, i+len(cl), string(cl), w, true)
 		} else {
 			// A cluster mixing printable and dangerous forms falls back
 			// to per-rune rules so no control byte survives verbatim.
+			// Only the first emitted unit leads: the whole cluster is
+			// still one wrap unit.
 			j := 0
+			lead := true
 			for j < len(cl) {
 				r, size := utf8.DecodeRune(cl[j:])
 				switch {
 				case r == utf8.RuneError && size == 1:
-					emit(i+j, i+j+1, "\ufffd", 1)
+					emit(i+j, i+j+1, "\ufffd", 1, lead)
 				case r == '\n':
 					// Terminator byte inside a cluster: no display.
 				case r == '\r':
-					emit(i+j, i+j+size, "^M", 2)
+					emit(i+j, i+j+size, "^M", 2, lead)
 				case r < 0x20 || r == 0x7f:
-					emit(i+j, i+j+size, "^"+string(r+'@'), 2)
+					emit(i+j, i+j+size, "^"+string(r+'@'), 2, lead)
 				case r >= 0x80 && r < 0xa0:
-					emit(i+j, i+j+size, fmt.Sprintf(`\u%04x`, r), 6)
+					emit(i+j, i+j+size, fmt.Sprintf(`\u%04x`, r), 6, lead)
 				default:
-					emit(i+j, i+j+size, string(cl[j:j+size]), ansi.GraphemeWidth.StringWidth(string(cl[j:j+size])))
+					emit(i+j, i+j+size, string(cl[j:j+size]), ansi.GraphemeWidth.StringWidth(string(cl[j:j+size])), lead)
 				}
+				lead = false
 				j += size
 			}
 		}

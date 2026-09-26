@@ -97,6 +97,14 @@ Catalog of all wiki pages for the vrg project.
   the key's action, render-time centring and left-truncation surviving
   resize, error-overlay cancellation with no return, safe `present.Path`
   display, and the current-file load-failure overlay trigger)
+- [wrap-mode.md](wrap-mode.md) — Issue #16: wrap on by default with the
+  `w` toggle to run-off-edge, grapheme-boundary wrapping with the
+  blank-cell rule for unfit clusters, the single shared
+  segmentation/cell-width policy (`present.Cell` `Lead`/`Cont` with
+  FileBuffer as `viewport.Source`), eight-column tab stops replacing
+  the provisional `→`, blank continuation gutters, the reserved
+  indicator width of zero or one, and the swappable row model keyed by
+  path, content revision, text width, and wrap mode
 
 ## Catalogs
 

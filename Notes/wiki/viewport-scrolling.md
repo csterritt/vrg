@@ -87,12 +87,16 @@ moves the matched-line cursor, which lives in `Index` itself (see
 Rendering no longer scans the buffer per frame:
 
 - `viewport.Rows` is the prepared rendered-row provider — `Len()` plus
-  `Row(i)` returning a `viewport.Row{Line, Cells, Spans}` — built when
-  a load completes (`bufferRows` adapts `*filebuffer.Buffer`, so
-  unwrapped rendered row *i* is source line *i*) and reinstalled on the
-  viewport when `relayout` runs. Issue #17 owns the async and
-  obsolete-layout contract; Issue #16's wrap mode will make the
-  row→line mapping many-to-one.
+  `Row(i)` returning a `viewport.Row{Line, Cont, Cells, Spans}` — built
+  when a load completes and reinstalled on the viewport when `relayout`
+  runs. Since Issue #16 the provider is `viewport.Model` built by
+  `viewport.Prepare` over `*filebuffer.Buffer` (satisfying
+  `viewport.Source`): wrap mode makes the row→line mapping many-to-one
+  with `Cont` continuation rows, and run-off-edge keeps row *i* =
+  source line *i* (the Issue #12 `bufferRows` adapter is gone). The
+  model is keyed by path, content revision, text width, and wrap mode —
+  Issue #17 owns the async and obsolete-layout contract. See
+  [wrap-mode.md](wrap-mode.md).
 - `Viewport.Visible()` materializes only the visible slice —
   `min(height, count − top)` rows — so the provider's `Row` is queried
   once per shown row and never for rows outside the frame. The
@@ -108,12 +112,15 @@ Rendering no longer scans the buffer per frame:
   provider interface (now with `RowOf`), and `Viewport` (`Resize`,
   `SetRows`, `SetTop`/`Top`, `Height`, the six scroll methods,
   `Reveal`, `Visible`).
-- `internal/app/browse.go` — `bufferRows` (including its `RowOf`),
-  `Model.scroll`, `Model.reveal`, `relayout`'s prepared-row reinstall,
-  `contentRow` over the visible slice.
-- `internal/app/app.go` — the `rows`/`saved` maps, the scroll-key case
-  in `Update`, and the saved-state restore plus reveal on current-path
-  load completion.
+- `internal/app/browse.go` — `Model.scroll`, `Model.reveal`,
+  `relayout`'s prepared-row rebuild and reinstall, `contentRow` over
+  the visible slice (continuation rows behind a blank gutter).
+- `internal/viewport/rows.go` — `Source`, `Key`, `Prepare`, `Model` —
+  the swappable prepared row model (Issue #16; see
+  [wrap-mode.md](wrap-mode.md)).
+- `internal/app/app.go` — the `rows`/`saved`/`revs` maps and
+  `prepW`/`prepWrap`, the scroll-key case in `Update`, and the
+  saved-state restore plus reveal on current-path load completion.
 
 See also: [destination-reveal.md](destination-reveal.md) (the Issue #14
 reveal contract built on this position),

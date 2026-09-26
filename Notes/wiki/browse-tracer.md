@@ -91,9 +91,10 @@ its raw-byte mapping is retained; C0 controls and DEL use caret
 notation; C1 controls use `\uXXXX`-style escapes; LF and CRLF are
 structural line terminators and are never displayed (their bytes map to
 the end-of-line position); a standalone CR renders as `^M`; a tab
-renders as the provisional single-cell `→` placeholder pending Issue
-#16's stop expansion — no test may assert specific cell positions on
-tab-containing lines. Grapheme clusters go through `x/ansi` width
+expands with space cells to the next multiple of eight source-display
+columns as one cluster (Issue #16 replaced the provisional `→` and
+asserted the deferred cell positions). Grapheme clusters go through
+`x/ansi` width
 accounting: a printable cluster is one unit; a cluster mixing
 printable and dangerous forms falls back to per-rune rules so no
 control byte survives verbatim.
@@ -136,18 +137,25 @@ follows an unescaped ESC.
 - `internal/viewport/viewport.go` — Issue #12: `Row`/`Rows` prepared
   content, clamped `top`, the six scroll units, and `Visible`. See
   [viewport-scrolling.md](viewport-scrolling.md).
+- `internal/viewport/rows.go` — Issue #16's `Source`/`Key`/`Prepare`/
+  `Model`: the swappable row model feeding the viewport — wrap mode's
+  grapheme-boundary packing with blank continuation gutters, or
+  run-off-edge's one row per line. See [wrap-mode.md](wrap-mode.md).
 - `internal/theme/theme.go` — the Issue #7 module: `Dark`/`Plain`
   constructors, `Toggle`/`Light`, and the style set (`Base`, `Gutter`,
   `FileList`, `FilenameRule`, `Match`, `CurrentMatch`, `Indicator`,
   `CurrentFile`, `Overlay`). See
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
 - `internal/app/browse.go` — `loadDoneMsg`, `ensureLoad`/`loadCmd`,
-  `bufferRows` (Issue #12 prepared rows, Issue #14 `RowOf`), `scroll`,
-  `navigate` (Issue #13 cursor steps and the file-crossing viewport
-  handoff), `reveal` (Issue #14),
-  `renderBrowse`, `filenameRule`, `contentRow`, `renderCells`.
+  `scroll`, `navigate` (Issue #13 cursor steps and the file-crossing
+  viewport handoff), `reveal` (Issue #14), `reservedW` (Issue #16's
+  zero-or-one indicator column),
+  `renderBrowse`, `filenameRule`, `contentRow` (Issue #16 blank
+  continuation gutters), `renderCells`.
 - `internal/app/app.go` — `phaseBrowse`, buffer/loading/failed maps,
-  the Issue #12 `rows`/`saved` maps, files/stops, `relayout`; the
+  the Issue #12 `rows`/`saved` maps, the Issue #16 `wrap` flag
+  (`w` toggles) and `revs`/`prepW`/`prepWrap` preparation bookkeeping,
+  files/stops, `relayout`; the
   matched-line cursor itself lives in `searchindex.Index` since
   Issue #13.
 

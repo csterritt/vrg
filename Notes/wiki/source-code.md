@@ -80,7 +80,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `up`/`down`/`u`/`d`/`pgup`/`pgdown` key case, and the saved-state
   `SetTop` restore when a load completes for the current path —
   Issue #14 runs `reveal` immediately after that restore, covering the
-  startup-after-load trigger;
+  startup-after-load trigger; Issue #16 adds `wrap` (on initially),
+  the `w` browse key flipping between wrap and run-off-edge modes, and
+  the preparation bookkeeping (`revs` — a per-path content revision
+  bumped on each successful load — plus `prepW`/`prepWrap` recording
+  the layout the cached models were built for);
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
   diagnostics box; Issue #15 adds the pop-up state (`popupID`,
@@ -140,13 +144,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   spans over escaped `present.Cell`s via `Match`/`CurrentMatch`,
   marker spans, clip-edge wide clusters). Issue #12 adds `scroll`
   (the six scroll keys routed to `Viewport` units, then saving the top
-  row per path — a no-op on placeholders and outside browse) and
-  `bufferRows` (the prepared `viewport.Rows` adapter over
-  `*filebuffer.Buffer`: unwrapped row i = source line i — Issue #14
-  adds its `RowOf`, which returns `Target.Line` until wrap arrives),
-  with
-  `relayout` reinstalling the current file's prepared rows on every
-  layout change. Issue #13 adds `navigate` (the `n`/`p` cursor step:
+  row per path — a no-op on placeholders and outside browse) and the
+  prepared-row install in `relayout` — the Issue #12 `bufferRows`
+  adapter is gone since Issue #16, which builds real `viewport.Model`
+  values via `viewport.Prepare` and caches them per path. Issue #16
+  also adds `reservedW` (the right-indicator column: zero in wrap
+  mode, one in run-off-edge, pending Issue #20's content), makes
+  `relayout` compute text width as panel minus gutter minus the
+  reserved column and rebuild models whose width, wrap mode, or
+  content revision is stale, and gives `contentRow` the blank
+  continuation gutter (`Row.Cont`). Issue #13 adds `navigate` (the `n`/`p` cursor step:
   strict no-op on zero/one stops, restyle within a file, and on a
   file crossing the departing top row is saved, the destination's
   prepared rows and saved-or-top state installed, and `ensureLoad`
@@ -163,6 +170,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [destination-reveal.md](destination-reveal.md),
   [file-change-popup.md](file-change-popup.md),
   [viewport-scrolling.md](viewport-scrolling.md),
+  [wrap-mode.md](wrap-mode.md),
   [safe-presentation.md](safe-presentation.md), and
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
 - `internal/app/popup.go` — the Issue #15 file-change pop-up:
@@ -249,10 +257,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `Path`-escaped filenames embed single-lined).
 - `internal/present/line.go` — `LineOf`/`Line` for content lines
   (U+FFFD for invalid UTF-8, caret notation, `\uXXXX`, LF/CRLF never
-  displayed, standalone CR → `^M`, provisional single-cell `→` tab
-  pending Issue #16) with per-byte `lo`/`hi` byte→cell maps and `Span`
-  range→cell mapping including zero-width markers; `Cell`. Grapheme-
-  aware via `x/ansi`. See [safe-presentation.md](safe-presentation.md).
+  displayed, standalone CR → `^M`; since Issue #16 a tab expands with
+  space cells to the next multiple of eight source-display columns as
+  one cluster, replacing the provisional `→`) with per-byte `lo`/`hi`
+  byte→cell maps and `Span` range→cell mapping including zero-width
+  markers; `Cell` carries `Lead` (a cluster's first cell, the only
+  legal wrap boundary) and `Cont` (trailing cells of a multi-cell
+  unit) — the shared segmentation/width policy Viewport consumes.
+  Grapheme-aware via `x/ansi`. See [safe-presentation.md](safe-presentation.md)
+  and [wrap-mode.md](wrap-mode.md).
 - `internal/present/doc.go` — the shared all-sink utility contract.
 
 ## internal/filebuffer
@@ -263,12 +276,17 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `internal/present`, validates each stop's submatches against the
   line's raw bytes, and exposes `LineCount`,
   `GutterWidth`/`GutterDigits` (largest line number's digit width +
-  two spaces, minimum one slot), `Text`, `Cells`, and `Spans`.
+  two spaces, minimum one slot), `Text`, `Cells`, and `Spans`. Since
+  Issue #16 the buffer is the grapheme-policy source for layout:
+  `Cells` carries the `Lead`/`Cont` cluster marks, so `*Buffer`
+  satisfies `viewport.Source` and row models consume boundaries
+  without re-segmenting. See [wrap-mode.md](wrap-mode.md).
 
 ## internal/viewport
 
 - `internal/viewport/viewport.go` — Issue #12's reading position:
-  `Row` (source line + cells + spans of one rendered row), the `Rows`
+  `Row` (source line + cells + spans of one rendered row — Issue #16
+  adds `Cont` marking a continuation row), the `Rows`
   prepared-row provider interface built at load or layout time —
   Issue #14 adds `RowOf(Target)` so the provider resolves a display
   target to its rendered row — and `Viewport` — content dimensions, the
@@ -279,9 +297,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   restore, Issue #14's `Reveal` (visible target → no scroll; hidden
   target → `row − floor(height/3)` top, clamped; reports whether the
   top moved), and `Visible`, which queries the provider only for the
-  shown range. Wrap, anchors, and panning remain Issues 16–21.
-  See [viewport-scrolling.md](viewport-scrolling.md) and
-  [destination-reveal.md](destination-reveal.md).
+  shown range. Anchors and panning remain Issues 17–19.
+  See [viewport-scrolling.md](viewport-scrolling.md),
+  [destination-reveal.md](destination-reveal.md), and
+  [wrap-mode.md](wrap-mode.md).
+- `internal/viewport/rows.go` — Issue #16's prepared row model:
+  `Source` (the per-line cell/span interface `*filebuffer.Buffer`
+  satisfies), `Key` (path, content revision, text width, wrap mode —
+  the staleness contract Issue #17's async preparation consumes),
+  `Prepare` (one-time layout: run-off-edge maps row i to line i; wrap
+  mode packs clusters greedily into Width-cell rows, moving an unfit
+  cluster whole and splitting an over-wide one as a last resort, with
+  an extra row for an end-of-line marker past a full final row), and
+  `Model` (`Len`/`Row`/`RowOf` — `Row` materializes cells and
+  row-local spans per query, blanking a split cluster's clipped lead).
 
 ## internal/theme
 

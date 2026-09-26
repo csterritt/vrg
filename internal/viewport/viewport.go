@@ -3,11 +3,16 @@ package viewport
 import "vrg/internal/present"
 
 // Row is one rendered row's prepared data: the source line the row
-// leads with plus the display cells and highlight spans a frame paints.
-// In unwrapped mode rendered row i is source line i; Issue #16's wrap
-// mode makes the mapping many-to-one.
+// leads with or continues plus the display cells and highlight spans a
+// frame paints, translated into row-local cells. In run-off-edge mode
+// rendered row i is source line i; wrap mode makes the mapping
+// many-to-one.
 type Row struct {
-	Line  int
+	Line int
+	// Cont marks a continuation row: it paints the next cells of a
+	// line already started above, behind a blank gutter rather than a
+	// line number.
+	Cont  bool
 	Cells []present.Cell
 	Spans []present.Span
 }
@@ -32,8 +37,8 @@ type Rows interface {
 	// Row returns the prepared data of rendered row i.
 	Row(i int) Row
 	// RowOf returns the rendered row containing the display target.
-	// Unwrapped, a target's row is its source line; wrap mode's
-	// many-to-one mapping arrives with Issue #16.
+	// Run-off-edge, a target's row is its source line; wrap mode's
+	// many-to-one mapping lands the row covering the target cell.
 	RowOf(t Target) int
 }
 
@@ -44,8 +49,8 @@ type Rows interface {
 // shorter than the viewport pins the top to 0 and leaves its unused
 // rows naturally. With no prepared rows (the loading and unreadable
 // placeholders) every scroll is a no-op, reveal is inert, and queries
-// stay empty. Wrap toggling, horizontal panning, and logical anchors
-// arrive with Issues 16–19.
+// stay empty. Horizontal panning and logical anchors arrive with
+// Issues 17–19.
 type Viewport struct {
 	width  int // text columns available to content
 	height int // content rows

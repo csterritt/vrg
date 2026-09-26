@@ -8,8 +8,8 @@ import (
 // Content presentation: the display text of one source line. LF and
 // CRLF are line terminators and produce no display; a standalone CR is
 // escaped ^M; other C0 controls and DEL take caret notation; C1 takes
-// \uXXXX; invalid UTF-8 becomes U+FFFD; tab renders as the provisional
-// one-cell → placeholder until Issue 16's stop expansion.
+// \uXXXX; invalid UTF-8 becomes U+FFFD; tab expands with spaces to the
+// next multiple of eight source-display columns.
 func TestLineText(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -36,7 +36,7 @@ func TestLineText(t *testing.T) {
 		{"crlf only line", "\r\n", ""},
 		{"crlf removed", "a\r\n", "a"},
 		{"lf removed", "a\n", "a"},
-		{"tab placeholder", "a\tb\n", "a→b"},
+		{"tab expansion", "a\tb\n", "a       b"},
 		{"combining cluster", "e\u0301x\n", "e\u0301x"},
 		{"printable unicode", "héllö→世\n", "héllö→世"},
 	} {
@@ -51,7 +51,8 @@ func TestLineText(t *testing.T) {
 
 // Cell counts for the printable forms: ASCII is one cell per byte, a
 // wide rune two, a combining cluster one, caret escapes two, \uXXXX six,
-// U+FFFD one, and the provisional tab form a single → cell.
+// U+FFFD one, and a tab its expansion width to the next eight-column
+// stop.
 func TestLineWidth(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -65,6 +66,8 @@ func TestLineWidth(t *testing.T) {
 		{"standalone cr", "a\rb\n", 4},
 		{"wide rune", "世x\n", 3},
 		{"combining cluster", "e\u0301x\n", 2},
+		{"tab expands to the next stop", "a\tb\n", 9},
+		{"tab at a stop takes eight", "12345678\tb\n", 17},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := LineOf([]byte(tc.raw)).Width(); got != tc.want {
@@ -115,19 +118,39 @@ func TestLineSpan(t *testing.T) {
 	}
 }
 
-// A tab is never emitted raw and occupies exactly one provisional →
-// cell; per Issue 5 nothing on a tab-containing line asserts specific
-// cell positions beyond that single-cell form.
-func TestLineTabForm(t *testing.T) {
-	l := LineOf([]byte("a\tb\n"))
-	if l.Text() != "a→b" {
-		t.Fatalf("tab presentation = %q, want %q", l.Text(), "a→b")
+// A tab is never emitted raw: it expands with space cells to the next
+// multiple of eight source-display columns — the cell positions Issue
+// #5 deferred — and its byte maps to the whole expansion, so a match on
+// the tab highlights every expansion cell.
+func TestLineTabStops(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+		want string
+		bAt  int // display cell of the b following the tab
+	}{
+		{"tab at column zero", "\tb\n", "        b", 8},
+		{"tab at column one", "a\tb\n", "a       b", 8},
+		{"tab ending at a stop", "1234567\tb\n", "1234567 b", 8},
+		{"tab starting at a stop", "12345678\tb\n", "12345678        b", 16},
+		{"double tab", "\t\tb\n", "                b", 16},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l := LineOf([]byte(tc.raw))
+			if l.Text() != tc.want {
+				t.Fatalf("LineOf(%q).Text() = %q, want %q", tc.raw, l.Text(), tc.want)
+			}
+			if got := l.Cells()[tc.bAt]; got.Text != "b" || !got.Lead {
+				t.Fatalf("cell %d = %+v, want the b cluster lead", tc.bAt, got)
+			}
+			if strings.Contains(l.Text(), "\t") {
+				t.Fatalf("raw tab survived presentation: %q", l.Text())
+			}
+		})
 	}
-	if got := l.Span(1, 2); got.Start != 1 || got.End != 2 {
-		t.Fatalf("tab span = %+v, want exactly one cell", got)
-	}
-	if strings.Contains(l.Text(), "\t") {
-		t.Fatalf("raw tab survived presentation: %q", l.Text())
+	// The tab byte's span covers its whole expansion.
+	if got := LineOf([]byte("a\tb\n")).Span(1, 2); got != (Span{1, 8}) {
+		t.Fatalf("tab span = %+v, want {1 8} over the expansion", got)
 	}
 }
 

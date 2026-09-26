@@ -29,9 +29,13 @@ line, terminator included, as display cells. Invalid UTF-8 renders as
 U+FFFD while its raw-byte mapping is retained; C0 controls and DEL use
 caret notation; C1 controls use `\uXXXX`; LF and CRLF are structural
 line terminators, never displayed (their bytes map to the end-of-line
-position); a standalone CR renders as `^M`; a tab renders as the
-provisional single-cell `→` placeholder pending Issue #16's stop
-expansion. Grapheme clusters go through `x/ansi` width accounting; a
+position); a standalone CR renders as `^M`; a tab expands with space
+cells to the next multiple of eight source-display columns as one
+cluster (Issue #16 replaced the provisional single-cell `→`). Grapheme
+clusters go through `x/ansi` width accounting and carry `Lead`/`Cont`
+cell marks — `Lead` on a cluster's first cell, `Cont` on a multi-cell
+unit's trailing cells — the shared segmentation/width policy the
+Issue #16 row model wraps on (see [wrap-mode.md](wrap-mode.md)); a
 cluster mixing printable and dangerous forms falls back to per-rune
 rules so no control byte survives verbatim. Every emitted unit records
 per-byte `lo`/`hi` cell maps; `Line.Span(start, end)` maps a raw byte

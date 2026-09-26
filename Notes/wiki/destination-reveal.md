@@ -27,9 +27,12 @@ and gone-line landing — are Issue #29's).
 
 The viewport never assumes a target's rendered row equals its line:
 `viewport.Rows` gained `RowOf(Target) int`, answered by the prepared
-row model, so Issue #16's wrap mode can map the target cell into the
-correct one of a source line's many rendered rows. `bufferRows` answers
-with the line itself while unwrapped.
+row model, so wrap mode maps the target cell into the correct one of a
+source line's many rendered rows. Issue #16's `viewport.Model` answers
+with the line itself in run-off-edge mode and with the row covering
+the target cell in wrap mode — boundary positions belong to the next
+row, an end-of-line marker lands on its own trailing row (see
+[wrap-mode.md](wrap-mode.md)).
 
 ## The placement rule
 
@@ -99,8 +102,10 @@ See [unit-tests.md](unit-tests.md) § `internal/viewport` and
 
 - `internal/viewport/viewport.go` — `Target`, `Rows.RowOf`, and
   `Viewport.Reveal`.
-- `internal/app/browse.go` — `reveal`, the `navigate` reveal trigger,
-  and `bufferRows.RowOf`.
+- `internal/app/browse.go` — `reveal` and the `navigate` reveal
+  trigger.
+- `internal/viewport/rows.go` — `Model.RowOf`, the wrap-aware answer
+  (Issue #16).
 - `internal/app/app.go` — the `loadDoneMsg` saved-state-plus-reveal
   sequence for the current path.
 

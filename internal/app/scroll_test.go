@@ -290,9 +290,10 @@ func TestRenderQueriesOnlyVisibleRows(t *testing.T) {
 	}
 }
 
-// The prepared-row adapter maps rendered row i to source line i in
-// unwrapped mode, carrying the buffer's cells and spans.
-func TestBufferRowsAdaptsBuffer(t *testing.T) {
+// A real *filebuffer.Buffer satisfies viewport.Source: Prepare maps
+// rendered row i to source line i in run-off-edge mode, carrying the
+// buffer's cells.
+func TestBufferPreparesAsRowSource(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(p, []byte("one\ntwo\n"), 0o644); err != nil {
@@ -302,7 +303,7 @@ func TestBufferRowsAdaptsBuffer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	var rows viewport.Rows = bufferRows{buf: buf}
+	var rows viewport.Rows = viewport.Prepare(buf, viewport.Key{Width: 80})
 	if rows.Len() != 2 {
 		t.Fatalf("Len = %d, want 2", rows.Len())
 	}

@@ -531,3 +531,54 @@ logical anchors), `internal/app/popup.go`, `internal/app/app.go`,
 `internal/app/browse.go`, `internal/app/overlay.go`,
 `internal/app/popup_test.go`, `internal/app/sinksafety_test.go`,
 `internal/app/browse_test.go`, `cmd/vrg/pty_replay_test.go`.
+
+## [2026-09-23] ingest | Issue #16 wrap mode and `w` toggle
+
+Ingested the completed Issue #16 implementation: wrapping is on
+initially and `w` toggles run-off-edge mode in browse. `present.Cell`
+gained `Lead` — a cluster's first cell, the only legal wrap boundary —
+alongside `Cont` (a multi-cell unit's trailing cells), making
+`internal/present` the single grapheme-segmentation and cell-width
+policy; `*filebuffer.Buffer` satisfies the new `viewport.Source`
+(`LineCount`/`Cells`/`Spans`) so `internal/viewport` never re-derives
+segmentation. Tabs now expand structurally with space cells to the
+next multiple of eight source-display columns as one cluster,
+replacing Issue #5's provisional `→` and asserting the deferred cell
+positions. New `internal/viewport/rows.go`: `Key{Path, Rev, Width,
+Wrap}` (the staleness contract for Issue #17's async preparation) and
+`Prepare`/`Model` — wrap mode packs clusters greedily into text-width
+rows, moving an unfit cluster whole (blank remainder) and splitting an
+over-wide one as a last resort with the clipped lead blanked; an
+end-of-line marker past a full final row occupies its own continuation
+row. `Row.Cont` marks continuations, painted behind a blank gutter.
+The reserved right-indicator column is zero in wrap mode and one in
+run-off-edge (Issue #20 populates it), so text width is panel minus
+gutter minus reserved. `relayout` rebuilds stale models per
+path/revision/layout; `Reveal` resolves wrapped targets through
+`Model.RowOf` (boundary positions belong to the next row). Created
+[wrap-mode](wrap-mode.md); updated
+[viewport-scrolling](viewport-scrolling.md) (the `bufferRows` adapter
+is gone — `viewport.Model` is the provider),
+[destination-reveal](destination-reveal.md) (`RowOf` now wrap-aware),
+[safe-presentation](safe-presentation.md) (tab expansion, `Lead`/`Cont`),
+[browse-tracer](browse-tracer.md) (tab contract, file list),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. New test files: `internal/viewport/wrap_test.go` (wrap table,
+continuation/run-off-edge models, key semantics, per-row span
+translation, end-of-line marker rows, wrapped-target reveal at
+`floor(h/3)`, the `lineSource` counting-fake render-cost guard),
+`internal/filebuffer/cluster_test.go` (`Lead`/`Cont` boundaries, tab
+stops), `internal/app/wrap_test.go` (default wrap with blank
+continuation gutters, `w` toggle changing the reserved column and
+re-wrapping, `n`/`p` reveal inside a screen-tall wrapped line);
+`line_test.go`'s provisional tab test became `TestLineTabStops` and
+`scroll_test.go`'s adapter test became `TestBufferPreparesAsRowSource`.
+Sources: `Notes/issues/016-wrap-mode-and-toggle.md`,
+`Notes/tasks/016-wrap-mode-and-toggle.md`, `Notes/PRD-vrg.md` (Text,
+graphemes, and safe presentation; Layout and indicators; Navigation,
+viewport, and logical anchors; Wrapping, indicators, and text
+display), `internal/present/line.go`, `internal/viewport/rows.go`,
+`internal/viewport/viewport.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/viewport/wrap_test.go`,
+`internal/filebuffer/cluster_test.go`, `internal/app/wrap_test.go`,
+`internal/present/line_test.go`, `internal/app/scroll_test.go`.

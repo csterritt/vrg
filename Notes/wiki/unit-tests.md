@@ -220,8 +220,10 @@ contracts of the shared utility:
 - `TestLineSpan` — byte→cell maps for escaped forms, including
   an ESC byte's match covering both `^[` cells and marker positions on
   removed terminator bytes.
-- `TestLineTabForm` — the provisional single `→` cell (no
-  position assertions, per the Issue #16 deferral).
+- `TestLineTabStops` — Issue #16's structural expansion: no raw tab
+  survives, expansion cells land on the next multiple of eight
+  source-display columns (the positions Issue #5 deferred), and the
+  tab byte's span covers the whole expansion.
 - `TestLineRetainsRaw` — raw line bytes survive presentation.
 
 ## internal/filebuffer
@@ -239,6 +241,19 @@ contracts of the shared utility:
 - `TestSubmatchValidation` — out-of-bounds and byte-mismatched
   submatches are dropped, not clamped into wrong highlights.
 - `TestLoadFailure` — unreadable files return the error.
+
+`cluster_test.go` (same package, Issue #16) pins the buffer as the
+shared grapheme-policy source:
+
+- `TestCellClusterBoundaries` — `Cells` carries `Lead` on every
+  cluster's first cell (the only legal wrap boundary) and `Cont` on
+  trailing cells, across ASCII, wide, combining, and caret-escape
+  units.
+- `TestLeadingCombiningCluster` — a standalone combining mark at line
+  start takes a provisional cell of its own, still a boundary.
+- `TestTabStopCells` — the tab expands to the next eight-column stop
+  as one cluster (first expansion cell leads), and the recorded
+  submatch on the tab byte highlights the whole expansion.
 
 ## internal/app
 
@@ -329,8 +344,25 @@ contracts; `codePress` synthesizes the special-key messages and
   `countingRows` fake installed through `m.rows` + relayout records
   exactly the visible `Row` indices per `View()`, before and after a
   scroll — never O(N) over the buffer.
-- `TestBufferRowsAdaptsBuffer` — the `bufferRows` adapter maps
-  rendered row i to source line i with the buffer's cells.
+- `TestBufferPreparesAsRowSource` — a real `*filebuffer.Buffer`
+  satisfies `viewport.Source`: `Prepare` maps rendered row i to
+  source line i in run-off-edge mode with the buffer's cells (the
+  Issue #12 `bufferRows` adapter is gone since Issue #16).
+
+`wrap_test.go` (same package, Issue #16) drives the wrap toggle
+through `Update`:
+
+- `TestWrapOnByDefaultBlankContinuationGutter` — a freshly loaded
+  long line wraps at the text width (panel minus gutter, no reserved
+  column) with continuation rows behind a blank gutter aligned to the
+  first row's text.
+- `TestWTogglesRunOffEdge` — `w` switches to run-off-edge: the
+  reserved indicator column widens by one (text width shrinks), the
+  long line renders as one clipped row, and a second `w` restores the
+  wrapped rows.
+- `TestNRevealInsideWrappedLine` — a match near the end of a
+  screen-tall wrapped line is revealed on its own rendered row at
+  `floor(h/3)` — at startup, after `n` away, and after `p` back.
 
 `nav_test.go` (same package) covers the Issue #13 `n`/`p` navigation
 wiring; `twoFileModel` lands the model in browse on a.txt:1 with stops
@@ -616,6 +648,35 @@ proving the reveal consumes a rendered row, not a source-line ordinal:
   to the nearest real row, then the EOF clamp still applies.
 - `TestRevealWithoutContentIsNoOp` — nil and zero-row providers are
   inert.
+
+`wrap_test.go` (same package, Issue #16) pins the prepared row model
+against `lineSource`, a `Source` fake over real `present.Line`
+segmentation that records every per-line `Cells`/`Spans` query:
+
+- `TestWrapRowModel` — the wrap table: short/empty/exact-multiple row
+  counts, ASCII packing, a wide cluster unfit for the row's remainder
+  moving whole and leaving a blank, a combining cluster kept whole, an
+  over-wide cluster splitting across rows with its clipped lead
+  blanked, and the tab expansion moving whole or splitting like any
+  oversized cluster.
+- `TestWrapRowLineAndContinuation` — every rendered row reports its
+  source line and `Cont` flag; scroll units stay rendered rows.
+- `TestRunOffEdgeRowModel` — one row per line carrying full cells for
+  the frame to clip; `RowOf` is the source line regardless of cell.
+- `TestRowModelKey` — `Key{Path, Rev, Width, Wrap}` identifies what a
+  model was prepared for; distinct preparations differ by key.
+- `TestWrapTranslatesSpansPerRow` — coverage spans clip to each row's
+  cell range and markers paint on their owning row (a boundary
+  position belongs to the next row).
+- `TestEndOfLineMarkerRows` — a marker after a completely full final
+  wrap row occupies another row (an empty continuation row painting
+  the marker at column zero); on a non-full last row it stays put.
+- `TestRevealFindsRowOfWrappedLine` — `Reveal` resolves a target deep
+  inside a screen-tall wrapped line to its containing rendered row and
+  lands it at `floor(height/3)`; a tail-line target still EOF-clamps.
+- `TestVisibleRowsNeverWrapsOffscreenLines` — the render-cost guard:
+  after `Prepare`, a frame queries `Cells`/`Spans` only for the lines
+  behind its visible rows — never O(N) per frame.
 
 ## internal/theme
 
