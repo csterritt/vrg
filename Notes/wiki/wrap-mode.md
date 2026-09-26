@@ -37,7 +37,8 @@ and 71 under "Wrapping, indicators, and text display" in
 - **Text width** is `panel width − gutter width − reserved indicator
   width`, where `reservedW()` returns **0 in wrap mode and 1 in
   run-off-edge mode** — the rightmost indicator column is reserved now
-  and populated by Issue #20. Toggling therefore changes the text
+  and populated by [Issue #20](hidden-content-indicators.md). Toggling
+  therefore changes the text
   width even at the same terminal size, which is itself a layout
   change forcing row-model rebuild.
 

@@ -1,0 +1,24 @@
+a.txt  ── a.txt ────────────────────────────────────────────────────────────────
+        1* xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+        2* yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy
+        3_ zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+        4_ xxmidxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxf
+        5_ 000005
+        6_ 000006
+        7_ 000007
+        8_ 000008
+        9_ 000009
+       10_ 000010
+       11_ 000011
+       12_ 000012
+
+
+
+
+
+
+
+
+
+
+

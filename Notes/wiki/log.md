@@ -734,3 +734,46 @@ Sources: `Notes/issues/019-minimal-horizontal-reveal.md`,
 and indicators), `internal/viewport/viewport.go`,
 `internal/app/browse.go`, `internal/viewport/hreveal_test.go`,
 `internal/app/hreveal_test.go`, `internal/viewport/pan_test.go`.
+
+## [2026-09-24] ingest | Issue #20 hidden-content indicators
+
+Ingested the completed Issue #20 implementation: run-off-edge frames
+now signpost clipped content. `viewport.Row` gained three flags —
+`HiddenLeft` (any of the line's text hidden left), `MatchHiddenLeft`
+(a match or marker entirely hidden left), and `MatchHiddenRight`
+(entirely hidden right) — computed by `hiddenMarks` inside `clipRow`,
+which sees the unclipped line and the same split-cluster blanked
+regions `[off, lb)`/`[rb, off+w)` the clip produces. Visibility is the
+Issue #19 painted-cell rule: a marker is one painted cell wherever it
+sits, a partially painted match counts as visible for that side, a
+match on a clip-edge-split cluster's blanked cells counts as entirely
+hidden on that side, and an entirely hidden match attributes to the
+side its hidden cells stand on (both only when a blank-filling cluster
+straddles both edges). `contentRow` renders them: the first trailing
+gutter space of every visible source line is blank, an inverse `_`, or
+an inverse `*` upgrade, and the reserved rightmost column is blank
+except an inverse `*` on the current matched line's visible row — the
+indicator is appended after text padded to the text width, so it never
+overwrites a match ending on the last text cell, and it vanishes when
+the current line scrolls off-screen. Wrap mode draws neither
+indicators nor the column. Created
+[hidden-content-indicators](hidden-content-indicators.md); updated
+[source-code](source-code.md) (`Row` flags + `hiddenMarks`,
+`contentRow` indicator composition), [unit-tests](unit-tests.md),
+[horizontal-panning](horizontal-panning.md) and
+[wrap-mode](wrap-mode.md) and
+[minimal-horizontal-reveal](minimal-horizontal-reveal.md) (Issue #20
+links), and the index. New test files:
+`internal/viewport/indicators_test.go` (per-side flags, marker cells,
+partial visibility, split-cluster blanks both directions,
+unpaintable-cluster hidden-right, wrap-mode absence) and
+`internal/app/indicators_test.go` (`_`/`*`/blank gutters per line
+including empty and uniform lines, inverse styling, current-line-only
+right `*` with off-screen absence, both stars together, no-overwrite
+last-cell case, split-glyph stars, wrap-mode absence).
+Sources: `Notes/issues/020-hidden-content-indicators.md`,
+`Notes/tasks/020-hidden-content-indicators.md`,
+`Notes/PRD-vrg.md` (Layout and indicators),
+`internal/viewport/viewport.go`, `internal/app/browse.go`,
+`internal/viewport/indicators_test.go`,
+`internal/app/indicators_test.go`.

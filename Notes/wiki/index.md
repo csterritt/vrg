@@ -128,6 +128,14 @@ Catalog of all wiki pages for the vrg project.
   oversized-match start-cell rule, the unpaintable-cluster geometric
   fallback with its no-loop guarantee, and the startup and
   per-navigation triggers after the file-change offset reset
+- [hidden-content-indicators.md](hidden-content-indicators.md) —
+  Issue #20: the per-line gutter `_`/`*` signposts for hidden-left
+  text and entirely hidden matches, the current-matched-line-only
+  right `*` in the reserved column with its off-screen absence and
+  never-overwrite guarantee, painted-cell visibility after grapheme
+  clipping shared with the reveal, partial visibility counting as
+  visible, split-cluster blanks counting as hidden, and wrap mode's
+  freedom from both indicators and the reserved column
 
 ## Catalogs
 

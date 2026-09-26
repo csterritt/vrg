@@ -91,7 +91,8 @@ the buffer.
 
 **Hidden-left geometry is legal.** At a nonzero offset *every* visible
 line may have text hidden left — the uniform-lines test pins this so
-Issue #20's `_` indicator can signpost every line at once.
+[Issue #20's `_` indicator](hidden-content-indicators.md) can
+signpost every line at once.
 
 ## Grapheme-safe clipping
 

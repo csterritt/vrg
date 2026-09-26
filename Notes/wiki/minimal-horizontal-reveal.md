@@ -17,8 +17,9 @@ reserved column) in `Notes/PRD-vrg.md`.
 
 "Visible" for reveal purposes means the target's start cell is
 **actually rendered as a painted cell** after grapheme clipping —
-consistent with how Issue #20's indicators will compute visibility —
-not merely geometrically inside the text area. A position inside
+consistent with how [Issue #20's indicators](
+hidden-content-indicators.md) compute visibility — not merely
+geometrically inside the text area. A position inside
 `[off, off + text width)` whose grapheme cluster is split by a clip
 edge renders blank and counts as *hidden*; the reveal then moves the
 offset even though the position was inside the window geometry. The

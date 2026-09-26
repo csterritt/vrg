@@ -488,12 +488,35 @@ func (m Model) contentRow(row int, cur []byte, buf *filebuffer.Buffer, failed bo
 	}
 	// A continuation row keeps the gutter blank so its text stays
 	// aligned with the row its source line leads with.
-	if r.Cont {
-		gutter = m.theme.Gutter(strings.Repeat(" ", digits) + "  ")
-	} else {
-		gutter = m.theme.Gutter(fmt.Sprintf("%*d", digits, r.Line+1) + "  ")
+	num := strings.Repeat(" ", digits)
+	if !r.Cont {
+		num = fmt.Sprintf("%*d", digits, r.Line+1)
 	}
-	return gutter + renderCells(r.Cells, r.Spans, textW, m.theme, r.Line == curLine)
+	// In run-off-edge mode the first trailing gutter space signposts
+	// hidden-left content — inverse "_" for text, upgraded to inverse
+	// "*" when a match or marker on the line is entirely hidden left.
+	// Wrap rows never carry the flags.
+	switch {
+	case r.MatchHiddenLeft:
+		gutter = m.theme.Gutter(num) + m.theme.Indicator("*") + " "
+	case r.HiddenLeft:
+		gutter = m.theme.Gutter(num) + m.theme.Indicator("_") + " "
+	default:
+		gutter = m.theme.Gutter(num + "  ")
+	}
+	cells := renderCells(r.Cells, r.Spans, textW, m.theme, r.Line == curLine)
+	if m.reservedW() == 0 {
+		return gutter + cells
+	}
+	// The reserved rightmost column is blank except an inverse "*" on
+	// the current matched line's row when a match or marker on that
+	// line is entirely hidden right. Painted text stops at textW, so
+	// the indicator never overwrites it.
+	right := " "
+	if r.Line == curLine && r.MatchHiddenRight {
+		right = m.theme.Indicator("*")
+	}
+	return gutter + cells + strings.Repeat(" ", max(0, textW-ansi.StringWidth(cells))) + right
 }
 
 // renderCells emits a line's display cells clipped to textW columns with

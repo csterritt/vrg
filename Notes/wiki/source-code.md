@@ -154,7 +154,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   Issue #12 `bufferRows` adapter is gone since Issue #16, which builds
   real `viewport.Model` values via `viewport.Prepare`. Issue #16
   also adds `reservedW` (the right-indicator column: zero in wrap
-  mode, one in run-off-edge, pending Issue #20's content) and gives
+  mode, one in run-off-edge, populated by Issue #20) and gives
   `contentRow` the blank continuation gutter (`Row.Cont`). Issue #17
   adds `layoutDoneMsg`/`installed` (the keyed prepared-layout
   completion and its cached form) and moves preparation off the
@@ -182,8 +182,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `pan` (the six pan keys routed to `Viewport` units under the same
   loaded-buffer gate as `scroll`) and the file-entry offset reset:
   `navigate`'s `FileChanged` branch and the current-path
-  `loadDoneMsg` both `SetOffset(0)` ahead of the reveal. See
+  `loadDoneMsg` both `SetOffset(0)` ahead of the reveal. Issue #20
+  populates the indicators: `contentRow` composes the gutter as
+  number + indicator cell + separator space — `Indicator`-styled `_`
+  for text hidden left, `*` for a match or marker entirely hidden
+  left, blank otherwise — and appends the reserved rightmost column,
+  blank except an `Indicator`-styled `*` on the current matched
+  line's row when `Row.MatchHiddenRight` is set. See
   [browse-tracer.md](browse-tracer.md),
+  [hidden-content-indicators.md](hidden-content-indicators.md),
   [match-navigation.md](match-navigation.md),
   [destination-reveal.md](destination-reveal.md),
   [file-change-popup.md](file-change-popup.md),
@@ -344,7 +351,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   a cluster wider than the text area); the unpaintable case counts as
   geometrically revealed so repeats cannot loop, and the write
   deliberately bypasses the paintable-boundary clamp.
+  Issue #20 adds `Row`'s indicator flags —
+  `HiddenLeft`/`MatchHiddenLeft`/`MatchHiddenRight` — computed by
+  `hiddenMarks` inside `clipRow` from the unclipped line and the same
+  split-cluster blanked regions the clip produces: painted-cell
+  visibility, markers painting wherever they sit, partially painted
+  matches counting visible, and an entirely hidden match attributed to
+  the side its hidden cells stand on.
   See [viewport-scrolling.md](viewport-scrolling.md),
+  [hidden-content-indicators.md](hidden-content-indicators.md),
   [horizontal-panning.md](horizontal-panning.md),
   [destination-reveal.md](destination-reveal.md),
   [minimal-horizontal-reveal.md](minimal-horizontal-reveal.md),

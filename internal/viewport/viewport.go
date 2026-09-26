@@ -21,6 +21,16 @@ type Row struct {
 	Cont  bool
 	Cells []present.Cell
 	Spans []present.Span
+	// HiddenLeft reports the row's line has text hidden left of the
+	// painted window — the frame's inverse "_" gutter marker.
+	HiddenLeft bool
+	// MatchHiddenLeft reports a match or marker on the row's line is
+	// entirely hidden left — upgrading the gutter marker to "*".
+	MatchHiddenLeft bool
+	// MatchHiddenRight reports a match or marker on the row's line is
+	// entirely hidden right — the reserved rightmost column's "*" on
+	// the current matched line's row.
+	MatchHiddenRight bool
 }
 
 // Target is a display location a reveal must show: the zero-based
@@ -421,11 +431,13 @@ func (v *Viewport) Visible() []Row {
 // clipRow returns a run-off-edge row's painted form at horizontal
 // offset off in a text area w cells wide: the line's cells
 // [off, off+w), its spans translated into window cells and clipped to
-// the window, and Start advanced to the first painted column. A
-// grapheme cluster split by either clip edge paints its in-window
-// cells blank — never a half glyph.
+// the window, Start advanced to the first painted column, and the
+// hidden-content indicator flags the window implies. A grapheme
+// cluster split by either clip edge paints its in-window cells blank —
+// never a half glyph.
 func clipRow(r Row, off, w int) Row {
 	off, w = max(off, 0), max(w, 0)
+	r.HiddenLeft, r.MatchHiddenLeft, r.MatchHiddenRight = hiddenMarks(r, off, w)
 	if off == 0 && len(r.Cells) <= w {
 		return r
 	}
@@ -480,4 +492,60 @@ func clipRow(r Row, off, w int) Row {
 	r.Cells = cells
 	r.Spans = spans
 	return r
+}
+
+// hiddenMarks derives a run-off-edge row's hidden-content indicator
+// flags for the window [off, off+w) from the unclipped line: text
+// hidden left (the gutter's "_"), a match or marker entirely hidden
+// left (the gutter's "*" upgrade), and a match or marker entirely
+// hidden right (the reserved column's "*" on the current matched
+// line's row). Visibility is over actually rendered cells after
+// grapheme clipping — an in-window cell does not paint when a clip
+// edge splits its cluster, the regions [off, lb) and [rb, off+w) —
+// while a marker always paints its in-window position. An entirely
+// hidden match is attributed to the side its hidden cells stand on; a
+// match covering only a split cluster's blanked cells on both edges —
+// possible only when the window paints nothing — reports both.
+func hiddenMarks(r Row, off, w int) (hidL, hidLMatch, hidRMatch bool) {
+	hidL = off > 0 && len(r.Cells) > 0
+	lb, rb := off, off+w
+	if off < len(r.Cells) && r.Cells[off].Cont {
+		for lb = off + 1; lb < len(r.Cells) && r.Cells[lb].Cont; lb++ {
+		}
+	}
+	if hi := off + w; hi > off && hi < len(r.Cells) && r.Cells[hi].Cont {
+		for rb = hi - 1; rb > off && r.Cells[rb].Cont; rb-- {
+		}
+	}
+	for _, s := range r.Spans {
+		if s.Start == s.End {
+			// A marker paints one cell wherever it sits — even on a
+			// split cluster's blanked cell.
+			switch {
+			case s.Start < off:
+				hidLMatch = true
+			case s.Start >= off+w:
+				hidRMatch = true
+			}
+			continue
+		}
+		lo, hi := max(s.Start, off), min(s.End, off+w)
+		visible := false
+		for c := lo; c < hi; c++ {
+			if c >= lb && c < rb {
+				visible = true
+				break
+			}
+		}
+		if visible {
+			continue
+		}
+		if s.Start < off || (lo < hi && lo < lb) {
+			hidLMatch = true
+		}
+		if s.Start >= off+w || (lo < hi && hi > rb) {
+			hidRMatch = true
+		}
+	}
+	return hidL, hidLMatch, hidRMatch
 }

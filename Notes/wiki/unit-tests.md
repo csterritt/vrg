@@ -521,6 +521,43 @@ whose matches sit far right of the text area:
   a two-cell CJK glyph reveals to `start + 2 − text width` so both
   cells of the first glyph paint at the right edge.
 
+`indicators_test.go` (same package, Issue #20) drives the
+hidden-content indicators through the rendered frame in run-off-edge
+mode; `indModel` lands a settled `w`-toggled browse, `frameLines`/
+`cellAt` probe cells of the ANSI-stripped `View()`, and `indCol`
+locates the gutter's first trailing space:
+
+- `TestGutterUnderscoreStarAndBlank` — per-line gutters at a nonzero
+  offset: `*` where the line's match is entirely hidden left, `_`
+  where only text hides left, blank on an empty line, and `_` on a
+  line whose match hides right instead; no right `*` anywhere.
+- `TestIndicatorsPaintInverse` — both marks emit the theme's inverse
+  pair `30;47` restored to base.
+- `TestRightStarCurrentMatchedLineOnly` — the reserved column's `*`
+  on the current matched line's row only: an unmatched line's
+  hidden-right text and a non-current matched line's hidden-right
+  match both leave it blank.
+- `TestRightStarAbsentWhenCurrentLineOffScreen` — scrolling the
+  current matched line out of view blanks every row's reserved column
+  while other gutters keep `_`.
+- `TestBothSidesHiddenStarsTogether` — one row carries the gutter `*`
+  and the reserved `*` at once.
+- `TestPartialMatchVisibilityDrawsNoStar` — a match one cell into the
+  window stays visible on either side: `_` not `*` left, blank not
+  `*` right, turning to `*` only when the last cell leaves.
+- `TestLastCellMatchAndFarMatchRightStar` — a match ending on the
+  last text cell paints its final glyph while the farther match's `*`
+  takes the reserved cell — the indicator never overwrites text.
+- `TestSplitGlyphBlanksDrawStars` — a match on a two-cell 世 split by
+  the right edge earns the current row's right `*`, split by the left
+  edge earns another row's gutter `*`, and whole-cluster offsets
+  clear both.
+- `TestWrapModeDrawsNoIndicatorsOrReservedColumn` — wrap mode draws
+  blank indicator cells and lets wrapped text occupy the frame's last
+  column.
+- `TestUniformLinesEveryGutterUnderscore` — the Issue #18
+  uniform-lines geometry signposts `_` on every visible line.
+
 `popup_test.go` (same package) covers the Issue #15 file-change
 pop-up; `popupModel` lands a two-file browse with `instantPopupTimer`
 (an injected `popupTimer` seam resolving to `popupExpiredMsg{id}`
@@ -872,6 +909,27 @@ run-off-edge mode:
   target reveals on both axes in one call.
 - `TestHRevealNoOpInWrapMode` — wrap-mode reveal leaves the dormant
   offset untouched.
+
+`indicators_test.go` (same package, Issue #20) pins the `Row`
+indicator flags against `lineSource`-backed run-off-edge models;
+`hid` returns the one visible row for a line, width, and offset:
+
+- `TestHiddenLeftTextFlag` — `HiddenLeft` for any line cells left of
+  the window, including a line fully hidden beside a wide sibling,
+  while an empty line and offset zero stay clear.
+- `TestMatchHiddenLeftFlag` — `MatchHiddenLeft` for a match or marker
+  entirely hidden left; half-painted and window-edge-flush matches
+  and an in-window marker count as visible.
+- `TestMatchHiddenRightFlag` — `MatchHiddenRight` likewise on the
+  right, including a marker on the first column past the window.
+- `TestHiddenBothSidesFlags` — one line flags both sides at once.
+- `TestSplitClusterBlankCountsAsHidden` — a match on a two-cell
+  cluster split by either clip edge counts as entirely hidden on that
+  side; whole-cluster offsets clear it.
+- `TestUnpaintableClusterCountsNotVisible` — a cluster wider than the
+  window blanks the whole text area; a match on it reports hidden
+  right while `HiddenLeft` covers the plain cells.
+- `TestWrapModeNoIndicatorFlags` — wrap-model rows carry no flags.
 
 ## internal/theme
 
