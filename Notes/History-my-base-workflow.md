@@ -460,3 +460,14 @@ Usage
  Input tokens: 164999 tokens
  Output tokens: 66558 tokens
  Cached input tokens: 12121226 tokens
+
+----
+Task 044-post-summary-context-integrity-failure.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 50 messages
+ Input tokens: 137109 tokens
+ Output tokens: 23791 tokens
+ Cached input tokens: 5186692 tokens

@@ -453,6 +453,50 @@ func TestOverlayAndReplayShareComposedDiagnostics(t *testing.T) {
 	}
 }
 
+// Issue #44's outcome assertion: a context record arriving after the
+// summary of an otherwise intact stream — the same stream the
+// searchindex cause row drives — is a fatal stream-integrity outcome
+// under a clean exit 0. The complete composed diagnostic is exactly
+// the after-summary cause — context lost its exemption (Issue #36) —
+// and the identical line is retained in the session collection for the
+// stderr replay.
+func TestPostSummaryContextIsFatalIntegrity(t *testing.T) {
+	dir := t.TempDir()
+	writeWorkFile(t, dir, "f.txt", "hit\n")
+	m := newModel(nil, nil)
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = update(t, m, searchDoneMsg{
+		index: fixtureIndex(t, dir,
+			`{"type":"begin","data":{"path":{"text":"f.txt"}}}`,
+			`{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+			`{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}`,
+			recSummary,
+			`{"type":"context","data":{"path":{"text":"f.txt"},"lines":{"text":"ctx\n"},"line_number":2,"submatches":[]}}`,
+		),
+	})
+	want := []string{"record after summary"}
+	if m.overlay == nil {
+		t.Fatal("a post-summary context record produced no overlay")
+	}
+	if !slices.Equal(m.overlay.lines, want) {
+		t.Fatalf("overlay lines = %q, want exactly %q", m.overlay.lines, want)
+	}
+	if m.phase != phaseBrowse {
+		t.Fatalf("phase = %d, want browse beneath the fatal overlay", m.phase)
+	}
+	m, _ = pressKey(t, m, "q") // dismiss the overlay to browse
+	m, cmd := pressKey(t, m, "q")
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("q on browse command = %T, want tea.QuitMsg", cmd())
+	}
+	if m.ExitCode() != 2 {
+		t.Fatalf("ExitCode = %d, want the fixed fatal status 2", m.ExitCode())
+	}
+	if got := replayed(t, m); !slices.Equal(got, want) {
+		t.Fatalf("replayed diagnostics = %q, want %q", got, want)
+	}
+}
+
 // The fatal overlay keeps every component: real child stderr, the
 // integrity causes, and the record-loss tallies appear together —
 // the fatal process result suppresses nothing and earns no generated

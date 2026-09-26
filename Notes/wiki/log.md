@@ -1783,3 +1783,45 @@ Sources: `Notes/tasks/043-combining-cluster-fallback-cell.md`,
 `Notes/PRD-vrg.md` (*Text, graphemes, and safe presentation*),
 `internal/present/line.go`, `internal/filebuffer/fallback_test.go`,
 `internal/app/cellmodel_test.go`.
+
+## [2026-09-25] ingest | Issue #44 post-summary context regression coverage
+
+Issue #44 (`Notes/tasks/044-post-summary-context-integrity-failure.md`)
+added the dedicated regression net for the summary-is-final contract —
+a test-only change on top of Issue #36's parser work, which owned
+removing the `context` exemption in `Index.Add` and correcting the
+contradictory lifecycle row. Any record after `summary`, `context`
+included, is a stream-integrity failure carrying the sole
+`record after summary` cause; pre-`summary` `context` records remain
+ignored for match/lifecycle purposes.
+
+`internal/searchindex/causes_test.go`'s `TestIntegrityCauses` gained
+the dedicated row — an intact begin/match/end/`summary` stream then a
+`context` record asserting exactly `{Kind: CauseRecordAfterSummary}`
+with the retained stop unaffected — plus neighbouring rows proving
+`context` before `begin` and before `summary` contributes no cause and
+touches no lifecycle state. `lifecycle_test.go`'s former "context in
+any position" row was renamed "context before the summary has no
+lifecycle effect" to make the pre-`summary`-only scope explicit.
+`internal/app/diagnostics_test.go` gained
+`TestPostSummaryContextIsFatalIntegrity`: the same stream through
+`searchDoneMsg` under a clean exit 0 is the fatal integrity outcome —
+overlay over browse carrying exactly `record after summary`, dismissal
+then `q` exiting 2, the identical line retained for stderr replay.
+
+Updated [searchindex-records-and-stops](searchindex-records-and-stops.md)
+(the positional `context` exemption),
+[stream-integrity-fatal-diagnostics](stream-integrity-fatal-diagnostics.md)
+(the Issue #44 coverage under Tests),
+[error-overlay-and-fatal-outcomes](error-overlay-and-fatal-outcomes.md)
+(the summary-is-final regression net under Tests),
+[unit-tests](unit-tests.md) (the lifecycle/causes/diagnostics
+catalogs), and the index.
+New files: none — test-only change;
+`Notes/walkthroughs/044-03/` holds the walkthrough.
+Sources: `Notes/tasks/044-post-summary-context-integrity-failure.md`,
+`Notes/PRD-vrg.md` (*Result index, records, and stream integrity*;
+*Outcome and exit-status contract*),
+`internal/searchindex/causes_test.go`,
+`internal/searchindex/lifecycle_test.go`,
+`internal/app/diagnostics_test.go`.

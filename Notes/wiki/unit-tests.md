@@ -132,8 +132,10 @@ coverage:
   `Incomplete` count, and the `BinaryExcluded` tally. Rows cover every
   transition: `begin` open/closed, `match` open/orphaned (never opened,
   after `end`), `end` open/orphaned/duplicate — including an orphaned
-  binary `end` still excluding — `context` inert before the summary
-  (Issue #36 removed its after-summary exemption), a
+  binary `end` still excluding — `context` inert in every
+  pre-`summary` position (Issue #36 removed its after-summary
+  exemption; Issue #44 amended the row's name to make the
+  pre-`summary`-only scope explicit), a
   file open at stream end, summary positioning (alone = complete
   zero-result stream, missing, second = `extra summary record`,
   records after it contributing only `record after summary` — including
@@ -230,6 +232,12 @@ stops, `Incomplete` marks, and `BinaryExcluded()` per row:
   identical orphaned matches emitting one cause each;
 - `TestOversizedAfterSummaryKeepsRecoveredPath` — the recovered
   oversized path detail surviving under the sole post-summary cause.
+- Issue #44 rows — the dedicated `context`-after-`summary` row driving
+  an intact begin/match/end/`summary` stream then a `context` record
+  and asserting exactly the single `CauseRecordAfterSummary` with the
+  retained stop unaffected, plus the neighbouring rows proving a
+  `context` before `begin` and before `summary` is ignored — no cause,
+  no opened file, no retained stop.
 
 `cursor_test.go` (external package) is the Issue #13 matched-line
 cursor coverage; `cursorIndex` builds a two-file fixture whose records
@@ -1332,6 +1340,12 @@ diagnostic-composition coverage:
   recoverable paths, and the mixed-recoverability case where the
   aggregate counts all four records while only the distinct recovered
   paths appear.
+- `TestPostSummaryContextIsFatalIntegrity` (Issue #44) — the same
+  intact-stream-then-`summary`-then-`context` fixture driven through
+  `searchDoneMsg` under a clean exit 0: the fatal integrity outcome
+  opens the overlay over browse carrying exactly
+  `record after summary`, dismissal then `q` exits 2, and the
+  identical line is retained for the stderr replay.
 - `TestAnonymousOversizedFatalOverlayIsNeverEmpty` /
   `TestAnonymousOversizedWithResultsOverlayAndReplay` (Issue #37) —
   real oversized streams through `fixtureStream`: the fatal overlay

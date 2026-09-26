@@ -216,24 +216,56 @@ func TestIntegrityCauses(t *testing.T) {
 		},
 		{
 			// Context records participate in no lifecycle validation
-			// before the summary, but the summary-is-final rule is
-			// positional: a post-summary context is a record after
-			// summary carrying no path.
+			// before the summary — neither position opens a file,
+			// retains a stop, or contributes a cause.
+			name: "context before begin is ignored",
+			records: []string{
+				ctxRec(jText("a.txt")),
+				beginRec(jText("a.txt")),
+				matchRec(jText("a.txt"), jText("hit\n"), 1, subRec(jText("hit"), 0, 3)),
+				endRec(jText("a.txt"), "null"),
+				`{"type":"summary","data":{}}`,
+			},
+			stops: 1,
+		},
+		{
+			// A context record sitting between a file's end and the
+			// summary is likewise ignored for lifecycle purposes.
+			name: "context before summary is ignored",
+			records: []string{
+				beginRec(jText("a.txt")),
+				matchRec(jText("a.txt"), jText("hit\n"), 1, subRec(jText("hit"), 0, 3)),
+				endRec(jText("a.txt"), "null"),
+				ctxRec(jText("a.txt")),
+				`{"type":"summary","data":{}}`,
+			},
+			stops: 1,
+		},
+		{
+			// Issue #44's dedicated row: the summary-is-final rule is
+			// positional, so a context record after the summary of an
+			// otherwise intact stream yields exactly the single
+			// record-after-summary cause — never an exemption — while
+			// the retained match keeps its complete metadata.
 			name: "context after summary",
 			records: []string{
+				beginRec(jText("a.txt")),
+				matchRec(jText("a.txt"), jText("hit\n"), 1, subRec(jText("hit"), 0, 3)),
+				endRec(jText("a.txt"), "null"),
 				`{"type":"summary","data":{}}`,
 				ctxRec(jText("a.txt")),
 			},
 			causes: []searchindex.Cause{
 				{Kind: searchindex.CauseRecordAfterSummary},
 			},
+			stops: 1,
 		},
 		{
 			// The malformed tally is independent of the cause: the
 			// fragment is skipped-and-counted while contributing only
 			// the after-summary cause.
-			name:     "unterminated fragment after summary",
-			stream:   `{"type":"summary","data":{}}` + "\n" + `{"type":"sum`,
+			name:      "unterminated fragment after summary",
+			stream:    `{"type":"summary","data":{}}` + "\n" + `{"type":"sum`,
 			malformed: 1,
 			causes: []searchindex.Cause{
 				{Kind: searchindex.CauseRecordAfterSummary},
@@ -299,7 +331,7 @@ func TestIntegrityCauses(t *testing.T) {
 			name: "detection order then end-of-stream causes",
 			records: []string{
 				beginRec(jText("a.txt")),
-				beginRec(jText("a.txt")), // duplicate
+				beginRec(jText("a.txt")),       // duplicate
 				endRec(jText("b.txt"), "null"), // b never opened
 				`{"type":"summary","data":{}}`,
 			},

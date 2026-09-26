@@ -21,7 +21,14 @@ Five event types are known:
 | `context` | none — the whole data payload is ignored | nothing |
 
 `context` is recognized because displayed content always comes from
-disk, never from the stream. A string type outside the five known events
+disk, never from the stream. Its exemption is **positional**: ignored
+for match and lifecycle purposes only *before* the `summary` — the
+summary-is-final rule makes a post-summary `context` a `record after
+summary` integrity failure like any other record (Issue #36 removed
+the exemption; Issue #44 pinned the dedicated regression coverage —
+see
+[stream-integrity-fatal-diagnostics.md](stream-integrity-fatal-diagnostics.md)).
+A string type outside the five known events
 is a valid decode with `KindUnknown` — not malformed — so unknown record
 types are counted separately from schema violations (Issue #10; see
 [record-robustness.md](record-robustness.md)).

@@ -1,7 +1,9 @@
 # Stream integrity fatal diagnostics (Issue #36)
 
 The structured-cause and universal-composition contract delivered by
-[Issue #36](../tasks/036-stream-integrity-fatal-diagnostics.md),
+[Issue #36](../tasks/036-stream-integrity-fatal-diagnostics.md) — with
+the dedicated post-summary `context` regression coverage added by
+[Issue #44](../tasks/044-post-summary-context-integrity-failure.md),
 implemented in `internal/searchindex` (`cause.go`, `index.go`) and
 `internal/app` (`overlay.go`, the `searchDoneMsg` branch of `app.go`).
 Relevant PRD sections in `Notes/PRD-vrg.md`: *Result index, records,
@@ -149,6 +151,23 @@ precedence (binary-late-match wording, `extra summary record`,
 post-summary rows expecting only `record after summary`, the
 unterminated cause order, and the Issue #36-owned context-after-summary
 correction).
+
+Issue #44 added the dedicated post-summary `context` regression net
+without touching production code: `TestIntegrityCauses` gained the
+dedicated row driving an intact begin/match/end/`summary` stream
+followed by a `context` record and asserting exactly the single
+`{Kind: CauseRecordAfterSummary}` cause — the retained match keeping
+its complete metadata — plus the neighbouring rows proving `context`
+before `begin` and before `summary` remains ignored (no cause, no
+opened file, no retained stop). Issue #9's former
+`lifecycle_test.go` row "context in any position" was amended in name
+to cover only pre-summary positions — "context before the summary has
+no lifecycle effect". In `internal/app`, the same stream drives
+`TestPostSummaryContextIsFatalIntegrity` in `diagnostics_test.go`: a
+fatal integrity outcome under a clean exit 0 — overlay over browse,
+the complete composed diagnostic being exactly
+`record after summary`, dismissal then quit exiting 2, and the
+identical line retained in the session collection for stderr replay.
 
 `internal/app/diagnostics_test.go` pins the composition:
 `TestComposedDiagnostics` asserts the complete exact line slices for

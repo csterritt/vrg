@@ -8,7 +8,9 @@ import (
 )
 
 // ctxRec renders a context record, which participates in no lifecycle
-// validation: rg emits it between a file's begin and end.
+// validation before the summary: rg emits it between a file's begin and
+// end. Positioned after the summary it is a positional record-after-
+// summary violation like any other record.
 func ctxRec(path string) string {
 	return `{"type":"context","data":{"path":` + path +
 		`,"lines":{"text":"ctx\n"},"line_number":2,"submatches":[]}}`
@@ -155,7 +157,10 @@ func TestLifecycleMatrix(t *testing.T) {
 			excluded: 1,
 		},
 		{
-			name: "context in every position has no lifecycle effect",
+			// Issue #9's former "context in any position" row, amended
+			// to cover only pre-summary positions: before the summary a
+			// context record has no lifecycle effect wherever it sits.
+			name: "context before the summary has no lifecycle effect",
 			records: []string{
 				ctxRec(jText("a.txt")),
 				beginRec(jText("a.txt")),

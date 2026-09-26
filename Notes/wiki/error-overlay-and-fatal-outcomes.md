@@ -250,7 +250,17 @@ stream, summary positioning, orphan retention with `Incomplete`, and
 open-at-end sealing — with Issue #36 correcting the
 post-`summary` rows (sole `record after summary` causes, the removed
 `context` exemption) and `causes_test.go` adding the exact structured
-`Cause` assertions.
+`Cause` assertions. Issue #44 added the dedicated regression net for
+the summary-is-final contract: an exact-cause row driving an intact
+stream then `summary` then `context` (sole
+`CauseRecordAfterSummary`, retained match unaffected), neighbouring
+pre-`summary` `context` rows proving the exemption is positional, the
+Issue #9 row renamed to "context before the summary has no lifecycle
+effect", and `internal/app`'s `TestPostSummaryContextIsFatalIntegrity`
+asserting the same stream's fatal outcome composes exactly
+`record after summary` — retained verbatim for the stderr replay
+(see
+[stream-integrity-fatal-diagnostics.md](stream-integrity-fatal-diagnostics.md)).
 `internal/app/outcome_test.go` is the single table-driven outcome
 matrix covering every row above with dismissal and exit assertions —
 Issue #10 added the record-loss and unknown-warning rows plus a

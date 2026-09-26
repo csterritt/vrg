@@ -287,7 +287,10 @@ Catalog of all wiki pages for the vrg project.
   `outcomeInput`-driven `composeDiagnostics` universal order
   (process → integrity → record-loss aggregates and per-path details →
   unknown warnings) shared by overlay and replay, stderr suppressing
-  the generated line, and no process-status line for exit 0/1
+  the generated line, and no process-status line for exit 0/1; plus
+  Issue #44's dedicated `context`-after-`summary` regression coverage
+  — the exact-cause stream row, the neighbouring pre-`summary`
+  `context` ignored-rows, and the fatal-outcome/replay assertion
 - [standalone-cluster-fallback.md](standalone-cluster-fallback.md) —
   Issue #43: a standalone zero-width grapheme cluster anywhere in a
   line paints one real cell — U+25CC DOTTED CIRCLE plus the cluster's
