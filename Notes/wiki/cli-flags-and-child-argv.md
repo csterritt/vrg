@@ -103,8 +103,9 @@ and supplied spellings without normalizing contradictions (`-i -s -S`
 forwards all three); `--` protects the pattern even when it is empty
 (`""` forwards as an empty argv element), `-`, dash-leading (`-foo` via
 `--`), or a literal `--` (`vrg -- --` and `vrg -- -- .` make the second
-`--` the pattern). The `cmd/vrg` stub prints `search stub: rg` followed
-by each element, `Escape`d.
+`--` the pattern). Since Issue #3 the vector is no longer printed by a
+stub — `internal/app` executes it verbatim as the rg child's argv; see
+[search-spawn-and-searching-screen](search-spawn-and-searching-screen.md).
 
 ## Generated help
 

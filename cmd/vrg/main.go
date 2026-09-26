@@ -2,11 +2,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
+	tea "charm.land/bubbletea/v2"
+
+	"vrg/internal/app"
 	"vrg/internal/cli"
 )
 
@@ -23,21 +26,43 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case cli.KindHelp:
 		return 0
 	case cli.KindSearch:
-		// Interim stub proving the end-to-end slice; later issues replace
-		// it with the search and the TUI. The protected child argv is
-		// printed exactly as rg would receive it, one escaped element at
-		// a time.
-		var b strings.Builder
-		b.WriteString("search stub: rg")
-		for _, a := range res.ChildArgv {
-			b.WriteString(" " + cli.Escape(a))
-		}
-		b.WriteByte('\n')
-		io.WriteString(stdout, b.String())
-		return 0
+		return runSearch(res, stderr)
 	default:
 		fmt.Fprintln(stderr, res.Diagnostic)
 		fmt.Fprintf(stderr, "\n%s", cli.HelpText())
 		return 2
 	}
+}
+
+// runSearch spawns rg from the invocation working directory and runs the
+// TUI. A start failure is a sanitized stderr diagnostic and exit 2
+// before the TUI exists.
+func runSearch(res cli.Result, stderr io.Writer) int {
+	wd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "vrg: %s\n", cli.Escape(err.Error()))
+		return 2
+	}
+	m, err := app.Start(context.Background(), app.Config{
+		Rg:      "rg",
+		Argv:    res.ChildArgv,
+		Workdir: wd,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "vrg: %s\n", cli.Escape(err.Error()))
+		return 2
+	}
+	// WithInput(os.Stdin) keeps the program reading real stdin rather
+	// than opening /dev/tty when stdin is already a pipe. WithWindowSize
+	// is only a fallback: a real terminal reports its own size and
+	// overrides it with a resize message.
+	fm, err := tea.NewProgram(m,
+		tea.WithInput(os.Stdin),
+		tea.WithWindowSize(80, 24),
+	).Run()
+	if err != nil {
+		fmt.Fprintf(stderr, "vrg: %s\n", cli.Escape(err.Error()))
+		return 2
+	}
+	return fm.(app.Model).ExitCode()
 }

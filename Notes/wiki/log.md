@@ -41,3 +41,36 @@ and the index. Tests using `-x` as an unsupported example moved to `-z`
 `internal/cli/cli.go`, `internal/cli/cli_test.go`,
 `internal/cli/internal_test.go`, `cmd/vrg/main.go`,
 `cmd/vrg/main_test.go`.
+
+## [2026-09-23] ingest | Issue #3 rg spawn, collection, and searching screen
+
+Ingested the completed Issue #3 implementation: `internal/searchindex`
+gained `DecodeRecord` (the five rg JSON events plus `KindUnknown`, the
+`{"text"}`/`{"bytes"}` value union, `ErrMalformed` schema/range checks)
+and the `Index` (stops keyed by raw path bytes + line, submatch sorting
+and union highlights, unsigned-byte ordering, non-canonicalizing
+workdir resolution). `internal/app` gained `Start`/`Config`/`collect`
+(`exec.CommandContext` in the invocation working directory, concurrent
+stdout/stderr drainage for the whole child lifetime, `Drained`/
+`PrepareGate` test seams) and the Bubble Tea `Model` (`Searching…`
+across collection and post-exit preparation, `N files, M matched lines`
+interim summary, `q` → exit 0). `cmd/vrg` replaced the `search stub:`
+line with `runSearch` (rg start failure → sanitized `vrg:` diagnostic,
+exit 2, no TUI; `WithInput(os.Stdin)` and a `WithWindowSize` fallback so
+piped stdio still renders). Created
+[searchindex-records-and-stops](searchindex-records-and-stops.md) and
+[search-spawn-and-searching-screen](search-spawn-and-searching-screen.md);
+updated [source-code](source-code.md), [unit-tests](unit-tests.md),
+[project-overview](project-overview.md), [cli-foundation](cli-foundation.md)
+(stale stub references), [cli-flags-and-child-argv](cli-flags-and-child-argv.md)
+(stub → execution), and the index. The `TestChildArgvStub` boundary test
+became `TestSearchLifecycleAtBoundary` plus `TestDualPipeDrainageAtBoundary`
+and `TestStartFailureNoRipgrep`. Sources:
+`Notes/issues/003-spawn-rg-collect-results-searching-screen.md`,
+`Notes/tasks/003-spawn-rg-collect-results-searching-screen.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity; Module
+Design), `internal/searchindex/record.go`, `internal/searchindex/index.go`,
+`internal/searchindex/searchindex_test.go`, `internal/app/app.go`,
+`internal/app/search.go`, `internal/app/model_test.go`,
+`internal/app/subprocess_test.go`, `cmd/vrg/main.go`,
+`cmd/vrg/main_test.go`.

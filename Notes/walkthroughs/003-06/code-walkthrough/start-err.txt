@@ -1,0 +1,1 @@
+vrg: cannot start rg: exec: "rg": executable file not found in $PATH

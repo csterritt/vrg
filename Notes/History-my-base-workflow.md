@@ -9,3 +9,14 @@ Usage
  Input tokens: 243919 tokens
  Output tokens: 72611 tokens
  Cached input tokens: 6566269 tokens
+
+----
+Task 003-spawn-rg-collect-results-searching-screen.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 83 messages
+ Input tokens: 119747 tokens
+ Output tokens: 37219 tokens
+ Cached input tokens: 7437812 tokens

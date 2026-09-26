@@ -17,9 +17,11 @@ arguments*, *Module Design → CLI*, *Outcome and exit-status contract*,
 `cli.Parse(args, out, env)` returns a `cli.Result` with an explicit
 `Kind`: `KindHelp`, `KindSearch`, or `KindUsageError`. Callers never see
 library types. `cmd/vrg` is a thin boundary that maps kinds to streams and
-statuses: help → stdout, exit 0; search → escaped stub line printing the
-protected child argv (`search stub: rg --json --no-config … -- pattern
-root`), exit 0; usage error → sanitized single-line diagnostic **followed
+statuses: help → stdout, exit 0; search → rg spawn plus the Bubble Tea
+program (Issue #3, see
+[search-spawn-and-searching-screen](search-spawn-and-searching-screen.md);
+the Issue #1–#2 escaped `search stub:` line is gone), exit code from the
+model; usage error → sanitized single-line diagnostic **followed
 by the generated usage block** (`cli.HelpText()`) on stderr, exit 2 —
 matching standard mow.cli behavior of printing usage after an error, with
 only module text on the stream.
@@ -67,7 +69,7 @@ only from the scan, never from the library's unordered per-option values.
 - Bare `vrg`, `-h`/`--help` in any pre-`--` position, and combined shorts
   containing `h` (`-ih`, `-hi`) produce the help-only result: one help
   copy on stdout, exit 0, empty stderr, no root validation, no child, no
-  TUI, no stub — even when rg is absent, and even when mixed with search
+  TUI — even when rg is absent, and even when mixed with search
   flags or an excess `-u` (`-i --help`, `-ih foo`, `-uuu --help`).
 - Help wins over missing-pattern, excess-operand, unsupported-option,
   excess-unrestricted, and invalid-root conditions.
@@ -102,8 +104,9 @@ only from the scan, never from the library's unordered per-option values.
 `cli.Escape` is the interim single-line escaper (Issue #6 generalizes):
 `\\` doubles, `\n`/`\r`/`\t` become escape spellings, other C0 controls
 and DEL use caret notation (`ESC` → `^[`), C1 controls use `\u` escapes,
-invalid UTF-8 bytes use `\xNN`. It covers usage diagnostics and the
-success stub; generated help contains only fixed text.
+invalid UTF-8 bytes use `\xNN`. It covers usage diagnostics and, since
+Issue #3, the rg start-failure diagnostic; generated help contains only
+fixed text.
 
 ## Tests consumed by later tasks
 

@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // binPath is the real cmd/vrg binary built once per test run; subprocess
@@ -68,26 +71,6 @@ func runVrgFull(t *testing.T, argv0 string, env []string, args ...string) runRes
 	return res
 }
 
-func runVrgIn(t *testing.T, dir string, args ...string) runResult {
-	t.Helper()
-	cmd := exec.Command(binPath, args...)
-	cmd.Dir = dir
-	var so, se bytes.Buffer
-	cmd.Stdout = &so
-	cmd.Stderr = &se
-	err := cmd.Run()
-	res := runResult{stdout: so.String(), stderr: se.String()}
-	if err == nil {
-		return res
-	}
-	if ee, ok := err.(*exec.ExitError); ok {
-		res.code = ee.ExitCode()
-		return res
-	}
-	t.Fatalf("failed to run %v in %s: %v", args, dir, err)
-	return res
-}
-
 func assertHelpRun(t *testing.T, res runResult, args []string) {
 	t.Helper()
 	if res.code != 0 {
@@ -99,8 +82,8 @@ func assertHelpRun(t *testing.T, res runResult, args []string) {
 	if res.stderr != "" {
 		t.Fatalf("vrg %v: stderr not empty: %q", args, res.stderr)
 	}
-	if strings.Contains(res.stdout, "search stub:") {
-		t.Fatalf("vrg %v: help path produced stub output: %q", args, res.stdout)
+	if strings.Contains(res.stdout, "Searching") {
+		t.Fatalf("vrg %v: help path produced TUI output: %q", args, res.stdout)
 	}
 	for _, s := range []string{res.stdout, res.stderr} {
 		if strings.Contains(s, "\x1b[?1049") || strings.Contains(s, "\x9b") {
@@ -220,70 +203,116 @@ func TestCLIOutputSafety(t *testing.T) {
 	if strings.Contains(res.stderr, "\x1b") {
 		t.Fatalf("raw escape byte reached stderr: %q", res.stderr)
 	}
+}
 
-	// The success stub escapes its substitutions too.
-	res = runVrg(t, "pa\x1b[31mt", ".")
-	if res.code != 0 {
-		t.Fatalf("stub run exited %d: %q", res.code, res.stderr)
+// fakeRgScript is an rg stand-in for boundary tests: it records its
+// argv and working directory into $VRG_CAPTURE_DIR, emits one complete
+// single-match JSON stream, and exits 0.
+const fakeRgScript = `#!/bin/sh
+printf '%s\n' "$@" > "$VRG_CAPTURE_DIR/argv"
+pwd > "$VRG_CAPTURE_DIR/cwd"
+# Hold the stream open briefly so the harness observes the searching
+# screen before the interim summary replaces it.
+sleep 0.3
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"f.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}' \
+'{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}' \
+'{"type":"summary","data":{}}'
+exit 0
+`
+
+// writeFakeRg installs script as the rg executable in a fresh directory
+// and returns it along with a fresh capture directory for its artifacts.
+func writeFakeRg(t *testing.T, script string) (fakeDir, capDir string) {
+	t.Helper()
+	fakeDir = t.TempDir()
+	capDir = t.TempDir()
+	if err := os.WriteFile(filepath.Join(fakeDir, "rg"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(res.stdout, "\x1b") {
-		t.Fatalf("raw escape byte reached stdout stub: %q", res.stdout)
+	return fakeDir, capDir
+}
+
+// searchEnv builds the child environment for a boundary search: the fake
+// rg dir on PATH, the capture directory, and a TERM for the TUI.
+func searchEnv(fakeDir, capDir string) []string {
+	return []string{
+		"PATH=" + fakeDir + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"VRG_CAPTURE_DIR=" + capDir,
+		"TERM=xterm-256color",
 	}
-	if !strings.Contains(res.stdout, "^[") {
-		t.Fatalf("stub did not show the escaped pattern: %q", res.stdout)
+}
+
+// runVrgTUI runs the built binary with a controlled stdin pipe: it
+// watches stdout for the interim-summary marker, sends q once it
+// appears, and returns after the process exits. The context deadline
+// bounds the run so a wedged search fails rather than hangs.
+func runVrgTUI(t *testing.T, workdir string, env []string, args ...string) runResult {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binPath, args...)
+	cmd.Dir = workdir
+	if env != nil {
+		cmd.Env = env
 	}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	outCh := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		tmp := make([]byte, 8192)
+		sent := false
+		for {
+			n, rerr := stdout.Read(tmp)
+			if n > 0 {
+				buf.Write(tmp[:n])
+				if !sent && bytes.Contains(buf.Bytes(), []byte("matched line")) {
+					_, _ = stdin.Write([]byte("q"))
+					sent = true
+				}
+			}
+			if rerr != nil {
+				break
+			}
+		}
+		stdin.Close()
+		outCh <- buf.String()
+	}()
+
+	werr := cmd.Wait()
+	out := <-outCh
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("vrg %v timed out (stdout %q, stderr %q)", args, out, stderr.String())
+	}
+	res := runResult{stdout: out, stderr: stderr.String()}
+	if werr == nil {
+		res.code = 0
+		return res
+	}
+	if ee, ok := werr.(*exec.ExitError); ok {
+		res.code = ee.ExitCode()
+		return res
+	}
+	t.Fatalf("failed to run %v: %v", args, werr)
+	return res
 }
 
 // The executable boundary: cmd/vrg alone chooses statuses and streams.
 func TestExecutableBoundary(t *testing.T) {
-	dir := t.TempDir()
-	file := filepath.Join(dir, "file")
-	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	subdir := filepath.Join(dir, "sub")
-	if err := os.Mkdir(subdir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	linkDir := filepath.Join(dir, "linkdir")
-	if err := os.Symlink(subdir, linkDir); err != nil {
-		t.Fatal(err)
-	}
-
-	searchCases := []struct {
-		name string
-		args []string
-	}{
-		{"default root", []string{"foo"}},
-		{"explicit dir", []string{"foo", subdir}},
-		{"regular file", []string{"foo", file}},
-		{"symlink root", []string{"foo", linkDir}},
-		{"empty pattern", []string{"", "."}},
-		{"literal dash pattern", []string{"-", "."}},
-		{"help-like operand", []string{"--", "--help"}},
-		{"-h operand", []string{"--", "-h"}},
-		{"literal -- operand", []string{"--", "--"}},
-	}
-	for _, tc := range searchCases {
-		t.Run(tc.name, func(t *testing.T) {
-			res := runVrg(t, tc.args...)
-			if res.code != 0 {
-				t.Fatalf("vrg %v exited %d, want 0 (stderr %q)", tc.args, res.code, res.stderr)
-			}
-			if res.stderr != "" {
-				t.Fatalf("vrg %v: stderr not empty: %q", tc.args, res.stderr)
-			}
-			if !strings.Contains(res.stdout, "search stub:") {
-				t.Fatalf("vrg %v: missing stub output: %q", tc.args, res.stdout)
-			}
-		})
-	}
-
-	res := runVrg(t, "foo")
-	if !strings.HasSuffix(res.stdout, "-- foo .\n") {
-		t.Fatalf("default-root child argv missing from stub output: %q", res.stdout)
-	}
-
 	errorCases := [][]string{
 		{"--"},            // missing pattern
 		{"a", "b", "c"},   // excess operands
@@ -301,7 +330,7 @@ func TestExecutableBoundary(t *testing.T) {
 	}
 
 	// stdin rejection must name stdin.
-	res = runVrg(t, "foo", "-")
+	res := runVrg(t, "foo", "-")
 	if !strings.Contains(res.stderr, "stdin") && !strings.Contains(res.stderr, "standard input") {
 		t.Fatalf("stdin root diagnostic does not name stdin: %q", res.stderr)
 	}
@@ -313,12 +342,145 @@ func TestDashFileRootAtProcessBoundary(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "-"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res := runVrgIn(t, dir, "foo", "./-")
+	fakeDir, capDir := writeFakeRg(t, fakeRgScript)
+	res := runVrgTUI(t, dir, searchEnv(fakeDir, capDir), "foo", "./-")
 	if res.code != 0 {
 		t.Fatalf(`vrg foo ./- exited %d, want 0 (stderr %q)`, res.code, res.stderr)
 	}
-	if !strings.Contains(res.stdout, "search stub:") {
-		t.Fatalf("missing stub output: %q", res.stdout)
+	if !strings.Contains(res.stdout, "matched line") {
+		t.Fatalf("missing interim summary: %q", res.stdout)
+	}
+}
+
+// The child receives exactly the protected argv — rg, the mandatory
+// internal flags, the user's flags in encounter order with supplied
+// spellings, --, pattern, root — and runs in the invocation working
+// directory. Each run shows "Searching…" then the interim summary, and
+// q exits 0 with empty stderr.
+func TestSearchLifecycleAtBoundary(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "file")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	subdir := filepath.Join(dir, "sub")
+	if err := os.Mkdir(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkDir := filepath.Join(dir, "linkdir")
+	if err := os.Symlink(subdir, linkDir); err != nil {
+		t.Fatal(err)
+	}
+	work := t.TempDir()
+
+	cases := []struct {
+		name string
+		args []string
+		argv []string
+	}{
+		{"default root", []string{"foo"}, []string{"--json", "--no-config", "--", "foo", "."}},
+		{"explicit dir", []string{"foo", subdir}, []string{"--json", "--no-config", "--", "foo", subdir}},
+		{"regular file", []string{"foo", file}, []string{"--json", "--no-config", "--", "foo", file}},
+		{"symlink root", []string{"foo", linkDir}, []string{"--json", "--no-config", "--", "foo", linkDir}},
+		{"empty pattern", []string{"", "."}, []string{"--json", "--no-config", "--", "", "."}},
+		{"literal dash pattern", []string{"-", "."}, []string{"--json", "--no-config", "--", "-", "."}},
+		{"help-like operand", []string{"--", "--help"}, []string{"--json", "--no-config", "--", "--help", "."}},
+		{"-h operand", []string{"--", "-h"}, []string{"--json", "--no-config", "--", "-h", "."}},
+		{"literal -- operand", []string{"--", "--"}, []string{"--json", "--no-config", "--", "--", "."}},
+		{"combined shorts expand", []string{"-iw", "foo", subdir}, []string{"--json", "--no-config", "-i", "-w", "--", "foo", subdir}},
+		{"encounter order", []string{"-i", "-s", "-i", "foo"}, []string{"--json", "--no-config", "-i", "-s", "-i", "--", "foo", "."}},
+		{"mixed alias order", []string{"--ignore-case", "-s", "-i", "foo"}, []string{"--json", "--no-config", "--ignore-case", "-s", "-i", "--", "foo", "."}},
+		{"options interleaved", []string{"foo", "-i", subdir, "-s"}, []string{"--json", "--no-config", "-i", "-s", "--", "foo", subdir}},
+		{"unrestricted pair", []string{"-u", "--unrestricted", "foo"}, []string{"--json", "--no-config", "-u", "--unrestricted", "--", "foo", "."}},
+		{"dash-leading pattern", []string{"--", "-foo"}, []string{"--json", "--no-config", "--", "-foo", "."}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeDir, capDir := writeFakeRg(t, fakeRgScript)
+			res := runVrgTUI(t, work, searchEnv(fakeDir, capDir), tc.args...)
+			if res.code != 0 {
+				t.Fatalf("vrg %v exited %d, want 0 (stderr %q)", tc.args, res.code, res.stderr)
+			}
+			if res.stderr != "" {
+				t.Fatalf("vrg %v: stderr not empty: %q", tc.args, res.stderr)
+			}
+			if !strings.Contains(res.stdout, "Searching…") {
+				t.Fatalf("vrg %v: stdout lacks the searching screen: %q", tc.args, res.stdout)
+			}
+			if !strings.Contains(res.stdout, "1 file, 1 matched line") {
+				t.Fatalf("vrg %v: stdout lacks the interim summary: %q", tc.args, res.stdout)
+			}
+			gotArgv, err := os.ReadFile(filepath.Join(capDir, "argv"))
+			if err != nil {
+				t.Fatalf("fake rg did not capture argv: %v", err)
+			}
+			if got := strings.Split(strings.TrimSuffix(string(gotArgv), "\n"), "\n"); !slices.Equal(got, tc.argv) {
+				t.Fatalf("vrg %v: child argv = %q, want %q", tc.args, got, tc.argv)
+			}
+			gotCwd, err := os.ReadFile(filepath.Join(capDir, "cwd"))
+			if err != nil {
+				t.Fatalf("fake rg did not capture cwd: %v", err)
+			}
+			wantCwd, _ := filepath.EvalSymlinks(work)
+			gotCwdEval, _ := filepath.EvalSymlinks(strings.TrimSpace(string(gotCwd)))
+			if gotCwdEval != wantCwd {
+				t.Fatalf("vrg %v: child cwd = %q, want %q", tc.args, gotCwd, wantCwd)
+			}
+		})
+	}
+}
+
+// A fake rg writing well over pipe capacity to stderr while streaming a
+// valid stdout stream neither deadlocks vrg nor loses the stream: the
+// post-write handshake file proves the child finished both pipes before
+// exiting, and every match lands in the summary.
+func TestDualPipeDrainageAtBoundary(t *testing.T) {
+	flood := `#!/bin/sh
+i=1
+while [ "$i" -le 16 ]; do
+  head -c 65536 /dev/zero >&2
+  printf '%s\n' '{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hit\n"},"line_number":'"$i"',"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}'
+  i=$((i+1))
+done
+printf '%s\n' '{"type":"summary","data":{}}'
+: > "$VRG_CAPTURE_DIR/writes-done"
+exit 0
+`
+	fakeDir, capDir := writeFakeRg(t, flood)
+	res := runVrgTUI(t, t.TempDir(), searchEnv(fakeDir, capDir), "hit")
+	if res.code != 0 {
+		t.Fatalf("vrg exited %d under stderr flood, want 0 (stderr %q)", res.code, res.stderr)
+	}
+	if !strings.Contains(res.stdout, "1 file, 16 matched lines") {
+		t.Fatalf("stdout stream lost under backpressure: %q", res.stdout)
+	}
+	if _, err := os.Stat(filepath.Join(capDir, "writes-done")); err != nil {
+		t.Fatalf("child handshake missing — it did not finish both pipes: %v", err)
+	}
+	if res.stderr != "" {
+		t.Fatalf("captured stderr leaked to vrg stderr: %q", res.stderr)
+	}
+}
+
+// rg that cannot be started produces a sanitized stderr diagnostic and
+// exit 2 without entering the TUI.
+func TestStartFailureNoRipgrep(t *testing.T) {
+	empty := t.TempDir()
+	res := runVrgFull(t, "", []string{"PATH=" + empty}, "foo")
+	if res.code != 2 {
+		t.Fatalf("vrg foo with no rg exited %d, want 2", res.code)
+	}
+	if res.stdout != "" {
+		t.Fatalf("start failure wrote to stdout or entered TUI: %q", res.stdout)
+	}
+	diag := strings.TrimRight(res.stderr, "\n")
+	if !strings.HasPrefix(diag, "vrg:") || !strings.Contains(diag, "rg") {
+		t.Fatalf("start failure diagnostic does not name the failure: %q", res.stderr)
+	}
+	for i := 0; i < len(res.stderr); i++ {
+		if c := res.stderr[i]; c != '\n' && (c < 0x20 || c == 0x7f) {
+			t.Fatalf("start failure diagnostic carries raw control byte 0x%02x: %q", c, res.stderr)
+		}
 	}
 }
 
@@ -335,44 +497,6 @@ func TestHelpAssignmentSpellingsAreUsageErrorsAtBoundary(t *testing.T) {
 			t.Fatalf("vrg %v emitted help for an assignment spelling: %q", args, res.stdout)
 		}
 		assertUsageError(t, res, args)
-	}
-}
-
-// The stub prints the exact protected child argv: rg, the mandatory
-// internal flags, the user's flags in encounter order with supplied
-// spellings, --, pattern, root.
-func TestChildArgvStub(t *testing.T) {
-	dir := t.TempDir()
-	cases := []struct {
-		args []string
-		want string
-	}{
-		{[]string{"foo"}, "search stub: rg --json --no-config -- foo .\n"},
-		{[]string{"-iw", "foo", dir}, "search stub: rg --json --no-config -i -w -- foo " + dir + "\n"},
-		{[]string{"-i", "-s", "-i", "foo"}, "search stub: rg --json --no-config -i -s -i -- foo .\n"},
-		{[]string{"-isi", "foo"}, "search stub: rg --json --no-config -i -s -i -- foo .\n"},
-		{[]string{"--ignore-case", "-s", "-i", "foo"}, "search stub: rg --json --no-config --ignore-case -s -i -- foo .\n"},
-		{[]string{"foo", "-i", dir, "-s"}, "search stub: rg --json --no-config -i -s -- foo " + dir + "\n"},
-		{[]string{"-u", "--unrestricted", "foo"}, "search stub: rg --json --no-config -u --unrestricted -- foo .\n"},
-		{[]string{"-uu", "foo"}, "search stub: rg --json --no-config -u -u -- foo .\n"},
-		{[]string{"", "."}, "search stub: rg --json --no-config --  .\n"},
-		{[]string{"-", "."}, "search stub: rg --json --no-config -- - .\n"},
-		{[]string{"--", "--"}, "search stub: rg --json --no-config -- -- .\n"},
-		{[]string{"--", "-foo"}, "search stub: rg --json --no-config -- -foo .\n"},
-	}
-	for _, tc := range cases {
-		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
-			res := runVrg(t, tc.args...)
-			if res.code != 0 {
-				t.Fatalf("vrg %v exited %d, want 0 (stderr %q)", tc.args, res.code, res.stderr)
-			}
-			if res.stderr != "" {
-				t.Fatalf("vrg %v: stderr not empty: %q", tc.args, res.stderr)
-			}
-			if res.stdout != tc.want {
-				t.Fatalf("vrg %v: stdout = %q, want %q", tc.args, res.stdout, tc.want)
-			}
-		})
 	}
 }
 

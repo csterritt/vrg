@@ -14,6 +14,15 @@ Catalog of all wiki pages for the vrg project.
 - [cli-flags-and-child-argv.md](cli-flags-and-child-argv.md) — Issue #2:
   flag allow-list, ordered exact-spelling forwarding, combined shorts,
   cumulative `-u` cap, `=` rejection, `--` protection, exact child argv
+- [searchindex-records-and-stops.md](searchindex-records-and-stops.md) —
+  Issue #3: rg JSON record decoding (text/bytes encodings, schema
+  ranges, unknown types), stop merging and ordering, highlight union,
+  working-directory path resolution
+- [search-spawn-and-searching-screen.md](search-spawn-and-searching-screen.md) —
+  Issue #3: rg spawn from the protected argv in the invocation working
+  directory, concurrent dual-pipe drainage, `Searching…` across
+  collection and post-exit preparation, interim summary, `q` → exit 0,
+  start failure → sanitized diagnostic + exit 2
 
 ## Catalogs
 
