@@ -38,6 +38,7 @@ func TestLineText(t *testing.T) {
 		{"lf removed", "a\n", "a"},
 		{"tab expansion", "a\tb\n", "a       b"},
 		{"combining cluster", "e\u0301x\n", "e\u0301x"},
+		{"standalone combining mark", "\u0301x\n", "\u25cc\u0301x"},
 		{"printable unicode", "héllö→世\n", "héllö→世"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -100,6 +101,7 @@ func TestLineSpan(t *testing.T) {
 		{"wide rune whole", "世x\n", 0, 3, Span{0, 2}},
 		{"wide rune interior byte", "世x\n", 1, 2, Span{0, 2}},
 		{"combining only", "e\u0301x\n", 1, 3, Span{0, 1}},
+		{"standalone mark covers its fallback cell", "\u0301x\n", 0, 2, Span{0, 1}},
 		{"crlf terminator-only match", "hit\r\n", 3, 5, Span{3, 3}},
 		{"lf terminator-only match", "hit\n", 3, 4, Span{3, 3}},
 		{"zero-width inside terminator", "hit\r\n", 4, 4, Span{3, 3}},

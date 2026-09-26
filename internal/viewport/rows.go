@@ -99,7 +99,7 @@ func (m Model) Row(i int) Row {
 		if !lc[j].Cont {
 			cp := make([]present.Cell, len(cells))
 			copy(cp, cells)
-			cp[j-s.start] = present.Cell{Text: " "}
+			cp[j-s.start] = present.Cell{Text: " ", Blank: true}
 			cells = cp
 		}
 	}

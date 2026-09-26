@@ -136,6 +136,14 @@ Catalog of all wiki pages for the vrg project.
   clipping shared with the reveal, partial visibility counting as
   visible, split-cluster blanks counting as hidden, and wrap mode's
   freedom from both indicators and the reserved column
+- [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md) —
+  Issue #21: `clusterSpan`'s outward expansion of partial spans to
+  `Lead` cluster boundaries (start/end/interior), combining-only
+  matches highlighting the whole base cluster, the standalone-cluster
+  provisional fallback cell, wide pairs and ZWJ sequences never split,
+  `Cell.Blank`-marked wrap/clip fillers never painted as match cells,
+  and the expanded span as the single source for highlight, reveal,
+  and indicator visibility
 
 ## Catalogs
 

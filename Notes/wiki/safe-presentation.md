@@ -37,12 +37,23 @@ cell marks — `Lead` on a cluster's first cell, `Cont` on a multi-cell
 unit's trailing cells — the shared segmentation/width policy the
 Issue #16 row model wraps on (see [wrap-mode.md](wrap-mode.md)); a
 cluster mixing printable and dangerous forms falls back to per-rune
-rules so no control byte survives verbatim. Every emitted unit records
+rules so no control byte survives verbatim. A zero-width unit joins
+the previous cell's text — a combining mark extends its base — except
+at line start, where it takes a provisional `Lead` cell of its own on
+a `◌` (U+25CC) dotted-circle base so a standalone cluster is always
+one visible cell — a bare mark would merge into the previous terminal
+cell and paint nothing (the Issue #21
+fallback; see
+[grapheme-highlight-expansion.md](grapheme-highlight-expansion.md)).
+Every emitted unit records
 per-byte `lo`/`hi` cell maps; `Line.Span(start, end)` maps a raw byte
 range to its display `Span` — interior bytes expand to their whole
 unit, a match covering an ESC byte highlights both `^[` cells, and a
 range covering only removed terminator bytes or a zero-width position
-yields a marker span (`Start == End`).
+yields a marker span (`Start == End`). Issue #21 adds a third cell
+mark, `Blank`, never produced here: the row and clip layers mark the
+filler cells they substitute for split clusters so a covering
+highlight never styles them.
 
 **Diagnostics** — `present.Diagnostic(s string) string` renders
 diagnostic text while preserving the message's own line structure: LF

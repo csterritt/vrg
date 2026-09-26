@@ -57,7 +57,8 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 			if !bytes.Equal(ln.Raw()[sm.Start:sm.End], sm.Bytes) {
 				continue
 			}
-			b.spans[li] = append(b.spans[li], ln.Span(sm.Start, sm.End))
+			b.spans[li] = append(b.spans[li],
+				clusterSpan(ln.Cells(), ln.Span(sm.Start, sm.End)))
 		}
 	}
 	return b, nil
@@ -81,5 +82,27 @@ func (b *Buffer) Text(i int) string { return b.lines[i].Text() }
 func (b *Buffer) Cells(i int) []present.Cell { return b.lines[i].Cells() }
 
 // Spans returns the validated highlight spans — display-cell ranges or
-// marker positions — of 0-based source line i.
+// marker positions — of 0-based source line i. Coverage spans are
+// cluster-expanded: they are the single span source for highlighting,
+// reveal, and the hidden-match indicators downstream.
 func (b *Buffer) Spans(i int) []present.Span { return b.spans[i] }
+
+// clusterSpan expands a nonempty span's endpoints outward to the
+// grapheme-cluster boundaries the cells' Lead marks carry, so a
+// recorded submatch landing inside a cluster highlights the whole
+// cluster — a combining mark's bytes alone highlight the base glyph,
+// and a wide pair or multi-cell escape is never split by a highlight
+// boundary. Marker positions (Start == End) are already cell-precise
+// and pass through.
+func clusterSpan(cells []present.Cell, s present.Span) present.Span {
+	if s.Start == s.End {
+		return s
+	}
+	for s.Start > 0 && s.Start < len(cells) && !cells[s.Start].Lead {
+		s.Start--
+	}
+	for s.End < len(cells) && !cells[s.End].Lead {
+		s.End++
+	}
+	return s
+}

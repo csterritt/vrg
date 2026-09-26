@@ -23,6 +23,12 @@ type Cell struct {
 	// Cont marks a trailing cell of a multi-cell unit — a wide cluster
 	// or a multi-cell escape — whose lead cell's text covers it.
 	Cont bool
+	// Blank marks a substituted filler cell — a wrap boundary's or clip
+	// edge's stand-in for a split cluster's unpaintable cells. It is
+	// never produced by LineOf; the row and clip layers mark the cells
+	// they blank so a covering highlight never styles them as match
+	// cells.
+	Blank bool
 }
 
 // Span is a display-cell range [Start, End) on one presented line. A
@@ -107,22 +113,27 @@ func LineOf(raw []byte) Line {
 	// display cells carrying text; lead marks whether the unit begins
 	// a new grapheme cluster. A zero-width unit joins the previous
 	// cell's text — a combining mark extends its base — or takes a
-	// provisional cell of its own at line start.
+	// provisional cell of its own at line start on a dotted-circle
+	// base, so a standalone invisible cluster is a real painted cell
+	// rather than a bare mark the terminal would merge into the cell
+	// before it.
 	emit := func(start, end int, text string, width int, lead bool) {
-		b.WriteString(text)
 		if width <= 0 {
 			c := len(l.cells) - 1
 			if c < 0 {
+				text = "◌" + text
 				l.cells = append(l.cells, Cell{Text: text, Lead: lead})
 				c = 0
 			} else {
 				l.cells[c].Text += text
 			}
+			b.WriteString(text)
 			for j := start; j < end; j++ {
 				l.lo[j], l.hi[j] = c, c+1
 			}
 			return
 		}
+		b.WriteString(text)
 		c := len(l.cells)
 		l.cells = append(l.cells, Cell{Text: text, Lead: lead})
 		for k := 1; k < width; k++ {

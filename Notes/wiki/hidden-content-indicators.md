@@ -82,6 +82,11 @@ rule the indicators share
   both edges — so a line can carry the gutter `*` and the column `*`
   together.
 
+Since Issue #21 the spans classified here are the cluster-expanded
+spans `Buffer.Spans` hands down — a match recorded mid-cluster counts
+from its cluster start
+([grapheme-highlight-expansion.md](grapheme-highlight-expansion.md)).
+
 ## Tests
 
 - `internal/viewport/indicators_test.go` — the `Row` flags: text
@@ -122,5 +127,8 @@ shared painted-cell visibility rule),
 reservation), [browse-tracer.md](browse-tracer.md) (the gutter and
 match styling the indicators join),
 [theme-and-colour-toggle.md](theme-and-colour-toggle.md) (the inverse
-`Indicator` style), and [safe-presentation.md](safe-presentation.md)
+`Indicator` style),
+[grapheme-highlight-expansion.md](grapheme-highlight-expansion.md)
+(the expanded spans the flags classify), and
+[safe-presentation.md](safe-presentation.md)
 (the shared grapheme policy).

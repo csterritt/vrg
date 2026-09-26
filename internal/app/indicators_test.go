@@ -1,12 +1,15 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"vrg/internal/present"
 )
 
 // frameLines splits the rendered frame into its pane lines with all
@@ -45,6 +48,18 @@ func subJSON(match string, start, end int) string {
 func matchRec(path, text string, num int, subs ...string) string {
 	return fmt.Sprintf(`{"type":"match","data":{"path":{"text":"%s"},"lines":{"text":"%s\n"},"line_number":%d,"submatches":[%s]}}`,
 		path, text, num, strings.Join(subs, ","))
+}
+
+// matchRecJSON is matchRec for lines carrying raw control bytes, which
+// are not legal inside a JSON string: the lines text goes through
+// json.Marshal so e.g. \x01 travels as \u0001.
+func matchRecJSON(path, text string, num int, subs ...string) string {
+	enc, err := json.Marshal(text + "\n")
+	if err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf(`{"type":"match","data":{"path":{"text":"%s"},"lines":{"text":%s},"line_number":%d,"submatches":[%s]}}`,
+		path, enc, num, strings.Join(subs, ","))
 }
 
 // indModel returns a settled run-off-edge browse model over a.txt at
@@ -386,6 +401,45 @@ func TestWrapModeDrawsNoIndicatorsOrReservedColumn(t *testing.T) {
 	// the first wrap row ends in an 'x' at the frame's right edge.
 	if got := cellAt(lines[1], m.width-1); got != "x" {
 		t.Fatalf("wrap row last cell = %q, want \"x\" — no reserved column", got)
+	}
+}
+
+// A match whose recorded bytes start mid-cluster is indicator-counted
+// from the cluster-expanded span FileBuffer hands down: the viewport's
+// clipped row carries the whole cluster's cells, and once the expanded
+// span stands entirely left of the window the gutter shows "*".
+func TestMidClusterMatchCountsFromClusterStart(t *testing.T) {
+	dir := t.TempDir()
+	// Ten x's + \x01 + ́ + forty x's: the ^A escape is the two-cell
+	// cluster at cells 10–11 and the combining mark — its own
+	// zero-width cluster — borrows the escape's trailing cell, so the
+	// recorded mark at bytes 11–13 expands to cells 10–12.
+	l1 := strings.Repeat("x", 10) + "\x01" + "́" + strings.Repeat("x", 40)
+	writeWorkFile(t, dir, "a.txt", l1+"\n")
+	recs := append(fileRecs("a.txt",
+		matchRecJSON("a.txt", l1, 1, subJSON("́", 11, 13)),
+	), `{"type":"summary","data":{}}`)
+	m := indModel(t, dir, recs...)
+
+	// Offset 10 paints the whole cluster; the row's clipped span is
+	// the expanded [10,12) → [0,2), not the recorded mark's [1,2).
+	m.vp.SetOffset(10)
+	r, ok := visRow(m, 0)
+	if !ok {
+		t.Fatal("line 1 has no visible row")
+	}
+	if !slices.Equal(r.Spans, []present.Span{{Start: 0, End: 2}}) {
+		t.Fatalf("clipped spans = %+v, want the cluster-expanded [{0 2}]", r.Spans)
+	}
+	if got := cellAt(frameLines(m)[1], indCol(m)); got != "_" {
+		t.Fatalf("gutter at offset 10 = %q, want \"_\" — the expanded match paints", got)
+	}
+
+	// Offset 12 leaves the whole expanded span left of the window —
+	// the match counts as entirely hidden left.
+	m.vp.SetOffset(12)
+	if got := cellAt(frameLines(m)[1], indCol(m)); got != "*" {
+		t.Fatalf("gutter at offset 12 = %q, want \"*\"", got)
 	}
 }
 

@@ -777,3 +777,59 @@ Sources: `Notes/issues/020-hidden-content-indicators.md`,
 `internal/viewport/viewport.go`, `internal/app/browse.go`,
 `internal/viewport/indicators_test.go`,
 `internal/app/indicators_test.go`.
+## [2026-09-24] ingest | Issue #21 grapheme-cluster highlight expansion and wide-glyph safety
+
+Ingested the completed Issue #21 implementation: FileBuffer now hands
+down cluster-expanded highlight spans and wrap/clip filler cells are
+never painted as match cells. `filebuffer.Load` runs each validated
+submatch's mapped span through `clusterSpan`, which walks a nonempty
+span's endpoints outward to the `Lead`-marked cluster boundaries —
+covering the start-inside, end-inside, and strictly interior cases the
+byte→cell map alone leaves mid-cluster: zero-width clusters joined
+into a host cell (a combining mark on a `^A` escape's trailing cell,
+on a tab expansion cell, or on a wide glyph's trailing cell) expand to
+the whole host cluster, a combining-only match highlights the whole
+base cluster (the visible `é` glyph for decomposed `e` + `́`),
+interior bytes of a wide pair or an emoji ZWJ sequence cover both
+cells, and a standalone combining cluster keeps the provisional
+`Lead` cell `emit` gives it at line start on a `◌` (U+25CC)
+dotted-circle base — the visible fallback that keeps its highlight
+one cell, never zero. `present.Cell` gained the
+`Blank` mark: `Model.Row` marks the lead cell it substitutes when a
+wrap row ends inside a split cluster and `clipRow` marks the in-window
+cells it blanks for an edge-split cluster; `renderCells` paints a
+`Blank` (or clip-edge-split) cell's space unstyled even under a
+covering span while a marker still paints its own position. The
+expanded span is the sole span source: `reveal` takes its target cell
+from it (a mid-cluster match reveals from the cluster start) and
+`hiddenMarks` classifies it (the cluster-start-hidden match counts
+entirely hidden left) — neither re-derives the recorded bytes.
+Created
+[grapheme-highlight-expansion](grapheme-highlight-expansion.md);
+updated [source-code](source-code.md) (`Cell.Blank`, `clusterSpan` in
+`Load`, blank marking in `Row`/`clipRow`, `renderCells` blank
+safety), [unit-tests](unit-tests.md) (new `expand_test.go`,
+`blanks_test.go`, `cluster_test.go`, and the updated
+indicator/hreveal entries), [safe-presentation](safe-presentation.md)
+(`Blank` and the provisional-cell fallback),
+[hidden-content-indicators](hidden-content-indicators.md) (expanded
+spans classified), [minimal-horizontal-reveal](minimal-horizontal-reveal.md),
+[wrap-mode](wrap-mode.md), and
+[horizontal-panning](horizontal-panning.md) (Issue #21 links), and the
+index. New test files: `internal/filebuffer/expand_test.go` (the
+`clusterSpan` boundary table and the `Load`-level expansion table),
+`internal/viewport/blanks_test.go` (`Blank` marks on wrap and clip
+filler), `internal/app/cluster_test.go` (`renderCells` blank safety);
+updated `internal/app/indicators_test.go` (mid-cluster match counting
+hidden-left, plus the `matchRecJSON` helper for records carrying raw
+control bytes) and `internal/app/hreveal_test.go` (a mid-cluster match
+revealing and painting the whole cluster).
+Sources: `Notes/issues/021-grapheme-cluster-highlight-expansion.md`,
+`Notes/tasks/021-grapheme-cluster-highlight-expansion.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; Testing
+Decisions → FileBuffer), `internal/filebuffer/filebuffer.go`,
+`internal/present/line.go`, `internal/viewport/rows.go`,
+`internal/viewport/viewport.go`, `internal/app/browse.go`,
+`internal/filebuffer/expand_test.go`, `internal/viewport/blanks_test.go`,
+`internal/app/cluster_test.go`, `internal/app/indicators_test.go`,
+`internal/app/hreveal_test.go`.

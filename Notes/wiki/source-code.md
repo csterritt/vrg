@@ -148,7 +148,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   right-justified number + two spaces over the viewport's visible-row
   slice), and `renderCells` (inverse-video
   spans over escaped `present.Cell`s via `Match`/`CurrentMatch`,
-  marker spans, clip-edge wide clusters). Issue #12 adds `scroll`
+  marker spans, clip-edge wide clusters — Issue #21: `Blank`-marked
+  wrap/clip filler cells never take the match style). Issue #12 adds `scroll`
   (the six scroll keys routed to `Viewport` units, then saving the
   anchor per path — a no-op on placeholders and outside browse) — the
   Issue #12 `bufferRows` adapter is gone since Issue #16, which builds
@@ -289,9 +290,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   one cluster, replacing the provisional `→`) with per-byte `lo`/`hi`
   byte→cell maps and `Span` range→cell mapping including zero-width
   markers; `Cell` carries `Lead` (a cluster's first cell, the only
-  legal wrap boundary) and `Cont` (trailing cells of a multi-cell
-  unit) — the shared segmentation/width policy Viewport consumes.
-  Grapheme-aware via `x/ansi`. See [safe-presentation.md](safe-presentation.md)
+  legal wrap boundary), `Cont` (trailing cells of a multi-cell
+  unit), and — Issue #21 — `Blank` (a substituted filler cell the row
+  and clip layers mark, never produced by `LineOf` and never a match
+  cell); a standalone zero-width cluster takes a provisional `Lead`
+  cell on a `◌` (U+25CC) dotted-circle base so it is always a visible
+  cell — the shared segmentation/width policy Viewport consumes.
+  Grapheme-aware via `x/ansi`. See [safe-presentation.md](safe-presentation.md),
+  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
   and [wrap-mode.md](wrap-mode.md).
 - `internal/present/doc.go` — the shared all-sink utility contract.
 
@@ -307,7 +313,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   Issue #16 the buffer is the grapheme-policy source for layout:
   `Cells` carries the `Lead`/`Cont` cluster marks, so `*Buffer`
   satisfies `viewport.Source` and row models consume boundaries
-  without re-segmenting. See [wrap-mode.md](wrap-mode.md).
+  without re-segmenting. Issue #21 adds `clusterSpan`: each validated
+  submatch's mapped span expands outward to `Lead` cluster boundaries,
+  so `Spans` hands down the cluster-expanded spans highlighting,
+  reveal, and the hidden-match indicators all consume. See
+  [wrap-mode.md](wrap-mode.md) and
+  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md).
 
 ## internal/viewport
 
@@ -357,8 +368,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   split-cluster blanked regions the clip produces: painted-cell
   visibility, markers painting wherever they sit, partially painted
   matches counting visible, and an entirely hidden match attributed to
-  the side its hidden cells stand on.
+  the side its hidden cells stand on. Issue #21 marks the substituted
+  clip-edge cells `Blank` so a covering span never styles the filler.
   See [viewport-scrolling.md](viewport-scrolling.md),
+  [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
   [hidden-content-indicators.md](hidden-content-indicators.md),
   [horizontal-panning.md](horizontal-panning.md),
   [destination-reveal.md](destination-reveal.md),
@@ -375,9 +388,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   an extra row for an end-of-line marker past a full final row — runs
   in a worker command since Issue #17), and
   `Model` (`Len`/`Row`/`RowOf` — `Row` materializes cells and
-  row-local spans per query, blanking a split cluster's clipped lead;
-  Issue #18 adds `Wrap`, reporting the key's mode so the viewport can
-  gate panning and clipping).
+  row-local spans per query, blanking a split cluster's clipped lead —
+  Issue #21 marks that substituted cell `Blank`; Issue #18 adds
+  `Wrap`, reporting the key's mode so the viewport can gate panning
+  and clipping).
 
 ## internal/theme
 

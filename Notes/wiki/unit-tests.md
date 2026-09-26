@@ -215,7 +215,8 @@ contracts of the shared utility:
 
 - `TestLineText` — content rules: invalid UTF-8 → U+FFFD, C0/DEL
   caret notation, `\u0085`-style C1 forms, LF/CRLF never displayed,
-  standalone CR → `^M`.
+  standalone CR → `^M`, and a standalone combining mark's `◌́`
+  fallback cell (Issue #21).
 - `TestLineWidth` — cell counts for escape forms and wide clusters.
 - `TestLineSpan` — byte→cell maps for escaped forms, including
   an ESC byte's match covering both `^[` cells and marker positions on
@@ -250,10 +251,27 @@ shared grapheme-policy source:
   trailing cells, across ASCII, wide, combining, and caret-escape
   units.
 - `TestLeadingCombiningCluster` — a standalone combining mark at line
-  start takes a provisional cell of its own, still a boundary.
+  start takes a provisional cell of its own on a `◌` dotted-circle
+  base (Issue #21's visible fallback), still a boundary.
 - `TestTabStopCells` — the tab expands to the next eight-column stop
   as one cluster (first expansion cell leads), and the recorded
   submatch on the tab byte highlights the whole expansion.
+
+`expand_test.go` (same package, Issue #21) pins cluster-expanded
+highlight spans:
+
+- `TestSpansExpandToWholeClusters` — the `Load`-level table: a
+  combining-only match covers the whole base cluster; a mark's
+  zero-width cluster borrowing an escape's trailing cell, a tab
+  expansion cell, or a wide glyph's trailing cell expands over the
+  whole host cluster; a mark joined to a replaced invalid byte's own
+  cell stays one cell; interior bytes of a wide pair or an emoji ZWJ
+  sequence cover both cells; and a standalone combining mark at line
+  start keeps its provisional fallback cell — never zero cells.
+- `TestClusterSpanBoundaries` — the cell-space expansion itself over
+  `Lead` marks: start inside, end inside, and strictly interior ranges
+  all expand to the whole cluster while whole-cluster, neighbouring,
+  line-end, and marker spans pass through.
 
 ## internal/app
 
@@ -520,6 +538,19 @@ whose matches sit far right of the text area:
 - `TestHRevealWideClusterMatchPaintsBothCells` — a match starting on
   a two-cell CJK glyph reveals to `start + 2 − text width` so both
   cells of the first glyph paint at the right edge.
+- `TestHRevealMidClusterMatchPaintsWholeCluster` (Issue #21) — `n` to
+  a match recorded mid-cluster (a combining mark borrowing an escape
+  cluster's trailing cell) keeps the offset because the expanded
+  target cell is visible, and the painted span covers the whole
+  cluster — both escape cells inverse.
+
+`cluster_test.go` (same package, Issue #21) pins `renderCells` blank
+safety directly:
+
+- `TestRenderCellsBlankFillersNeverMatchStyled` — a `Blank`-marked
+  filler under a covering span and a clip-edge split blank both paint
+  unstyled, while a marker on a blanked cell still paints its inverse
+  space.
 
 `indicators_test.go` (same package, Issue #20) drives the
 hidden-content indicators through the rendered frame in run-off-edge
@@ -557,6 +588,13 @@ locates the gutter's first trailing space:
   column.
 - `TestUniformLinesEveryGutterUnderscore` — the Issue #18
   uniform-lines geometry signposts `_` on every visible line.
+- `TestMidClusterMatchCountsFromClusterStart` (Issue #21) — the
+  indicator tests consume the expanded spans: a match recorded on a
+  combining mark mid-cluster paints its clipped row as the expanded
+  `[cluster start, cluster end)` span, and once that whole cluster
+  stands left of the window the gutter upgrades to `*`.
+- `matchRecJSON` — the record helper for lines carrying raw control
+  bytes, which JSON-escapes the `lines` text (`\x01` → `\u0001`).
 
 `popup_test.go` (same package) covers the Issue #15 file-change
 pop-up; `popupModel` lands a two-file browse with `instantPopupTimer`
@@ -930,6 +968,17 @@ indicator flags against `lineSource`-backed run-off-edge models;
   window blanks the whole text area; a match on it reports hidden
   right while `HiddenLeft` covers the plain cells.
 - `TestWrapModeNoIndicatorFlags` — wrap-model rows carry no flags.
+
+`blanks_test.go` (same package, Issue #21) pins the `Blank` filler
+mark on substituted cells:
+
+- `TestWrapSplitBlankIsMarked` — the lead cell a wrap row blanks for a
+  last-resort-split cluster is `Blank`-marked with the covering span
+  still spanning it; rows continuing the split keep unmarked `Cont`
+  cells.
+- `TestClipBlanksAreMarked` — `clipRow` marks the in-window cells of a
+  cluster split at either clip edge `Blank` while the clipped span
+  still covers them.
 
 ## internal/theme
 

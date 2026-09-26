@@ -575,11 +575,14 @@ func renderCells(cells []present.Cell, spans []present.Span, textW int, th theme
 		// cell of a marked wide glyph paints blank so the row's width
 		// accounting holds.
 		mk := marker(c) || (cells[c].Cont && c > 0 && marker(c-1))
-		if mk || (c+1 == textW && c+1 < len(cells) && cells[c+1].Cont) {
-			// The second form is a cluster split at the clip edge.
+		// A wrap or clip blank — marked by the row layer, or a cluster
+		// split detected at the clip edge — paints unstyled even when a
+		// coverage span crosses it: it is filler, not a match cell.
+		bl := cells[c].Blank || (c+1 == textW && c+1 < len(cells) && cells[c+1].Cont)
+		if mk || bl {
 			txt = " "
 		}
-		if cov := covered(c) || mk; inv != cov {
+		if cov := mk || (covered(c) && !bl); inv != cov {
 			flush()
 			inv = cov
 		}

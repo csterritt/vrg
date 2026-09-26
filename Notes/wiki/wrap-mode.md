@@ -172,6 +172,9 @@ row position this model feeds),
 implements),
 [safe-presentation.md](safe-presentation.md) (the line-presentation
 policy it shares),
+[grapheme-highlight-expansion.md](grapheme-highlight-expansion.md)
+(the blank filler cell this model substitutes, `Blank`-marked since
+Issue #21 so a covering highlight never paints it),
 [browse-tracer.md](browse-tracer.md) (the panel it lays out), and
 [theme-and-colour-toggle.md](theme-and-colour-toggle.md) (the other
 browse-phase toggle).

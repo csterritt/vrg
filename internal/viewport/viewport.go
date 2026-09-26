@@ -455,7 +455,7 @@ func clipRow(r Row, off, w int) Row {
 			copy(cp, cells)
 		}
 		for i := from; i < to; i++ {
-			cp[i] = present.Cell{Text: " "}
+			cp[i] = present.Cell{Text: " ", Blank: true}
 		}
 	}
 	if lo < hi && r.Cells[lo].Cont {

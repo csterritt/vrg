@@ -149,6 +149,9 @@ resolve/clamp path the re-clamp rides),
 [destination-reveal.md](destination-reveal.md) (the entry sequence the
 reset precedes),
 [match-navigation.md](match-navigation.md) (the file crossings that
-reset the offset), and
+reset the offset),
+[grapheme-highlight-expansion.md](grapheme-highlight-expansion.md)
+(the clip-edge blanks, `Blank`-marked since Issue #21 so a covering
+highlight never paints them), and
 [safe-presentation.md](safe-presentation.md) (the shared grapheme
 policy the clipping consumes).

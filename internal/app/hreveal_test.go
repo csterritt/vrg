@@ -184,6 +184,50 @@ func TestHRevealAfterFileChangeReset(t *testing.T) {
 	}
 }
 
+// A match whose recorded bytes start mid-cluster reveals and paints
+// the cluster-expanded span FileBuffer hands down: n to a combining
+// mark that borrowed the trailing cell of an escape cluster lands the
+// highlight on the whole cluster — both cells inverse — not just the
+// borrowed cell.
+func TestHRevealMidClusterMatchPaintsWholeCluster(t *testing.T) {
+	dir := t.TempDir()
+	// Line 2: 60 x's + \x01 + ́ + 30 x's — the ^A escape is the
+	// two-cell cluster at cells 60–61 and the mark borrows its
+	// trailing cell, so the recorded mark at bytes 61–63 expands to
+	// cells 60–62.
+	l2 := strings.Repeat("x", 60) + "\x01" + "́" + strings.Repeat("x", 30)
+	writeWorkFile(t, dir, "a.txt", "hit\n"+l2+"\n")
+	recs := append(fileRecs("a.txt",
+		matchLineRec("a.txt", "hit", 1, "hit", 0, 3),
+		matchRecJSON("a.txt", l2, 2, subJSON("́", 61, 63)),
+	), `{"type":"summary","data":{}}`)
+	m, cmd := browseModel(t, dir, 80, 24, recs...)
+	m = settle(t, m, cmd)
+	m = pump(t, m, keyPress("w"))
+
+	m, _ = update(t, m, keyPress("n")) // → a.txt:2
+	if s, _ := m.currentStop(); s.Line != 2 {
+		t.Fatalf("stop after n = %+v, want a.txt:2", s)
+	}
+	// The expanded span's cluster start sits inside the window, so
+	// the offset holds at zero and the painted span covers the whole
+	// ^A cluster — the escape's lead cell and the borrowed trailing
+	// cell alike.
+	if m.vp.Offset() != 0 {
+		t.Fatalf("offset = %d, want 0 — the expanded target cell 60 was visible", m.vp.Offset())
+	}
+	r, ok := visRow(m, 1)
+	if !ok {
+		t.Fatal("line 2 has no visible row")
+	}
+	if len(r.Spans) != 1 || r.Spans[0].Start != 60 || r.Spans[0].End != 62 {
+		t.Fatalf("line-2 spans = %+v, want the cluster-expanded [{60 62}]", r.Spans)
+	}
+	if got := m.View().Content; !strings.Contains(got, "\x1b[30;47;4m^Á\x1b[24;37;40m") {
+		t.Fatalf("view lacks the whole-cluster highlight: %q", got)
+	}
+}
+
 // A match whose first submatch starts on a two-cell cluster reveals by
 // the cluster-width rule: both cells of the CJK glyph paint at the
 // right edge, not a clipping blank.

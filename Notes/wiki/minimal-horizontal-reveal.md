@@ -131,7 +131,10 @@ half and the entry sequence this extends),
 clamp the reveal deliberately bypasses, and `clipRow`'s blanking),
 [wrap-mode.md](wrap-mode.md) (the mode with no horizontal reveal),
 [match-navigation.md](match-navigation.md) (the steps that trigger
-it), [safe-presentation.md](safe-presentation.md) (the shared grapheme
+it),
+[grapheme-highlight-expansion.md](grapheme-highlight-expansion.md)
+(the expanded spans the target's start cell comes from),
+[safe-presentation.md](safe-presentation.md) (the shared grapheme
 policy), and [logical-anchor-and-layout.md](
 logical-anchor-and-layout.md) (the pending intent that carries the
 reveal across layout installs).

@@ -44,14 +44,17 @@ func TestCellClusterBoundaries(t *testing.T) {
 }
 
 // A standalone combining mark at line start has no base cell to join:
-// it takes a provisional cell of its own, still a cluster boundary.
+// it takes a provisional cell of its own on a dotted-circle base — a
+// visible cell, still a cluster boundary — so a highlight on the
+// mark's bytes paints a real cell rather than a bare mark a terminal
+// would merge into the previous cell.
 func TestLeadingCombiningCluster(t *testing.T) {
 	dir := t.TempDir()
 	b := load(t, writeFile(t, dir, "f", "́x\n"))
 	cells := b.Cells(0)
-	if len(cells) != 2 || cells[0].Text != "́" || !cells[0].Lead ||
+	if len(cells) != 2 || cells[0].Text != "◌́" || !cells[0].Lead ||
 		cells[1].Text != "x" || !cells[1].Lead {
-		t.Fatalf("Cells(0) = %+v, want the combining cluster then x, both leads", cells)
+		t.Fatalf("Cells(0) = %+v, want the ◌́ fallback cell then x, both leads", cells)
 	}
 }
 
