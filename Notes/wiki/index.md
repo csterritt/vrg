@@ -29,6 +29,12 @@ Catalog of all wiki pages for the vrg project.
   side channel, display + termios restoration, the single
   post-restoration stderr diagnostic, the `VRG_TEST_*` seams, and the
   fake-rg/PTY harness
+- [browse-tracer.md](browse-tracer.md) — Issue #5: two-pane browse view
+  (raw-path file list, underlined current entry, filename rule,
+  right-justified gutter, inverse-video matches), async prepared-buffer
+  loading with `Loading…`, the safe-presentation core's path/content
+  rules and byte→cell maps, the provisional tab form, the no-style
+  sink-safety method, and the provisional list width pending Issue #24
 
 ## Catalogs
 

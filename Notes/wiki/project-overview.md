@@ -22,11 +22,14 @@ current file's contents with matches highlighted.
 
 Six internal packages mirror the PRD Module Design: `cli`,
 `searchindex`, `filebuffer`, `viewport`, `theme`, `app` — all under
-`internal/`, plus the thin entry point `cmd/vrg`. Issues #1–#3 are
+`internal/`, plus the thin entry point `cmd/vrg`. Issues #1–#5 are
 live: invocation, flag allow-list, the protected child argv, rg spawn
-with dual-pipe drainage, the `Searching…` state, the interim summary,
-and the `searchindex` record/stop model. `filebuffer`, `viewport`, and
-`theme` remain documented package boundaries awaiting their issues.
+with dual-pipe drainage, cancellation/cleanup/terminal restoration,
+the `Searching…` state, the `searchindex` record/stop model, and the
+two-pane browse tracer — file list, filename rule, guttered content
+with inverse-video matches, async prepared-buffer loads — built on
+`filebuffer`'s safe-presentation core with byte→cell maps and the
+`viewport`/`theme` seams.
 
 See [source-code.md](source-code.md) for the file catalog and
 [unit-tests.md](unit-tests.md) for the test catalog.

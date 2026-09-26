@@ -1,0 +1,5 @@
+Script started on 2026-09-23 14:19:18-04:00 [COMMAND="/home/chris/vrg/Notes/walkthroughs/005-06/code-walkthrough/manual-run/inner.sh" <not executed on terminal>]
+[>4m[?1049h[?25l[?5W[?2004h[>4;2m[>1u[?u[H[2J[4m./b.c[m        ── ./b.c ──────────────────────────────────────────────────────────
+./src/a.txt  1  int [7mhit[m = 0;[3;14H2  no match[H[2J[4m./b.c[m        ── ./b.c ──────────────────────────────────────────────────────────────────────────────
+./src/a.txt  1  int [7mhit[m = 0;[3;14H2  no match[>4m[<1u[30d[?1049l[?25h[?2004l
+Script done on 2026-09-23 14:19:19-04:00 [COMMAND_EXIT_CODE="0"]

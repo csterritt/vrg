@@ -1,14 +1,14 @@
 package app
 
 import (
-	"fmt"
-
 	tea "charm.land/bubbletea/v2"
+	"vrg/internal/filebuffer"
 	"vrg/internal/searchindex"
+	"vrg/internal/theme"
+	"vrg/internal/viewport"
 )
 
-// phase is the model's coarse state. Later issues add browsing between
-// searching and exit.
+// phase is the model's coarse state.
 type phase int
 
 const (
@@ -17,24 +17,35 @@ const (
 	// stays here until the prepared index arrives, even after rg has
 	// exited.
 	phaseSearching phase = iota
-	// phaseSummary is the interim result screen shown once the index is
-	// ready; q dismisses it with exit 0.
-	phaseSummary
+	// phaseBrowse is the two-pane browse view: file list on the left,
+	// the current file's content on the right.
+	phaseBrowse
 )
 
 // Model is the Bubble Tea application model: it owns the search
-// lifecycle state and renders the searching and interim summary screens.
+// lifecycle state and renders the searching and browse screens.
 // cancel terminates the rg child and abandons collection; the process
-// boundary confirms the reap before exiting.
+// boundary confirms the reap before exiting. File loads run off the
+// update path behind loadGate — nil in production, a test seam that
+// holds the worker's read and decode/map phases.
 type Model struct {
-	phase  phase
-	cancel func()
-	done   <-chan searchDoneMsg
-	index  *searchindex.Index
-	width  int
-	height int
-	code   int
-	quit   bool
+	phase    phase
+	cancel   func()
+	done     <-chan searchDoneMsg
+	index    *searchindex.Index
+	stops    []searchindex.Stop
+	files    [][]byte // distinct raw paths in index order
+	cursor   int      // index into stops of the current matched line
+	bufs     map[string]*filebuffer.Buffer
+	failed   map[string]bool
+	loading  map[string]bool
+	theme    theme.Theme
+	vp       viewport.Viewport
+	loadGate <-chan struct{}
+	width    int
+	height   int
+	code     int
+	quit     bool
 }
 
 // newModel returns a searching model awaiting the collection result on
@@ -43,7 +54,19 @@ func newModel(done <-chan searchDoneMsg, cancel func()) Model {
 	if cancel == nil {
 		cancel = func() {}
 	}
-	return Model{phase: phaseSearching, cancel: cancel, done: done}
+	return Model{
+		phase:   phaseSearching,
+		cancel:  cancel,
+		done:    done,
+		bufs:    make(map[string]*filebuffer.Buffer),
+		failed:  make(map[string]bool),
+		loading: make(map[string]bool),
+		theme:   theme.Dark(),
+		// Same fallback the process boundary hands Bubble Tea; a real
+		// terminal's first resize overrides it.
+		width:  80,
+		height: 24,
+	}
 }
 
 // Init returns the command that waits for collection to finish and
@@ -54,12 +77,14 @@ func (m Model) Init() tea.Cmd {
 }
 
 // Update applies one message. Resize is handled in any state so the UI
-// stays responsive during collection; a search-done message moves the
-// model to the interim summary; q quits the summary with exit 0. ctrl+c
-// in any state — and q while searching, which covers the post-exit
-// preparation window — cancel the search and exit 130. Esc is a base-state
-// no-op. Once the model has committed to quitting, late messages
-// (including a search completion racing cancellation) are discarded.
+// stays responsive during collection and loads; a search-done message
+// moves the model to the browse view and starts the current file's
+// load; a load-done message stores the prepared buffer without any
+// full-file work here; q quits the browse view with exit 0. ctrl+c in
+// any state — and q while searching, which covers the post-exit
+// preparation window — cancel the search and exit 130. Esc is a
+// base-state no-op. Once the model has committed to quitting, late
+// messages (including completions racing cancellation) are discarded.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.quit {
 		return m, nil
@@ -67,9 +92,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.relayout()
 	case searchDoneMsg:
-		m.phase = phaseSummary
+		m.phase = phaseBrowse
 		m.index = msg.index
+		m.stops = msg.index.Stops()
+		m.files = distinctPaths(m.stops)
+		m.cursor = 0
+		m.relayout()
+		return m, m.ensureLoad()
+	case loadDoneMsg:
+		key := string(msg.path)
+		delete(m.loading, key)
+		if msg.err != nil {
+			m.failed[key] = true
+		} else {
+			m.bufs[key] = msg.buf
+		}
+		m.relayout()
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -99,32 +139,16 @@ func (m Model) cancelled() Model {
 // exit Bubble Tea emits the display-restoration sequence (leave alt
 // screen, cursor visible). During the whole collection and post-exit
 // preparation span the screen is "Searching…"; afterwards it is the
-// interim "N files, M matched lines" summary.
+// two-pane browse view.
 func (m Model) View() tea.View {
 	var v tea.View
-	if m.phase == phaseSummary {
-		v = tea.NewView(m.summaryLine() + "\n")
+	if m.phase == phaseBrowse {
+		v = tea.NewView(m.renderBrowse())
 	} else {
 		v = tea.NewView("Searching…\n")
 	}
 	v.AltScreen = true
 	return v
-}
-
-// summaryLine renders the interim result count.
-func (m Model) summaryLine() string {
-	files, lines := 0, 0
-	if m.index != nil {
-		files, lines = m.index.FileCount(), m.index.LineCount()
-	}
-	return fmt.Sprintf("%d %s, %d matched %s", files, plural(files, "file"), lines, plural(lines, "line"))
-}
-
-func plural(n int, s string) string {
-	if n == 1 {
-		return s
-	}
-	return s + "s"
 }
 
 // ExitCode is the process exit status the model settled on.

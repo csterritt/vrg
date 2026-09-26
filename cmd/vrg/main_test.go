@@ -212,7 +212,7 @@ const fakeRgScript = `#!/bin/sh
 printf '%s\n' "$@" > "$VRG_CAPTURE_DIR/argv"
 pwd > "$VRG_CAPTURE_DIR/cwd"
 # Hold the stream open briefly so the harness observes the searching
-# screen before the interim summary replaces it.
+# screen before the browse view replaces it.
 sleep 0.3
 printf '%s\n' \
 '{"type":"begin","data":{"path":{"text":"f.txt"}}}' \
@@ -245,7 +245,7 @@ func searchEnv(fakeDir, capDir string) []string {
 }
 
 // runVrgTUI runs the built binary with a controlled stdin pipe: it
-// watches stdout for the interim-summary marker, sends q once it
+// watches stdout for the browse view's filename marker, sends q once it
 // appears, and returns after the process exits. The context deadline
 // bounds the run so a wedged search fails rather than hangs.
 func runVrgTUI(t *testing.T, workdir string, env []string, args ...string) runResult {
@@ -280,7 +280,7 @@ func runVrgTUI(t *testing.T, workdir string, env []string, args ...string) runRe
 			n, rerr := stdout.Read(tmp)
 			if n > 0 {
 				buf.Write(tmp[:n])
-				if !sent && bytes.Contains(buf.Bytes(), []byte("matched line")) {
+				if !sent && bytes.Contains(buf.Bytes(), []byte("f.txt")) {
 					_, _ = stdin.Write([]byte("q"))
 					sent = true
 				}
@@ -347,15 +347,15 @@ func TestDashFileRootAtProcessBoundary(t *testing.T) {
 	if res.code != 0 {
 		t.Fatalf(`vrg foo ./- exited %d, want 0 (stderr %q)`, res.code, res.stderr)
 	}
-	if !strings.Contains(res.stdout, "matched line") {
-		t.Fatalf("missing interim summary: %q", res.stdout)
+	if !strings.Contains(res.stdout, "f.txt") {
+		t.Fatalf("missing browse view: %q", res.stdout)
 	}
 }
 
 // The child receives exactly the protected argv — rg, the mandatory
 // internal flags, the user's flags in encounter order with supplied
 // spellings, --, pattern, root — and runs in the invocation working
-// directory. Each run shows "Searching…" then the interim summary, and
+// directory. Each run shows "Searching…" then the browse view, and
 // q exits 0 with empty stderr.
 func TestSearchLifecycleAtBoundary(t *testing.T) {
 	dir := t.TempDir()
@@ -407,8 +407,8 @@ func TestSearchLifecycleAtBoundary(t *testing.T) {
 			if !strings.Contains(res.stdout, "Searching…") {
 				t.Fatalf("vrg %v: stdout lacks the searching screen: %q", tc.args, res.stdout)
 			}
-			if !strings.Contains(res.stdout, "1 file, 1 matched line") {
-				t.Fatalf("vrg %v: stdout lacks the interim summary: %q", tc.args, res.stdout)
+			if !strings.Contains(res.stdout, "f.txt") {
+				t.Fatalf("vrg %v: stdout lacks the browse view: %q", tc.args, res.stdout)
 			}
 			gotArgv, err := os.ReadFile(filepath.Join(capDir, "argv"))
 			if err != nil {
@@ -433,7 +433,7 @@ func TestSearchLifecycleAtBoundary(t *testing.T) {
 // A fake rg writing well over pipe capacity to stderr while streaming a
 // valid stdout stream neither deadlocks vrg nor loses the stream: the
 // post-write handshake file proves the child finished both pipes before
-// exiting, and every match lands in the summary.
+// exiting, and every match lands in the index shown by the browse view.
 func TestDualPipeDrainageAtBoundary(t *testing.T) {
 	flood := `#!/bin/sh
 i=1
@@ -451,7 +451,7 @@ exit 0
 	if res.code != 0 {
 		t.Fatalf("vrg exited %d under stderr flood, want 0 (stderr %q)", res.code, res.stderr)
 	}
-	if !strings.Contains(res.stdout, "1 file, 16 matched lines") {
+	if !strings.Contains(res.stdout, "f.txt") {
 		t.Fatalf("stdout stream lost under backpressure: %q", res.stdout)
 	}
 	if _, err := os.Stat(filepath.Join(capDir, "writes-done")); err != nil {

@@ -38,13 +38,24 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   and [cancellation-and-cleanup.md](cancellation-and-cleanup.md).
 - `internal/app/app.go` — the Bubble Tea `Model`: `phaseSearching` renders
   `Searching…` until the prepared index arrives (spanning post-exit
-  preparation), `phaseSummary` renders `N files, M matched lines` and
-  `q` quits with `ExitCode` 0; `ctrl+c` in any state or `q` while
-  searching cancels (kills the child context, `ExitCode` 130), `Esc` is
-  a searching-only no-op, and once `quit` is set `Update` discards all
-  messages so a late completion cannot revive a cancelled UI; every view
-  sets `AltScreen` for the exit restoration sequence; resize handled in
-  any state.
+  preparation), `phaseBrowse` renders the two-pane browse view and `q`
+  quits with `ExitCode` 0; `ctrl+c` in any state or `q` while searching
+  cancels (kills the child context, `ExitCode` 130), `Esc` is a no-op,
+  and once `quit` is set `Update` discards all messages so a late
+  completion cannot revive a cancelled UI; every view sets `AltScreen`
+  for the exit restoration sequence; resize handled in any state.
+  Issue #5 state: `stops`/`files`/`cursor`, the `bufs`/`loading`/
+  `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam.
+- `internal/app/browse.go` — the Issue #5 browse composition:
+  `loadDoneMsg` (the worker's prepared-buffer completion keyed by raw
+  path), `ensureLoad`/`loadCmd` (one async load per file; read, split,
+  escape, and map all off the update path, behind `loadGate` in tests),
+  `renderBrowse` (raw-path-ordered file list with underlined current
+  entry scrolled into view, filename rule, `Loading…`/`(unreadable)`
+  placeholders), `filenameRule`, `contentRow` (right-justified gutter +
+  two spaces), and `renderCells` (inverse-video spans over escaped
+  cells, marker spans, clip-edge wide clusters). See
+  [browse-tracer.md](browse-tracer.md).
 
 ## internal/searchindex
 
@@ -73,12 +84,36 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [cli-foundation.md](cli-foundation.md) and
   [cli-flags-and-child-argv.md](cli-flags-and-child-argv.md).
 
-## Package boundaries awaiting their issues
+## internal/filebuffer
 
-Each is a documented empty package mirroring PRD Module Design:
+- `internal/filebuffer/present.go` — the Issue #5 safe-presentation
+  core: `EscapePath` for path bytes (`\n`/`\r`/`\t` forms, `\\`,
+  `\xNN` invalid UTF-8, caret notation for C0/DEL, `\uXXXX` for C1,
+  printable Unicode preserved) and `presentLine`/`presented` for
+  content lines (U+FFFD for invalid UTF-8, caret notation, `\uXXXX`,
+  LF/CRLF never displayed, standalone CR → `^M`, provisional
+  single-cell `→` tab pending Issue #16) with per-byte `lo`/`hi`
+  byte→cell maps and `Span` range→cell mapping including zero-width
+  markers. Grapheme-aware via `x/ansi`. See
+  [browse-tracer.md](browse-tracer.md).
+- `internal/filebuffer/filebuffer.go` — `Buffer`, one file's prepared
+  display-ready content: `Load` reads, splits, escapes, and maps the
+  file (all inside the worker command, never on `Update`), validates
+  each stop's submatches against the line's raw bytes, and exposes
+  `LineCount`, `GutterWidth`/`GutterDigits` (largest line number's
+  digit width + two spaces, minimum one slot), `Text`, `Cells`, and
+  `Spans`.
 
-- `internal/filebuffer` — per-file loading/classification into safe
-  display-ready lines and validated highlights.
-- `internal/viewport` — logical reading position and rendered-row
-  visibility.
-- `internal/theme` — active colour scheme and styles.
+## internal/viewport
+
+- `internal/viewport/viewport.go` — the minimal Issue #5 seam:
+  content dimensions plus `Range`, the visible window clamped to the
+  loaded line count. Top-of-file only; scrolling/reveal are Issues
+  12–19.
+
+## internal/theme
+
+- `internal/theme/theme.go` — the minimal Issue #5 seam: `Dark` emits
+  real SGR (inverse `\x1b[7m`, underline `\x1b[4m`); `Plain` is the
+  no-style composition path whose identity styles let sink-safety
+  tests assert no escape bytes may legitimately appear.

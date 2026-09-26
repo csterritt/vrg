@@ -1,0 +1,4 @@
+Script started on 2026-09-23 14:19:19-04:00 [COMMAND="/home/chris/vrg/Notes/walkthroughs/005-06/code-walkthrough/manual-hostile/inner.sh" <not executed on terminal>]
+[>4m[?1049h[?25l[?5W[?2004h[>4;2m[>1u[?u[H[2J[4m./evil\nesc^[name.txt[m  ── ./evil\nesc^[name.txt ────────────────────────────────
+./plain.txt            1  pre ^[]0;pwned^G mid [7mhit[m[3;24H2  plain line[>4m[<1u[24d[?1049l[?25h[?2004l
+Script done on 2026-09-23 14:19:19-04:00 [COMMAND_EXIT_CODE="0"]

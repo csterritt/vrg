@@ -106,3 +106,36 @@ fake-rg block/stream scripts, termios equality). Sources:
 App), `internal/app/app.go`, `internal/app/search.go`,
 `internal/app/model_test.go`, `internal/app/subprocess_test.go`,
 `cmd/vrg/main.go`, `cmd/vrg/hooks.go`, `cmd/vrg/pty_test.go`.
+
+## [2026-09-23] ingest | Issue #5 browse tracer and safe-presentation core
+
+Ingested the completed Issue #5 implementation: the interim summary is
+replaced by the two-pane browse view. `internal/filebuffer` gained the
+safe-presentation core (`present.go`: `EscapePath` path rules —
+`\n`/`\r`/`\t`, `\\`, `\xNN`, caret notation, `\uXXXX` C1 — and
+`presentLine` content rules — U+FFFD, caret notation, invisible
+LF/CRLF, `^M` standalone CR, provisional `→` tab — with per-byte
+`lo`/`hi` byte→cell maps and marker spans) and `filebuffer.go`
+(`Buffer`/`Load`: read, split, escape, map, submatch validation,
+`GutterWidth`). `internal/viewport` and `internal/theme` gained their
+minimal seams (`Range` clamp; `Dark`/`Plain` styles). `internal/app`
+gained `browse.go` (`loadDoneMsg` prepared-buffer completion,
+`ensureLoad`/`loadCmd` async workers behind `loadGate`,
+`renderBrowse`/`filenameRule`/`contentRow`/`renderCells` with
+inverse-video matches) and `app.go`'s `phaseBrowse` state. Created
+[browse-tracer](browse-tracer.md); updated
+[source-code](source-code.md), [unit-tests](unit-tests.md) (new
+filebuffer and browse test catalogs; summary-era entries retargeted),
+[project-overview](project-overview.md), and the index. Boundary and
+PTY tests now watch for the browse filename marker instead of the
+interim summary. Sources:
+`Notes/issues/005-browse-tracer-file-list-and-file-panel.md`,
+`Notes/tasks/005-browse-tracer-file-list-and-file-panel.md`,
+`Notes/PRD-vrg.md` (File list and layout; Text, graphemes, and safe
+presentation; Module Design), `internal/filebuffer/present.go`,
+`internal/filebuffer/filebuffer.go`, `internal/viewport/viewport.go`,
+`internal/theme/theme.go`, `internal/app/browse.go`,
+`internal/app/app.go`, `internal/filebuffer/present_test.go`,
+`internal/filebuffer/filebuffer_test.go`, `internal/app/browse_test.go`,
+`internal/app/model_test.go`, `cmd/vrg/main_test.go`,
+`cmd/vrg/pty_test.go`.

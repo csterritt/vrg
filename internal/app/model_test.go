@@ -64,8 +64,8 @@ func escPress() tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: tea.KeyEscape}
 }
 
-// A completed model for summary-phase tests: the search finished with a
-// prepared index and the model shows the interim summary.
+// A completed model for browse-phase tests: the search finished with a
+// prepared index and the model shows the browse view.
 func completedModel(t *testing.T, files int) Model {
 	t.Helper()
 	var recs []string
@@ -106,35 +106,16 @@ func TestResizeDuringSearching(t *testing.T) {
 	}
 }
 
-// An injected search-completion message transitions the model to the
-// interim summary screen: "N files, M matched lines".
-func TestCompletionTransitionsToSummary(t *testing.T) {
-	ix := fixtureIndex(t, "/w",
-		`{"type":"match","data":{"path":{"text":"a"},"lines":{"text":"x\n"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}`,
-		`{"type":"match","data":{"path":{"text":"a"},"lines":{"text":"y\n"},"line_number":4,"submatches":[{"match":{"text":"y"},"start":0,"end":1}]}}`,
-		`{"type":"match","data":{"path":{"text":"b"},"lines":{"text":"z\n"},"line_number":2,"submatches":[{"match":{"text":"z"},"start":0,"end":1}]}}`,
-		`{"type":"summary","data":{}}`,
-	)
-	m := newModel(nil, nil)
-	m2, _ := update(t, m, searchDoneMsg{index: ix})
-	got := m2.View().Content
-	if !strings.Contains(got, "2 files, 3 matched lines") {
-		t.Fatalf("summary view = %q, want \"2 files, 3 matched lines\"", got)
-	}
-	if strings.Contains(got, "Searching…") {
-		t.Fatalf("summary view still shows searching: %q", got)
-	}
-}
-
-// On the interim summary screen q exits with status 0.
-func TestQOnSummaryExitsZero(t *testing.T) {
+// On the browse view q exits with status 0 through the ordinary cleanup
+// path.
+func TestQOnBrowseExitsZeroCleanup(t *testing.T) {
 	m := completedModel(t, 1)
 	m2, cmd := update(t, m, keyPress("q"))
 	if cmd == nil {
-		t.Fatal("q on summary returned no command, want tea.Quit")
+		t.Fatal("q on browse returned no command, want tea.Quit")
 	}
 	if _, ok := cmd().(tea.QuitMsg); !ok {
-		t.Fatalf("q on summary command = %T, want tea.QuitMsg", cmd())
+		t.Fatalf("q on browse command = %T, want tea.QuitMsg", cmd())
 	}
 	if m2.ExitCode() != 0 {
 		t.Fatalf("ExitCode = %d, want 0", m2.ExitCode())
@@ -182,8 +163,8 @@ func TestGateHoldsSearchingAfterRgExit(t *testing.T) {
 	close(gate)
 	msg := awaitMsg(t, m, 10*time.Second)
 	m2, _ := update(t, m, msg)
-	if got := m2.View().Content; !strings.Contains(got, "matched line") {
-		t.Fatalf("view after gate release = %q, want interim summary", got)
+	if got := m2.View().Content; !strings.Contains(got, "Loading…") {
+		t.Fatalf("view after gate release = %q, want the browse placeholder", got)
 	}
 }
 
@@ -260,14 +241,14 @@ func TestQDuringGateHeldPreparationCancels(t *testing.T) {
 	}
 }
 
-// ctrl+c cancels from any state: while searching and on the interim
-// summary it quits with exit 130 after signalling the child.
+// ctrl+c cancels from any state: while searching and in the browse
+// view it quits with exit 130 after signalling the child.
 func TestCtrlCCancelsFromAnyState(t *testing.T) {
-	for _, name := range []string{"searching", "summary"} {
+	for _, name := range []string{"searching", "browse"} {
 		t.Run(name, func(t *testing.T) {
 			cancelled := false
 			var m Model
-			if name == "summary" {
+			if name == "browse" {
 				m = completedModel(t, 1)
 				m.cancel = func() { cancelled = true }
 			} else {

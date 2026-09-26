@@ -326,7 +326,7 @@ func TestPTYSIGINTWhileSearchingExits130(t *testing.T) {
 
 // q while index preparation is gate-held — rg has already exited and
 // been reaped, which the side channel proves — is cancellation: exit
-// 130, no interim summary, ordinary cleanup.
+// 130, no browse view, ordinary cleanup.
 func TestPTYQDuringGateHeldPreparationExits130(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgStreamScript)
 	reap := filepath.Join(capDir, "reap")
@@ -350,8 +350,8 @@ func TestPTYQDuringGateHeldPreparationExits130(t *testing.T) {
 	if code != 130 {
 		t.Fatalf("exit = %d, want 130; output: %q", code, out)
 	}
-	if strings.Contains(out, "matched line") {
-		t.Fatalf("gate-held search showed the interim summary: %q", out)
+	if strings.Contains(out, "f.txt") {
+		t.Fatalf("gate-held search showed the browse view: %q", out)
 	}
 	assertDisplayRestored(t, out)
 	pidIsGone(t, pid)

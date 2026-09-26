@@ -97,6 +97,42 @@ and base64 `{"bytes"}` encodings freely:
   working directory with no canonicalization (`./`, `a/../b` survive);
   absolute paths pass through.
 
+## internal/filebuffer
+
+`present_test.go` (same package) covers the safe-presentation core:
+
+- `TestEscapePath` — the full path-rule table: `\n`/`\r`/`\t` to their
+  two-character forms, `\\` doubling, `\xNN` for invalid UTF-8, caret
+  notation for C0 and `^?` for DEL, `\uXXXX` for C1, printable Unicode
+  preserved.
+- `TestEscapePathNeverEmitsControls` — every C0 byte, DEL, and C1
+  fixture produces no raw control byte in the output.
+- `TestPresentLineText` — content rules: invalid UTF-8 → U+FFFD, C0/DEL
+  caret notation, `\u0085`-style C1 forms, LF/CRLF never displayed,
+  standalone CR → `^M`.
+- `TestPresentLineWidth` — cell counts for escape forms and wide
+  clusters.
+- `TestPresentLineSpan` — byte→cell maps for escaped forms, including
+  an ESC byte's match covering both `^[` cells and marker positions on
+  removed terminator bytes.
+- `TestPresentLineTabForm` — the provisional single `→` cell (no
+  position assertions, per the Issue #16 deferral).
+- `TestPresentLineRetainsRaw` — raw line bytes survive presentation.
+
+`filebuffer_test.go` (external package `filebuffer_test`) covers
+`Load` against real fixture files:
+
+- `TestLoadLineCount` — source-line counts including empty and
+  no-trailing-newline files.
+- `TestGutterWidth` — digit width of the largest line number plus two
+  spaces, minimum one slot.
+- `TestLinePresentation` — escaped text per line through `Buffer`.
+- `TestHighlightSpans` — validated submatches become display-cell
+  spans on the escaped line.
+- `TestSubmatchValidation` — out-of-bounds and byte-mismatched
+  submatches are dropped, not clamped into wrong highlights.
+- `TestLoadFailure` — unreadable files return the error.
+
 ## internal/app
 
 `model_test.go` (same package) drives `Update` directly:
@@ -105,26 +141,54 @@ and base64 `{"bytes"}` encodings freely:
   while the completion channel is silent.
 - `TestResizeDuringSearching` — `WindowSizeMsg` stores dimensions and
   keeps the searching state.
-- `TestCompletionTransitionsToSummary` — an injected `searchDoneMsg`
-  renders `2 files, 3 matched lines`.
-- `TestQOnSummaryExitsZero` — `q` on the summary returns `tea.Quit` and
-  `ExitCode` 0.
+- `TestQOnBrowseExitsZeroCleanup` — `q` on the browse view returns
+  `tea.Quit` and `ExitCode` 0.
 - `TestGateHoldsSearchingAfterRgExit` — `Config.Drained` fires once the
   child has exited and both pipes are drained, `PrepareGate` still holds
   preparation, the view stays `Searching…`, and releasing the gate
-  delivers the summary.
+  delivers the browse view.
 - `TestQWhileSearchingCancels` — `q` during searching returns `tea.Quit`
   with `ExitCode` 130 and fires the session cancel.
 - `TestQDuringGateHeldPreparationCancels` — `q` in the post-exit
   gate-held window cancels: the collector abandons the gate, never
   prepares an index, and the model is already committed to quitting.
 - `TestCtrlCCancelsFromAnyState` — `ctrl+c` cancels from both searching
-  and summary, always `ExitCode` 130.
+  and browse, always `ExitCode` 130.
 - `TestEscDuringSearchingIsNoOp` — `Esc` during searching leaves the
   model unchanged and does not cancel.
 - `TestLateCompletionAfterCancellationDoesNotRevive` — a `searchDoneMsg`
   delivered after cancellation cannot revive the UI; the model stays
   quitting at 130.
+
+`browse_test.go` (same package) covers the Issue #5 browse
+composition:
+
+- `TestCompletionTransitionsToBrowse` — `searchDoneMsg` renders the
+  two-pane view: file list, filename rule, `Loading…` placeholder.
+- `TestLoadCompletionRendersContent` — the `loadDoneMsg` carrying a
+  prepared buffer swaps the placeholder for guttered content; the
+  completion carries the decoded/mapped buffer so `Update` does no
+  full-file work.
+- `TestMatchRendersInverse` — a matched span emits the inverse-video
+  SGR run.
+- `TestGatedLoadKeepsResponsive` — with `loadGate` holding the worker's
+  read and decode/map phases, keys and resizes are still processed and
+  the placeholder stays until the gate releases.
+- `TestCtrlCWhileLoadGateHeld` — `ctrl+c` mid-load goes through the
+  Issue #4 path to 130.
+- `TestQOnBrowseExitsZero`, `TestEscOnBrowseIsNoOp` — browse-phase key
+  behavior.
+- `TestLoadFailureShowsUnreadable` — a failed load renders
+  `(unreadable)` instead of hanging on the placeholder.
+- `TestBrowseRendering` — composed `View()`: raw-path file-list order,
+  current-entry underline, `── path ───` filename rule, right-justified
+  gutter with two spaces, no other panel borders.
+- `TestSinkSafetyRawOutput` — the hostile fixture (OSC, CSI, C0, C1,
+  DEL, standalone CR, invalid UTF-8 path bytes, embedded filename
+  newline) through the real composition path under `theme.Plain`,
+  asserting on the raw view string before ANSI stripping that no
+  fixture control byte survives verbatim in the list, rule, or content
+  sinks.
 
 `subprocess_test.go` re-executes the test binary as fake rg via
 `TestMain` (`VRG_FAKE_RG` mode, `VRG_FAKE_DIR` artifacts):
@@ -163,23 +227,22 @@ stdout/stderr/status separately:
   diagnostic first line on stderr, and exactly one generated usage block
   after it (no library `Error:`/`incorrect usage` text).
 - `TestDashFileRootAtProcessBoundary` — `./-` in a real temp dir reaches
-  the TUI's interim summary.
+  the TUI's browse view.
 - `TestHelpAssignmentSpellingsAreUsageErrorsAtBoundary` —
   `--help=false`/`-h=false`/`--help=true` are exit-2 usage errors with
   no help on stdout (Issue #2 pinned the status).
 - `TestSearchLifecycleAtBoundary` — replaces the Issue #2 stub test. A
   shell-script fake rg captures its argv and cwd, sleeps briefly so the
   harness observes `Searching…`, then emits one match. The
-  `runVrgTUI` helper pipes stdin, watches stdout for the `matched line`
-  marker, and sends `q`. Asserts per row: `Searching…` then
-  `1 file, 1 matched line` on stdout, exact child argv (combined
-  expansion, mixed aliases, empty/`-`/`--`/`-foo` patterns), exact
-  working directory, empty stderr, exit 0.
+  `runVrgTUI` helper pipes stdin, watches stdout for the browse
+  filename marker, and sends `q`. Asserts per row: `Searching…` then
+  the browse view's `f.txt` in the list/rule on stdout, exact child
+  argv (combined expansion, mixed aliases, empty/`-`/`--`/`-foo`
+  patterns), exact working directory, empty stderr, exit 0.
 - `TestDualPipeDrainageAtBoundary` — a shell fake rg floods stderr with
-  16 × 64 KiB while emitting 16 valid matches; the summary shows
-  `1 file, 16 matched lines`, a `writes-done` handshake file proves the
-  child finished both pipes, and the child's stderr never reaches vrg's
-  own stderr.
+  16 × 64 KiB while emitting 16 valid matches; the browse view shows
+  the file, a `writes-done` handshake file proves the child finished
+  both pipes, and the child's stderr never reaches vrg's own stderr.
 - `TestStartFailureNoRipgrep` — rg-free PATH: exit 2, empty stdout (no
   TUI), and a sanitized `vrg:` diagnostic naming the failure with no
   raw control bytes.
@@ -216,7 +279,7 @@ where to write `ready`; the `VRG_TEST_*` seams come from
 - `TestPTYQDuringGateHeldPreparationExits130` — fake rg emits and exits
   while `VRG_TEST_GATE_FIFO` holds index preparation; the reap file
   already shows `exit status 0` when `q` cancels from the gate-held
-  window: exit 130, no interim summary rendered, termios restored.
+  window: exit 130, no browse filename rendered, termios restored.
 - `TestPTYOrdinaryExitReapsChild` — `SIGTERM` ends the program without
   a cancellation key while the fake rg still runs: exit 0, child reaped
   (`killed`), terminal restored — the ordinary path cleans up too.
