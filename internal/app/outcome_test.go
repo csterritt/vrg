@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"vrg/internal/searchindex"
 )
 
 // sigErr returns a child wait error for a signal death, produced by a
@@ -57,6 +58,53 @@ var (
 		`{"type":"end","data":{"path":{"text":"b.bin"},"binary_offset":4}}`,
 		recSummary,
 	}
+	// A file left open when the stream ends, contributing no matches.
+	recsOpenNoMatches = []string{
+		`{"type":"begin","data":{"path":{"text":"f.txt"}}}`,
+		recSummary,
+	}
+	// Unknown event types only: a complete stream, zero results.
+	recsUnknownOnly = []string{
+		`{"type":"weird","data":{"x":1}}`,
+		recSummary,
+	}
+)
+
+// streamLines joins records into a collected stdout stream — the form
+// Index.Feed consumes, so malformed bytes can ride along.
+func streamLines(records ...string) string {
+	return strings.Join(records, "\n") + "\n"
+}
+
+// Issue #10 stream fixtures: each carries a record that cannot survive
+// decoding, so the index must be built through Feed.
+var (
+	// One garbage line inside a valid file lifecycle: malformed skip
+	// with usable results remaining.
+	streamMalformedWithResults = streamLines(
+		`{"type":"begin","data":{"path":{"text":"f.txt"}}}`,
+		`{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		`this is not json`,
+		`{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}`,
+		recSummary,
+	)
+	// The file's only match record is malformed: zero usable results.
+	streamMalformedNoResults = streamLines(
+		`{"type":"begin","data":{"path":{"text":"f.txt"}}}`,
+		`{"type":"match","data":{"path":{"text":"f.txt"},"lines":`,
+		`{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}`,
+		recSummary,
+	)
+	// A skipped match plus a binary-excluding end leave zero retained
+	// stops: usable results is assessed after all filtering, so this
+	// is the record-loss fatal row, not no-results.
+	streamMalformedThenBinary = streamLines(
+		`{"type":"begin","data":{"path":{"text":"b.bin"}}}`,
+		`{"type":"match","data":{"path":{"text":"b.bin"},"lines":`,
+		`{"type":"match","data":{"path":{"text":"b.bin"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		`{"type":"end","data":{"path":{"text":"b.bin"},"binary_offset":7}}`,
+		recSummary,
+	)
 )
 
 // outcomeRow is one row of the Issue #9 outcome-transition matrix: the
@@ -65,10 +113,12 @@ var (
 // initial presentation (underlying screen plus whether the diagnostics
 // overlay opens), the substrings the overlay must carry, which key
 // dismisses it, the post-dismissal state, the key that ends the
-// session, and the final exit status.
+// session, and the final exit status. stream, when set, is fed through
+// Index.Feed instead of recs so rows can carry malformed records.
 type outcomeRow struct {
 	name      string
 	recs      []string
+	stream    string
 	code      int      // child exit status; -1 selects the signal-death fixture
 	stderr    string   // captured child stderr
 	overlay   bool     // the diagnostics overlay opens on completion
@@ -220,6 +270,67 @@ var outcomeMatrix = []outcomeRow{
 		quitKey: "q", exit: 1,
 		diags: []string{"something odd"},
 	},
+	// Issue #10 rows: record-loss inputs and the after-filtering
+	// usable-results assessment.
+	{
+		// Unknown-type warnings alone never change the exit status:
+		// warning overlay first, then the no-results screen at 1.
+		name: "unknown-type-only warnings with zero results warn then no-results, exit 1",
+		recs: recsUnknownOnly, code: 0,
+		overlay: true, screen: phaseNoResults,
+		dismiss: "q", after: phaseNoResults,
+		quitKey: "q", exit: 1,
+		diags: []string{"1 unrecognised record types skipped"},
+	},
+	{
+		name:    "malformed skip with usable results overlays browse, exit 0",
+		code:    0,
+		stream:  streamMalformedWithResults,
+		overlay: true, screen: phaseBrowse,
+		dismiss: "esc", after: phaseBrowse,
+		quitKey: "q", exit: 0,
+		diags: []string{"1 malformed record skipped"},
+	},
+	{
+		// rg 0/1, complete stream, records skipped, no usable results:
+		// the record-loss fatal row — the overlay stands alone and
+		// either dismissal key exits 2.
+		name:    "malformed skip with zero usable results is record-loss fatal, q exits 2",
+		code:    0,
+		stream:  streamMalformedNoResults,
+		overlay: true, screen: phaseFatal,
+		dismiss: "q", afterQuit: true, exit: 2,
+		diags: []string{"1 malformed record skipped"},
+	},
+	{
+		name:    "malformed skip with zero usable results is record-loss fatal, Esc exits 2",
+		code:    0,
+		stream:  streamMalformedNoResults,
+		overlay: true, screen: phaseFatal,
+		dismiss: "esc", afterQuit: true, exit: 2,
+		diags: []string{"1 malformed record skipped"},
+	},
+	{
+		// A skipped record plus binary exclusion leave zero retained
+		// stops: assessed after all filtering, the record-loss fatal
+		// row applies rather than the no-results row.
+		name:    "skipped record plus binary exclusion is record-loss fatal, exit 2",
+		code:    0,
+		stream:  streamMalformedThenBinary,
+		overlay: true, screen: phaseFatal,
+		dismiss: "q", afterQuit: true, exit: 2,
+		diags: []string{"1 malformed record skipped"},
+	},
+	{
+		// Missing end with retained matches is covered by the
+		// open-at-end row above; with no matches at all the integrity
+		// failure is fatal with nothing beneath the overlay.
+		name: "missing end with no matches is fatal overlay, exit 2",
+		recs: recsOpenNoMatches, code: 0,
+		overlay: true, screen: phaseFatal,
+		dismiss: "q", afterQuit: true, exit: 2,
+		diags: []string{"missing end"},
+	},
 	{
 		name: "ctrl+c in browse overrides the fixed status with 130",
 		recs: recsOneMatch, code: 0,
@@ -260,6 +371,17 @@ func pressKey(t *testing.T, m Model, key string) (Model, tea.Cmd) {
 	}
 }
 
+// fixtureStream builds a prepared index by feeding a raw collected
+// stream through Index.Feed — the route malformed bytes take, since
+// they never reach a decoded Record.
+func fixtureStream(t *testing.T, workdir, stream string) *searchindex.Index {
+	t.Helper()
+	ix := searchindex.New(workdir)
+	ix.Feed([]byte(stream))
+	ix.Prepare()
+	return ix
+}
+
 // waitFixture builds the row's child wait error: nil for a clean exit,
 // the exit-code fixture for a positive code, the signal fixture for -1.
 func waitFixture(t *testing.T, row outcomeRow) error {
@@ -286,10 +408,17 @@ func TestOutcomeMatrix(t *testing.T) {
 			dir := t.TempDir()
 			writeWorkFile(t, dir, "f.txt", "hit\n")
 
+			var ix *searchindex.Index
+			if row.stream != "" {
+				ix = fixtureStream(t, dir, row.stream)
+			} else {
+				ix = fixtureIndex(t, dir, row.recs...)
+			}
+
 			m := newModel(nil, nil)
 			m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 			m, _ = update(t, m, searchDoneMsg{
-				index:   fixtureIndex(t, dir, row.recs...),
+				index:   ix,
 				stderr:  []byte(row.stderr),
 				waitErr: waitFixture(t, row),
 			})

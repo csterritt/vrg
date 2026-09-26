@@ -1,6 +1,7 @@
 package searchindex
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -119,6 +120,76 @@ func DecodeRecord(raw []byte) (Record, error) {
 	default:
 		return Record{Kind: KindUnknown}, nil
 	}
+}
+
+// recoverRecordPath is the oversized-record best-effort path recovery:
+// it streams a decoder over the record's first maxRecordPayload bytes —
+// the prefix consumed before the limit was hit — and returns the
+// decoded data.path only when both the record's type and the path value
+// arrived intact inside it. rg emits type and data.path before the line
+// payload, so the usual oversized match still names its file; a record
+// cut off earlier decodes to nil and is counted anonymously. The scan
+// is token-based because the prefix is not valid JSON — it ends where
+// the limit fell, mid-value.
+func recoverRecordPath(prefix []byte) []byte {
+	dec := json.NewDecoder(bytes.NewReader(prefix))
+	t, err := dec.Token()
+	if err != nil || t != json.Delim('{') {
+		return nil
+	}
+	var typ string
+	var path []byte
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			break // cut mid-member
+		}
+		name, _ := tok.(string)
+		if name == "data" {
+			path = recoverDataPath(dec)
+			continue
+		}
+		var raw json.RawMessage
+		if err := dec.Decode(&raw); err != nil {
+			break // cut mid-value
+		}
+		if name == "type" {
+			_ = json.Unmarshal(raw, &typ)
+		}
+	}
+	if typ == "" || path == nil {
+		return nil
+	}
+	return path
+}
+
+// recoverDataPath descends into the record's data object member by
+// member, decoding each value independently so a member cut by the
+// limit ends the scan with whatever was already recovered — path counts
+// only when it decoded whole through decodeValue.
+func recoverDataPath(dec *json.Decoder) []byte {
+	t, err := dec.Token()
+	if err != nil || t != json.Delim('{') {
+		return nil
+	}
+	var path []byte
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			break
+		}
+		name, _ := tok.(string)
+		var raw json.RawMessage
+		if err := dec.Decode(&raw); err != nil {
+			break // the limit cut this member's value
+		}
+		if name == "path" && path == nil {
+			if p, err := decodeValue(raw); err == nil {
+				path = p
+			}
+		}
+	}
+	return path
 }
 
 // decodeData decodes a record's data member, which must be a JSON object

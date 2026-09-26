@@ -86,3 +86,14 @@ Usage
  Input tokens: 63641 tokens
  Output tokens: 25148 tokens
  Cached input tokens: 2541969 tokens
+
+----
+Task 010-record-robustness-malformed-oversized-unknown.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 56 messages
+ Input tokens: 162312 tokens
+ Output tokens: 23544 tokens
+ Cached input tokens: 3919576 tokens

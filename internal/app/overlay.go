@@ -37,16 +37,18 @@ type outcome struct {
 // decideOutcome maps one completed search to its presentation and fixed
 // exit status. waitErr is the child's wait error — nil, the benign
 // "no matches" exit status 1, or a fatal outcome — failures are the
-// stream-integrity diagnostics, usable is the retained-stop count, and
-// recordLoss is the malformed-record count, passed through but unused
-// until Issue #10 extends the matrix. Any diagnostics make the outcome
-// overlay-bearing; a fatal outcome — a fatal process result or any
-// integrity failure — fixes status 2, usable results fix 0, and an
-// intact empty stream fixes 1.
-func decideOutcome(waitErr error, stderr []byte, failures []string, usable, recordLoss int) outcome {
-	fatal := processFatal(waitErr) || len(failures) > 0
+// stream-integrity diagnostics, usable is the retained-stop count
+// assessed after all filtering, recordLoss is the malformed+oversized
+// skip tally, and recordDiags are the stream's record-skip diagnostic
+// lines. Any diagnostics make the outcome overlay-bearing; a fatal
+// outcome — a fatal process result, any integrity failure, or record
+// loss that left zero usable results — fixes status 2, usable results
+// fix 0, and an intact empty stream fixes 1. Unknown-type warnings are
+// diagnostics only and never turn fatal on their own.
+func decideOutcome(waitErr error, stderr []byte, failures []string, usable, recordLoss int, recordDiags []string) outcome {
+	fatal := processFatal(waitErr) || len(failures) > 0 || (recordLoss > 0 && usable == 0)
 	var o outcome
-	o.diags = collectDiagnostics(waitErr, stderr, failures)
+	o.diags = collectDiagnostics(waitErr, stderr, failures, recordDiags)
 	o.overlay = len(o.diags) > 0
 	switch {
 	case fatal:
@@ -77,10 +79,12 @@ func processFatal(waitErr error) bool {
 
 // collectDiagnostics assembles the overlay's diagnostic lines: a
 // generated line naming the exit code or signal when the process
-// outcome was fatal, the child's sanitized stderr, and the
-// stream-integrity failures. Everything passes through the Issue #6
-// diagnostic utility before it can reach the screen.
-func collectDiagnostics(waitErr error, stderr []byte, failures []string) []string {
+// outcome was fatal, the child's sanitized stderr, the stream-integrity
+// failures, then the record-skip diagnostics — the named oversized-path
+// lines and the malformed, oversized, and unrecognised-type tallies.
+// Everything passes through the Issue #6 diagnostic utility before it
+// can reach the screen.
+func collectDiagnostics(waitErr error, stderr []byte, failures, recordDiags []string) []string {
 	var diags []string
 	if processFatal(waitErr) {
 		diags = append(diags, fmt.Sprintf("rg failed: %s", waitErr))
@@ -90,6 +94,9 @@ func collectDiagnostics(waitErr error, stderr []byte, failures []string) []strin
 	}
 	for _, f := range failures {
 		diags = append(diags, strings.Split(present.Diagnostic(f), "\n")...)
+	}
+	for _, d := range recordDiags {
+		diags = append(diags, strings.Split(present.Diagnostic(d), "\n")...)
 	}
 	return diags
 }

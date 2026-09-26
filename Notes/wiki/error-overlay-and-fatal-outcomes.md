@@ -17,10 +17,10 @@ a `text` record and a `bytes` record carrying the same path agree on
 one identity, and interleaved open files keep independent state.
 `Index.Feed(stream)` consumes the collected stdout: each
 newline-terminated record is decoded and `Add`ed, a record failing the
-per-record schema is skipped (counting it is Issue #10's), and a
+per-record schema is skipped and counted (Issue #10), and a
 non-empty trailing chunk without its terminator is an unterminated
-record — skipped and an integrity failure, since a cut stream is
-incomplete.
+record — skipped, counted malformed, and an integrity failure, since a
+cut stream is incomplete.
 
 The transition matrix and its dispositions:
 
@@ -60,8 +60,9 @@ classification is unconfirmed even though they remain browsable.
 `decideOutcome` in `internal/app/overlay.go` is the pure function of
 the completed search's independent inputs: the child's wait error, the
 captured stderr, the stream-integrity failures, the usable-results
-count (retained stops — `Index.LineCount`), and the record-loss count
-(passed through, unused until Issue #10). It returns the underlying
+count (retained stops — `Index.LineCount`), and — since Issue #10 —
+the record-loss count (malformed + oversized) with the record-skip
+diagnostic lines (`Index.RecordDiagnostics`). It returns the underlying
 screen, whether the overlay opens, the fixed exit status, and the
 diagnostic lines. `Update`'s `searchDoneMsg` branch applies it exactly
 once; the status never changes afterwards except through `ctrl+c`.
@@ -80,6 +81,17 @@ The outcome table:
 | rg 0/1 | intact | > 0, stderr non-empty | browse + warning overlay | 0 |
 | rg 0/1 | intact | 0, stderr non-empty | no-results + warning overlay; dismissal reveals no-results | 1 |
 | rg 1 | intact, all files binary-excluded | 0 | no-results + warning overlay → `(N binary files skipped)` | 1 |
+| rg 0/1 | intact, unknown-type warnings only | 0 | warning overlay → no-results | 1 |
+| rg 0/1 | intact, malformed/oversized records skipped | > 0 | browse + warning overlay (skip tallies) | 0 |
+| rg 0/1 | intact, malformed/oversized records skipped | 0 | record-loss fatal overlay; `q`/`Esc` quits | 2 |
+| rg 0/1 | skipped record + binary exclusion emptied the index | 0 | record-loss fatal overlay | 2 |
+
+Usable results is assessed **after all filtering** — a stream whose
+sole retained file was binary-excluded after a skipped record lands on
+the record-loss fatal row, not no-results. Record loss is fatal only
+when nothing usable survived; unknown-type tallies are diagnostics only
+and never fatal alone. See
+[record-robustness.md](record-robustness.md).
 
 `Esc` exits only in the fatal no-results case, where there is no
 underlying state to reveal; it is a dismissal everywhere else and a
@@ -95,7 +107,10 @@ When a fatal process result supplies **no** stderr, a generated
 diagnostic names the wait status — `rg failed: exit status 3` or
 `rg failed: signal: killed` — so the overlay never opens empty.
 Diagnostics assemble in order: the generated process line, the
-sanitized stderr text, then the stream-integrity failures. Everything
+sanitized stderr text, the stream-integrity failures, then — since
+Issue #10 — the record-skip diagnostics (`oversized record skipped for
+<path>` lines first, then the malformed/oversized/unknown tallies).
+Everything
 passes through `present.Diagnostic` — the Issue #6 utility — before it
 can reach the screen; see
 [safe-presentation.md](safe-presentation.md).
@@ -144,7 +159,10 @@ table-driven — every transition row, binary-exclusion precedence,
 trailing-unterminated double disposition, summary positioning, orphan
 retention with `Incomplete`, and open-at-end sealing.
 `internal/app/outcome_test.go` is the single table-driven outcome
-matrix covering every row above with dismissal and exit assertions.
+matrix covering every row above with dismissal and exit assertions —
+Issue #10 added the record-loss and unknown-warning rows plus a
+`stream`/`fixtureStream` path for fixtures containing undecodable
+bytes.
 `internal/app/overlay_test.go` pins scrolling, both dismissal keys,
 `ctrl+c`, ignored keys (including the unreachable `c` toggle),
 unbroken-line wrapping, and generated code-or-signal diagnostics.

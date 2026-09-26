@@ -131,6 +131,46 @@ coverage:
 - `TestEmptyStreamIntegrity` — an empty stream reports the missing
   summary.
 
+`disposition_test.go` (external package) is the Issue #10
+deterministic-disposition coverage:
+
+- `TestMalformedDispositions` — every Issue #3 schema-violation row
+  (invalid JSON, bad base64, missing/non-string `type`, missing or
+  mistyped required fields, `line_number` violations, bad submatch
+  ranges, negative `binary_offset`, empty `submatches`) embedded
+  mid-lifecycle in an otherwise intact stream: counted `Malformed()`,
+  no integrity failure, and the following records resynchronize and
+  index.
+- `TestIntegrityDispositions` — the lifecycle-violation rows driven
+  through `Feed` asserting the failures are reported while
+  `Malformed()` stays zero (a skipped record never becomes a lifecycle
+  failure on its own).
+- `TestCompositeDispositions` — the two both-disposition rows: the
+  trailing unterminated record (malformed + `unterminated trailing
+  record`) and malformed bytes after `summary` (malformed +
+  `record after summary`).
+
+`oversized_test.go` (external package) covers the Issue #10 resource
+limit and unknown types:
+
+- `TestOversizedBoundary` — the 64 MiB boundary: a payload at the
+  limit indexes normally; one byte over is oversized.
+- `TestOversizedResynchronizes` — the record after an oversized one
+  indexes normally (discard-through-newline).
+- `TestOversizedDiagnosticNamesRecoveredPath` /
+  `TestOversizedDiagnosticAnonymousWhenPathLost` — the `oversized
+  record skipped for <path>` line when `type`/`data.path` decoded
+  before the limit, and the bare tally when the cut fell first.
+- `TestOversizedOnlyFileAbsentFromList` — a file whose match records
+  were all oversized leaves no stops while its path still names the
+  diagnostic.
+- `TestOversizedUnterminatedFinalRecord` — the triple disposition:
+  oversized + malformed + `unterminated trailing record`.
+- `TestUnknownTypeDispositions` — the separate `Unknown()` tally, the
+  `N unrecognised record types skipped` diagnostic, no lifecycle
+  effect, no substitution for `summary`, and unknown-after-`summary`
+  counted plus independently flagged.
+
 ## internal/present
 
 `present_test.go` (same package) covers the path and diagnostic
@@ -275,7 +315,13 @@ later issues extend it with rows rather than duplicating the decision:
   results, missing-summary/orphaned-end/open-at-end integrity
   failures, stderr warnings over browse and no-results, all-binary
   after a warning, and `ctrl+c` → 130 from browse, no-results, and an
-  open overlay.
+  open overlay. Issue #10 added the record-loss rows (malformed/oversized
+  skips with usable results → browse + warning overlay → 0; with zero
+  usable results — including after binary exclusion emptied the index —
+  → record-loss fatal → 2; unknown-type-only warnings → warning overlay
+  → no-results → 1) plus missing-`end` variants; rows carrying
+  undecodable bytes use the `stream` field through `fixtureStream`,
+  which pipes raw bytes into `Index.Feed` rather than decoding records.
 
 `overlay_test.go` (same package) pins the Issue #9 modal overlay:
 

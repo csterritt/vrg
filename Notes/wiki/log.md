@@ -277,3 +277,40 @@ precedence), `internal/searchindex/index.go`,
 `internal/app/outcome_test.go`, `internal/app/overlay_test.go`,
 `internal/app/sinksafety_test.go`, `cmd/vrg/pty_test.go`,
 `cmd/vrg/main_test.go`.
+
+## [2026-09-23] ingest | Issue #10 record robustness
+
+Ingested the completed Issue #10 implementation. `internal/searchindex`
+gained deterministic record dispositions: `Feed` enforces
+`maxRecordPayload` (64 MiB) on each split line so oversized records are
+discarded through the newline and the stream resynchronizes, counts
+schema-failing records into `Malformed()` without conflating them with
+integrity failures, and gives the unterminated oversized final record
+its triple disposition (oversized + malformed + `unterminated trailing
+record`); `Add` tallies `KindUnknown` into `Unknown()` — never a
+substitute for `summary`, counted plus separately flagged after
+`summary`. `record.go` gained `recoverRecordPath`/`recoverDataPath`,
+token-streamed `data.path` recovery over an oversized record's consumed
+prefix so the diagnostic names the file (`oversized record skipped for
+<path>`, via `present.Path`) whenever the path decoded before the
+limit, else the anonymous tally only. `RecordDiagnostics()` assembles
+the skip lines — per-path oversized lines, then the malformed/
+oversized/unknown tallies. `internal/app`: `decideOutcome` now consumes
+the record-loss count (malformed + oversized) and the record-skip
+diagnostics — fatal when record loss left zero usable results assessed
+after all filtering (binary exclusion included), a warning overlay over
+browse at 0 otherwise, unknown-only warnings still no-results at 1.
+Created [record-robustness](record-robustness.md); updated
+[searchindex-records-and-stops](searchindex-records-and-stops.md),
+[error-overlay-and-fatal-outcomes](error-overlay-and-fatal-outcomes.md)
+(decideOutcome inputs, four new outcome rows, diagnostics order),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/010-record-robustness-malformed-oversized-unknown.md`,
+`Notes/tasks/010-record-robustness-malformed-oversized-unknown.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity;
+Outcome and exit-status contract; Resources and responsiveness),
+`internal/searchindex/index.go`, `internal/searchindex/record.go`,
+`internal/searchindex/disposition_test.go`,
+`internal/searchindex/oversized_test.go`, `internal/app/overlay.go`,
+`internal/app/app.go`, `internal/app/outcome_test.go`.

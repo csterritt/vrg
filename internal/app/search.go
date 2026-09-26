@@ -144,8 +144,8 @@ func collect(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Reader, cfg C
 }
 
 // prepareIndex feeds the collected record stream through the index and
-// prepares it: decoding, lifecycle validation, and binary exclusion all
-// happen inside Feed. Record-loss counting is Issue #10's.
+// prepares it: decoding, record skipping and counting, lifecycle
+// validation, and binary exclusion all happen inside Feed.
 func prepareIndex(workdir string, stream []byte) *searchindex.Index {
 	ix := searchindex.New(workdir)
 	ix.Feed(stream)

@@ -69,6 +69,21 @@ type Index struct {
 	failures   []string
 	sawSummary bool
 	sealed     bool
+	// malformed counts records skipped for violating the per-record
+	// schema, including the trailing unterminated record. It is kept
+	// strictly separate from the integrity failures: lifecycle
+	// violations never inflate it, and a skip never becomes a lifecycle
+	// violation except in the two composite cases the matrices mark
+	// both.
+	malformed int
+	// oversized counts records discarded for exceeding the 64 MiB
+	// payload limit; oversizedPaths holds the sanitized path of each
+	// one whose type and data.path were recovered from its prefix.
+	oversized      int
+	oversizedPaths []string
+	// unknown counts records whose string type is outside the five
+	// known events — a warning tally, never record loss.
+	unknown int
 }
 
 // stop is the mutable per-stop accumulation behind Stop.
@@ -93,15 +108,31 @@ func New(dir string) *Index {
 	}
 }
 
+// maxRecordPayload is the JSON record size ceiling: 64 MiB excluding
+// the newline delimiter. Feed enforces it explicitly on each split
+// line — an intentional bound, not a line-reader's incidental limit —
+// so a record one byte over is discarded while one exactly at the limit
+// decodes normally.
+const maxRecordPayload = 64 << 20
+
 // Feed consumes one collected stdout stream: each newline-terminated
 // line is decoded and Added, a line that fails the per-record schema is
-// skipped (its counting is Issue #10's), and a non-empty trailing chunk
-// without its terminator is an unterminated record — skipped and an
-// integrity failure, since a cut stream is incomplete.
+// skipped and counted malformed, and a line over the payload limit is
+// skipped and counted oversized — the split itself is the discard
+// through the next newline, so the following record resynchronizes. A
+// non-empty trailing chunk without its terminator is an unterminated
+// record — counted malformed without a decode attempt and an integrity
+// failure, since a cut stream is incomplete — and when it also exceeds
+// the payload limit it is counted oversized too: all three
+// dispositions hold for that one record.
 func (ix *Index) Feed(stream []byte) {
 	lines := bytes.Split(stream, []byte("\n"))
 	for _, line := range lines[:len(lines)-1] {
 		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		if len(line) > maxRecordPayload {
+			ix.skipOversized(line[:maxRecordPayload])
 			continue
 		}
 		rec, err := DecodeRecord(line)
@@ -115,17 +146,45 @@ func (ix *Index) Feed(stream []byte) {
 		if ix.sawSummary {
 			ix.fail("record after summary", nil)
 		}
+		ix.malformed++
+		if len(last) > maxRecordPayload {
+			ix.countOversized(last[:maxRecordPayload])
+		}
 		ix.fail("unterminated trailing record", nil)
 	}
 }
 
-// skipMalformed notes a record position whose bytes failed the
+// skipMalformed counts one record position whose bytes failed the
 // per-record schema. A skipped record does not by itself make intact
 // lifecycle metadata incomplete; only the positional summary-final rule
-// still applies to it. Counting the skip is Issue #10's.
+// still applies to it — a malformed record after the summary is counted
+// malformed and flagged as an integrity failure independently.
 func (ix *Index) skipMalformed() {
+	ix.malformed++
 	if ix.sawSummary {
 		ix.fail("record after summary", nil)
+	}
+}
+
+// skipOversized counts one oversized record — a line that exceeded the
+// payload limit — applying the same positional summary rule a malformed
+// skip does, and naming the file when the record's type and data.path
+// were recovered from the consumed prefix.
+func (ix *Index) skipOversized(prefix []byte) {
+	if ix.sawSummary {
+		ix.fail("record after summary", nil)
+	}
+	ix.countOversized(prefix)
+}
+
+// countOversized records one oversized record and its best-effort path
+// diagnostic: prefix is the record's first maxRecordPayload bytes, from
+// which recoverRecordPath lifts the emitted path when it arrived intact
+// before the limit.
+func (ix *Index) countOversized(prefix []byte) {
+	ix.oversized++
+	if path := recoverRecordPath(prefix); path != nil {
+		ix.oversizedPaths = append(ix.oversizedPaths, present.Path(path))
 	}
 }
 
@@ -179,8 +238,15 @@ func (ix *Index) Add(rec Record) {
 		ix.sawSummary = true
 		return
 	case KindMatch:
+	case KindUnknown:
+		// Unknown types carry no lifecycle meaning but are tallied
+		// separately and reported; the after-summary check above has
+		// already flagged the position independently, so an unknown
+		// type there is both counted and an integrity failure.
+		ix.unknown++
+		return
 	default:
-		// Context and unknown records carry no lifecycle meaning.
+		// Context records carry no lifecycle meaning.
 		return
 	}
 	key := string(rec.Path)
@@ -282,6 +348,67 @@ func (ix *Index) seal() {
 func (ix *Index) IntegrityFailures() []string {
 	ix.seal()
 	return ix.failures
+}
+
+// Malformed returns the count of records skipped for violating the
+// per-record schema — invalid JSON, invalid base64, missing or invalid
+// type fields, and known events with missing or mistyped required
+// fields or out-of-range values — plus the trailing unterminated
+// record, counted malformed for its missing termination. Lifecycle
+// violations are integrity failures, not malformed records, and never
+// enter this count.
+func (ix *Index) Malformed() int {
+	return ix.malformed
+}
+
+// Oversized returns the count of records discarded for exceeding the
+// 64 MiB payload limit — a record-loss tally separate from malformed
+// records, though an unterminated oversized final record enters both.
+func (ix *Index) Oversized() int {
+	return ix.oversized
+}
+
+// Unknown returns the count of records whose string type is outside the
+// five known events. Unknown types are a warning tally only: they never
+// count as malformed, never satisfy a required completion event, and
+// never by themselves change the outcome's exit status.
+func (ix *Index) Unknown() int {
+	return ix.unknown
+}
+
+// RecordDiagnostics returns the nonfatal record-skip diagnostics in a
+// fixed order: one "oversized record skipped for <path>" line per
+// oversized record whose path was recovered, then the malformed,
+// oversized, and unrecognised-type tally lines for each nonzero count.
+// Unlike IntegrityFailures these describe recoverable record loss;
+// whether their presence makes the outcome fatal is the app's outcome
+// decision. The slice does not share the index's storage.
+func (ix *Index) RecordDiagnostics() []string {
+	var diags []string
+	for _, p := range ix.oversizedPaths {
+		diags = append(diags, "oversized record skipped for "+p)
+	}
+	if ix.malformed > 0 {
+		diags = append(diags, fmt.Sprintf("%d malformed record%s skipped",
+			ix.malformed, plural(ix.malformed)))
+	}
+	if ix.oversized > 0 {
+		diags = append(diags, fmt.Sprintf("%d oversized record%s skipped",
+			ix.oversized, plural(ix.oversized)))
+	}
+	if ix.unknown > 0 {
+		diags = append(diags, fmt.Sprintf("%d unrecognised record types skipped",
+			ix.unknown))
+	}
+	return diags
+}
+
+// plural is the English plural suffix for a count's noun.
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // Stops returns the navigation stops in index order: unsigned raw path

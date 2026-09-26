@@ -114,13 +114,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.relayout()
 	case searchDoneMsg:
 		m.index = msg.index
-		var failures []string
+		var failures, recordDiags []string
+		recordLoss := 0
 		if m.index != nil {
 			m.stops = m.index.Stops()
 			m.binarySkipped = m.index.BinaryExcluded()
 			failures = m.index.IntegrityFailures()
+			recordDiags = m.index.RecordDiagnostics()
+			recordLoss = m.index.Malformed() + m.index.Oversized()
 		}
-		o := decideOutcome(msg.waitErr, msg.stderr, failures, len(m.stops), 0)
+		o := decideOutcome(msg.waitErr, msg.stderr, failures, len(m.stops), recordLoss, recordDiags)
 		m.code = o.code
 		m.phase = o.screen
 		if o.overlay {

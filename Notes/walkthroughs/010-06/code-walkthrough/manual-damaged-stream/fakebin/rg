@@ -1,0 +1,9 @@
+#!/bin/sh
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"f1.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"f1.txt"},"lines":{"text":"hit one\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+'this is not json at all' \
+'{"type":"weird","data":{"x":1}}' \
+'{"type":"end","data":{"path":{"text":"f1.txt"},"binary_offset":null}}' \
+'{"type":"summary","data":{}}'
+exit 0

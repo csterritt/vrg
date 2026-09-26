@@ -23,7 +23,8 @@ Five event types are known:
 `context` is recognized because displayed content always comes from
 disk, never from the stream. A string type outside the five known events
 is a valid decode with `KindUnknown` — not malformed — so unknown record
-types can be counted separately from schema violations (Issue #10).
+types are counted separately from schema violations (Issue #10; see
+[record-robustness.md](record-robustness.md)).
 
 ## Text/bytes encodings
 
@@ -40,7 +41,8 @@ survive intact via the `bytes` form.
 `match` value plus integer `start`/`end` satisfying
 `0 <= start <= end <= len(decoded lines)`. Integers must fit `int64` —
 floats, strings, and exponents are malformed. Violations return an error
-wrapping `ErrMalformed`; skipping and counting them is Issue #10's.
+wrapping `ErrMalformed`; `Feed` skips and counts them per Issue #10
+(see [record-robustness.md](record-robustness.md)).
 Cross-record lifecycle integrity — begin/end pairing, summary
 positioning — is validated since Issue #9 inside `Index` itself, so the
 parser deliberately stays per-record.
@@ -51,9 +53,9 @@ Since Issue #9, `Index` validates the stream's lifecycle as records are
 `Add`ed: per-path open state keyed on decoded raw path bytes (so `text`
 and `bytes` encodings of one path agree), independent state for
 interleaved open files, and summary positioning. `Feed(stream)`
-consumes the collected stdout, skipping schema-failing records
-(counting them is Issue #10's) and flagging a trailing unterminated
-record as both malformed-positioned and stream-incomplete. The full
+consumes the collected stdout, skipping and counting schema-failing
+records (Issue #10) and flagging a trailing unterminated
+record as both malformed and stream-incomplete. The full
 transition matrix — duplicate `begin`, orphaned `match` (retained, with
 `Stop.Incomplete` set), orphaned `end`, `missing end` sealing at
 `Prepare`, missing/second `summary`, records after summary — and the

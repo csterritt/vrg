@@ -65,11 +65,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   diagnostics box.
 - `internal/app/overlay.go` — the Issue #9 outcome contract:
   `decideOutcome` (the pure function of wait error, stderr, integrity
-  failures, usable results, and the unused-until-#10 record-loss count
-  returning screen, overlay flag, fixed status, and diagnostic lines),
+  failures, usable results, and — consumed since Issue #10 — the
+  record-loss count and record-skip diagnostics, returning screen,
+  overlay flag, fixed status, and diagnostic lines),
   `processFatal` (any wait error but benign exit 1), and
   `collectDiagnostics` (generated code-or-signal line, sanitized
-  stderr, integrity failures — all through `present.Diagnostic`); the
+  stderr, integrity failures, record-skip lines — all through
+  `present.Diagnostic`); the
   modal `overlay` state, `overlayKey`, `overlayLayout` (hard-wrapped
   interior sized from the frame), `renderOverlay` (the centred
   `theme.Overlay` box composited over the base frame by cell-exact
@@ -103,8 +105,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 - `internal/searchindex/record.go` — `DecodeRecord` per-record schema
   validation for the five rg JSON events (`begin`/`match`/`end`/
   `summary`/`context`) plus `KindUnknown`; the `{"text"}`/`{"bytes"}`
-  value union; `ErrMalformed` range/required-field errors. See
-  [searchindex-records-and-stops.md](searchindex-records-and-stops.md).
+  value union; `ErrMalformed` range/required-field errors; and —
+  Issue #10 — `recoverRecordPath`/`recoverDataPath`, the token-streamed
+  best-effort `data.path` recovery over an oversized record's consumed
+  prefix. See
+  [searchindex-records-and-stops.md](searchindex-records-and-stops.md)
+  and [record-robustness.md](record-robustness.md).
 - `internal/searchindex/index.go` — the `Index`: match records merge
   into navigation stops keyed by (raw path bytes, line), submatches
   sort by `(start, end)`, `Prepare` sorts stops by unsigned raw path
@@ -121,10 +127,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `seal` applies the end-of-stream rules once inside `Prepare`, and
   `IntegrityFailures()` returns the diagnostics kept separate from
   process success; `Stop.Incomplete` marks stops with damaged file
-  metadata. See
-  [no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md)
-  and
-  [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md).
+  metadata. Issue #10 adds record robustness: `maxRecordPayload` (the
+  64 MiB per-record bound enforced on each split line), the `malformed`/
+  `oversized`/`unknown` tallies exposed by `Malformed()`/`Oversized()`/
+  `Unknown()`, `oversizedPaths` recovered per skipped oversized record,
+  and `RecordDiagnostics()` assembling the nonfatal record-skip lines.
+  See
+  [no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md),
+  [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md),
+  and [record-robustness.md](record-robustness.md).
 
 ## internal/cli
 
