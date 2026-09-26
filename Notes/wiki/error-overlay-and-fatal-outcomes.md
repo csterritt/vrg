@@ -96,7 +96,11 @@ and never fatal alone. See
 `Esc` exits only in the fatal no-results case, where there is no
 underlying state to reveal; it is a dismissal everywhere else and a
 no-op in base states. `ctrl+c` overrides any fixed status with 130,
-including with the overlay open.
+including with the overlay open. Issue #32 pinned the full precedence
+and dismissal semantics — error suspending help with scroll
+restoration, appended errors preserving the reader's position, and
+the `Esc`/`q` dismissal-outcome table — in
+[overlay-precedence.md](overlay-precedence.md).
 
 ## Diagnostics and stderr classification
 

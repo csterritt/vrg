@@ -75,7 +75,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   (Issue #24), and once
   `quit` is set `Update`
   discards all messages so a late completion cannot revive a cancelled
-  UI; every view wraps the frame in `theme.Base`, composites the
+  UI; the Issue #32 precedence stack — `ctrl+c`, modal error, help,
+  pop-up dismissal, base keys — is this routing order (see
+  [overlay-precedence.md](overlay-precedence.md)); every view wraps
+  the frame in `theme.Base`, composites the
   overlays while open (help beneath the diagnostics overlay), and sets
   `AltScreen` for the exit restoration
   sequence; resize handled in any state.

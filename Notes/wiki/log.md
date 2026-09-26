@@ -1260,3 +1260,42 @@ Sources: `Notes/issues/031-help-overlay.md`,
 overlays, and key precedence), `internal/app/help.go`,
 `internal/app/help_test.go`, `internal/app/overlay.go`,
 `internal/app/app.go`, `internal/app/sinksafety_test.go`.
+
+## [2026-09-24] ingest | Issue #32 overlay precedence — error suspends help, append preserves scroll, `Esc`/`q` dismissal semantics
+
+Ingested the completed Issue #32 implementation: the `KeyPressMsg`
+routing in `Update` is the `ctrl+c` → modal error → help → pop-up →
+base precedence stack, `openOverlay` suspends an open help at its
+retained scroll position (either dismissal key restores it) and is the
+single open-or-append route every error takes — appending while the
+reader's scroll position holds — and `openHelp`/`openOverlay` each
+cancel a live pop-up with no return. `Esc` is dismissal-only: a no-op
+in every base state (its one base-state effect is pop-up dismissal),
+while dismissing the fatal no-results overlay with either `q` or `Esc`
+exits 2 because there is no underlying state. The composed semantics
+needed no production changes — they were already assembled from the
+Issue #9/#15/#26/#31 primitives — so the issue's deliverable is the
+new `precedence_test.go` pinning them: the gated
+error-while-help-open suspension at scroll 5 for both dismissal keys
+with error-first key routing, the generalized append-preserving-scroll
+case (an unsupported-encoding diagnostic appended to a read-failure
+overlay), and the full dismissal-outcome table run for `q` and `Esc`
+with the state-specific follow-ups — second `q` exits the fixed
+status, second `Esc` no-ops, and the error-over-help row's three-key
+sequence. Created
+[overlay-precedence](overlay-precedence.md); updated
+[error-overlay-and-fatal-outcomes](error-overlay-and-fatal-outcomes.md)
+(the `Esc` note cross-reference),
+[help-overlay](help-overlay.md) (the suspension note's
+cross-reference), [file-change-popup](file-change-popup.md) (the
+cancellation note's cross-reference),
+[source-code](source-code.md) (the `app.go` precedence routing),
+[unit-tests](unit-tests.md) (the `precedence_test.go` catalog), and
+the index.
+New files: `internal/app/precedence_test.go`.
+Sources: `Notes/issues/032-overlay-precedence-esc-semantics.md`,
+`Notes/tasks/032-overlay-precedence-esc-semantics.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence; Outcome and
+exit-status contract), `internal/app/app.go`, `internal/app/overlay.go`,
+`internal/app/help.go`, `internal/app/popup.go`,
+`internal/app/precedence_test.go`.

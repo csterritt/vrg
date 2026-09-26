@@ -43,8 +43,9 @@ base precedence:
 An error overlay opening while help is up suspends help rather than
 destroying it: `m.help` keeps its lines and scroll offset, `m.overlay`
 takes the keyboard and the topmost render, and dismissing the error
-reveals help at its retained position. Issue #32 owns the combined
-precedence and `Esc`-semantics matrix over this stack.
+reveals help at its retained position. See
+[overlay-precedence.md](overlay-precedence.md) for the combined
+precedence and `Esc`-semantics matrix over this stack (Issue #32).
 
 ## The binding table and footer slot
 

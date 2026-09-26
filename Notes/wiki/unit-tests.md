@@ -1116,6 +1116,28 @@ component:
 - `TestHelpCancelsPopup` — an active file-change pop-up is cancelled on
   open, does not return on close, and its stale expiry stays inert.
 
+`precedence_test.go` (same package, Issue #32) pins the combined
+overlay-precedence and dismissal semantics:
+
+- `TestErrorSuspendsHelpRestoringScroll` — for both `q` and `Esc`: the
+  load gate parks the current file's failing worker, help opens at a
+  reduced height and scrolls to row 5, the released failure opens the
+  error over the suspended help, `down` scrolls the error while the
+  help offset stays put and `h`/`n`/`r`/`w`/`c` are swallowed, and
+  dismissal restores help at row 5 over browsing.
+- `TestAppendedErrorPreservesReaderScroll` — a read-failure overlay
+  scrolled to 3 receives an unsupported-encoding append (a different
+  error source than Issue #26's reload re-entry): the reader stays at
+  3 and the appended text is reachable at the bottom.
+- `TestDismissalOutcomeTable` — the dismissal-outcome table run for
+  both `q` and `Esc`: browse error overlay → browsing, browse help →
+  browsing, browse error-over-help → help restored at its scroll then
+  a second dismissal → browsing then a base-state `q` exits, warning
+  overlay over an empty result → no-results, help over no-results →
+  no-results, fatal overlay → exit 2, record-loss overlay → exit 2 —
+  with state-specific follow-ups (a second `q` exits the fixed status
+  from each still-running base state; a second `Esc` is a no-op).
+
 `sinksafety_test.go` (same package) holds the Issue #6 shared
 sink-safety table:
 

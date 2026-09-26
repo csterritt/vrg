@@ -37,8 +37,8 @@ anchors" (the one-stop no-op that issues no pop-up) in
   every error overlay now takes — clears `popupID`; nothing restores
   it, so a dismissed overlay never reveals the pop-up again. Since
   Issue #31 `openHelp` does the same for the help overlay (see
-  [help-overlay.md](help-overlay.md)); Issue #32 owns the combined
-  precedence matrix.
+  [help-overlay.md](help-overlay.md)); the combined precedence matrix
+  is in [overlay-precedence.md](overlay-precedence.md) (Issue #32).
 
 ## Rendering
 

@@ -228,6 +228,13 @@ Catalog of all wiki pages for the vrg project.
   footer slot, pop-up cancellation on open, error-suspension retention,
   wrapped unbroken text, tiny-size clipping, and the `help overlay`
   sink-safety row
+- [overlay-precedence.md](overlay-precedence.md) — Issue #32: the
+  `ctrl+c` → modal error → help → pop-up → base key-precedence stack,
+  error-suspends-help with scroll restoration for both dismissal keys,
+  appended errors preserving the reader's scroll, pop-up cancellation
+  without return, the `Esc`/`q` dismissal-outcome table (fatal
+  no-results overlay exiting 2 under either key), and `Esc` never
+  exiting from a base state
 
 ## Catalogs
 
