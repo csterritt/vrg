@@ -610,6 +610,38 @@ count across the open overlay's lines):
   is already in flight mints nothing: dropped, not queued, per the
   Issue #25 one-load-per-path rule.
 
+`reload_test.go` (same package, Issue #27) pins the explicit-`r`
+contracts through the same gated seams: `loaderModel` and
+`gatedLoaderModel` from `failures_test.go` drive the loads, and the
+layout worker is held by retaining the command `pump` would run:
+
+- `TestExplicitReloadRereadsCurrentFile` — `r` issues exactly one
+  reread, shows `Loading…` with the filename row intact, leaves the
+  cursor and stops untouched, and installs the new bytes.
+- `TestReloadDuplicateDroppedNotQueued` — a second `r` while the load
+  is held mints nothing, as does a re-entry in flight; only after the
+  placeholder settles does the next `r` start a new load.
+- `TestReloadPreservesAnchorThroughMatchingLayout` — the anchor and
+  top are asserted only after the new revision's prepared layout
+  installs, never against the superseded one.
+- `TestReloadAnchorClampsToShrunkContent` — an anchor past the shrunken
+  EOF is rewritten by the lossy clamp.
+- `TestFailedReloadReplacesContent` — a failed reread shows
+  `(unreadable)` plus the overlay; no stale text survives.
+- `TestReloadSecondFailureAppendsPreservingScroll` — a second
+  consecutive failure appends exactly one occurrence to the reopened
+  overlay with the reader's position preserved.
+- `TestReloadIsTheOneStopRetryRoute` — `n`/`p` are no-ops on a
+  one-stop index; `r` retries to success with the prior-failure
+  overlay kept up.
+- `TestDiskChangeWithoutRIsNotObserved` — disk edits produce no load
+  and no frame change until `r`.
+- `TestPreReloadLayoutDiscardedAfterReload` — a held pre-reload layout
+  released after the reload completes fails the revision-keyed install
+  guard without touching the panel or the anchor.
+- `TestNavigationDuringReloadOverridesAnchor` — a selection made
+  during the in-flight load commits its reveal over the anchor intent.
+
 `pan_test.go` (same package, Issue #18) drives the horizontal-pan
 keys through `Update`; `panRecords` builds a one-stop record set for a
 file whose first line is the match:

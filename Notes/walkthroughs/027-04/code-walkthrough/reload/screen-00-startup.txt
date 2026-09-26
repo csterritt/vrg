@@ -1,0 +1,24 @@
+./a-long.txt   ── ./a-long.txt ─────────────────────────────────────────────────
+./b-short.txt   1  line-01
+                2  MARK alpha line-002
+                3  line-03
+                4  line-04
+                5  line-05
+                6  line-06
+                7  line-07
+                8  line-08
+                9  line-09
+               10  line-10
+               11  line-11
+               12  line-12
+               13  line-13
+               14  line-14
+               15  line-15
+               16  line-16
+               17  line-17
+               18  line-18
+               19  line-19
+               20  line-20
+               21  line-21
+               22  line-22
+               23  line-23

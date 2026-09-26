@@ -94,7 +94,10 @@ longer runs inside `Update`. Like file loads, it runs in a worker
   without touching the visible panel, the anchor, saved per-file
   state, or the pending reveal intent. A matching layout for a file
   that is no longer current still caches into `rows` — ready for a
-  revisit — but never calls `SetRows`.
+  revisit — but never calls `SetRows`. Issue #27 exercises the
+  remaining supersession source, the content revision: a layout keyed
+  to a pre-`r` revision is discarded the same way (see
+  [explicit-reload.md](explicit-reload.md)).
 - **`syncLayout` recomputes the geometry** (list width, text width,
   viewport resize) after any parameter change — window resize, wrap
   toggle, search completion, a load changing the gutter, a file
@@ -118,7 +121,12 @@ sets `pendingReveal` and returns. The intent is *newest-stop wins*:
 while the worker is held reveals whichever stop is selected when a
 matching layout installs — never a stale destination. `commitReveal`
 runs the intent on each current-path install; `reveal` re-pends it if
-the install still leaves no current rows.
+the install still leaves no current rows. Issue #27 turned the boolean
+into `pending pendingIntent` (`intentNone`/`intentReveal`/
+`intentAnchor`) so an explicit reload can carry "keep the anchor, no
+reveal" instead, and renamed the committer `commitIntent`; the
+reveal intent's newest-stop semantics are unchanged. See
+[explicit-reload.md](explicit-reload.md).
 
 ## Cached-file navigation
 
@@ -184,12 +192,14 @@ See [unit-tests.md](unit-tests.md) § `internal/viewport` and
   `Reveal`, the lossy rewrite in `resolve`'s clamp.
 - `internal/viewport/rows.go` — `rowSpan.start` feeding `Row.Start`.
 - `internal/app/app.go` — `rows`/`revs`/`reqKey`/`saved` (now
-  `viewport.Target`), `pendingReveal`, `listW`/`textW`/`fileIdx`,
+  `viewport.Target`), `pending` (`pendingIntent` since Issue #27),
+  `listW`/`textW`/`fileIdx`,
   `listEntry`, the `layoutDoneMsg` install guard, the `w` and
   `WindowSizeMsg` cases issuing layout requests.
 - `internal/app/browse.go` — `layoutDoneMsg`, `installed`,
   `syncLayout`/`layoutKey`/`currentRows`/`ensureLayout`/`layoutCmd`,
-  `reveal`'s pending intent, `commitReveal`, `navigate`'s crossing
+  `reveal`'s pending intent, `commitIntent` (`commitReveal` until
+  Issue #27), `navigate`'s crossing
   sequence, `renderBrowse`'s cached widths and visible-window list.
 
 See also: [viewport-scrolling.md](viewport-scrolling.md) (the scroll

@@ -1,0 +1,24 @@
+./a-long.txt   ── ./a-long.txt ─────────────────────────────────────────────────
+./b-short.txt  68  line-68
+               69  line-69
+               70  MARK omega line-070
+               71  line-71
+               72  line-72
+               73  line-73
+               74  line-74
+               75  line-75
+               76  line-76
+               77  line-77
+               78  line-78
+               79  line-79
+               80  line-80
+               81  line-81 appended
+               82  line-82 appended
+               83  line-83 appended
+               84  line-84 appended
+               85  line-85 appended
+               86  line-86 appended
+               87  line-87 appended
+               88  line-88 appended
+               89  line-89 appended
+               90  line-90 appended

@@ -273,3 +273,14 @@ Usage
  Input tokens: 168172 tokens
  Output tokens: 59573 tokens
  Cached input tokens: 7606887 tokens
+
+----
+Task 027-explicit-reload-r.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 40 messages
+ Input tokens: 124604 tokens
+ Output tokens: 33140 tokens
+ Cached input tokens: 3854912 tokens

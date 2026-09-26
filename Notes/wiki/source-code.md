@@ -66,7 +66,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   searching cancels (kills the child context, `ExitCode` 130), `Esc` is
   a base-state no-op, `c` in browse toggles the theme between its dark
   and light schemes (Issue #7), `n`/`p` in browse step the matched-line
-  cursor through `navigate` (Issue #13), `,`/`.`/`<`/`>`/`[`/`]` in
+  cursor through `navigate` (Issue #13), `r` in browse rereads the
+  current file through `reload` (Issue #27), `,`/`.`/`<`/`>`/`[`/`]` in
   browse pan horizontally through `Model.pan` (Issue #18),
   `left`/`tab` hide and `right`/`shift+tab` show the file list
   (Issue #24), and once
@@ -93,8 +94,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   prepared-layout bookkeeping — `rows` (per-path `installed{key,
   rows}`), `revs` (per-path content revision bumped on each successful
   load), `reqKey` (latest requested key per path) — plus
-  `pendingReveal` (the newest-stop reveal intent awaiting a matching
-  layout), the `listW`/`textW`/`fileIdx` caches and `listEntry` seam
+  `pending` (the newest-stop reveal intent awaiting a matching
+  layout — `pendingIntent` since Issue #27), the `listW`/`textW`/`fileIdx` caches and `listEntry` seam
   keeping `View()` off the whole file list, the `layoutDoneMsg`
   install-only-on-match case, and layout requests on the resize, `w`,
   load-completion, and search-completion paths;
@@ -109,7 +110,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `readFile` (the read-phase test seam — nil selects
   `filebuffer.ReadFile`), and the `loadDoneMsg` error branch's
   mark-retain-collect-overlay split on whether the failed path is
-  current;
+  current; Issue #27 adds `reloading` (the per-path in-flight reread
+  mark distinguishing reload completions from first loads), replaces
+  `pendingReveal` with `pending pendingIntent` (reveal vs. anchor
+  intent), the `r` browse key routed to `reload()`, and the
+  `loadDoneMsg` success branch's `SetRows(nil)` plus anchor-intent
+  recording for reload completions;
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
   diagnostics box; Issue #15 adds the pop-up state (`popupID`,
@@ -210,8 +216,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `Viewport.Reveal`; the `saved` entry is replaced only when the
   viewport moved) and calls it at the end of every moved `navigate`;
   since Issue #17 it carries the pending intent when no matching
-  layout is installed, committed by `commitReveal` on install for the
-  newest stop. Issue #15 opens the file-change pop-up inside the
+  layout is installed, committed on install for the newest stop —
+  `commitReveal`, renamed `commitIntent` when Issue #27 widened the
+  intent. Issue #15 opens the file-change pop-up inside the
   `FileChanged`
   branch — selection time, before the destination loads — and batches
   its instance-keyed expiry command with the load. Issue #26 routes the
@@ -219,7 +226,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   skips the pop-up, re-opens its retained `failLines` overlay, and
   mints exactly one retry (still dropped while a request is in
   flight), so a same-file step inside a failed file requests nothing
-  and a cross-file entry retries once. Issue #18 adds
+  and a cross-file entry retries once. Issue #27 adds `pendingIntent`
+  (`intentNone`/`intentReveal`/`intentAnchor` — the anchor intent a
+  reload completion records when no reveal is already carried) and
+  `reload()` (the `r` handler: drop the cached buffer, re-open the
+  prior-failure overlay for a failed path, mint exactly one request
+  through the shared bookkeeping, mark it in `reloading`; a press
+  against an in-flight load is dropped not queued). Issue #18 adds
   `pan` (the six pan keys routed to `Viewport` units under the same
   loaded-buffer gate as `scroll`) and the file-entry offset reset:
   `navigate`'s `FileChanged` branch and the current-path
@@ -240,6 +253,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [wrap-mode.md](wrap-mode.md),
   [horizontal-panning.md](horizontal-panning.md),
   [logical-anchor-and-layout.md](logical-anchor-and-layout.md),
+  [explicit-reload.md](explicit-reload.md),
   [safe-presentation.md](safe-presentation.md), and
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
 - `internal/app/popup.go` — the Issue #15 file-change pop-up:

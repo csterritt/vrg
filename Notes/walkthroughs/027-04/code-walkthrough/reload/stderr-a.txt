@@ -1,0 +1,1 @@
+cannot read ./a-long.txt: open /tmp/vrg27-fixture-a.VmzT0n/./a-long.txt: no such file or directory

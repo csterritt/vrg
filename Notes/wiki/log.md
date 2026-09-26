@@ -1024,3 +1024,45 @@ Sources: `Notes/issues/026-read-failures-unreadable-retry-rules.md`,
 consistency; Outcome and exit-status contract),
 `internal/app/app.go`, `internal/app/browse.go`,
 `internal/app/failures_test.go`, `internal/app/outcome_test.go`.
+
+## [2026-09-24] ingest | Issue #27 explicit reload — `r` reread, revisions, and the pending-intent seam
+
+Ingested the completed Issue #27 implementation: `r` in browse routes to
+`reload()`, which drops the cached buffer immediately (the panel shows
+`Loading…` for the duration and a failure can never present stale
+content as refreshed), re-opens the retained `failLines` overlay when
+retrying a failed path — mirroring `entryLoad` — and mints exactly one
+request through the shared `loadSeq`/`loading[path]` bookkeeping plus a
+new `reloading` mark; rg is never rerun and the stops/cursor are
+untouched. Duplicate `r` and cross-file re-entry while the path loads
+are dropped not queued per Issue #25, and the placeholder's settlement
+is the only completion signal — making `r` the one-stop index's only
+retry route. A successful reload bumps `revs[path]`, stale-keying the
+installed row model and any in-flight pre-reload layout request (the
+revision-superseded discard Issue #17 designed for is now exercised);
+the current-path completion `SetRows(nil)`s the viewport so nothing
+superseded can paint, while the logical `anchor Target` survives and
+resolves — clamped — against the new revision's layout. `pendingReveal`
+became `pending pendingIntent` (`intentNone`/`intentReveal`/
+`intentAnchor`): `reveal` still carries the newest-stop intent, a reload
+completion records `intentAnchor` only when no reveal is already
+carried, and `commitIntent` discharges whichever survives at matching
+layout install — the seam Issue #28 generalizes into full
+reveal-versus-reload arbitration. Failed reloads flow through the Issue
+#26 current-file path (`(unreadable)` + overlay, one collected
+occurrence, second-failure append preserving scroll). Created
+[explicit-reload](explicit-reload.md); updated
+[source-code](source-code.md) (`app.go`'s `reloading`/`pending`/`r`
+key and the success branch, `browse.go`'s `reload`/`pendingIntent`/
+`commitIntent`), [unit-tests](unit-tests.md) (the new `reload_test.go`
+catalog), [read-failures](read-failures.md) (the `r` retry route),
+[logical-anchor-and-layout](logical-anchor-and-layout.md) (the
+widened pending intent and the exercised revision supersession),
+[async-load-isolation](async-load-isolation.md) (reload sharing the
+one-load-per-path rule), and the index.
+New test file: `internal/app/reload_test.go`.
+Sources: `Notes/issues/027-explicit-reload-r.md`,
+`Notes/tasks/027-explicit-reload-r.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency), `internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/reload_test.go`.

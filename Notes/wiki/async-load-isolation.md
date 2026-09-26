@@ -61,7 +61,11 @@ destination reveal; the latest-target rule is Issue #28's).
 - `bufs` retains every successful buffer for the session — no
   eviction. A revisit shows the cached content and issues no new load;
   the only command it may return is an Issue #17 layout request when
-  no installed row model matches the current parameters.
+  no installed row model matches the current parameters. Issue #27's
+  `r` is the single intentional exception: `reload()` drops the cached
+  buffer and mints a fresh identity through the same bookkeeping, and
+  a duplicate `r` against the in-flight load is dropped not queued —
+  see [explicit-reload.md](explicit-reload.md).
 
 ## Separately gated decode/map
 
@@ -117,7 +121,8 @@ See [unit-tests.md](unit-tests.md) § `internal/app`.
   `ensureLoad`'s mint-and-drop rule, `loadCmd`'s two-phase worker
   (`readFile`/`ReadFile` then `Prepare` behind `mapGate`), and Issue
   #26's `entryLoad` (the failed-path re-entry exception minting
-  exactly one retry).
+  exactly one retry); Issue #27's `reload()` mints through the same
+  bookkeeping with a `reloading` mark on top.
 - `internal/filebuffer/filebuffer.go` — `Load` split into `ReadFile` +
   `Prepare`; `Prepare` carries the split/escape/map/validate body.
 
@@ -134,6 +139,8 @@ scroll contracts the placeholder no-op protects),
 [stderr-replay.md](stderr-replay.md) (where a non-current failure's
 diagnostic surfaces),
 [cancellation-and-cleanup.md](cancellation-and-cleanup.md) (the quit
-guard a late completion hits), and
+guard a late completion hits),
+[explicit-reload.md](explicit-reload.md) (the `r` reread that shares
+the same request bookkeeping), and
 [file-list-layout.md](file-list-layout.md) (the status-note slot a
 settled placeholder hands to).

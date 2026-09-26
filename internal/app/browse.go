@@ -137,6 +137,26 @@ func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 	return m, tea.Batch(m.entryLoad(step), lay, pop)
 }
 
+// pendingIntent is the deferred action owed to the current file's
+// viewport while no layout matching the current parameters is
+// installed. The model carries it and commits it through the Issue
+// #17 installation path when a matching prepared layout arrives;
+// superseded and non-current installs leave it untouched.
+type pendingIntent int
+
+const (
+	// intentNone means no deferred action is owed.
+	intentNone pendingIntent = iota
+	// intentReveal is the destination reveal for the newest selected
+	// stop — the navigation and first-load intent.
+	intentReveal
+	// intentAnchor keeps the retained logical anchor with no reveal —
+	// recorded by an explicit reload's load completion (Issue #27).
+	// Issue #28 generalizes this seam into the full
+	// reveal-versus-reload arbitration for all load completions.
+	intentAnchor
+)
+
 // reveal applies the destination reveal for the current stop: the
 // display target is the start cell of the first submatch on the
 // destination line — the marker cell for a zero-width match — so the
@@ -152,16 +172,16 @@ func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 func (m *Model) reveal() {
 	s, ok := m.currentStop()
 	if !ok {
-		m.pendingReveal = false
+		m.pending = intentNone
 		return
 	}
 	key := string(s.Path)
 	buf := m.bufs[key]
 	if buf == nil || m.currentRows() == nil {
-		m.pendingReveal = true
+		m.pending = intentReveal
 		return
 	}
-	m.pendingReveal = false
+	m.pending = intentNone
 	t := viewport.Target{Line: int(s.Line) - 1}
 	for i, sp := range buf.Spans(t.Line) {
 		if i == 0 || sp.Start < t.Cell {
@@ -173,12 +193,18 @@ func (m *Model) reveal() {
 	}
 }
 
-// commitReveal runs the pending reveal intent after a matching layout
-// installs; reveal re-pends it when the install still leaves the
-// current file without current rows.
-func (m *Model) commitReveal() {
-	if m.pendingReveal {
+// commitIntent discharges the intent owed to the current file after a
+// matching layout installs: a deferred reveal runs for the newest
+// selected stop, while the reload-anchor intent's work — resolving
+// the retained anchor against the new rows — already happened inside
+// SetRows, so it only clears. Obsolete and non-current installs never
+// reach here: they cannot consume the intent.
+func (m *Model) commitIntent() {
+	switch m.pending {
+	case intentReveal:
 		m.reveal()
+	case intentAnchor:
+		m.pending = intentNone
 	}
 }
 
@@ -213,6 +239,37 @@ func (m *Model) entryLoad(step searchindex.Step) tea.Cmd {
 	m.loadSeq++
 	m.loading[key] = m.loadSeq
 	return m.loadCmd(step.Stop, m.loadSeq)
+}
+
+// reload issues the explicit r reload: exactly one reread of the
+// current file's raw path — never an rg rerun, never a cursor or stop
+// change. A press while that path's load is in flight is dropped, not
+// queued: the placeholder's change off "Loading…" is the only
+// completion signal. The cached buffer is dropped up front so the
+// panel reads "Loading…" — scrolling is a placeholder no-op — and a
+// failed reread can never present stale content as refreshed. A
+// previously failed file's r is its retry route — the only one in a
+// one-stop index — and re-opens the prior-failure overlay while the
+// retry runs, as in the cross-file re-entry sequence. The request is
+// marked so its completion records the anchor intent rather than a
+// first load's reveal.
+func (m *Model) reload() tea.Cmd {
+	s, ok := m.currentStop()
+	if !ok {
+		return nil
+	}
+	key := string(s.Path)
+	if m.loading[key] != 0 {
+		return nil
+	}
+	delete(m.bufs, key)
+	if lines := m.failLines[key]; len(lines) > 0 {
+		m.openOverlay(lines)
+	}
+	m.loadSeq++
+	m.loading[key] = m.loadSeq
+	m.reloading[key] = true
+	return m.loadCmd(s, m.loadSeq)
 }
 
 // ensureLoad starts the current file's load unless it is in flight or

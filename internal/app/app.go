@@ -85,21 +85,31 @@ type Model struct {
 	revs   map[string]int
 	reqKey map[string]viewport.Key
 	saved  map[string]viewport.Target
-	// pendingReveal carries the reveal intent for the newest selected
-	// stop while no layout matching the current parameters is
-	// installed; it commits when one installs. listW and textW are the
-	// cached file-list and content widths, recomputed on the update
-	// path so a frame render never rescans the list. listShow is the
-	// user's file-list visibility preference — shown initially;
-	// left/tab hide, right/shift+tab show — and a zero-width
-	// allocation draws no cells without touching it. listTop is the
-	// list's scroll offset: the first visible entry index, adjusted
-	// minimally to keep the current file inside the window.
-	pendingReveal bool
-	listW         int
-	textW         int
-	listShow      bool
-	listTop       int
+	// pending is the deferred intent owed to the current file's
+	// viewport while no layout matching the current parameters is
+	// installed: intentReveal reveals the newest selected stop;
+	// intentAnchor — recorded when an explicit reload's load
+	// completes — keeps the retained logical anchor with no reveal.
+	// It commits when a matching layout installs through the Issue
+	// #17 path; superseded and non-current installs cannot consume
+	// it, and Issue #28 generalizes the seam into the full
+	// reveal-versus-reload arbitration for all load completions.
+	// reloading marks each raw path whose in-flight load is an r
+	// reread, so its completion records the anchor intent rather than
+	// a first load's reveal. listW and textW are the cached file-list
+	// and content widths, recomputed on the update path so a frame
+	// render never rescans the list. listShow is the user's file-list
+	// visibility preference — shown initially; left/tab hide,
+	// right/shift+tab show — and a zero-width allocation draws no
+	// cells without touching it. listTop is the list's scroll offset:
+	// the first visible entry index, adjusted minimally to keep the
+	// current file inside the window.
+	pending   pendingIntent
+	reloading map[string]bool
+	listW     int
+	textW     int
+	listShow  bool
+	listTop   int
 	// wrap is the wrap-mode flag: on means lines wrap at grapheme
 	// boundaries, off means run-off-edge with the reserved indicator
 	// column. On initially; w toggles.
@@ -158,6 +168,7 @@ func newModel(done <-chan searchDoneMsg, cancel func()) Model {
 		failed:    make(map[string]bool),
 		failLines: make(map[string][]string),
 		loading:   make(map[string]int),
+		reloading: make(map[string]bool),
 		rows:      make(map[string]installed),
 		revs:      make(map[string]int),
 		reqKey:    make(map[string]viewport.Key),
@@ -275,6 +286,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		delete(m.loading, key)
+		wasReload := m.reloading[key]
+		delete(m.reloading, key)
 		if msg.err != nil {
 			m.failed[key] = true
 			d := fmt.Sprintf("cannot read %s: %v", present.Path(msg.path), msg.err)
@@ -304,13 +317,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !bytes.Equal(msg.path, m.currentPath()) {
 			return m, nil
 		}
-		// The current file's saved anchor already sits in the
-		// viewport — set when the file became current — so the
-		// prepared layout resolves it on install and the pending
-		// reveal commits over it. The load-completion entry sequence
-		// also resets the horizontal offset to zero before that
-		// reveal.
+		// The current file's anchor already sits in the viewport —
+		// set when the file became current or retained through a
+		// reload — so the prepared layout resolves it on install and
+		// the pending intent commits over it. The load-completion
+		// entry sequence resets the horizontal offset to zero, and
+		// the viewport drops its rows: nothing installed can match
+		// the new revision, so superseded rows never paint as
+		// refreshed content.
 		m.vp.SetOffset(0)
+		m.vp.SetRows(nil)
+		// A reload's completion owes the anchor intent — keep the
+		// logical anchor, no reveal — committed when the new
+		// revision's matching layout installs. An outstanding reveal
+		// for a selection made during the load takes precedence.
+		if wasReload && m.pending == intentNone {
+			m.pending = intentAnchor
+		}
 		cmd := m.syncLayout()
 		return m, cmd
 	case layoutDoneMsg:
@@ -328,7 +351,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rows[key.Path] = installed{key: key, rows: msg.rows}
 		if cur := m.currentPath(); cur != nil && key.Path == string(cur) {
 			m.vp.SetRows(msg.rows)
-			m.commitReveal()
+			m.commitIntent()
 		}
 	case popupExpiredMsg:
 		// Only the instance that scheduled this expiry answers it —
@@ -393,6 +416,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// searching ordinary keys stay inert.
 			if m.phase == phaseBrowse {
 				return m.navigate(msg.String() == "n")
+			}
+		case "r":
+			// The explicit reload is a browse key: one reread of the
+			// current file — never an rg rerun — while a duplicate
+			// press during the in-flight load is dropped, not queued.
+			if m.phase == phaseBrowse {
+				return m, m.reload()
 			}
 		}
 	}

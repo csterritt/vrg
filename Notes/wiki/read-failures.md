@@ -52,9 +52,11 @@ slot rules and the layout dimensions stay nonnegative.
 between stops of a failed file requests nothing and re-opens nothing —
 the overlay stays dismissed and `(unreadable)` stays up. A crossing into
 a previously failed file is different: `navigate` routes the destination
-through `entryLoad`, which runs the re-entry sequence. (`r` retry is
-Issue #27's; a one-stop index therefore has no navigation-based retry at
-all.)
+through `entryLoad`, which runs the re-entry sequence. (`r` is the other
+retry route — Issue #27's explicit reload re-opens the retained overlay
+the same way; see
+[explicit-reload.md](explicit-reload.md) — and the only one a one-stop
+index has.)
 
 ## The re-entry sequence
 
@@ -162,7 +164,9 @@ See [unit-tests.md](unit-tests.md) § `internal/app`.
 
 See also: [async-load-isolation.md](async-load-isolation.md) (the
 one-load-per-path rule and non-current settlement isolation the re-entry
-reuses), [match-navigation.md](match-navigation.md) (the cursor steps
+reuses), [explicit-reload.md](explicit-reload.md) (the `r` retry route
+that re-opens the retained overlay),
+[match-navigation.md](match-navigation.md) (the cursor steps
 that distinguish same-file from cross-file), [browse-tracer.md](browse-tracer.md)
 (the placeholders and filename row), [stderr-replay.md](stderr-replay.md)
 (the diagnostic-only collection and exit replay),

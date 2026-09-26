@@ -185,6 +185,14 @@ Catalog of all wiki pages for the vrg project.
   without dismissal, second-failure append preserving scroll, away-
   settled retries), and load failures never moving the fixed exit
   status — all behind the injected `readFile` seam
+- [explicit-reload.md](explicit-reload.md) — Issue #27: `r` rereads the
+  current file without rerunning rg or touching the stops, duplicate
+  presses and re-entry dropped not queued with placeholder settlement
+  as the completion signal, the cached buffer dropped immediately and
+  failures landing as `(unreadable)` plus overlay, per-path content
+  revisions discarding superseded prepared layouts, and the
+  `pendingIntent` seam committing a reveal for the newest stop or an
+  anchor-preserving no-reveal — generalized by Issue #28
 
 ## Catalogs
 
