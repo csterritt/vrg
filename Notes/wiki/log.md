@@ -1394,3 +1394,40 @@ Sources: `Notes/issues/034-documentation-scale-and-memory-limits.md`,
 Further Notes), `README.md`, `internal/app/help.go`,
 `internal/app/readme_test.go`, `internal/cli/readme_test.go`,
 `internal/app/sinksafety_test.go`, `internal/app/help_test.go`.
+## [2026-09-24] ingest | Issue #35 final integration verification — clean-checkout gates, PTY/subprocess re-runs, five smoke outcomes
+
+Ingested the completed Issue #35 verification pass. From a clean
+worktree checkout of the composed repository: `go build ./...`,
+`go vet ./...`, and `go test ./...` all pass; the Issues #4/#9/#11
+PTY/subprocess packages were re-run uncached (`go test -count=1
+./cmd/vrg` and the subprocess-boundary tests in `./internal/app`) with
+every test executing; and `scripts/smoke.py` verified all five final-
+binary outcomes — browse exit 0 after `q`, warning-overlay dismissal
+then no-results exit 1, the fatal composed diagnostic exiting 2 under
+both `q` and `Esc` with stderr replay, cancellation exiting 130 with
+the child and its process group externally gone and termios/display
+restored, and the help-only invocation (bare, `-h`, `--help`) printing
+one `Usage:` copy with empty stderr and exit 0 while a sentinel fake rg
+is never invoked. The pass caught one real regression: cancellation
+killed only the direct child PID, so a scripted rg whose blocking
+payload ran as a grandchild left the drained pipes held open and the
+process hung post-restoration — fixed in `internal/app/search.go` by
+spawning the child as a process-group leader and SIGKILLing the group
+in `cmd.Cancel`, with `TestCancelTerminatesChildProcessGroup` (new
+`forkblock` fake-rg mode) as the regression test. The seeded smoke
+harness's stale marker strings were aligned to the composed diagnostic
+wording the focused tests pin (`exit status N`, `missing summary`) and
+to the fragmented repaint of the centred no-results text; no behavioral
+assertion changed.
+Created [final-verification](final-verification.md); updated
+[cancellation-and-cleanup](cancellation-and-cleanup.md) (process-group
+kill),
+[source-code](source-code.md) (`search.go` `Setpgid`/`Cancel`),
+[unit-tests](unit-tests.md) (`forkblock` mode, the new test), and the
+index.
+New files: `Notes/wiki/final-verification.md`.
+Sources: `Notes/issues/035-final-integration-verification.md` (task
+file `Notes/tasks/035-final-integration-verification.md`),
+`Notes/PRD-vrg.md` (Testing Decisions), `internal/app/search.go`,
+`internal/app/subprocess_test.go`, `scripts/smoke.py`, the clean
+worktree gate output, and the smoke run.

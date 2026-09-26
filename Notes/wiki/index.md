@@ -253,6 +253,11 @@ Catalog of all wiki pages for the vrg project.
   synchronization tests asserting against `helpBindings`,
   `optionDecls`, and `decideOutcome`, and the `help footer note`
   sink-safety row
+- [final-verification.md](final-verification.md) — Issue #35: the
+  clean-checkout verification pass (`go build`/`vet`/`test`, the
+  `-count=1` PTY/subprocess re-runs, the five smoke outcomes through
+  `scripts/smoke.py`), and the regression it caught — the process-group
+  cancellation kill plus the seeded harness's marker alignment
 
 ## Catalogs
 

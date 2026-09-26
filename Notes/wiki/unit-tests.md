@@ -1322,6 +1322,13 @@ completion arrives (bounded — a missing follow-up or timeout fails).
   `block` fake rg: the child pid disappears (`ESRCH`), `Reaped` closes
   promptly, and `ReapReport` receives the `signal: killed` wait status —
   proving vrg's own `Wait` path ran.
+- `TestCancelTerminatesChildProcessGroup` (Issue #35) — the `forkblock`
+  fixture runs its blocking payload as a grandchild inheriting both
+  pipes (the shell-scripted fixture shape): cancellation still reaps
+  promptly, both the child and grandchild pids are gone (`ESRCH`), and
+  the child's process group is empty — the regression test for the
+  process-group kill, covering the hang a surviving grandchild's held
+  pipes caused before the fix.
 
 ## internal/viewport
 

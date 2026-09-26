@@ -6,9 +6,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 
 	"vrg/internal/searchindex"
 )
@@ -100,6 +102,18 @@ func Start(ctx context.Context, cfg Config) (*Session, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(ctx, rg, cfg.Argv...)
 	cmd.Dir = cfg.Workdir
+	// The child leads its own process group so cancellation kills the
+	// whole tree: a scripted rg forks its payload rather than exec'ing
+	// it, and a surviving grandchild would hold the drained pipes open
+	// and stall the reap forever.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if err == syscall.ESRCH {
+			return os.ErrProcessDone
+		}
+		return err
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		cancel()

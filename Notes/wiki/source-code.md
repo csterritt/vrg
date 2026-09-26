@@ -37,7 +37,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   executable, protected argv, invocation working directory, `Drained`/
   `PrepareGate`/`ReapReport` test hooks, and — Issue #11 — `DiagAck`,
   the collection-acknowledgement side channel), `Start` (spawns
-  `exec.CommandContext` in the working directory, fails synchronously
+  `exec.CommandContext` in the working directory with the child leading
+  its own process group — `SysProcAttr.Setpgid`, and `cmd.Cancel`
+  SIGKILLs the group so a scripted child's surviving grandchildren
+  cannot hold the drained pipes open (Issue #35 regression fix) —
+  fails synchronously
   before the TUI, returns a `Session` owning the model plus `Cancel`/
   `Reaped`), `collect` (concurrent stdout/stderr drainage for the whole
   child lifetime, then `Wait` with reap reporting, then cancellation-

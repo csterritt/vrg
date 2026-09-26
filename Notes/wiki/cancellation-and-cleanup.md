@@ -32,16 +32,24 @@ a search completion that lands after cancellation cannot revive the UI.
 A real SIGINT (not the raw-mode `ctrl+c` keystroke) reaches the boundary
 as `tea.ErrInterrupted` and maps to 130 without involving the model.
 
+Since Issue #35 the kill reaches the child's whole **process group**:
+the child is spawned with `SysProcAttr.Setpgid` and `cmd.Cancel`
+SIGKILLs the group, so a scripted rg whose blocking payload runs as a
+grandchild cannot survive its parent holding the drained pipes open —
+the cancellation hang the final verification pass caught and repaired
+(see [final-verification.md](final-verification.md)).
+
 ## The cleanup boundary
 
 Every controlled exit — ordinary quit, cancellation, or failure — passes
 through the same code in `runSearch` after `Program.Run` returns: the
 session's `Cancel` terminates a still-running child, then `<-Reaped()`
 blocks until the collector's `cmd.Wait()` has returned, so the process
-never leaves an orphaned or unreaped rg behind. Killing the child closes
-its pipes, so Issue #3's dual-pipe drainage ends promptly rather than
-waiting for further output; cancellation likewise abandons a held
-preparation gate and skips index preparation entirely.
+never leaves an orphaned or unreaped rg behind. Killing the child's
+process group closes its pipes even when a grandchild inherited them,
+so Issue #3's dual-pipe drainage ends promptly rather than waiting for
+further output; cancellation likewise abandons a held preparation gate
+and skips index preparation entirely.
 
 Terminal restoration has two halves, both asserted by the PTY harness.
 The display half: every `View` sets `AltScreen`, so on exit the renderer

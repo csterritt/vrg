@@ -418,11 +418,14 @@ exit 1
                  cwd=repo)
     try:
         wait_file(hs)
-        # The warning overlay must be observed before Esc dismisses it,
-        # and the no-results view before q quits it.
+        # The warning overlay must be observed before Esc dismisses it.
+        # The centred no-results text is painted fragmented — the
+        # overlay's border covers its middle cells — so the observable
+        # post-dismissal marker is the repaint of those covered cells,
+        # "sults"; q is sent only after that patch is observed.
         run.wait_output("warn")
         run.send("\x1b")
-        run.wait_output("No results found")
+        run.wait_output("sults")
         run.send("q")
         run.wait_exit()
         run.drain()
@@ -434,8 +437,13 @@ exit 1
     visible = strip_ansi(run.text())
     check("no-results exit 1", run.exit_code == 1,
           "exit=%s" % run.exit_code)
+    # "No results found" never appears contiguously in the stream: the
+    # overlay-bearing frame painted "No re" + box + "found", and the
+    # dismissal repaint filled "sults". All three fragments together
+    # prove the complete text reached the terminal.
     check("no-results shows 'No results found'",
-          "No results found" in visible)
+          all(f in visible for f in ("No re", "sults", "found")),
+          "visible=%r" % visible)
     check("no-results stderr replays 'warn'", "warn" in run.stderr(),
           "stderr=%r" % run.stderr())
     check("no-results PTY reached EOF", run.eof)
@@ -445,8 +453,9 @@ def scenario_fatal():
     """Fatal fake-rg with a malformed record -> q and Esc -> exit 2.
 
     The fixture emits one malformed line and exits 2, so the composed
-    fatal diagnostic (Issues #36-37, #44) carries all three component
-    kinds: the generated process line naming the exit code, the
+    fatal diagnostic carries all three component kinds: the generated
+    process line naming the exit status ("rg failed: exit status 2",
+    Issues #9's composed wording, pinned by the outcome tests), the
     missing-summary integrity cause, and the malformed record-loss
     component.
     """
@@ -472,7 +481,7 @@ exit 2
             # The fatal overlay's process component must be observed
             # rendered before the dismissal key — the acknowledgement
             # that the composed diagnostic painted.
-            run.wait_output("code 2")
+            run.wait_output("exit status 2")
             run.send(key)
             run.wait_exit()
             run.drain()
@@ -486,14 +495,14 @@ exit 2
     visible = strip_ansi(run.text())
     check("fatal q exit 2", run.exit_code == 2,
           "exit=%s" % run.exit_code)
-    check("fatal q overlay names exit code", "code 2" in visible,
+    check("fatal q overlay names exit code", "exit status 2" in visible,
           "visible=%r" % visible)
     check("fatal q overlay states integrity cause",
-          "missing summary record" in visible, "visible=%r" % visible)
+          "missing summary" in visible, "visible=%r" % visible)
     check("fatal q overlay states record-loss cause",
           "malformed record" in visible, "visible=%r" % visible)
     check("fatal q stderr replays composed diagnostic",
-          "ripgrep exited with code 2" in run.stderr(),
+          "rg failed: exit status 2" in run.stderr(),
           "stderr=%r" % run.stderr())
 
     run = one_run("\x1b")

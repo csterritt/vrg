@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"slices"
@@ -84,6 +85,29 @@ func fakeRgMain(mode string) int {
 		// Block on signal delivery: uncatchable SIGKILL still ends the
 		// process, and the parked channel keeps the runtime's deadlock
 		// detector quiet.
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch)
+		<-ch
+		return 0
+	case "forkblock":
+		// The blocking payload runs as a grandchild inheriting both
+		// pipes — the shell-scripted fixture's shape (a scripted rg
+		// forks its blocking command rather than exec'ing it).
+		// Terminating only the direct child leaves the grandchild
+		// holding the pipes open, so the collector's drainage wait
+		// never ends; cancellation must kill the child's whole
+		// process group.
+		if dir != "" {
+			os.WriteFile(filepath.Join(dir, "ready"),
+				[]byte(strconv.Itoa(os.Getpid())), 0o644)
+		}
+		child := exec.Command("sleep", "3600")
+		child.Stdout = os.Stdout
+		child.Stderr = os.Stderr
+		if err := child.Start(); err == nil && dir != "" {
+			os.WriteFile(filepath.Join(dir, "grandchild"),
+				[]byte(strconv.Itoa(child.Process.Pid)), 0o644)
+		}
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch)
 		<-ch
@@ -235,6 +259,92 @@ func TestCancelTerminatesAndReapsChild(t *testing.T) {
 	if err := syscall.Kill(pid, 0); err != syscall.ESRCH {
 		t.Fatalf("child pid %d still exists after reap (err=%v)", pid, err)
 	}
+}
+
+// awaitPIDFile polls a pid-carrying handshake file under dir, like
+// awaitReadyPID for a name other than "ready".
+func awaitPIDFile(t *testing.T, dir, name string) int {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if b, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
+			pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+			if err != nil {
+				t.Fatalf("%s file = %q, want a pid: %v", name, b, err)
+			}
+			return pid
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("fake rg did not write %s within budget", name)
+	return 0
+}
+
+// pidIsGoneEventually polls until the pid is fully gone — ESRCH, so a
+// terminated process is proven reaped rather than a lingering zombie.
+func pidIsGoneEventually(t *testing.T, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := syscall.Kill(pid, 0); err == syscall.ESRCH {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("pid %d still exists", pid)
+}
+
+// Cancelling while the child's blocking payload runs as a grandchild —
+// the shell-script fixture shape — still ends promptly: the kill
+// reaches the child's whole process group, so no surviving member holds
+// the pipes open and stalls the reap.
+func TestCancelTerminatesChildProcessGroup(t *testing.T) {
+	work := t.TempDir()
+	out := t.TempDir()
+	t.Setenv("VRG_FAKE_RG", "forkblock")
+	t.Setenv("VRG_FAKE_DIR", out)
+	sess, err := Start(context.Background(), Config{
+		Rg:      fakeRg(),
+		Argv:    []string{"--json", "--no-config", "--", "x", "."},
+		Workdir: work,
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	pid := awaitReadyPID(t, out)
+	gpid := awaitPIDFile(t, out, "grandchild")
+
+	m := sess.Model()
+	m2, cmd := update(t, m, keyPress("q"))
+	if cmd == nil {
+		t.Fatal("q while searching returned no command, want tea.Quit")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("q while searching command = %T, want tea.QuitMsg", cmd())
+	}
+	if m2.ExitCode() != 130 {
+		t.Fatalf("ExitCode = %d, want 130", m2.ExitCode())
+	}
+
+	select {
+	case <-sess.Reaped():
+	case <-time.After(10 * time.Second):
+		t.Fatal("child was not reaped within budget after cancellation — " +
+			"a surviving grandchild still holds the pipes")
+	}
+	pidIsGoneEventually(t, pid)
+	pidIsGoneEventually(t, gpid)
+
+	// The child's process group — its own pid, since the child leads
+	// the group — must be empty once every member is gone.
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := syscall.Kill(-pid, 0); err == syscall.ESRCH {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("child process group %d still exists", pid)
 }
 
 // A child that cannot be started surfaces a sanitized start error from
