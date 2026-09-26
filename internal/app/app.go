@@ -1,8 +1,12 @@
 package app
 
 import (
+	"fmt"
+	"io"
+
 	tea "charm.land/bubbletea/v2"
 	"vrg/internal/filebuffer"
+	"vrg/internal/present"
 	"vrg/internal/searchindex"
 	"vrg/internal/theme"
 	"vrg/internal/viewport"
@@ -35,11 +39,18 @@ const (
 // cancel terminates the rg child and abandons collection; the process
 // boundary confirms the reap before exiting. File loads run off the
 // update path behind loadGate — nil in production, a test seam that
-// holds the worker's read and decode/map phases.
+// holds the worker's read and decode/map phases. diags is the session
+// diagnostic collection: every diagnostic the model has processed, in
+// collection order, independent of what any screen displayed. diagCh
+// carries the collector's incremental stderr lines and diagAck is the
+// test-only acknowledgement seam — both nil in plain unit-test models.
 type Model struct {
 	phase    phase
 	cancel   func()
 	done     <-chan searchDoneMsg
+	diagCh   <-chan string
+	diagAck  io.Writer
+	diags    []string
 	index    *searchindex.Index
 	stops    []searchindex.Stop
 	files    [][]byte // distinct raw paths in index order
@@ -83,11 +94,25 @@ func newModel(done <-chan searchDoneMsg, cancel func()) Model {
 	}
 }
 
-// Init returns the command that waits for collection to finish and
-// delivers the search-done message. Collection runs off this path; the
-// model only receives its result.
+// Init returns the command that waits for the collector's next event:
+// an incremental diagnostic line or the search-done completion.
+// Collection runs off this path; the model only receives its messages.
 func (m Model) Init() tea.Cmd {
-	return func() tea.Msg { return <-m.done }
+	return m.awaitEvent
+}
+
+// awaitEvent is the collector event wait: the next diagnostic line or
+// the search completion, whichever the collector delivers first. Update
+// re-issues it for every diagnostic, so collector events are processed
+// in emission order — all streamed diagnostics land before the
+// completion that follows them.
+func (m Model) awaitEvent() tea.Msg {
+	select {
+	case line := <-m.diagCh:
+		return diagMsg{line: line}
+	case msg := <-m.done:
+		return msg
+	}
 }
 
 // Update applies one message. Resize is handled in any state so the UI
@@ -126,6 +151,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		o := decideOutcome(msg.waitErr, msg.stderr, failures, len(m.stops), recordLoss, recordDiags)
 		m.code = o.code
 		m.phase = o.screen
+		// The completion's own diagnostics join the collection. Child
+		// stderr is absent here: it was already collected line-by-line
+		// while the search ran, and collecting it again would break
+		// exactly-once.
+		for _, d := range completionDiagnostics(msg.waitErr, failures, recordDiags) {
+			m.collect(d)
+		}
 		if o.overlay {
 			m.overlay = &overlay{lines: o.diags}
 		}
@@ -136,11 +168,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		m.relayout()
 		return m, m.ensureLoad()
+	case diagMsg:
+		// The shutdown boundary: a diagnostic counts as collected once
+		// the model has processed the message carrying it.
+		m.CollectDiagnostic(msg.line)
+		return m, m.awaitEvent
 	case loadDoneMsg:
 		key := string(msg.path)
 		delete(m.loading, key)
 		if msg.err != nil {
 			m.failed[key] = true
+			m.CollectDiagnostic(fmt.Sprintf("cannot read %s: %v", present.Path(msg.path), msg.err))
 		} else {
 			m.bufs[key] = msg.buf
 		}
@@ -177,6 +215,38 @@ func (m Model) cancelled() Model {
 	m.code = 130
 	m.cancel()
 	return m
+}
+
+// collect appends an already-sanitized diagnostic line to the session
+// collection and reports the acknowledgement side channel when one is
+// wired — one acknowledgement per collected diagnostic, the evidence
+// the PTY harness waits for before sending an exit key.
+func (m *Model) collect(d string) {
+	m.diags = append(m.diags, d)
+	if m.diagAck != nil {
+		fmt.Fprintln(m.diagAck, "collected")
+	}
+}
+
+// CollectDiagnostic sanitizes raw diagnostic text through the
+// safe-presentation utility and appends it to the session collection.
+// Processing the message that carries a diagnostic — never its mere
+// arrival in a pipe — is what collects it, so a diagnostic still in
+// flight at exit is neither waited for nor replayed.
+func (m *Model) CollectDiagnostic(d string) {
+	m.collect(present.Diagnostic(d))
+}
+
+// ReplayTo writes the session diagnostic collection to w, one line per
+// collected occurrence in collection order. The process boundary runs
+// it after terminal restoration on every controlled exit — ordinary
+// quit, cancellation, controlled failure — and it never waits on
+// in-flight work. The lines were sanitized when collected, so replay
+// emits them verbatim; no persistent log is written.
+func (m Model) ReplayTo(w io.Writer) {
+	for _, d := range m.diags {
+		fmt.Fprintln(w, d)
+	}
 }
 
 // View renders the current screen on the alternate screen; on every

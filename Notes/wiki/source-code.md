@@ -10,10 +10,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `app.Session` and runs the Bubble Tea program (`WithInput(os.Stdin)`,
   `WithWindowSize(80, 24)` fallback for piped output). After `Run`
   returns, every controlled exit funnels through one cleanup boundary:
-  `sess.Cancel()` terminates a still-running child and `<-sess.Reaped()`
-  waits for its reap. Status selection: `tea.ErrInterrupted` → 130,
-  other `Run` errors → sanitized `vrg:` diagnostic on stderr after
-  terminal restoration and exit 2, otherwise the final model's
+  `sess.Cancel()` terminates a still-running child, `<-sess.Reaped()`
+  waits for its reap, then `model.ReplayTo(stderr)` writes the session
+  diagnostic collection — every diagnostic the final model processed —
+  to stderr exactly once, after terminal restoration (Issue #11).
+  Status selection: `tea.ErrInterrupted` → 130, other `Run` errors →
+  the `vrg:` diagnostic joins the collection via `CollectDiagnostic`
+  before `ReplayTo` (no separate direct write) and exit 2, otherwise the
+  final model's
   `ExitCode` (the fixed search status — 0/1/2 per the Issue #9 outcome
   table — or 130 cancellation); rg start failure →
   sanitized diagnostic, exit 2, no TUI; usage error → sanitized
@@ -22,14 +26,17 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 - `cmd/vrg/hooks.go` — the env-var test seams applied to `app.Config`:
   `VRG_TEST_REAP_FILE` (reap-evidence side channel → `ReapReport`),
   `VRG_TEST_GATE_FIFO` (boundary `PrepareGate`), `VRG_TEST_FAIL_FIFO`
-  (controlled-failure hook → `Program` context cancellation). No-op
+  (controlled-failure hook → `Program` context cancellation), and —
+  Issue #11 — `VRG_TEST_DIAG_ACK_FILE` (one acknowledgement line per
+  collected diagnostic → `DiagAck`). No-op
   when unset.
 
 ## internal/app
 
 - `internal/app/search.go` — the subprocess seam: `Config` (rg
   executable, protected argv, invocation working directory, `Drained`/
-  `PrepareGate`/`ReapReport` test hooks), `Start` (spawns
+  `PrepareGate`/`ReapReport` test hooks, and — Issue #11 — `DiagAck`,
+  the collection-acknowledgement side channel), `Start` (spawns
   `exec.CommandContext` in the working directory, fails synchronously
   before the TUI, returns a `Session` owning the model plus `Cancel`/
   `Reaped`), `collect` (concurrent stdout/stderr drainage for the whole
@@ -37,10 +44,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   aware gated index preparation — a cancelled gate abandons the build),
   and `prepareIndex` (feeds the stream through `Index.Feed` so decoding
   and lifecycle validation happen inside the index, then `Prepare`).
+  Issue #11: the stderr drain also forwards each line to the model as a
+  `diagMsg` over an unbuffered channel — pairing every send with the
+  model's event wait so the completion can never overtake a diagnostic —
+  while cancellation stops delivery and keeps draining.
   The delivered `searchDoneMsg` carries the index, captured stderr, and
   the wait error the model's outcome decision consumes. See
-  [search-spawn-and-searching-screen.md](search-spawn-and-searching-screen.md)
-  and [cancellation-and-cleanup.md](cancellation-and-cleanup.md).
+  [search-spawn-and-searching-screen.md](search-spawn-and-searching-screen.md),
+  [cancellation-and-cleanup.md](cancellation-and-cleanup.md), and
+  [stderr-replay.md](stderr-replay.md).
 - `internal/app/app.go` — the Bubble Tea `Model`: `phaseSearching` renders
   `Searching…` until the prepared index arrives (spanning post-exit
   preparation); a done message resolves the Issue #9 `decideOutcome`
@@ -62,16 +74,26 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam;
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
-  diagnostics box.
+  diagnostics box; Issue #11 adds `diags` (the session diagnostic
+  collection), `diagCh`/`diagAck` (the event channel and
+  acknowledgement seam), `awaitEvent` (the `Init` command selecting
+  between diagnostic lines and the completion, re-issued per
+  `diagMsg`), `collect`/`CollectDiagnostic` (collection plus
+  sanitization and acknowledgement), and `ReplayTo` (the
+  post-restoration replay writer the boundary runs on every controlled
+  exit).
 - `internal/app/overlay.go` — the Issue #9 outcome contract:
   `decideOutcome` (the pure function of wait error, stderr, integrity
   failures, usable results, and — consumed since Issue #10 — the
   record-loss count and record-skip diagnostics, returning screen,
   overlay flag, fixed status, and diagnostic lines),
-  `processFatal` (any wait error but benign exit 1), and
+  `processFatal` (any wait error but benign exit 1),
   `collectDiagnostics` (generated code-or-signal line, sanitized
   stderr, integrity failures, record-skip lines — all through
-  `present.Diagnostic`); the
+  `present.Diagnostic` — the display list), and — Issue #11 —
+  `completionDiagnostics`/`processDiagnostic`/`streamDiagnostics` (the
+  collection subset, child stderr excluded because the session
+  collection already took it incrementally); the
   modal `overlay` state, `overlayKey`, `overlayLayout` (hard-wrapped
   interior sized from the frame), `renderOverlay` (the centred
   `theme.Overlay` box composited over the base frame by cell-exact

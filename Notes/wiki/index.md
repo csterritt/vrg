@@ -65,6 +65,12 @@ Catalog of all wiki pages for the vrg project.
   match, underlined current match, inverse indicator, single-line-
   bordered overlay, filename rule, file list, current-file underline),
   and how browse rendering consumes it
+- [stderr-replay.md](stderr-replay.md) — Issue #11: the session
+  diagnostic collection independent of display, incremental child-stderr
+  collection through `diagMsg` on the unbuffered event channel, the
+  processed-versus-in-flight shutdown boundary, `ReplayTo` on the common
+  post-restoration writer for every controlled exit, controlled-failure
+  unification, and the `VRG_TEST_DIAG_ACK_FILE` acknowledgement seam
 
 ## Catalogs
 

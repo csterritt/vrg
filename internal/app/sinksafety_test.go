@@ -2,6 +2,7 @@ package app
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -228,6 +229,28 @@ var sinkSafetySinks = []sinkRow{
 			}
 		},
 	},
+	{
+		name: "stderr replay",
+		render: func(t *testing.T, fx hostileFixture, _ bool) string {
+			return renderReplaySink(t, fx)
+		},
+		check: func(t *testing.T, fx hostileFixture, raw string) {
+			// The replayed diagnostics carry the escaped stderr text
+			// and the escaped embedded filename — the filename's
+			// single-line form proves its newline could not become a
+			// diagnostic line break.
+			for _, w := range fx.wantDiag {
+				if !strings.Contains(raw, w) {
+					t.Fatalf("replayed diagnostic lacks escaped form %q: %q", w, raw)
+				}
+			}
+			for _, w := range fx.wantPath {
+				if !strings.Contains(raw, w) {
+					t.Fatalf("replayed diagnostic lacks escaped filename %q: %q", w, raw)
+				}
+			}
+		},
+	},
 }
 
 // The shared sink-safety table: every fixture is driven through every
@@ -361,6 +384,23 @@ func renderUsageErrorSink(t *testing.T, fx hostileFixture) string {
 			res.Kind, res.ErrorKind)
 	}
 	return res.Diagnostic + "\n\n" + cli.HelpText()
+}
+
+// renderReplaySink drives the fixture through the stderr-replay sink:
+// one collected diagnostic line carrying the injection as child stderr
+// text and one diagnostic embedding it as a filename, replayed through
+// the model's post-restoration writer.
+func renderReplaySink(t *testing.T, fx hostileFixture) string {
+	t.Helper()
+	m := newModel(nil, nil)
+	m, _ = update(t, m, diagMsg{line: "pre" + fx.inject + "post"})
+	m, _ = update(t, m, loadDoneMsg{
+		path: []byte("f" + fx.inject + ".txt"),
+		err:  errors.New("denied"),
+	})
+	var buf bytes.Buffer
+	m.ReplayTo(&buf)
+	return buf.String()
 }
 
 // renderCLIHelpSink drives a hostile operand through cli.Parse on a

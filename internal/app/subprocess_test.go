@@ -112,7 +112,7 @@ func TestChildArgvAndWorkingDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	awaitMsg(t, sess.Model(), 10*time.Second)
+	awaitDone(t, sess.Model(), 10*time.Second)
 
 	gotArgv, err := os.ReadFile(filepath.Join(out, "argv"))
 	if err != nil {
@@ -151,11 +151,7 @@ func TestDualPipeBackpressure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	msg := awaitMsg(t, sess.Model(), 30*time.Second)
-	res, ok := msg.(searchDoneMsg)
-	if !ok {
-		t.Fatalf("completion message = %T, want searchDoneMsg", msg)
-	}
+	_, res := awaitDone(t, sess.Model(), 30*time.Second)
 	if res.waitErr != nil {
 		t.Fatalf("child wait error: %v", res.waitErr)
 	}

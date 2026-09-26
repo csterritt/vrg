@@ -40,9 +40,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 // TUI. A start failure is a sanitized stderr diagnostic and exit 2
 // before the TUI exists. Every controlled exit — ordinary quit,
 // cancellation, program error — funnels through one cleanup boundary:
-// the child is terminated and reaped before the status is decided, and
-// a controlled-failure diagnostic is written exactly once, after the
-// terminal has been restored.
+// the child is terminated and reaped before the status is decided, then
+// the session diagnostic collection is replayed to stderr exactly once,
+// after the terminal has been restored. A controlled failure's own
+// diagnostic joins the collection first — the common writer serves
+// every controlled exit and there is no separate direct write.
 func runSearch(res cli.Result, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -73,17 +75,25 @@ func runSearch(res cli.Result, stderr io.Writer) int {
 	sess.Cancel()
 	<-sess.Reaped()
 
+	// fm is the last model Update produced; its session collection
+	// holds every diagnostic processed before the exit. A nil model on
+	// an early program error simply has an empty collection.
+	model, _ := fm.(app.Model)
 	switch {
 	case err == nil:
-		return fm.(app.Model).ExitCode()
+		model.ReplayTo(stderr)
+		return model.ExitCode()
 	case errors.Is(err, tea.ErrInterrupted):
 		// Interrupt arrives here when ctrl+c was a real SIGINT rather
 		// than a raw-mode keystroke the model handled.
+		model.ReplayTo(stderr)
 		return 130
 	default:
-		// A controlled application failure: the single post-restoration
-		// stderr diagnostic.
-		fmt.Fprintf(stderr, "vrg: %s\n", present.Diagnostic(err.Error()))
+		// A controlled application failure: its diagnostic enters the
+		// session collection and the common post-restoration writer
+		// replays everything — exactly once across both mechanisms.
+		model.CollectDiagnostic("vrg: " + err.Error())
+		model.ReplayTo(stderr)
 		return 2
 	}
 }

@@ -85,13 +85,36 @@ func processFatal(waitErr error) bool {
 // Everything passes through the Issue #6 diagnostic utility before it
 // can reach the screen.
 func collectDiagnostics(waitErr error, stderr []byte, failures, recordDiags []string) []string {
-	var diags []string
-	if processFatal(waitErr) {
-		diags = append(diags, fmt.Sprintf("rg failed: %s", waitErr))
-	}
+	diags := processDiagnostic(waitErr)
 	if s := strings.TrimRight(string(stderr), "\n"); s != "" {
 		diags = append(diags, strings.Split(present.Diagnostic(s), "\n")...)
 	}
+	return append(diags, streamDiagnostics(failures, recordDiags)...)
+}
+
+// completionDiagnostics returns the diagnostic lines knowable only at
+// search completion — the generated process-failure line, the
+// integrity failures, and the record tallies — excluding child stderr,
+// which the session collection already took line-by-line while the
+// search ran.
+func completionDiagnostics(waitErr error, failures, recordDiags []string) []string {
+	return append(processDiagnostic(waitErr), streamDiagnostics(failures, recordDiags)...)
+}
+
+// processDiagnostic is the generated diagnostic for a fatal process
+// outcome — one line naming the exit code or signal — or nothing when
+// the child's exit was clean or the benign status 1.
+func processDiagnostic(waitErr error) []string {
+	if processFatal(waitErr) {
+		return []string{fmt.Sprintf("rg failed: %s", waitErr)}
+	}
+	return nil
+}
+
+// streamDiagnostics escapes the stream-integrity failures and
+// record-skip diagnostic lines for display and collection.
+func streamDiagnostics(failures, recordDiags []string) []string {
+	var diags []string
 	for _, f := range failures {
 		diags = append(diags, strings.Split(present.Diagnostic(f), "\n")...)
 	}

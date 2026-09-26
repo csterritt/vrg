@@ -115,6 +115,15 @@ passes through `present.Diagnostic` — the Issue #6 utility — before it
 can reach the screen; see
 [safe-presentation.md](safe-presentation.md).
 
+Since Issue #11 the display list is assembled by `collectDiagnostics`
+while the **session collection** takes the completion-only subset from
+`completionDiagnostics` (process line, integrity failures, record-skip
+lines — `processDiagnostic`/`streamDiagnostics`) — child stderr is
+excluded there because the collection already took it line-by-line
+through `diagMsg` while the search ran, so collecting it again would
+double-count. Display and collection are independent; see
+[stderr-replay.md](stderr-replay.md).
+
 ## The modal overlay
 
 `overlay` (`internal/app/overlay.go`) holds the sanitized diagnostic
@@ -179,7 +188,8 @@ marker. See [unit-tests.md](unit-tests.md).
   lifecycle state, `IntegrityFailures`, `Stop.Incomplete`, `seal`.
 - `internal/app/overlay.go` — `decideOutcome`, `collectDiagnostics`,
   `processFatal`, the `overlay` type, `overlayKey`, `overlayLayout`,
-  `renderOverlay`, `renderBlank`.
+  `renderOverlay`, `renderBlank`; Issue #11 split the collection side
+  out as `completionDiagnostics`/`processDiagnostic`/`streamDiagnostics`.
 - `internal/app/app.go` — `phaseFatal`, the `overlay` field, the
   `decideOutcome` branch in `Update`, overlay-first key routing, and
   `View` compositing.

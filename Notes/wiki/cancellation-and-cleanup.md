@@ -16,7 +16,7 @@ and exit 130. "Searching" spans the whole collection **and** the
 post-exit preparation window: `q` after rg has exited but before the
 prepared index arrives (the gate-held window proven by
 `Config.PrepareGate`) is still cancellation, not a browse quit. `q` on
-the interim summary remains the ordinary quit, exit 0. `Esc` during
+a completed screen remains the ordinary quit with its fixed status. `Esc` during
 searching is a strict no-op — it is an overlay-dismissal key only and
 never exits a base state.
 
@@ -51,13 +51,16 @@ byte-for-byte with its pre-launch value.
 
 A controlled application failure — TUI startup error, program error,
 injected test failure — after the child has started runs the same
-cleanup (terminate, reap, restore) and then writes a sanitized
-`vrg:`-prefixed diagnostic to stderr **exactly once, after terminal
-restoration**, exiting 2. The single write site is `runSearch`'s
-post-`Run` branch; there is no second path (a replay/collection
-mechanism is Issue #11's, and the diagnostic must never flow through
-both). The injectable hook is `VRG_TEST_FAIL_FIFO`: a fifo whose first
-writer's close cancels the program context, surfacing as a `Run` error.
+cleanup (terminate, reap, restore), exits 2, and its sanitized
+`vrg:`-prefixed diagnostic reaches stderr **exactly once, after terminal
+restoration**. Since Issue #11 the failure diagnostic no longer writes
+directly: `runSearch` collects it into the session diagnostic collection
+(`model.CollectDiagnostic`) and the common post-restoration replay
+writer emits it alongside every earlier diagnostic in collection order —
+exactly-once holds across what were previously two mechanisms. The
+injectable hook is `VRG_TEST_FAIL_FIFO`: a fifo whose first writer's
+close cancels the program context, surfacing as a `Run` error. See
+[stderr-replay.md](stderr-replay.md).
 
 ## Test seams and the PTY harness
 
@@ -69,6 +72,10 @@ writer's close cancels the program context, surfacing as a `Run` error.
 - `VRG_TEST_GATE_FIFO` — boundary-level `PrepareGate`: preparation is
   held until a writer opens and closes the fifo.
 - `VRG_TEST_FAIL_FIFO` — the controlled-failure hook described above.
+- `VRG_TEST_DIAG_ACK_FILE` (Issue #11) — receives one acknowledgement
+  line per diagnostic the model processes into the session collection;
+  the application-side evidence replay tests wait on before sending an
+  exit key. Wired to `Config.DiagAck`.
 
 The PTY harness (`cmd/vrg/pty_test.go`, Linux-only) opens `/dev/ptmx`,
 gives the child a session with the slave as controlling terminal
@@ -78,7 +85,9 @@ file and either blocks forever or emits a complete stream and exits.
 Assertions combine: exit status, pid gone (`kill -0` → `ESRCH`), reap
 side-channel content, the display-restoration sequences in the captured
 stream, and slave termios equality. Issues #9 and #11 reuse this
-harness.
+harness — Issue #11's `pty_replay_test.go` additionally waits on the
+diagnostic-acknowledgement side channel before keypresses and asserts
+replayed diagnostics land after the restoration sequence.
 
 ## Tests
 

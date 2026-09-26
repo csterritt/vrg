@@ -359,6 +359,42 @@ sink-safety table:
   extensible: later issues add rows for their sinks without
   duplicating fixtures.
 
+`replay_test.go` (same package) is the Issue #11 session-collection
+and replay coverage — `replayed` runs `Model.ReplayTo` and `driveEvent`
+pumps one collector event through `Update` the way the real program
+does (bounded, so a silent channel fails rather than hangs):
+
+- `TestReplayCollectsDisplayedAndUndisplayedInOrder` — a streamed
+  stderr warning (shown in the overlay) plus two `loadDoneMsg` failures
+  no screen displays replay exactly once each in collection order on a
+  normal `q` quit.
+- `TestShutdownBoundaryCtrlC` — a real `Start`ed session with a
+  gate-held completion: the streamed `rg: warn one` is collected, then
+  `ctrl+c` exits 130 and replays only it; the completion's gated
+  `missing summary` diagnostic is never waited for or replayed, and
+  cancellation ends collection promptly with no index prepared.
+- `TestShutdownBoundaryQ` — the same boundary on the `q` route in both
+  incomplete states: `searching` (fake rg warns then `sleep`s forever —
+  collected warning replayed, `Reaped` closes promptly) and
+  `gate-held preparation` (child exited, completion held — only the
+  collected warning replays).
+- `TestControlledFailureJoinsSessionCollection` — the boundary's
+  `CollectDiagnostic` route replays the `vrg:` failure line after the
+  earlier diagnostics, once each, in collection order.
+- `TestReplayEscapesEmbeddedFilename` — a load failure on a path with
+  an embedded newline and ESC replays as one line carrying the
+  `Path`-escaped form (`f\no^[.txt`) with no raw control byte.
+
+`sinksafety_test.go` additionally gained the `stderr replay` row:
+`renderReplaySink` drives each hostile fixture through the collection
+plus `ReplayTo` and the check asserts the escaped `wantDiag` and
+`wantPath` forms in the replayed output.
+
+`model_test.go`'s completion helper became `awaitDone`: `Init` now
+yields incremental `diagMsg`s as well as `searchDoneMsg`, so the helper
+pumps the command and every follow-up through `Update` until the
+completion arrives (bounded — a missing follow-up or timeout fails).
+
 `subprocess_test.go` re-executes the test binary as fake rg via
 `TestMain` (`VRG_FAKE_RG` mode, `VRG_FAKE_DIR` artifacts):
 
@@ -430,14 +466,18 @@ stdout/stderr/status separately:
   filename marker, and sends `q`. Asserts per row: `Searching…` then
   the browse view's `f.txt` in the list/rule on stdout, exact child
   argv (combined expansion, mixed aliases, empty/`-`/`--`/`-foo`
-  patterns), exact working directory, empty stderr, exit 0.
+  patterns), exact working directory, empty stderr, exit 0. The fixture
+  workdir gained `f.txt` under Issue #11 — without it the load failure
+  is a legitimately collected diagnostic and replays to stderr.
 - `TestDualPipeDrainageAtBoundary` — a shell fake rg floods stderr with
   16 × 64 KiB while emitting a valid begin/match/end/summary stream;
   the captured stderr opens the warning overlay (escaped NULs read as
   `^@`, the first step's marker), `q` dismisses it to the browse view
   (the second step's `f.txt` marker), `q` quits at 0, a `writes-done`
-  handshake file proves the child finished both pipes, and the child's
-  stderr never reaches vrg's own stderr. `runVrgTUISteps` drives the
+  handshake file proves the child finished both pipes, and — since
+  Issue #11 — vrg's own stderr carries the collected flood exactly
+  once, sanitized (`^@` forms), as the post-restoration replay.
+  `runVrgTUISteps` drives the
   marker/key step sequence; `runVrgTUI` is the one-step wrapper.
 - `TestStartFailureNoRipgrep` — rg-free PATH: exit 2, empty stdout (no
   TUI), and a sanitized `vrg:` diagnostic naming the failure with no
@@ -499,3 +539,36 @@ where to write `ready`; the `VRG_TEST_*` seams come from
   overlay fits one frame, so both `ERRHEAD-MARKER` and `ERRTAIL-MARKER`
   are visible at once, dismissal reveals the complete browse view, and
   the exit status stays 0 — a warning, not a failure.
+
+`pty_replay_test.go` (same Linux-only harness) is the Issue #11
+process-boundary replay coverage. Every test wires
+`VRG_TEST_DIAG_ACK_FILE` and waits on the acknowledgement — one line
+per diagnostic processed into the session collection — before sending
+the exit key; `assertReplayedOnce`/`replayTail` assert on the captured
+stream after the `\x1b[?1049l` display-restoration sequence. Fake-rg
+scripts: `fakeRgWarnBlockScript` (warns then `sleep`s),
+`fakeRgWarnStreamScript` (warns + complete stream), `fakeRgWarnNoSummaryScript`
+(warns + stream without `summary`, so the completion carries a gated
+`missing summary` diagnostic), `fakeRgBadPathScript` (a complete stream
+whose one match names a file with an embedded newline and ESC):
+
+- `TestPTYCtrlCAfterDiagnosticReplaysOnce` — ack then `ctrl+c` against
+  a blocked rg: exit 130, `warn one` exactly once after restoration,
+  termios restored, `killed` reap status.
+- `TestPTYQWhileSearchingReplaysDiagnostic` — the same boundary for `q`
+  while searching: exit 130, replay once.
+- `TestPTYQDuringGateHeldPreparationReplaysDiagnostic` — rg exited
+  (reap shows `exit status 0`) while `VRG_TEST_GATE_FIFO` holds
+  preparation; the acknowledged warning replays once at 130 and the
+  gate-held `missing summary` never appears — no waiting on
+  undelivered work.
+- `TestPTYQuitAfterCompletedStreamReplaysWarning` — ack, warning
+  overlay, `q` dismisses, `q` quits at 0; `warn one` replays once after
+  restoration.
+- `TestPTYControlledFailureReplaysAlongsideEarlierDiagnostics` — ack
+  then the `VRG_TEST_FAIL_FIFO` handshake: exit 2, `warn one` and the
+  `vrg:` diagnostic each exactly once across the whole captured stream
+  (both mechanisms counted), in collection order.
+- `TestPTYReplayEscapesEmbeddedFilename` — the absent newline/ESC file
+  fails its load; the replayed `cannot read` diagnostic carries the
+  single-lined `we\nir^[d.txt` form and no raw control byte.

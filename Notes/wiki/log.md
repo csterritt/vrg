@@ -314,3 +314,41 @@ Outcome and exit-status contract; Resources and responsiveness),
 `internal/searchindex/disposition_test.go`,
 `internal/searchindex/oversized_test.go`, `internal/app/overlay.go`,
 `internal/app/app.go`, `internal/app/outcome_test.go`.
+
+## [2026-09-23] ingest | Issue #11 stderr replay of collected diagnostics
+
+Ingested the completed Issue #11 implementation. `internal/app` gained
+the session diagnostic collection: `Model.diags` holds every diagnostic
+the model processed, independent of display; `collect`'s stderr drain
+forwards each child stderr line to the model as a `diagMsg` over an
+unbuffered channel (every send pairs with the model's `awaitEvent`, so
+the completion can never overtake a diagnostic; cancellation stops
+delivery while drainage continues); `Update`'s `diagMsg` branch and the
+`searchDoneMsg` branch append through `collect`, which also writes the
+`Config.DiagAck` acknowledgement — processing the message is the
+collection boundary, so in-flight work is never waited for or replayed.
+`overlay.go` split `collectDiagnostics` (the display list, stderr
+included) from `completionDiagnostics` (the collection subset, stderr
+excluded to preserve exactly-once). `ReplayTo` emits the collection in
+order on the common post-restoration writer; `runSearch` calls it on
+every controlled exit and routes controlled failures through
+`CollectDiagnostic` first, retiring the separate direct write.
+`cmd/vrg` gained the `VRG_TEST_DIAG_ACK_FILE` seam. Created
+[stderr-replay](stderr-replay.md); updated
+[cancellation-and-cleanup](cancellation-and-cleanup.md) (unified
+failure write, new seam),
+[error-overlay-and-fatal-outcomes](error-overlay-and-fatal-outcomes.md)
+(display/collection split), [safe-presentation](safe-presentation.md)
+(the delivered `stderr replay` sink row), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. New test files:
+`internal/app/replay_test.go`, `cmd/vrg/pty_replay_test.go`; the
+lifecycle and dash-file boundary fixtures gained `f.txt` and the
+dual-pipe boundary test now expects the replayed flood. Sources:
+`Notes/issues/011-stderr-replay-of-collected-diagnostics.md`,
+`Notes/tasks/011-stderr-replay-of-collected-diagnostics.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence; Outcome and
+exit-status contract), `internal/app/app.go`, `internal/app/search.go`,
+`internal/app/overlay.go`, `internal/app/replay_test.go`,
+`internal/app/model_test.go`, `internal/app/subprocess_test.go`,
+`internal/app/sinksafety_test.go`, `cmd/vrg/main.go`,
+`cmd/vrg/hooks.go`, `cmd/vrg/main_test.go`, `cmd/vrg/pty_replay_test.go`.

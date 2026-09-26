@@ -1,11 +1,13 @@
 package app
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"vrg/internal/searchindex"
@@ -37,16 +39,32 @@ type Config struct {
 	// subprocess-boundary harness's evidence that vrg's reap path ran,
 	// rather than inferring reaping from a missing pid.
 	ReapReport io.Writer
+	// DiagAck, when non-nil, receives one acknowledgement line for
+	// every diagnostic the model processes into the session collection.
+	// The PTY harness waits on it before sending an exit key: it proves
+	// application-side processing, where a child-side write handshake
+	// would prove only that bytes reached the pipe.
+	DiagAck io.Writer
 }
 
 // searchDoneMsg delivers the finished collection to the model: the
 // prepared index, the buffered child stderr, and the child's wait error
 // (nil for a clean exit). The model's outcome decision classifies all
-// three independently — see decideOutcome in overlay.go.
+// three independently — see decideOutcome in overlay.go. The stderr
+// bytes still serve display; the session collection took them
+// line-by-line through diagMsg while the search ran.
 type searchDoneMsg struct {
 	index   *searchindex.Index
 	stderr  []byte
 	waitErr error
+}
+
+// diagMsg carries one raw child-stderr line collected while the search
+// runs, so a diagnostic lands in the session collection even when the
+// child never exits. Processing the message — escaping the line and
+// appending it — is the moment the diagnostic counts as collected.
+type diagMsg struct {
+	line string
 }
 
 // Session is one running search: the spawned child, the collector
@@ -97,24 +115,60 @@ func Start(ctx context.Context, cfg Config) (*Session, error) {
 		return nil, fmt.Errorf("cannot start rg: %w", err)
 	}
 	done := make(chan searchDoneMsg, 1)
+	// diags carries stderr lines to the model as they are read. It is
+	// unbuffered: every send pairs with the model's event wait, so the
+	// completion cannot overtake a diagnostic on the way to Update.
+	diags := make(chan string)
 	reaped := make(chan struct{})
-	go collect(ctx, cmd, stdout, stderr, cfg, reaped, done)
-	return &Session{model: newModel(done, cancel), cancel: cancel, reaped: reaped}, nil
+	go collect(ctx, cmd, stdout, stderr, cfg, reaped, done, diags)
+	m := newModel(done, cancel)
+	m.diagCh = diags
+	m.diagAck = cfg.DiagAck
+	return &Session{model: m, cancel: cancel, reaped: reaped}, nil
 }
 
 // collect drains the child's stdout and stderr concurrently for its
 // whole lifetime — neither pipe can fill and block rg — then waits for
 // exit, reports the reaped status, honors the drained signal and
-// preparation gate, prepares the index, and delivers the result.
-// Killing the child closes both pipes, so drainage ends promptly rather
-// than waiting for further output. Cancellation abandons the gate and
-// skips index preparation entirely.
-func collect(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Reader, cfg Config, reaped chan<- struct{}, done chan<- searchDoneMsg) {
+// preparation gate, prepares the index, and delivers the result. Each
+// stderr line is additionally forwarded to the model as it is read, so
+// diagnostics reach the session collection even when the child stays
+// running. Killing the child closes both pipes, so drainage ends
+// promptly rather than waiting for further output. Cancellation
+// abandons the gate and skips index preparation entirely.
+func collect(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Reader, cfg Config, reaped chan<- struct{}, done chan<- searchDoneMsg, diags chan<- string) {
 	var outBuf, errBuf bytes.Buffer
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() { defer wg.Done(); _, _ = io.Copy(&outBuf, stdout) }()
-	go func() { defer wg.Done(); _, _ = io.Copy(&errBuf, stderr) }()
+	go func() {
+		defer wg.Done()
+		// stderr is also delivered to the model line-by-line as it is
+		// read: a diagnostic reaches the session collection even if the
+		// child then blocks forever. Cancellation stops the delivery —
+		// the model has quit and no one is collecting — while drainage
+		// continues to the pipe's end.
+		live := true
+		r := bufio.NewReader(stderr)
+		for {
+			line, rerr := r.ReadString('\n')
+			if line != "" {
+				errBuf.WriteString(line)
+				if live {
+					line = strings.TrimSuffix(line, "\n")
+					line = strings.TrimSuffix(line, "\r")
+					select {
+					case diags <- line:
+					case <-ctx.Done():
+						live = false
+					}
+				}
+			}
+			if rerr != nil {
+				return
+			}
+		}
+	}()
 	wg.Wait()
 	waitErr := cmd.Wait()
 

@@ -1,0 +1,8 @@
+#!/bin/sh
+echo "warn one" >&2
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"f.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}' \
+'{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}' \
+'{"type":"summary","data":{}}'
+exit 0

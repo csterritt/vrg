@@ -97,3 +97,14 @@ Usage
  Input tokens: 162312 tokens
  Output tokens: 23544 tokens
  Cached input tokens: 3919576 tokens
+
+----
+Task 011-stderr-replay-of-collected-diagnostics.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 55 messages
+ Input tokens: 108611 tokens
+ Output tokens: 29894 tokens
+ Cached input tokens: 4341180 tokens

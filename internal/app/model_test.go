@@ -34,19 +34,34 @@ func update(t *testing.T, m Model, msg tea.Msg) (Model, tea.Cmd) {
 	return nm.(Model), cmd
 }
 
-// awaitMsg runs the Init command's wait on a goroutine and bounds the
-// wait: exceeding the budget means collection deadlocked, which fails
-// rather than hangs the suite.
-func awaitMsg(t *testing.T, m Model, budget time.Duration) tea.Msg {
+// awaitDone pumps the collector event stream the way the real program
+// does — the event command and the re-issue each diagnostic returns —
+// feeding every message through Update until the search-done completion
+// arrives, which it returns alongside the resulting model. The budget
+// bounds the whole wait: exceeding it means collection deadlocked,
+// which fails rather than hangs the suite.
+func awaitDone(t *testing.T, m Model, budget time.Duration) (Model, searchDoneMsg) {
 	t.Helper()
-	ch := make(chan tea.Msg, 1)
-	go func() { ch <- m.Init()() }()
-	select {
-	case msg := <-ch:
-		return msg
-	case <-time.After(budget):
-		t.Fatal("collection did not complete within budget; suspected deadlock")
-		return nil
+	deadline := time.Now().Add(budget)
+	cmd := m.Init()
+	for {
+		ch := make(chan tea.Msg, 1)
+		go func() { ch <- cmd() }()
+		select {
+		case msg := <-ch:
+			var follow tea.Cmd
+			m, follow = update(t, m, msg)
+			if done, ok := msg.(searchDoneMsg); ok {
+				return m, done
+			}
+			if follow == nil {
+				t.Fatalf("event %T returned no follow-up command", msg)
+			}
+			cmd = follow
+		case <-time.After(time.Until(deadline)):
+			t.Fatal("collection did not complete within budget; suspected deadlock")
+			return m, searchDoneMsg{}
+		}
 	}
 }
 
@@ -161,8 +176,7 @@ func TestGateHoldsSearchingAfterRgExit(t *testing.T) {
 	}
 
 	close(gate)
-	msg := awaitMsg(t, m, 10*time.Second)
-	m2, _ := update(t, m, msg)
+	m2, _ := awaitDone(t, m, 10*time.Second)
 	if got := m2.View().Content; !strings.Contains(got, "Loading…") {
 		t.Fatalf("view after gate release = %q, want the browse placeholder", got)
 	}

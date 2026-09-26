@@ -355,6 +355,11 @@ func TestDashFileRootAtProcessBoundary(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "-"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// The fake rg reports f.txt relative to the working directory;
+	// create it so its load succeeds and no diagnostic is collected.
+	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	fakeDir, capDir := writeFakeRg(t, fakeRgScript)
 	res := runVrgTUI(t, dir, searchEnv(fakeDir, capDir), "foo", "./-")
 	if res.code != 0 {
@@ -385,6 +390,11 @@ func TestSearchLifecycleAtBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	work := t.TempDir()
+	// The fake rg reports f.txt relative to the working directory;
+	// create it so its load succeeds and no diagnostic is collected.
+	if err := os.WriteFile(filepath.Join(work, "f.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	cases := []struct {
 		name string
@@ -449,7 +459,8 @@ func TestSearchLifecycleAtBoundary(t *testing.T) {
 // exiting, the captured stderr opens the warning overlay (its escaped
 // NUL bytes read as ^@), and dismissing it reveals the browse view —
 // every match landed in the index. Exit status is still 0: rg exited
-// cleanly and the stream was intact.
+// cleanly and the stream was intact. The collected diagnostics are then
+// replayed to vrg's own stderr once the TUI closes.
 func TestDualPipeDrainageAtBoundary(t *testing.T) {
 	flood := `#!/bin/sh
 printf '%s\n' '{"type":"begin","data":{"path":{"text":"f.txt"}}}'
@@ -479,8 +490,10 @@ exit 0
 	if _, err := os.Stat(filepath.Join(capDir, "writes-done")); err != nil {
 		t.Fatalf("child handshake missing — it did not finish both pipes: %v", err)
 	}
-	if res.stderr != "" {
-		t.Fatalf("captured stderr leaked to vrg stderr: %q", res.stderr)
+	// The collected flood is replayed to vrg's stderr after exit —
+	// escaped, so the NUL bytes surface as ^@.
+	if !strings.Contains(res.stderr, "^@") {
+		t.Fatalf("stderr replay lacks the collected diagnostics: %.200q", res.stderr)
 	}
 }
 

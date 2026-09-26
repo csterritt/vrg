@@ -21,17 +21,33 @@ const (
 	// envFailFIFO names a fifo whose first writer's close injects a
 	// controlled application failure into the running program.
 	envFailFIFO = "VRG_TEST_FAIL_FIFO"
+	// envDiagAckFile names a file that receives one acknowledgement
+	// line per diagnostic processed into the session collection — the
+	// application-side evidence replay tests wait on before sending an
+	// exit key.
+	envDiagAckFile = "VRG_TEST_DIAG_ACK_FILE"
 )
 
 // wireTestHooks applies the VRG_TEST_* seams to cfg and returns the
 // context the program runs under plus a cleanup func.
 func wireTestHooks(cfg *app.Config) (context.Context, func()) {
 	ctx := context.Background()
-	cleanup := func() {}
+	var closers []io.Closer
 	if p := os.Getenv(envReapFile); p != "" {
 		if f, err := os.Create(p); err == nil {
 			cfg.ReapReport = f
-			cleanup = func() { _ = f.Close() }
+			closers = append(closers, f)
+		}
+	}
+	if p := os.Getenv(envDiagAckFile); p != "" {
+		if f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+			cfg.DiagAck = f
+			closers = append(closers, f)
+		}
+	}
+	cleanup := func() {
+		for _, c := range closers {
+			_ = c.Close()
 		}
 	}
 	if p := os.Getenv(envGateFIFO); p != "" {
