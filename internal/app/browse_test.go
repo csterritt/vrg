@@ -12,9 +12,14 @@ import (
 
 // browseModel returns a model past a completed search: browse phase,
 // dimensions set, and the load command for the first file in hand.
+// The pop-up timer is suppressed — a file-crossing command is just the
+// destination's load — so tests not exercising the pop-up stay
+// synchronous; pop-up tests substitute instantPopupTimer or inject
+// popupExpiredMsg directly.
 func browseModel(t *testing.T, workdir string, w, h int, recs ...string) (Model, tea.Cmd) {
 	t.Helper()
 	m := newModel(nil, nil)
+	m.popupTimer = func(int) tea.Cmd { return nil }
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: w, Height: h})
 	m, cmd := update(t, m, searchDoneMsg{index: fixtureIndex(t, workdir, recs...)})
 	return m, cmd

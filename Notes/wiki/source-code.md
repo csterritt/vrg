@@ -83,7 +83,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   startup-after-load trigger;
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
-  diagnostics box; Issue #11 adds `diags` (the session diagnostic
+  diagnostics box; Issue #15 adds the pop-up state (`popupID`,
+  `popupSeq`, `popupPath`, the `popupTimer` test seam), the
+  `popupExpiredMsg` case with instance-keyed dismissal, the any-key
+  dismissal ahead of normal key routing, the current-file
+  `loadDoneMsg` failure route into `openOverlay`, and pop-up
+  compositing under the overlay in `View`; Issue #11 adds `diags` (the
+  session diagnostic
   collection), `diagCh`/`diagAck` (the event channel and
   acknowledgement seam), `awaitEvent` (the `Init` command selecting
   between diagnostic lines and the completion, re-issued per
@@ -107,8 +113,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   interior sized from the frame), `renderOverlay` (the centred
   `theme.Overlay` box composited over the base frame by cell-exact
   `ansi.Truncate`/`ansi.Cut` splicing), and `renderBlank` (the frame
-  under a fatal-only overlay). See
-  [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md).
+  under a fatal-only overlay). Issue #15 adds `openOverlay` (the single
+  overlay-opening route — appends lines when an overlay is already up,
+  and cancels any live pop-up so it cannot return) and `composite`
+  (the shared centred cell-exact splice `renderOverlay` and
+  `renderPopup` both consume). See
+  [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md)
+  and [file-change-popup.md](file-change-popup.md).
 - `internal/app/noresults.go` — `renderNoResults` (Issue #8): the
   centred "No results found" message on the frame's middle row, with
   "(N binary files skipped)" appended when exclusion emptied the list,
@@ -143,13 +154,27 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `currentPath` onto `Index.Current()`. Issue #14 adds `reveal` (the
   target = the destination line's smallest span start cell, reported to
   `Viewport.Reveal`; the `saved` entry is replaced only when the
-  viewport moved) and calls it at the end of every moved `navigate`. See
+  viewport moved) and calls it at the end of every moved `navigate`.
+  Issue #15 opens the file-change pop-up inside the `FileChanged`
+  branch — selection time, before the destination loads — and batches
+  its instance-keyed expiry command with the load. See
   [browse-tracer.md](browse-tracer.md),
   [match-navigation.md](match-navigation.md),
   [destination-reveal.md](destination-reveal.md),
+  [file-change-popup.md](file-change-popup.md),
   [viewport-scrolling.md](viewport-scrolling.md),
   [safe-presentation.md](safe-presentation.md), and
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
+- `internal/app/popup.go` — the Issue #15 file-change pop-up:
+  `popupExpiredMsg` (the expiry carrying its instance ID), `popupTick`
+  (the one-second `tea.Tick` behind the `popupTimer` test seam),
+  `openPopup` (mints the next instance, stores the destination's raw
+  path bytes, returns the expiry command), and `renderPopup` (the
+  centred `theme.Overlay` box — `present.Path`-escaped path
+  left-truncated with a leading `…` — recomputed from the current
+  frame dimensions on every render, so resize recentres and
+  re-truncates without touching the timer). See
+  [file-change-popup.md](file-change-popup.md).
 
 ## internal/searchindex
 

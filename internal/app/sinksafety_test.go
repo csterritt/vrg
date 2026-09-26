@@ -127,9 +127,10 @@ type sinkRow struct {
 }
 
 // sinkSafetySinks is the table of every output sink existing at this
-// point: the three browse sinks, the usage-error stderr composition,
-// and the generated command-line help on stdout (distinct from the
-// Issue #31 TUI help dialog, which adds its own row later).
+// point: the three browse sinks, the Issue #15 file-change pop-up, the
+// usage-error stderr composition, and the generated command-line help
+// on stdout (distinct from the Issue #31 TUI help dialog, which adds
+// its own row later).
 var sinkSafetySinks = []sinkRow{
 	{
 		name:   "file-list entry",
@@ -174,6 +175,23 @@ var sinkSafetySinks = []sinkRow{
 			for _, w := range fx.wantText {
 				if !strings.Contains(raw, w) {
 					t.Fatalf("panel content lacks escaped form %q: %q", w, raw)
+				}
+			}
+		},
+	},
+	{
+		name:   "file-change pop-up",
+		tui:    true,
+		styled: true,
+		render: func(t *testing.T, fx hostileFixture, styled bool) string {
+			return renderPopupSink(t, fx, styled)
+		},
+		check: func(t *testing.T, fx hostileFixture, raw string) {
+			// The hostile bytes name the destination file; the pop-up
+			// shows their Path-escaped single-line form inside the box.
+			for _, w := range fx.wantPath {
+				if !strings.Contains(raw, "│"+w+"│") {
+					t.Fatalf("pop-up lacks escaped form %q: %q", w, raw)
 				}
 			}
 		},
@@ -346,6 +364,42 @@ func renderBrowseSink(t *testing.T, fx hostileFixture, inName bool, styled bool)
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, searchDoneMsg{index: ix})
 	m, _ = update(t, m, cmd())
+	return m.View().Content
+}
+
+// renderPopupSink drives the fixture through the file-change pop-up's
+// real composition path at 80x24: the hostile bytes name the second
+// matched file, n crosses the file boundary, and the raw View()
+// content is returned with the pop-up composited on top. styled
+// selects real styling; false renders through theme.Plain.
+func renderPopupSink(t *testing.T, fx hostileFixture, styled bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	hostile := "f" + fx.inject + ".txt"
+	writeWorkFile(t, dir, "a.txt", "hit\n")
+	writeWorkFile(t, dir, hostile, "hit\n")
+	ix := searchindex.New(dir)
+	for _, name := range []string{"a.txt", hostile} {
+		ix.Add(searchindex.Record{Kind: searchindex.KindBegin, Path: []byte(name)})
+		ix.Add(searchindex.Record{
+			Kind:       searchindex.KindMatch,
+			Path:       []byte(name),
+			LineNumber: 1,
+			Line:       []byte("hit\n"),
+			Submatches: []searchindex.Submatch{{Start: 0, End: 3, Bytes: []byte("hit")}},
+		})
+		ix.Add(searchindex.Record{Kind: searchindex.KindEnd, Path: []byte(name)})
+	}
+	ix.Add(searchindex.Record{Kind: searchindex.KindSummary})
+	ix.Prepare()
+
+	m := newModel(nil, nil)
+	if !styled {
+		m.theme = theme.Plain()
+	}
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = update(t, m, searchDoneMsg{index: ix})
+	m, _ = update(t, m, keyPress("n"))
 	return m.View().Content
 }
 

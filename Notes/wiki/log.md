@@ -483,3 +483,51 @@ Decisions → Viewport), `internal/viewport/viewport.go`,
 `internal/viewport/reveal_test.go`, `internal/app/app.go`,
 `internal/app/browse.go`, `internal/app/reveal_test.go`,
 `internal/app/nav_test.go`, `internal/app/scroll_test.go`.
+
+## [2026-09-23] ingest | Issue #15 file-change pop-up
+
+Ingested the completed Issue #15 implementation: `internal/app` gained
+`popup.go` — `popupExpiredMsg` (the expiry carrying its instance ID),
+`popupTick` (the one-second `tea.Tick` behind the `popupTimer` seam),
+`openPopup` (fresh instance per pop-up, raw destination path stored),
+and `renderPopup` (centred `theme.Overlay` box over a
+`present.Path`-escaped, left-truncated-with-`…` path — geometry
+recomputed per render, so resize recentres and re-truncates the same
+instance without restarting its timer). `navigate` opens the pop-up in
+the `FileChanged` branch — at selection, before the destination loads —
+and `tea.Batch`es the expiry with the load command; the
+`popupExpiredMsg` case dismisses only on an instance-ID match (stale
+timers inert); the `KeyPressMsg` branch clears the pop-up before normal
+routing so any key dismisses and still performs its action;
+`openOverlay` (new single overlay-opening route — appends when already
+open) cancels the pop-up permanently, and `View` composites pop-up
+under overlay. `composite` was factored out of `renderOverlay` for
+shared use. A `loadDoneMsg` failure for the current path now opens the
+diagnostics overlay (the first slice of Issue #26's read-failure
+rules), which is also the injected cancellation trigger.
+`cmd/vrg/pty_replay_test.go`'s embedded-filename replay test gained a
+second `q` since the current-file load failure now opens the overlay.
+Created [file-change-popup](file-change-popup.md); updated
+[match-navigation](match-navigation.md) (crossings open the pop-up),
+[error-overlay-and-fatal-outcomes](error-overlay-and-fatal-outcomes.md)
+(`openOverlay`, `composite`, current-file failure route, pop-up
+cancellation), [safe-presentation](safe-presentation.md) (the
+`file-change pop-up` sink row, delivered), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. New test file:
+`internal/app/popup_test.go` (`instantPopupTimer` injected-seam helper;
+selection-time centred opening over `Loading…` with the batched
+load + expiry, load completion never restarting, fresh-instance minting
+with stale-expiry rejection, dismissal keys performing their actions,
+resize recentring without restart, left-truncation at both sizes,
+error-overlay cancellation with no return); `sinksafety_test.go` gained
+the `file-change pop-up` row via `renderPopupSink`; `browse_test.go`'s
+`browseModel` installs a nil-command `popupTimer` keeping navigation
+commands synchronous. Sources:
+`Notes/issues/015-file-change-popup.md`,
+`Notes/tasks/015-file-change-popup.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence; File loading,
+cache, reload, and selection consistency; Navigation, viewport, and
+logical anchors), `internal/app/popup.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/app/overlay.go`,
+`internal/app/popup_test.go`, `internal/app/sinksafety_test.go`,
+`internal/app/browse_test.go`, `cmd/vrg/pty_replay_test.go`.

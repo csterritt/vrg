@@ -1,0 +1,24 @@
+first.txt                       ── mid.txt ─────────────────────────────────────
+mid.txt                          1  x000001
+nasty^[]0;pwned^G.txt            2  x000002
+…xxxxxxxxxxxxxxxxxxxxxxxxxxx.txt 3  hit 00003
+zzz.txt                          4  x000004
+                                 5  x000005
+                                 6  x000006
+                                 7  x000007
+                                 8  x000008
+                                 9  x000009
+                                10 ┌───────┐
+                                   │mid.txt│
+                                   └───────┘
+
+
+
+
+
+
+
+
+
+
+

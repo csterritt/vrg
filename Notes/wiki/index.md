@@ -91,6 +91,12 @@ Catalog of all wiki pages for the vrg project.
   BOF/EOF precedence, the saved-or-top starting sequence on entry
   including the startup-after-load trigger, and the move-driven
   saved-state replacement rule
+- [file-change-popup.md](file-change-popup.md) — Issue #15: the
+  selection-time file-change pop-up (one-second instance-keyed timer
+  with stale-expiry rejection, any-key dismissal that still performs
+  the key's action, render-time centring and left-truncation surviving
+  resize, error-overlay cancellation with no return, safe `present.Path`
+  display, and the current-file load-failure overlay trigger)
 
 ## Catalogs
 

@@ -249,8 +249,8 @@ func TestPTYControlledFailureReplaysAlongsideEarlierDiagnostics(t *testing.T) {
 
 // fakeRgBadPathScript emits a complete stream whose one match names a
 // file with an embedded newline and ESC — a path that cannot load in
-// the empty working directory — then exits 0. The load failure is a
-// collected diagnostic that no screen displays.
+// the empty working directory — then exits 0. The current-file load
+// failure is a collected diagnostic and opens the error overlay.
 const fakeRgBadPathScript = `#!/bin/sh
 echo $$ > "$VRG_CAPTURE_DIR/ready"
 printf '%s\n' \
@@ -272,6 +272,11 @@ func TestPTYReplayEscapesEmbeddedFilename(t *testing.T) {
 	awaitReadyPID(t, capDir)
 	r.waitFor(t, "(unreadable)") // the failed load's placeholder
 	awaitFileContent(t, ack)     // the failure diagnostic is collected
+	// The current-file failure opened the error overlay: the first q
+	// dismisses it, the second quits the browse view.
+	before := len(r.output())
+	r.send(t, "q")
+	r.waitForGrowth(t, before)
 	r.send(t, "q")
 	code, out := r.waitExit(t)
 	if code != 0 {

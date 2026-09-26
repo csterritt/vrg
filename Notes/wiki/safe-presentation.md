@@ -84,7 +84,10 @@ set restructured as a shared, extensible table:
   `wantDiag` forms inside the border — and, since Issue #11, the
   **stderr replay** row: the replay writer is driven through
   `renderReplaySink` and the check asserts the escaped `wantDiag` and
-  `wantPath` (embedded filename) forms in the replayed output.
+  `wantPath` (embedded filename) forms in the replayed output — and,
+  since Issue #15, the **file-change pop-up**: `renderPopupSink` names
+  the navigation destination with the fixture bytes and the check
+  asserts the `Path`-escaped `wantPath` form inside the box.
 - **Method**: each fixture × sink renders through the real composition
   path under `theme.Plain` — the no-style path where no escape byte may
   legitimately appear — and asserts on the **raw output before any ANSI
@@ -100,7 +103,9 @@ it through `internal/present` and adds a `sinkSafetySinks` row without
 duplicating fixtures — Issue #9 (error overlay — delivered; see
 [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md)),
 Issue #11 (stderr replay — delivered; see
-[stderr-replay.md](stderr-replay.md)), Issue #15 (file-change pop-up),
+[stderr-replay.md](stderr-replay.md)), Issue #15 (file-change pop-up —
+delivered; see
+[file-change-popup.md](file-change-popup.md)),
 Issue #31 (TUI help dialog substitutions), Issue #34 (any generated
 README/help text).
 

@@ -335,7 +335,9 @@ contracts; `codePress` synthesizes the special-key messages and
 `nav_test.go` (same package) covers the Issue #13 `n`/`p` navigation
 wiring; `twoFileModel` lands the model in browse on a.txt:1 with stops
 a.txt:1, a.txt:3, b.txt:2 (records emitted b.txt-first) and b.txt
-uncached:
+uncached (since Issue #15 `browseModel` also installs a nil-command
+`popupTimer`, so crossings keep returning just the load command and no
+real timer is started):
 
 - `TestStartupSelectsFirstStopInPathOrder` — the cursor starts on the
   first stop in path order: the filename rule and list underline show
@@ -392,6 +394,44 @@ leading `hit`:
 - `TestFirstVisitStartsAtTopThenReveals` — an uncached destination
   shows `Loading…` at top 0, then the load's top-of-file start plus
   reveal lands the target a third down.
+
+`popup_test.go` (same package) covers the Issue #15 file-change
+pop-up; `popupModel` lands a two-file browse with `instantPopupTimer`
+(an injected `popupTimer` seam resolving to `popupExpiredMsg{id}`
+immediately, so `cmdMsgs` flattens a crossing's batch — load + expiry —
+with no sleeps) and `popupBox` locates the box in a frame:
+
+- `TestPopupOpensCentredAtSelection` — the same-file `n` shows no box;
+  the crossing `n` shows the destination's `Path`-escaped name in a
+  bordered box whose border columns sit exactly at the centre of the
+  80×24 frame over `Loading…`, and the returned command flattens to
+  the destination's `loadDoneMsg` plus `popupExpiredMsg` carrying the
+  instance ID — the pop-up starts at selection, not at load.
+- `TestLoadCompletionDoesNotRestartPopup` — the load completing
+  leaves the same instance active (content renders beneath) and
+  returns no command; the instance's own expiry then dismisses.
+- `TestPopupInstanceKeyedExpiry` — a second crossing mints a fresh
+  instance; the first's stale expiry leaves the newer pop-up up, and
+  only its own expiry clears it.
+- `TestPopupKeyDismissalStillActs` — `down` dismisses the pop-up and
+  scrolls one row in the same update.
+- `TestPopupDismissKeyStillNavigates` — the quick second `n` dismisses
+  and navigates: the cursor lands on the next file and that
+  crossing's own fresh pop-up opens.
+- `TestPopupDismissalKeys` — `q` dismisses and quits with `ExitCode` 0;
+  `Esc` performs only the dismissal.
+- `TestPopupRecentresOnResize` — shrinking to 40×10 recentres the box
+  on the new frame with the same instance alive and no command
+  returned.
+- `TestPopupLeftTruncatesLongPath` — a 104-cell destination name
+  renders left-truncated with a leading `…` sized to the 78-cell
+  interior at 80 columns, and renders untruncated at 120.
+- `TestErrorOverlayCancelsPopup` — a `loadDoneMsg` failure for the
+  current path opens the diagnostics overlay (`cannot read …`), the
+  pop-up is gone and never returns after `Esc` dismissal, and its
+  late expiry is inert.
+- `TestNoPopupWithoutCrossing` — the startup stop and its completed
+  load open nothing.
 
 `noresults_test.go` (same package) covers the Issue #8 no-results
 outcome; `exitErr` builds a real `*exec.ExitError` child wait error and
@@ -461,7 +501,10 @@ sink-safety table:
   stdout, and — since Issue #9 — the `error overlay` row, where the
   fixture rides in as captured child stderr over a fatal exit and the
   check asserts the `Diagnostic`-escaped `wantDiag` forms inside the
-  border. Under `theme.Plain` (the no-style composition path) the raw
+  border, and — since Issue #15 — the `file-change pop-up` row, where
+  `renderPopupSink` names the destination file with the fixture bytes
+  and asserts the `Path`-escaped `wantPath` form inside the box. Under
+  `theme.Plain` (the no-style composition path) the raw
   output — asserted before any ANSI stripping — must contain no fixture
   control byte verbatim and none of the universal set
   (`\x1b`, `\x07`, `\x9b`, `\xc2\x85`, bare `\r`); TUI rows pin the

@@ -1,0 +1,20 @@
+#!/bin/sh
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"first.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"first.txt"},"lines":{"text":"hit 00003\n"},"line_number":3,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+'{"type":"match","data":{"path":{"text":"first.txt"},"lines":{"text":"hit 00005\n"},"line_number":5,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+'{"type":"end","data":{"path":{"text":"first.txt"},"binary_offset":null}}' \
+'{"type":"begin","data":{"path":{"text":"mid.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"mid.txt"},"lines":{"text":"hit 00003\n"},"line_number":3,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+'{"type":"end","data":{"path":{"text":"mid.txt"},"binary_offset":null}}' \
+'{"type":"begin","data":{"path":{"text":"nasty\u001b]0;pwned\u0007.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"nasty\u001b]0;pwned\u0007.txt"},"lines":{"text":"hit 00001\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+'{"type":"end","data":{"path":{"text":"nasty\u001b]0;pwned\u0007.txt"},"binary_offset":null}}' \
+'{"type":"begin","data":{"path":{"text":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt"},"lines":{"text":"hit 00005\n"},"line_number":5,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+'{"type":"end","data":{"path":{"text":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt"},"binary_offset":null}}' \
+'{"type":"begin","data":{"path":{"text":"zzz.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"zzz.txt"},"lines":{"text":"hit 00002\n"},"line_number":2,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+'{"type":"end","data":{"path":{"text":"zzz.txt"},"binary_offset":null}}' \
+'{"type":"summary","data":{}}'
+exit 0

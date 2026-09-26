@@ -72,7 +72,10 @@ actual transition ends in `reveal()` — see
   `ensureLoad` then requests the destination's load when it is neither
   cached nor in flight, so an uncached destination shows `Loading…`
   until its `loadDoneMsg` arrives — whose completion path applies the
-  same saved-state restore plus reveal. Issue #17 owns the
+  same saved-state restore plus reveal. Since Issue #15 a crossing
+  also opens the file-change pop-up at selection time, its
+  instance-keyed expiry batched with the load command — see
+  [file-change-popup.md](file-change-popup.md). Issue #17 owns the
   stale-layout request path; this issue's handoff is the immediate
   switch plus the saved-viewport restore the reveal overrides.
 - **Manual scrolling** never touches the cursor: `n`/`p` continue from
@@ -103,6 +106,8 @@ Issue #14 added in `internal/app/reveal_test.go`. See
 
 See also: [destination-reveal.md](destination-reveal.md) (the reveal
 every actual transition now triggers),
+[file-change-popup.md](file-change-popup.md) (the pop-up every file
+crossing now opens),
 [viewport-scrolling.md](viewport-scrolling.md) (the per-file
 saved state this handoff consumes),
 [searchindex-records-and-stops.md](searchindex-records-and-stops.md)

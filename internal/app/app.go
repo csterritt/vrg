@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"vrg/internal/filebuffer"
@@ -75,8 +76,18 @@ type Model struct {
 	// overlay is the open diagnostics overlay, nil when none is up. It
 	// owns the keyboard while open.
 	overlay *overlay
-	code    int
-	quit    bool
+	// popupID is the active file-change pop-up's instance — zero when
+	// none is up. popupSeq mints the instance IDs; popupPath is the raw
+	// destination path the pop-up displays, captured at selection.
+	// popupTimer builds the instance's expiry command — nil selects the
+	// real one-second tick; tests substitute a synchronous or nil
+	// command so batched navigation commands stay instant.
+	popupID    int
+	popupSeq   int
+	popupPath  []byte
+	popupTimer func(id int) tea.Cmd
+	code       int
+	quit       bool
 }
 
 // newModel returns a searching model awaiting the collection result on
@@ -168,7 +179,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.collect(d)
 		}
 		if o.overlay {
-			m.overlay = &overlay{lines: o.diags}
+			m.openOverlay(o.diags)
 		}
 		if m.phase != phaseBrowse {
 			return m, nil
@@ -186,7 +197,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.loading, key)
 		if msg.err != nil {
 			m.failed[key] = true
-			m.CollectDiagnostic(fmt.Sprintf("cannot read %s: %v", present.Path(msg.path), msg.err))
+			d := fmt.Sprintf("cannot read %s: %v", present.Path(msg.path), msg.err)
+			m.CollectDiagnostic(d)
+			// A current-file failure interrupts with the error
+			// overlay; a non-current one stays diagnostic-only.
+			if bytes.Equal(msg.path, m.currentPath()) {
+				m.openOverlay(strings.Split(present.Diagnostic(d), "\n"))
+			}
 		} else {
 			m.bufs[key] = msg.buf
 			m.rows[key] = bufferRows{buf: msg.buf}
@@ -200,7 +217,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.vp.SetTop(m.saved[key])
 			m.reveal()
 		}
+	case popupExpiredMsg:
+		// Only the instance that scheduled this expiry answers it —
+		// a stale instance's expiry cannot dismiss a newer pop-up.
+		if msg.id == m.popupID {
+			m.popupID = 0
+		}
 	case tea.KeyPressMsg:
+		// Any key press dismisses the pop-up; the key still performs
+		// its normal action in this same update.
+		m.popupID = 0
 		if m.overlay != nil {
 			return m.overlayKey(msg.String())
 		}
@@ -295,6 +321,9 @@ func (m Model) View() tea.View {
 		base = renderBlank(m.width, m.height)
 	default:
 		base = "Searching…\n"
+	}
+	if m.popupID != 0 {
+		base = m.renderPopup(base)
 	}
 	if m.overlay != nil {
 		base = m.renderOverlay(base)

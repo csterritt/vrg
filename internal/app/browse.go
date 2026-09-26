@@ -59,15 +59,17 @@ func (m Model) currentStop() (searchindex.Stop, bool) {
 
 // navigate applies one matched-line cursor step: n advances and p
 // retreats, both circularly. The zero- and one-stop indexes are strict
-// no-ops — no command, no state change. A step within the same file
-// keeps the viewport and reveals the destination target. A step into
-// another file switches the panel: the departing file's top row joins
-// its saved state, the viewport reinstalls the new file's prepared
-// rows at its own saved top — top of file on a first visit — the
-// destination reveal runs over that starting point when content is
+// no-ops — no command, no state change, no pop-up. A step within the
+// same file keeps the viewport and reveals the destination target. A
+// step into another file switches the panel — the departing file's top
+// row joins its saved state, the viewport reinstalls the new file's
+// prepared rows at its own saved top (top of file on a first visit),
+// the destination reveal runs over that starting point when content is
 // already cached, and its load is requested when the file is neither
-// cached nor in flight nor already failed. The file list needs no
-// wiring: its underlined entry derives from the cursor.
+// cached nor in flight nor already failed — and opens the file-change
+// pop-up: a fresh instance whose one-second expiry command returns
+// alongside the load. The file list needs no wiring: its underlined
+// entry derives from the cursor.
 func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 	depart := m.currentPath()
 	var step searchindex.Step
@@ -79,6 +81,7 @@ func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 	if !step.Moved {
 		return m, nil
 	}
+	var pop tea.Cmd
 	if step.FileChanged {
 		if depart != nil {
 			m.saved[string(depart)] = m.vp.Top()
@@ -89,9 +92,10 @@ func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 		// completing for it later applies the same restore before the
 		// reveal; the reveal then overrides either starting point.
 		m.vp.SetTop(m.saved[string(step.Stop.Path)])
+		pop = m.openPopup(step.Stop.Path)
 	}
 	m.reveal()
-	return m, m.ensureLoad()
+	return m, tea.Batch(m.ensureLoad(), pop)
 }
 
 // reveal applies the destination reveal for the current stop: the

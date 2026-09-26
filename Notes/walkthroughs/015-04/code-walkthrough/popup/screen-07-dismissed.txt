@@ -1,0 +1,24 @@
+first.txt                       ── …xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt
+mid.txt                          2  x000002
+nasty^[]0;pwned^G.txt            3  x000003
+…xxxxxxxxxxxxxxxxxxxxxxxxxxx.txt 4  x000004
+zzz.txt                          5  hit 00005
+                                 6  x000006
+                                 7  x000007
+                                 8  x000008
+                                 9  x000009
+                                10  x000010
+                                11  x000011
+                                12  x000012
+                                13  x000013
+                                14  x000014
+                                15  x000015
+                                16  x000016
+                                17  x000017
+                                18  x000018
+                                19  x000019
+                                20  x000020
+                                21  x000021
+                                22  x000022
+                                23  x000023
+                                24  x000024

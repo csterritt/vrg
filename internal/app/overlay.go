@@ -214,30 +214,54 @@ func renderBlank(w, h int) string {
 	return strings.Join(rows, "\n")
 }
 
+// openOverlay opens the diagnostics overlay over lines — or appends
+// them to the open one, preserving the reader's scroll position — and
+// cancels any active pop-up; a dismissed overlay never restores one.
+func (m *Model) openOverlay(lines []string) {
+	if m.overlay == nil {
+		m.overlay = &overlay{lines: lines}
+	} else {
+		m.overlay.lines = append(m.overlay.lines, lines...)
+	}
+	m.popupID = 0
+}
+
 // renderOverlay composites the modal box over the base frame: the
 // visible slice of wrapped lines inside a single-line border painted in
 // the base colours, centred on the frame.
 func (m Model) renderOverlay(base string) string {
 	lines, interiorH, scroll := m.overlayLayout()
 	visible := lines[scroll : scroll+interiorH]
-	box := m.theme.Overlay(visible)
+	return m.composite(base, m.theme.Overlay(visible))
+}
+
+// composite paints a box centred over the base frame, clipped to the
+// frame: each box row splices over the base row at the centred
+// position, preserving the base's head and tail. A box wider than the
+// frame truncates rather than overflowing.
+func (m Model) composite(base, box string) string {
 	boxRows := strings.Split(box, "\n")
-	boxW := ansi.StringWidth(boxRows[0])
-	boxH := len(boxRows)
+	boxW := 0
+	for _, r := range boxRows {
+		boxW = max(boxW, ansi.StringWidth(r))
+	}
+	boxW = min(boxW, m.width)
 
 	rows := strings.Split(base, "\n")
 	for len(rows) < m.height {
 		rows = append(rows, "")
 	}
 	x := max(0, (m.width-boxW)/2)
-	y := max(0, (m.height-boxH)/2)
+	y := max(0, (m.height-len(boxRows))/2)
 	for i, br := range boxRows {
 		if y+i >= len(rows) {
 			break
 		}
+		br = ansi.Truncate(br, m.width-x, "")
+		w := ansi.StringWidth(br)
 		head := ansi.Truncate(rows[y+i], x, "")
 		head += strings.Repeat(" ", max(0, x-ansi.StringWidth(head)))
-		tail := ansi.Cut(rows[y+i], x+boxW, m.width)
+		tail := ansi.Cut(rows[y+i], x+w, m.width)
 		rows[y+i] = head + br + tail
 	}
 	return strings.Join(rows[:m.height], "\n")

@@ -127,7 +127,13 @@ double-count. Display and collection are independent; see
 ## The modal overlay
 
 `overlay` (`internal/app/overlay.go`) holds the sanitized diagnostic
-lines and the scroll offset. While `m.overlay` is non-nil it owns the
+lines and the scroll offset. Since Issue #15 every opening goes
+through `openOverlay`: it appends the new lines when an overlay is
+already open (preserving the reader's scroll) and cancels any live
+file-change pop-up — an arriving error overlay removes the pop-up and
+it cannot return when the overlay is dismissed (see
+[file-change-popup.md](file-change-popup.md)). While `m.overlay` is
+non-nil it owns the
 keyboard — `overlayKey` runs before the base-state switch:
 
 - `up`/`down` scroll one row, clamped at both ends.
@@ -145,11 +151,21 @@ overflows the border; interior height is the smaller of frame minus
 border and the wrapped count. `renderOverlay` composites
 `theme.Overlay`'s single-line bordered box — base colours, see
 [theme-and-colour-toggle.md](theme-and-colour-toggle.md) — centred over
-the underlying frame's rows via cell-exact `ansi.Truncate`/`ansi.Cut`
-splicing. The overlay is a new output sink and carries its
+the underlying frame's rows via `composite`, the cell-exact
+`ansi.Truncate`/`ansi.Cut` splice Issue #15 refactored out so the
+file-change pop-up shares it. The overlay is a new output sink and
+carries its
 `sinkSafetySinks` row (`error overlay`): the hostile fixture set drives
 hostile bytes in as captured stderr and asserts the Diagnostic-escaped
 form inside the border.
+
+A `loadDoneMsg` failure for the **current** path also opens the
+overlay — the `cannot read <safe path>: <err>` line through
+`openOverlay`, alongside the `(unreadable)` panel placeholder — the
+first slice of Issue #26's read-failure rules, delivered as the
+injected trigger Issue #15's pop-up cancellation is tested against. A
+failure for a non-current path still only joins the session collection
+for stderr replay.
 
 ## Fixed-status rule
 
@@ -189,7 +205,9 @@ marker. See [unit-tests.md](unit-tests.md).
 - `internal/app/overlay.go` — `decideOutcome`, `collectDiagnostics`,
   `processFatal`, the `overlay` type, `overlayKey`, `overlayLayout`,
   `renderOverlay`, `renderBlank`; Issue #11 split the collection side
-  out as `completionDiagnostics`/`processDiagnostic`/`streamDiagnostics`.
+  out as `completionDiagnostics`/`processDiagnostic`/`streamDiagnostics`;
+  Issue #15 added `openOverlay` (open-or-append plus pop-up
+  cancellation) and `composite` (the shared centred splice).
 - `internal/app/app.go` — `phaseFatal`, the `overlay` field, the
   `decideOutcome` branch in `Update`, overlay-first key routing, and
   `View` compositing.
