@@ -61,16 +61,28 @@ safe presentation", and "Module Design" in `Notes/PRD-vrg.md`.
 Full-file work never lands on the UI update path:
 
 - `ensureLoad` starts one worker `tea.Cmd` per file (repeat requests
-  are dropped, not queued). The worker runs `filebuffer.Load` — read,
-  split, escape, map — and returns a `loadDoneMsg` carrying the
-  finished `*filebuffer.Buffer` keyed by the raw path bytes.
+  are dropped, not queued). Since Issue #25 the worker is keyed by a
+  minted request identity recorded under the raw path: it runs
+  `filebuffer.Load`'s two phases — `ReadFile` then `Prepare`
+  (split, escape, map, validate) — and returns a `loadDoneMsg`
+  carrying the path, the request identity, and the finished
+  `*filebuffer.Buffer` (or the read/decode error).
 - `Update` only installs the completed buffer (or marks the path
-  failed); it performs no read/decode/map work itself.
+  failed), and only while the completion's request identity matches
+  the path's in-flight request — a stale or unsolicited result cannot
+  touch the cache, the status maps, or the panel. A completion for a
+  non-current path updates that path's entries alone; the visible
+  panel changes only when the completed path is current. Successful
+  buffers are retained for the session — no eviction. See
+  [async-load-isolation.md](async-load-isolation.md).
 - Until the buffer arrives the panel shows `Loading…` behind a minimal
-  one-digit gutter; a failed load shows `(unreadable)`.
-- `Model.loadGate` is the test seam: when set, the worker blocks on the
-  channel before its read and decode/map phases, letting tests prove
-  keys and resizes are still processed mid-load.
+  one-digit gutter — scrolling and panning it are no-ops while
+  navigation, the toggles, and the exit keys stay live — and a failed
+  load shows `(unreadable)`.
+- `Model.loadGate` is the test seam for the whole worker; Issue #25
+  added `mapGate`, which holds only the decode/map phase after the
+  read has completed, so tests can prove `ctrl+c`, `n`/`p`, `w`, `c`,
+  and resizes stay actionable while the expensive phase is held.
 - The current file opens at top-of-file — or at its saved anchor on a
   revisit — then the Issue #14 destination reveal scrolls a hidden
   navigation target to the one-third row (see
@@ -161,7 +173,8 @@ follows an unescaped ESC.
   `FileList`, `FilenameRule`, `Match`, `CurrentMatch`, `Indicator`,
   `CurrentFile`, `Overlay`). See
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
-- `internal/app/browse.go` — `loadDoneMsg`, `layoutDoneMsg`/
+- `internal/app/browse.go` — `loadDoneMsg` (request-keyed since
+  Issue #25), `layoutDoneMsg`/
   `installed` (Issue #17), `ensureLoad`/`loadCmd`,
   `syncLayout`/`ensureLayout`/`layoutCmd`/`currentRows` (Issue #17),
   `scroll`, `navigate` (Issue #13 cursor steps and the file-crossing
@@ -172,7 +185,9 @@ follows an unescaped ESC.
   continuation gutters), `renderCells`; Issue #24 adds `listWidth`
   (the real three-term formula and the `listShow` gate), `scrollList`,
   `truncateLeft`, and the filename rule's status-note slot.
-- `internal/app/app.go` — `phaseBrowse`, buffer/loading/failed maps,
+- `internal/app/app.go` — `phaseBrowse`, buffer/loading/failed maps
+  (`loading` is the Issue #25 path → request-identity map, minted by
+  `loadSeq`; `mapGate` is the decode/map test seam),
   the `rows`/`reqKey`/`revs` layout bookkeeping and `saved` anchors
   (Issue #17), the Issue #16 `wrap` flag (`w` toggles), `fileIdx`/
   `listW`/`textW` caches and the `listEntry` seam (Issue #17),
@@ -184,6 +199,8 @@ See also: [theme-and-colour-toggle.md](theme-and-colour-toggle.md) (the
 scheme toggle and the style set this view consumes),
 [safe-presentation.md](safe-presentation.md) (the generalized
 utility and sink-safety table),
+[async-load-isolation.md](async-load-isolation.md) (the Issue #25
+request-keyed load contract),
 [searchindex-records-and-stops.md](searchindex-records-and-stops.md)
 (raw path identity and ordering the list inherits),
 [cancellation-and-cleanup.md](cancellation-and-cleanup.md) (the exit

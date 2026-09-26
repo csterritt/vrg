@@ -287,7 +287,7 @@ func TestPopupLeftTruncatesLongPath(t *testing.T) {
 func TestErrorOverlayCancelsPopup(t *testing.T) {
 	m, _ := popupModel(t, 8, 4)
 	stale := m.popupID
-	m, _ = update(t, m, loadDoneMsg{path: []byte("b.txt"), err: errors.New("denied")})
+	m, _ = update(t, m, loadDoneMsg{path: []byte("b.txt"), req: m.loading["b.txt"], err: errors.New("denied")})
 	if m.overlay == nil {
 		t.Fatal("the current-file load failure did not open the error overlay")
 	}

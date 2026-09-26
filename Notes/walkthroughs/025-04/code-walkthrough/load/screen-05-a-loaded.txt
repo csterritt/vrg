@@ -1,0 +1,24 @@
+./a-big-slow-loading-file.txt  ── ./a-big-slow-loading-file.txt ────────────────
+./b-small-fast-file.txt              1  MARK alpha
+                                     2  padline 0000002 xxxxxxxxxxxxxxxxxxxxxxxx
+                                        xxxxxxxxxxxx
+                                     3  padline 0000003 xxxxxxxxxxxxxxxxxxxxxxxx
+                                        xxxxxxxxxxxx
+                                     4  padline 0000004 xxxxxxxxxxxxxxxxxxxxxxxx
+                                        xxxxxxxxxxxx
+                                     5  padline 0000005 xxxxxxxxxxxxxxxxxxxxxxxx
+                                        xxxxxxxxxxxx
+                                     6  padline 0000006 xxxxxxxxxxxxxxxxxxxxxxxx
+                                        xxxxxxxxxxxx
+                                     7  padline 0000007 xxxxxxxxxxxxxxxxxxxxxxxx
+                                        xxxxxxxxxxxx
+                                     8  padline 0000008 xxxxxxxxxxxxxxxxxxxxxxxx
+                                        xxxxxxxxxxxx
+                                     9  padline 0000009 xxxxxxxxxxxxxxxxxxxxxxxx
+                                        xxxxxxxxxxxx
+                                    10  padline 0000010 xxxxxxxxxxxxxxxxxxxxxxxx
+                                        xxxxxxxxxxxx
+                                    11  padline 0000011 xxxxxxxxxxxxxxxxxxxxxxxx
+                                        xxxxxxxxxxxx
+                                    12  padline 0000012 xxxxxxxxxxxxxxxxxxxxxxxx
+                                        xxxxxxxxxxxx

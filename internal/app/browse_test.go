@@ -261,7 +261,7 @@ func TestLoadFailureShowsUnreadable(t *testing.T) {
 		`{"type":"end","data":{"path":{"text":"gone.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m2, _ := update(t, m, loadDoneMsg{path: []byte("gone.txt"), err: os.ErrNotExist})
+	m2, _ := update(t, m, loadDoneMsg{path: []byte("gone.txt"), req: m.loading["gone.txt"], err: os.ErrNotExist})
 	if v := m2.View().Content; !strings.Contains(v, "(unreadable)") {
 		t.Fatalf("failed load view lacks the unreadable placeholder: %q", v)
 	}

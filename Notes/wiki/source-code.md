@@ -78,7 +78,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   Issue #5 state: `stops`/`files`, the `bufs`/`loading`/
   `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam —
   the Issue #5 `cursor` field is gone since Issue #13, the matched-line
-  cursor living in `searchindex.Index` instead;
+  cursor living in `searchindex.Index` instead; Issue #25 keys `loading`
+  by a request identity `loadSeq` mints (one in-flight load per raw
+  path, repeats dropped not queued; the `loadDoneMsg` case installs only
+  on a matching identity and updates a non-current path's entries
+  without touching the panel) and adds `mapGate`, the seam holding the
+  decode/map phase alone after the read;
   Issue #12 adds `saved` (per-path vertical state for revisits —
   `viewport.Target` logical anchors since Issue #17) and the
   `up`/`down`/`u`/`d`/`pgup`/`pgdown` key case; Issue #14's `reveal`
@@ -146,8 +151,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md).
 - `internal/app/browse.go` — the Issue #5 browse composition:
   `loadDoneMsg` (the worker's prepared-buffer completion keyed by raw
-  path), `ensureLoad`/`loadCmd` (one async load per file; read, split,
-  escape, and map all off the update path, behind `loadGate` in tests),
+  path and — Issue #25 — the minted request identity),
+  `ensureLoad`/`loadCmd` (one async load per file; read, split,
+  escape, and map all off the update path, behind `loadGate` and —
+  since Issue #25 — the post-read `mapGate` in tests),
   `renderBrowse` (raw-path-ordered file list — `FileList` entries with
   `CurrentFile` underline on the current one — painted from the
   `listTop` scrolled window,
@@ -212,6 +219,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [match-navigation.md](match-navigation.md),
   [destination-reveal.md](destination-reveal.md),
   [file-change-popup.md](file-change-popup.md),
+  [async-load-isolation.md](async-load-isolation.md),
   [viewport-scrolling.md](viewport-scrolling.md),
   [wrap-mode.md](wrap-mode.md),
   [horizontal-panning.md](horizontal-panning.md),
@@ -328,7 +336,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 - `internal/filebuffer/filebuffer.go` — `Buffer`, one file's prepared
   display-ready content: `Load` reads, splits, escapes, and maps the
   file (all inside the worker command, never on `Update`) through
-  `internal/present`, validates each stop's submatches against the
+  `internal/present` — Issue #25 split it into `ReadFile` (the read
+  phase) and `Prepare` (the decode/map phase on raw bytes) so tests
+  can gate the expensive phase alone — validates each stop's
+  submatches against the
   line's raw bytes, and exposes `LineCount`,
   `GutterWidth`/`GutterDigits` (largest line number's digit width +
   two spaces, minimum one slot), `Text`, `Cells`, and `Spans`. Since

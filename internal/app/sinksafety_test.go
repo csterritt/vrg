@@ -448,8 +448,11 @@ func renderReplaySink(t *testing.T, fx hostileFixture) string {
 	t.Helper()
 	m := newModel(nil, nil)
 	m, _ = update(t, m, diagMsg{line: "pre" + fx.inject + "post"})
+	path := "f" + fx.inject + ".txt"
+	req := mintLoad(&m, path)
 	m, _ = update(t, m, loadDoneMsg{
-		path: []byte("f" + fx.inject + ".txt"),
+		path: []byte(path),
+		req:  req,
 		err:  errors.New("denied"),
 	})
 	var buf bytes.Buffer

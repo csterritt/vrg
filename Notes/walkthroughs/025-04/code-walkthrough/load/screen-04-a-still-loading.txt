@@ -1,0 +1,24 @@
+./a-big-slow-loading-file.txt  ── ./a-big-slow-loading-file.txt ────────────────
+./b-small-fast-file.txt           Loading…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -944,3 +944,38 @@ Sources: `Notes/issues/024-file-list-layout-width-truncation-toggle.md`,
 `Notes/PRD-vrg.md` (File list and layout; Layout and indicators —
 the width bullets), `internal/app/app.go`, `internal/app/browse.go`,
 `internal/app/filelist_test.go`.
+## [2026-09-24] ingest | Issue #25 asynchronous load isolation — request-keyed completions and responsiveness
+
+Ingested the completed Issue #25 implementation: `loading` is now a
+raw-path → request-identity map (`loadSeq` mints), `loadDoneMsg`
+carries `req`, and the `Update` case installs a completion only while
+its identity matches the path's in-flight request — stale and
+unsolicited results touch nothing, and a late completion after
+cancellation hits the `quit` guard. A completion accepted for a
+non-current path updates only that path's `bufs`/`revs` and drops its
+stale `rows`/`reqKey` entries without touching the visible panel;
+current-path completions still reset the offset and drive the
+Issue #17 layout install plus pending reveal. `ensureLoad` drops
+re-entry to an in-flight path — one load per raw path, nothing queued
+— and `bufs` retains successful buffers for the session with no
+eviction. `filebuffer.Load` split into `ReadFile` (read) and `Prepare`
+(decode/map) so the new `mapGate` seam can hold the expensive phase
+alone — a read-phase failure completes without reaching it — while the
+gated tests prove resize, `w`, `c`, `n`/`p`, and `ctrl+c` stay
+actionable. Created [async-load-isolation](async-load-isolation.md);
+updated [source-code](source-code.md) (`app.go`'s
+`loading`/`loadSeq`/`mapGate`, `browse.go`'s `req`-keyed completion
+and two-phase worker, `filebuffer.go`'s `ReadFile`/`Prepare` split),
+[unit-tests](unit-tests.md) (the new `load_test.go` catalog and the
+request-minting injector updates),
+[browse-tracer](browse-tracer.md) (the async-loading section rewritten
+for keyed completions and the two gates),
+[match-navigation](match-navigation.md) (the crossing's load link),
+and the index.
+New test file: `internal/app/load_test.go`.
+Sources: `Notes/issues/025-async-load-isolation.md`,
+`Notes/tasks/025-async-load-isolation.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency; Resources and responsiveness), `internal/app/app.go`,
+`internal/app/browse.go`, `internal/app/load_test.go`,
+`internal/filebuffer/filebuffer.go`.

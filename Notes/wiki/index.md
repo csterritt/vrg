@@ -170,6 +170,13 @@ Catalog of all wiki pages for the vrg project.
   (real notes owned by Issues #26, #29, #30), minimal-movement list
   scrolling, and every width change routed through the Issue #17
   prepared-layout path preserving the logical anchor
+- [async-load-isolation.md](async-load-isolation.md) — Issue #25:
+  navigation live while a file loads, load completions keyed by raw
+  path plus minted request identity installing only on match, panel
+  isolation for non-current completions, one in-flight load per path
+  with re-entry dropped not queued, session-long buffer retention,
+  post-cancellation rejection, the separately gated decode/map phase,
+  and the actionable input list while it is held
 
 ## Catalogs
 

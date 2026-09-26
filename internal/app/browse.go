@@ -17,9 +17,12 @@ import (
 // loadDoneMsg delivers a prepared buffer for one raw path: the worker
 // has already read, split, escaped, and mapped the file, so Update
 // stores the result without full-file work. The raw path bytes are the
-// cache key — never a displayed form.
+// cache key — never a displayed form — and req is the request identity
+// ensureLoad minted; a completion whose identity is not the in-flight
+// request's is dropped.
 type loadDoneMsg struct {
 	path []byte
+	req  int
 	buf  *filebuffer.Buffer
 	err  error
 }
@@ -183,35 +186,48 @@ func (m Model) currentPath() []byte {
 }
 
 // ensureLoad starts the current file's load unless it is in flight or
-// settled; repeat requests are dropped, not queued. It returns the
-// worker command or nil.
+// settled; repeat requests are dropped, not queued — at most one load
+// is ever in flight per raw path. It mints the request's identity,
+// records it as the path's in-flight request, and returns the worker
+// command or nil.
 func (m *Model) ensureLoad() tea.Cmd {
 	s, ok := m.currentStop()
 	if !ok {
 		return nil
 	}
 	key := string(s.Path)
-	if m.loading[key] || m.bufs[key] != nil || m.failed[key] {
+	if m.loading[key] != 0 || m.bufs[key] != nil || m.failed[key] {
 		return nil
 	}
-	m.loading[key] = true
-	return m.loadCmd(s)
+	m.loadSeq++
+	m.loading[key] = m.loadSeq
+	return m.loadCmd(s, m.loadSeq)
 }
 
-// loadCmd returns the worker command for one file: read, split, escape,
-// and map all happen off the update path, behind the loadGate test seam
-// when one is set. The completion message is keyed by the raw path.
-func (m Model) loadCmd(s searchindex.Stop) tea.Cmd {
+// loadCmd returns the worker command for one file: the read, split,
+// escape, and map all happen off the update path. The loadGate test
+// seam holds the whole worker before the read; mapGate holds the
+// decode/map phase alone, after the read — so a test can prove input
+// stays actionable while the expensive phase is parked (Issue #25).
+// The completion message is keyed by the raw path and the request
+// identity.
+func (m Model) loadCmd(s searchindex.Stop, req int) tea.Cmd {
 	path := bytes.Clone(s.Path)
 	resolved := bytes.Clone(s.ResolvedPath)
 	stops := stopsForFile(m.index, path)
-	gate := m.loadGate
+	gate, mapGate := m.loadGate, m.mapGate
 	return func() tea.Msg {
 		if gate != nil {
 			<-gate
 		}
-		buf, err := filebuffer.Load(resolved, stops)
-		return loadDoneMsg{path: path, buf: buf, err: err}
+		data, err := filebuffer.ReadFile(resolved)
+		if err != nil {
+			return loadDoneMsg{path: path, req: req, err: err}
+		}
+		if mapGate != nil {
+			<-mapGate
+		}
+		return loadDoneMsg{path: path, req: req, buf: filebuffer.Prepare(data, stops)}
 	}
 }
 

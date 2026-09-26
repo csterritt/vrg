@@ -69,9 +69,15 @@ func TestReplayCollectsDisplayedAndUndisplayedInOrder(t *testing.T) {
 		t.Fatalf("overlay lacks the warning diagnostic: %q", v)
 	}
 	// Failures on non-current files are collected but never displayed:
-	// no overlay, no in-UI indicator.
-	m, _ = update(t, m, loadDoneMsg{path: []byte("late-a.txt"), err: errors.New("denied")})
-	m, _ = update(t, m, loadDoneMsg{path: []byte("late-b.txt"), err: errors.New("vanished")})
+	// no overlay, no in-UI indicator. Their loads are in flight — a
+	// completion is dropped unless it carries the in-flight request's
+	// identity.
+	reqA := mintLoad(&m, "late-a.txt")
+	m, _ = update(t, m, loadDoneMsg{
+		path: []byte("late-a.txt"), req: reqA, err: errors.New("denied")})
+	reqB := mintLoad(&m, "late-b.txt")
+	m, _ = update(t, m, loadDoneMsg{
+		path: []byte("late-b.txt"), req: reqB, err: errors.New("vanished")})
 
 	m, _ = pressKey(t, m, "q") // dismiss the overlay, revealing browse
 	m, cmd := pressKey(t, m, "q")
@@ -270,8 +276,10 @@ func TestControlledFailureJoinsSessionCollection(t *testing.T) {
 // stays one line and carries no raw control bytes.
 func TestReplayEscapesEmbeddedFilename(t *testing.T) {
 	m := newModel(nil, nil)
+	req := mintLoad(&m, "f\no\x1b.txt")
 	m, _ = update(t, m, loadDoneMsg{
 		path: []byte("f\no\x1b.txt"),
+		req:  req,
 		err:  errors.New("denied"),
 	})
 	got := replayed(t, m)

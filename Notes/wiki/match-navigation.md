@@ -79,7 +79,10 @@ actual transition ends in `reveal()` — see
   `ensureLoad` requests the destination's load when it is neither
   cached nor in flight, so an uncached destination shows `Loading…`
   until its `loadDoneMsg` arrives — whose completion issues the
-  layout request that completes the same sequence. Since Issue #15 a
+  layout request that completes the same sequence. Issue #25 keys that
+  completion by request identity and keeps navigation itself live
+  while a load runs — see
+  [async-load-isolation.md](async-load-isolation.md). Since Issue #15 a
   crossing also opens the file-change pop-up at selection time, its
   instance-keyed expiry batched with the load and layout commands —
   see [file-change-popup.md](file-change-popup.md).
@@ -111,6 +114,8 @@ Issue #14 added in `internal/app/reveal_test.go`. See
 
 See also: [logical-anchor-and-layout.md](logical-anchor-and-layout.md)
 (the anchor handoff and pending reveal intent a crossing carries),
+[async-load-isolation.md](async-load-isolation.md) (the load the
+crossing may start and the mid-load navigation contract),
 [destination-reveal.md](destination-reveal.md) (the reveal
 every actual transition now triggers),
 [file-change-popup.md](file-change-popup.md) (the pop-up every file

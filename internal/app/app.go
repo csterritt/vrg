@@ -40,8 +40,13 @@ const (
 // lifecycle state and renders the searching and browse screens.
 // cancel terminates the rg child and abandons collection; the process
 // boundary confirms the reap before exiting. File loads run off the
-// update path behind loadGate — nil in production, a test seam that
-// holds the worker's read and decode/map phases. diags is the session
+// update path behind two test seams — loadGate holds the whole worker
+// before its read, mapGate holds the decode/map phase alone after the
+// read; both are nil in production. loading maps each raw path to its
+// in-flight request's identity — at most one load per path, repeat
+// requests dropped not queued — which loadSeq mints; a completion
+// whose request identity does not match is discarded. diags is the
+// session
 // diagnostic collection: every diagnostic the model has processed, in
 // collection order, independent of what any screen displayed. diagCh
 // carries the collector's incremental stderr lines and diagAck is the
@@ -59,7 +64,8 @@ type Model struct {
 	fileIdx map[string]int // raw path → its files index
 	bufs    map[string]*filebuffer.Buffer
 	failed  map[string]bool
-	loading map[string]bool
+	loading map[string]int // raw path → in-flight request identity
+	loadSeq int            // mints request identities
 	// rows holds each file's installed prepared row model with the
 	// (path, content revision, text width, wrap mode) key it was built
 	// for — preparation runs off the update path and a completion
@@ -96,6 +102,7 @@ type Model struct {
 	theme    theme.Theme
 	vp       viewport.Viewport
 	loadGate <-chan struct{}
+	mapGate  <-chan struct{}
 	width    int
 	height   int
 	// binarySkipped is the distinct count of files dropped by binary
@@ -140,7 +147,7 @@ func newModel(done <-chan searchDoneMsg, cancel func()) Model {
 		done:    done,
 		bufs:    make(map[string]*filebuffer.Buffer),
 		failed:  make(map[string]bool),
-		loading: make(map[string]bool),
+		loading: make(map[string]int),
 		rows:    make(map[string]installed),
 		revs:    make(map[string]int),
 		reqKey:  make(map[string]viewport.Key),
@@ -251,6 +258,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.awaitEvent
 	case loadDoneMsg:
 		key := string(msg.path)
+		if req, ok := m.loading[key]; !ok || req != msg.req {
+			// A completion whose path has no in-flight request, or
+			// whose identity is not the in-flight request's, is
+			// stale or unsolicited: it cannot touch the cache, the
+			// status maps, or the panel.
+			return m, nil
+		}
 		delete(m.loading, key)
 		if msg.err != nil {
 			m.failed[key] = true

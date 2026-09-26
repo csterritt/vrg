@@ -520,6 +520,52 @@ anchor preservation through every relayout cause:
   joins the filename rule at 80 columns, and at 30 columns the path
   truncates so the note still paints whole.
 
+`load_test.go` (same package, Issue #25) pins the asynchronous
+load-isolation contracts. Helpers: `gatedModel` (a browse model wired
+with `loadGate` holding the worker's start and `mapGate` holding the
+decode/map phase after the read, plus a suppressed pop-up timer,
+returning the startup file's load command uninvoked) and `mintLoad`
+(registers an in-flight request identity so a test can inject a
+completion whose real worker never ran — existing injectors in
+`browse_test.go`, `popup_test.go`, `replay_test.go`,
+`filelist_test.go`, and `sinksafety_test.go` mint or read the
+in-flight request identity the same way):
+
+- `TestNavigationActiveWhileLoadInFlight` — with a.txt's worker
+  genuinely started and parked on `loadGate`, `n` crosses to b.txt at
+  once (placeholder panel, its own load issues) and `p` returns to the
+  still-loading a.txt whose in-flight request is unchanged; releasing
+  the gate lets the original request render its content.
+- `TestPlaceholderScrollAndPanAreNoOp` — all six scroll keys and all
+  six pan keys on a `Loading…` panel return no command, leave the
+  frame byte-identical, and write no saved state, while `w`, `c`, and
+  `tab` keep their ordinary meanings mid-load.
+- `TestReEnterLoadingPathIsDroppedNotQueued` — away-and-back during a
+  held load returns no command (no second worker, nothing queued), the
+  in-flight request identity is unchanged, and its completion still
+  installs.
+- `TestLateCompletionIsolatedToItsPath` — A→B→C with every worker
+  held: a.txt's and b.txt's completions while c.txt is current fill
+  only their own cache entries — c.txt's frame, viewport, and saved
+  state byte-identical — and revisits show the cached content with no
+  new load (the crossing issues only a layout request) and no
+  eviction.
+- `TestLoadCompletionKeyedByRequestIdentity` — a completion whose
+  identity is not the in-flight request's, and one for a path with no
+  request at all, are dropped without touching the cache, the status
+  maps, the diagnostics, or the panel; the in-flight request's own
+  completion installs.
+- `TestLoadCompletionAfterQuitDiscarded` — a worker completion after
+  `ctrl+c` returns no command, keeps exit 130, and fills no cache.
+- `TestDecodeMapGateKeepsInputsActionable` — with the read finished
+  and the worker parked on `mapGate`, resize, `w`, `c`, `n`, and `p`
+  all apply without waiting; releasing the gate delivers the prepared
+  buffer to the then-current file (in the light scheme `c` switched
+  to).
+- `TestMapGateHoldsDecodeMapNotRead` — a read-phase failure (missing
+  file) completes promptly even while `mapGate` is held, proving the
+  gate sits after the read.
+
 `pan_test.go` (same package, Issue #18) drives the horizontal-pan
 keys through `Update`; `panRecords` builds a one-stop record set for a
 file whose first line is the match:

@@ -23,10 +23,27 @@ type Buffer struct {
 // file, where rg removes its three bytes from first-line data.
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
+// ReadFile is the read phase of a load: the file's raw bytes. It is
+// separate from Prepare — the decode/map phase — so the caller can
+// schedule, gate, or cancel the phases independently (Issue #25).
+func ReadFile(path []byte) ([]byte, error) {
+	return os.ReadFile(string(path))
+}
+
 // Load reads path and prepares its display-ready content and validated
-// highlights. The whole read, split, escape, and map happens here — the
-// caller delivers the finished Buffer as its completion message so no
-// full-file work lands on the UI update path.
+// highlights — ReadFile followed by Prepare. The caller delivers the
+// finished Buffer as its completion message so no full-file work lands
+// on the UI update path.
+func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
+	data, err := ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return Prepare(data, stops), nil
+}
+
+// Prepare turns previously read file bytes into a display-ready
+// Buffer: the split, escape, and map work of a load.
 //
 // Each stop's submatches are checked against the line's raw bytes:
 // out-of-bounds ranges and text mismatches are dropped. A leading
@@ -35,11 +52,7 @@ var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 // that line shift by its length into the raw view before validating
 // and mapping. Stale marking is Issue #29's; UTF-16/32 classification
 // is Issue #30's.
-func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
-	data, err := os.ReadFile(string(path))
-	if err != nil {
-		return nil, err
-	}
+func Prepare(data []byte, stops []searchindex.Stop) *Buffer {
 	b := &Buffer{spans: make(map[int][]present.Span)}
 	bom := 0
 	if bytes.HasPrefix(data, utf8BOM) {
@@ -83,7 +96,7 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 				clusterSpan(ln.Cells(), ln.Span(start, end)))
 		}
 	}
-	return b, nil
+	return b
 }
 
 // LineCount returns the number of source lines; an empty file has zero.

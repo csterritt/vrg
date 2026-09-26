@@ -346,7 +346,8 @@ func TestGutterGrowthRelayoutKeepsAnchorText(t *testing.T) {
 		if err != nil {
 			t.Fatalf("reload load: %v", err)
 		}
-		mm, cmd = update(t, mm, loadDoneMsg{path: []byte("a.txt"), buf: buf})
+		req := mintLoad(&mm, "a.txt")
+		mm, cmd = update(t, mm, loadDoneMsg{path: []byte("a.txt"), req: req, buf: buf})
 		if cmd == nil {
 			t.Fatal("the gutter-changing load issued no relayout request")
 		}
