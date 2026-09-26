@@ -110,7 +110,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   load), `reqKey` (latest requested key per path) — plus
   `pending` (the newest-stop reveal intent awaiting a matching
   layout — `pendingIntent` since Issue #27), the `listW`/`textW`/`fileIdx` caches and `listEntry` seam
-  keeping `View()` off the whole file list (Issue #38 pins `textW` as
+  keeping `View()` off the whole file list (Issue #40 adds the
+  completion-time `fileStops` per-file stop groups and the
+  `longestEntryW` widest-entry measure so no update or frame
+  re-enumerates the index or re-measures the entries, and narrows
+  `index` to the `stopIndex` read seam — `Current`/`Next`/`Prev`/
+  `Stops` — that a counting test double wraps to prove `Stops` is
+  never invoked after the completion snapshot); Issue #38 pins `textW` as
   the panel width — terminal minus `listW` — minus the gutter and the
   reserved right-indicator column, the width `layoutKey` carries and
   every viewport install site uses), the `layoutDoneMsg`
@@ -284,7 +290,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   file crossing the departing anchor is saved, the destination's
   matching-key rows and saved anchor installed, and `ensureLoad`
   requests the load when uncached) and moves `currentStop`/
-  `currentPath` onto `Index.Current()`. Issue #14 adds `reveal` (the
+  `currentPath` onto `Index.Current()` — the Issue #40 `stopIndex`
+  read seam. Issue #40 also points `loadCmd` at the destination's
+  precomputed `fileStops` group rather than re-filtering
+  `Index.Stops()` per issued load and has `listWidth` read the
+  completion-time `longestEntryW` rather than scanning the entries —
+  the `stopsForFile` helper moved to `browse_test.go`, test-only
+  since. Issue #14 adds `reveal` (the
   target reported to `Viewport.Reveal`; the `saved` entry is replaced
   only when the viewport moved) and calls it at the end of every moved
   `navigate`; Issue #29 hands the target computation to

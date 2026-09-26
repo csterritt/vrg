@@ -1620,3 +1620,49 @@ Sources: `Notes/tasks/039-render-from-shared-grapheme-cell-model.md`,
 `internal/app/browse.go`, `internal/app/overlay.go`,
 `internal/app/popup.go`, `internal/theme/theme.go`,
 `internal/app/cellmodel_test.go`, `internal/app/guard_test.go`.
+## [2026-09-24] ingest | Issue #40 bounded browse render — completion-time groups, no whole-index scans
+
+Issue #40 (`Notes/tasks/040-browse-render-no-whole-index-scan.md`)
+removed the last whole-index work from the keystroke and frame paths.
+The `searchDoneMsg` browse branch now builds the immutable per-file
+structures once — `m.stops` (the single `Index.Stops()`
+materialization), `files`/`fileIdx`, `fileStops` (raw path → its stop
+group), and `longestEntryW` (the widest list entry's painted cell
+width via `listEntry` + `present.CellWidth`). `loadCmd` hands each
+load worker the destination's precomputed `fileStops` group instead of
+re-filtering `Index.Stops()` per issued load, and `listWidth` reads
+`longestEntryW` as formula term 1 instead of re-measuring every entry
+inside `syncLayout`. `m.index` narrows to the new `stopIndex` read
+seam (`Current`/`Next`/`Prev`/`Stops`) so `countingIndex` can tally
+whole-stop materializations; `stopsForFile` moved to
+`browse_test.go`, test-only since nothing in production needs it.
+Per-frame work stays as before: `renderBrowse` queries `listEntry`
+only for `files[listTop : listTop+rows]` and left-truncates each
+visible entry against the *current* `listW` through
+`present.TruncateLeft` — the truncated text cannot be precomputed
+because the allotted width moves with resize, gutter growth, wrap
+mode, and the list toggle. The new guard
+(`internal/app/rendercost_test.go`) counts provider queries and
+`Stops()` calls across a navigation `Update()` plus the resulting
+`View()` without reset, bounding the combined transition by the
+visible row count; the resize and gutter-growth case asserts the
+visible entries re-truncate at grapheme boundaries inside the same
+bound. Rationale: the PRD's *Resources and responsiveness* scale
+examples (~10,000 files, ~100,000 matched lines) demand no unbounded
+work on the UI update path.
+Updated [file-list-layout](file-list-layout.md) (the `listWidth`
+formula term and a new *Bounded transition and render cost — Issue
+#40* section), [match-navigation](match-navigation.md) (the
+crossing's bounded per-keystroke cost), [browse-tracer](browse-tracer.md)
+(the completion-time precompute and the `stopIndex` seam),
+[source-code](source-code.md) (the `fileStops`/`longestEntryW`
+fields, `stopIndex`, `loadCmd`'s group read, `stopsForFile`'s move),
+[unit-tests](unit-tests.md) (`rendercost_test.go` and the
+`TestListWidthFormula` seam), and the index.
+New files: `internal/app/rendercost_test.go`;
+`Notes/walkthroughs/040-04/` holds the walkthrough.
+Sources: `Notes/tasks/040-browse-render-no-whole-index-scan.md`,
+`Notes/PRD-vrg.md` (*Resources and responsiveness*, *File list and
+layout*), `internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/rendercost_test.go`, `internal/app/filelist_test.go`,
+`internal/app/browse_test.go`.

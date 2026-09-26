@@ -95,6 +95,13 @@ actual transition ends in `reveal()` — see
   prior-failure overlay, and issues exactly one retry behind `Loading…`
   — while a same-file step inside a failed file requests nothing —
   see [read-failures.md](read-failures.md).
+  Issue #40 bounds the crossing's per-keystroke cost by the visible
+  window: `entryLoad`'s load command reads the destination's
+  precomputed `fileStops` group instead of re-filtering
+  `Index.Stops()`, and `syncLayout`'s list-width recompute reads the
+  completion-time `longestEntryW` rather than re-measuring every entry
+  — see [file-list-layout.md](file-list-layout.md) § *Bounded
+  transition and render cost*.
 - **Manual scrolling** never touches the cursor: `n`/`p` continue from
   the last selected stop, not from the scrolled position.
 - **The file list is passive**: there is no direct selection route —
@@ -117,9 +124,12 @@ Issue #14 added in `internal/app/reveal_test.go`. See
 - `internal/searchindex/index.go` — the `cursor` field, its clamp in
   `Prepare`, and the shared `export` helper.
 - `internal/app/browse.go` — `navigate`, `reveal` (Issue #14; pending
-  intent since Issue #17), and `currentStop` reading the index cursor.
+  intent since Issue #17), `currentStop` reading the index cursor
+  through the Issue #40 `stopIndex` seam, and `entryLoad` issuing
+  loads against the precomputed `fileStops` groups.
 - `internal/app/app.go` — the `n`/`p` key case; the model's own cursor
-  field is gone.
+  field is gone. `fileStops` is built in the `searchDoneMsg` browse
+  branch (Issue #40).
 
 See also: [logical-anchor-and-layout.md](logical-anchor-and-layout.md)
 (the anchor handoff and pending reveal intent a crossing carries),

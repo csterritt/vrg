@@ -64,23 +64,30 @@ const (
 // carries the collector's incremental stderr lines and diagAck is the
 // test-only acknowledgement seam — both nil in plain unit-test models.
 type Model struct {
-	phase     phase
-	cancel    func()
-	done      <-chan searchDoneMsg
-	diagCh    <-chan string
-	diagAck   io.Writer
-	diags     []string
-	index     *searchindex.Index
-	stops     []searchindex.Stop
-	files     [][]byte       // distinct raw paths in index order
-	fileIdx   map[string]int // raw path → its files index
-	bufs      map[string]*filebuffer.Buffer
-	failed    map[string]bool
-	stale     map[string]bool     // raw path → latest completed load validated stale (Issue #29)
-	failLines map[string][]string // raw path → latest failure's overlay lines
-	encLines  map[string][]string // raw path → latest unsupported-encoding overlay lines (Issue #30)
-	loading   map[string]int      // raw path → in-flight request identity
-	loadSeq   int                 // mints request identities
+	phase   phase
+	cancel  func()
+	done    <-chan searchDoneMsg
+	diagCh  <-chan string
+	diagAck io.Writer
+	diags   []string
+	index   stopIndex
+	stops   []searchindex.Stop
+	files   [][]byte       // distinct raw paths in index order
+	fileIdx map[string]int // raw path → its files index
+	// fileStops is the immutable per-file stop grouping and
+	// longestEntryW the widest list entry's painted cell width — both
+	// built once from the materialized stop list at search completion,
+	// so a keystroke or a frame reads shared structures instead of
+	// re-enumerating the index or re-measuring every entry (Issue #40).
+	fileStops     map[string][]searchindex.Stop // raw path → its stop group
+	longestEntryW int
+	bufs          map[string]*filebuffer.Buffer
+	failed        map[string]bool
+	stale         map[string]bool     // raw path → latest completed load validated stale (Issue #29)
+	failLines     map[string][]string // raw path → latest failure's overlay lines
+	encLines      map[string][]string // raw path → latest unsupported-encoding overlay lines (Issue #30)
+	loading       map[string]int      // raw path → in-flight request identity
+	loadSeq       int                 // mints request identities
 	// rows holds each file's installed prepared row model with the
 	// (path, content revision, text width, wrap mode) key it was built
 	// for — preparation runs off the update path and a completion
@@ -259,16 +266,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.syncLayout()
 		return m, cmd
 	case searchDoneMsg:
-		m.index = msg.index
 		in := outcomeInput{waitErr: msg.waitErr, stderr: msg.stderr}
-		if m.index != nil {
-			m.stops = m.index.Stops()
-			m.binarySkipped = m.index.BinaryExcluded()
-			in.causes = m.index.IntegrityCauses()
-			in.malformed = m.index.Malformed()
-			in.oversized = m.index.Oversized()
-			in.oversizedDiags = m.index.OversizedDiagnostics()
-			in.unknown = m.index.Unknown()
+		if msg.index != nil {
+			m.index = msg.index
+			m.stops = msg.index.Stops()
+			m.binarySkipped = msg.index.BinaryExcluded()
+			in.causes = msg.index.IntegrityCauses()
+			in.malformed = msg.index.Malformed()
+			in.oversized = msg.index.Oversized()
+			in.oversizedDiags = msg.index.OversizedDiagnostics()
+			in.unknown = msg.index.Unknown()
 		}
 		in.usable = len(m.stops)
 		o := decideOutcome(in)
@@ -289,8 +296,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.files = distinctPaths(m.stops)
 		m.fileIdx = make(map[string]int, len(m.files))
+		m.fileStops = make(map[string][]searchindex.Stop, len(m.files))
 		for i, f := range m.files {
 			m.fileIdx[string(f)] = i
+		}
+		for _, s := range m.stops {
+			k := string(s.Path)
+			m.fileStops[k] = append(m.fileStops[k], s)
+		}
+		for _, f := range m.files {
+			if w := present.CellWidth(m.listEntry(f)); w > m.longestEntryW {
+				m.longestEntryW = w
+			}
 		}
 		cmd := m.syncLayout()
 		// The first stop's reveal is owed once its layout installs.

@@ -47,12 +47,9 @@ func TestListWidthFormula(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := Model{
-				width:    tc.W,
-				files:    [][]byte{[]byte("f")},
-				listShow: true,
-				listEntry: func([]byte) string {
-					return strings.Repeat("p", tc.longest)
-				},
+				width:         tc.W,
+				listShow:      true,
+				longestEntryW: tc.longest,
 			}
 			if got := m.listWidth(tc.gutterW, tc.res); got != tc.want {
 				t.Fatalf("listWidth(longest=%d, W=%d, gutter=%d, res=%d) = %d, want %d",

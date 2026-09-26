@@ -47,6 +47,19 @@ type installed struct {
 	rows viewport.Rows
 }
 
+// stopIndex is the model's read surface on the prepared search index:
+// single-stop reads and circular steps for matched-line navigation,
+// plus Stops — the whole-stop materialization the completion runs once
+// to build the per-file structures. Keeping Stops on the interface
+// lets a test double count every invocation: after the completion
+// snapshot neither Update nor View may call it (Issue #40).
+type stopIndex interface {
+	Current() (searchindex.Stop, bool)
+	Next() searchindex.Step
+	Prev() searchindex.Step
+	Stops() []searchindex.Stop
+}
+
 // distinctPaths returns the distinct raw paths across the index-ordered
 // stops: the file list's order.
 func distinctPaths(stops []searchindex.Stop) [][]byte {
@@ -54,17 +67,6 @@ func distinctPaths(stops []searchindex.Stop) [][]byte {
 	for _, s := range stops {
 		if len(out) == 0 || !bytes.Equal(out[len(out)-1], s.Path) {
 			out = append(out, s.Path)
-		}
-	}
-	return out
-}
-
-// stopsForFile returns the stops belonging to one raw path.
-func stopsForFile(ix *searchindex.Index, path []byte) []searchindex.Stop {
-	var out []searchindex.Stop
-	for _, s := range ix.Stops() {
-		if bytes.Equal(s.Path, path) {
-			out = append(out, s)
 		}
 	}
 	return out
@@ -303,7 +305,7 @@ func (m *Model) ensureLoad() tea.Cmd {
 func (m Model) loadCmd(s searchindex.Stop, req int) tea.Cmd {
 	path := bytes.Clone(s.Path)
 	resolved := bytes.Clone(s.ResolvedPath)
-	stops := stopsForFile(m.index, path)
+	stops := m.fileStops[string(path)]
 	gate, mapGate := m.loadGate, m.mapGate
 	read := m.readFile
 	if read == nil {
@@ -351,19 +353,13 @@ func (m Model) reservedW() int {
 // minimum of the longest escaped path plus two cells of padding,
 // floor(0.40 × terminal width), and the terminal width minus the file
 // panel's minimum (gutter + ten text cells + the reserved indicator
-// column). Scanning the entries for the longest runs on the update
-// path only; the frame render uses the cached result.
+// column). The longest-entry term is the width measured once at search
+// completion, so a re-layout never rescans the entries.
 func (m Model) listWidth(gutterW, res int) int {
 	if !m.listShow {
 		return 0
 	}
-	maxW := 0
-	for _, f := range m.files {
-		if w := present.CellWidth(m.listEntry(f)); w > maxW {
-			maxW = w
-		}
-	}
-	return max(0, min(min(maxW+2, m.width*2/5), m.width-(gutterW+10+res)))
+	return max(0, min(min(m.longestEntryW+2, m.width*2/5), m.width-(gutterW+10+res)))
 }
 
 // scrollList keeps the current file's entry inside the visible list

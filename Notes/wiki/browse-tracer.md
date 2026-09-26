@@ -102,6 +102,12 @@ Full-file work never lands on the UI update path:
   the current parameters, and the file list renders through the
   `listEntry` provider only for its visible window — see
   [logical-anchor-and-layout.md](logical-anchor-and-layout.md).
+  Issue #40 completes the bound on the other side: the per-file stop
+  groups and the longest-entry width are precomputed at search
+  completion, so neither a navigation keystroke nor a frame
+  re-enumerates the index — see
+  [file-list-layout.md](file-list-layout.md) § *Bounded transition and
+  render cost*.
 
 ## Safe-presentation core
 
@@ -181,15 +187,17 @@ follows an unescaped ESC.
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
 - `internal/app/browse.go` — `loadDoneMsg` (request-keyed since
   Issue #25), `layoutDoneMsg`/
-  `installed` (Issue #17), `ensureLoad`/`loadCmd`,
+  `installed` (Issue #17), `ensureLoad`/`loadCmd` (loads read the
+  Issue #40 `fileStops` groups, never a whole-index refilter),
   `syncLayout`/`ensureLayout`/`layoutCmd`/`currentRows` (Issue #17),
   `scroll`, `navigate` (Issue #13 cursor steps and the file-crossing
   viewport handoff), `reveal`/`commitReveal` (Issue #14; pending
   intent since Issue #17), `reservedW` (Issue #16's
-  zero-or-one indicator column),
+  zero-or-one indicator column), the Issue #40 `stopIndex` read seam,
   `renderBrowse`, `filenameRule`, `contentRow` (Issue #16 blank
   continuation gutters), `renderCells`; Issue #24 adds `listWidth`
-  (the real three-term formula and the `listShow` gate), `scrollList`,
+  (the real three-term formula and the `listShow` gate — term 1 the
+  precomputed `longestEntryW` since Issue #40), `scrollList`,
   `truncateLeft`, and the filename rule's status-note slot.
 - `internal/app/app.go` — `phaseBrowse`, buffer/loading/failed maps
   (`loading` is the Issue #25 path → request-identity map, minted by
@@ -197,7 +205,9 @@ follows an unescaped ESC.
   the `rows`/`reqKey`/`revs` layout bookkeeping and `saved` anchors
   (Issue #17), the Issue #16 `wrap` flag (`w` toggles), `fileIdx`/
   `listW`/`textW` caches and the `listEntry` seam (Issue #17),
-  files/stops; the
+  files/stops plus the Issue #40 `fileStops` groups and
+  `longestEntryW` — all built once in the `searchDoneMsg` browse
+  branch; the
   matched-line cursor itself lives in `searchindex.Index` since
   Issue #13.
 

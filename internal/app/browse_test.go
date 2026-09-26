@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"vrg/internal/searchindex"
 )
 
 // browseModel returns a model past a completed search: browse phase,
@@ -31,6 +33,17 @@ func writeWorkFile(t *testing.T, dir, name, data string) {
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
+}
+
+// stopsForFile returns the stops belonging to one raw path.
+func stopsForFile(ix stopIndex, path []byte) []searchindex.Stop {
+	var out []searchindex.Stop
+	for _, s := range ix.Stops() {
+		if bytes.Equal(s.Path, path) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // A completed search presents the two-pane browse view: the file list on

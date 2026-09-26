@@ -615,7 +615,9 @@ anchor preservation through every relayout cause:
   sanitized path plus two, the `floor(0.40 × width)` cap including its
   odd-width rounding, and `width − (gutter + 10 + reserved)`), gutter
   growth narrowing the allocation, the ten-cell panel minimum, and
-  zero/pathological widths clamped nonnegative.
+  zero/pathological widths clamped nonnegative. Since Issue #40 the
+  longest-entry term arrives through the `longestEntryW` field — the
+  completion-time measure — rather than a substituted provider.
 - `TestTruncateLeftGraphemeSafe` — the leading-`…` cut fits the budget
   exactly and lands only on cluster boundaries: wide characters
   straddling the cut drop whole, combining clusters and ZWJ sequences
@@ -651,6 +653,23 @@ anchor preservation through every relayout cause:
 - `TestStatusSlotRendersInFilenameRow` — a synthetic `statusNote`
   joins the filename rule at 80 columns, and at 30 columns the path
   truncates so the note still paints whole.
+
+`rendercost_test.go` (same package, Issue #40) is the bounded-render
+cost guard. `countingIndex` wraps the prepared index behind the
+`stopIndex` seam and tallies every `Stops()` whole-stop
+materialization, while a counting `listEntry` provider tallies list
+queries — both counters spanning a navigation `Update` and the
+resulting `View` without reset, so a whole-index scan or whole-list
+query on either half of the model transition fails:
+
+- `TestNavigationRenderCostBoundedByVisibleWindow` — a 300-file,
+  900-stop fixture: two same-file `n` steps and the file-crossing
+  third plus the frame query the provider at most `height` times and
+  materialize `Stops()` never.
+- `TestResizeAndGutterGrowthRetruncateWithinVisibleCost` — resizing to
+  a narrower list and a load widening the gutter each re-truncate the
+  visible entries to a leading-`…` suffix against the new width,
+  inside the same visible-row bound with zero `Stops()` calls.
 
 `cellmodel_test.go` (same package, Issue #39) pins the composed view's
 cluster-exact rendering against the shared grapheme/cell model —

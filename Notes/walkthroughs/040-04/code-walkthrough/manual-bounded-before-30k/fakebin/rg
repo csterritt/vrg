@@ -1,0 +1,3 @@
+#!/bin/sh
+cat "/home/chris/vrg/Notes/walkthroughs/040-04/code-walkthrough/manual-bounded-before-30k/records.jsonl"
+exit 0

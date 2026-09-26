@@ -20,10 +20,13 @@ and the reserved indicator column) in `Notes/PRD-vrg.md`.
 `syncLayout`, its result cached in `listW` so a frame render never
 rescans the list — returns the nonnegative minimum of:
 
-1. **Longest sanitized path width plus two** — the list measures the
-   `present.Path` display form of every entry (via the `listEntry`
-   provider seam), never raw byte lengths, and adds two cells of
-   padding.
+1. **Longest sanitized path width plus two** — `longestEntryW`, the
+   `present.CellWidth` of the widest entry's `present.Path` display
+   form (produced through the `listEntry` provider seam), measured
+   once at search completion — never raw byte lengths — plus two cells
+   of padding. Issue #40 moved the measure to the completion so a
+   re-layout never rescans the entries; see *Bounded transition and
+   render cost* below.
 2. **`floor(0.40 × terminal width)`** — computed as `width*2/5`, so
    odd widths round down (81 columns caps the list at 32).
 3. **Terminal width minus the file panel's minimum** — `width −
@@ -145,11 +148,79 @@ exactly `files[listTop:listTop+height]` deep into a long list — the
 Issue #17 render-cost guarantee; see
 [logical-anchor-and-layout.md](logical-anchor-and-layout.md)).
 
+## Bounded transition and render cost — Issue #40
+
+Issue #40 (`Notes/tasks/040-browse-render-no-whole-index-scan.md`)
+removed the last whole-index work from the keystroke and frame paths,
+answering the PRD's *Resources and responsiveness* rule that parsing,
+sorting, and rewrapping never perform unbounded work on the UI update
+path and that frames render prepared data rather than scanning — the
+point of the rule being the ~10,000-matched-file and
+~100,000-matched-line scale examples, where a per-keystroke index scan
+would stall navigation and repainting.
+
+**Prepared once at search completion** (the `searchDoneMsg` browse
+branch, where the stop list is already materialized):
+
+- `m.stops` — the single `Index.Stops()` snapshot; the only
+  whole-index materialization in the session.
+- `m.files` + `m.fileIdx` — the distinct raw paths in index order and
+  the path → entry-index map the cursor-derived current file resolves
+  through.
+- `m.fileStops` — the immutable per-file stop groups (raw path → its
+  stops), shared by every consumer; `loadCmd` hands the worker the
+  destination's group instead of re-filtering `Index.Stops()` on each
+  issued load.
+- `m.longestEntryW` — the widest entry's painted cell width, measured
+  through the `listEntry` provider and `present.CellWidth`; `listWidth`
+  reads it as formula term 1, so resize, gutter growth, wrap toggles,
+  and file crossings never re-measure the list.
+
+**Per-keystroke** `Update` then only moves state: the index cursor
+steps in O(1), `syncLayout` recomputes the three widths from the
+cached `longestEntryW`, `scrollList` keeps the active entry in view,
+and a crossing issues the destination's load against its precomputed
+group — no regrouping, no whole-group reallocation, no index
+re-enumeration.
+
+**Per-frame** `View` materializes only the visible file range:
+`renderBrowse` queries `listEntry` for `files[listTop : listTop+rows]`
+and left-truncates each visible entry against the *current* `listW`
+through `present.TruncateLeft` — Issue #39's grapheme-boundary cut.
+The truncated text cannot be precomputed: the allotted width moves
+with terminal resizes, gutter growth, the wrap-mode indicator column,
+and the list hide/show toggle.
+
+**The cost guard** (`internal/app/rendercost_test.go`) proves the
+bound rather than assuming it. `m.index` narrows to the `stopIndex`
+read seam (`Current`/`Next`/`Prev`/`Stops`), letting `countingIndex`
+tally every `Stops()` materialization while a counting `listEntry`
+fake tallies provider queries — both counters spanning a navigation
+`Update()` and the resulting `View()` *without reset*, so a
+whole-index scan, copy, or whole-list query on either half of the
+transition fails:
+
+- `TestNavigationRenderCostBoundedByVisibleWindow` — 300 files × 3
+  stops; two same-file `n` steps and the file-crossing third, then the
+  frame: at most `height` provider queries, zero `Stops()` calls.
+- `TestResizeAndGutterGrowthRetruncateWithinVisibleCost` — a 200-file
+  fixture with 25-cell names: resizing 80 → 40 columns narrows the
+  list to 16 cells and the visible entries re-truncate to a
+  leading-`…` suffix at grapheme boundaries, then a load widening the
+  gutter re-runs the same path — each transition inside the
+  visible-row bound with zero `Stops()` calls.
+
+The earlier provider-side guards from Issues #17 and #24
+(`TestRenderQueriesOnlyVisibleListEntries`,
+`TestListRenderQueriesOnlyVisibleWindow`) still pin the visible-window
+query contract unchanged.
+
 ## Tests
 
 - `internal/app/filelist_test.go` — `TestListWidthFormula` table-drives
   every term of the formula (each winning, the `floor` rounding, the
-  ten-cell panel minimum, gutter growth, zero and pathological widths);
+  ten-cell panel minimum, gutter growth, zero and pathological widths)
+  against the `longestEntryW` completion-time measure since Issue #40;
   `TestTruncateLeftGraphemeSafe` pins the leading-`…` cut at grapheme
   boundaries for wide, combining, and ZWJ clusters;
   `TestFilenameRuleStatusSlot` covers the note slot's priority,
@@ -166,6 +237,11 @@ Issue #17 render-cost guarantee; see
   scrolling; `TestListRenderQueriesOnlyVisibleWindow` asserts the
   exact queried slice; `TestStatusSlotRendersInFilenameRow` renders
   the synthetic note at 80 and 30 columns.
+- `internal/app/rendercost_test.go` — Issue #40's bounded-render cost
+  guard: `countingIndex` tallies `Stops()` materializations and a
+  counting `listEntry` fake tallies provider queries across each
+  navigation/resize `Update()` plus the resulting `View()`, bounded by
+  the visible row count.
 
 See [unit-tests.md](unit-tests.md) § `internal/app`.
 
@@ -173,9 +249,11 @@ See [unit-tests.md](unit-tests.md) § `internal/app`.
 
 - `internal/app/app.go` — `listShow`/`listTop` fields, the
   `statusNote` provider seam, the `left`/`tab` and `right`/`shift+tab`
-  browse-key cases.
+  browse-key cases; Issue #40 adds `fileStops` and `longestEntryW`,
+  built in the `searchDoneMsg` browse branch.
 - `internal/app/browse.go` — `listWidth` (the formula and the
-  `listShow` gate), `scrollList`, `syncLayout`'s scroll and geometry
+  `listShow` gate — term 1 reading `longestEntryW` since Issue #40),
+  `scrollList`, `syncLayout`'s scroll and geometry
   sequencing, `filenameRule`'s note slot, `renderBrowse`'s `listTop`
   window — width and truncation routed through `present.CellWidth`/
   `present.TruncateLeft` since Issue #39.
