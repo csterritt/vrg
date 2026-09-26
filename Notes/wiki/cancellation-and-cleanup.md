@@ -3,7 +3,7 @@
 The cancellation and cleanup contract delivered by
 [Issue #4](../issues/004-cancellation-child-cleanup-terminal-restore.md),
 implemented in `internal/app` (`app.go`, `search.go`) and wired by
-`cmd/vrg` (`main.go`, `hooks.go`). Relevant PRD sections:
+`cmd/vrg` (`main.go`, `seams.go`, `seams_testhooks.go`). Relevant PRD sections:
 *Implementation Decisions → Outcome and exit-status contract* (rows 1–2
 and the cleanup bullet), *Colours, overlays, and key precedence*
 (`ctrl+c` precedence), *Module Design → App* (failure modes), and
@@ -70,24 +70,38 @@ directly: `runSearch` collects it into the session diagnostic collection
 (`model.CollectDiagnostic`) and the common post-restoration replay
 writer emits it alongside every earlier diagnostic in collection order —
 exactly-once holds across what were previously two mechanisms. The
-injectable hook is `VRG_TEST_FAIL_FIFO`: a fifo whose first writer's
+injectable hook is `VRG_TEST_FAIL_TRIGGER`: a fifo whose first writer's
 close cancels the program context, surfacing as a `Run` error. See
 [stderr-replay.md](stderr-replay.md).
 
 ## Test seams and the PTY harness
 
-- `VRG_TEST_REAP_FILE` — receives one line with the child's reaped wait
+Since Issue #45 every seam below lives behind the `vrg_testhooks` build
+tag in `cmd/vrg/seams_testhooks.go` — the production binary contains
+none of them. See
+[test-hook-build-topology.md](test-hook-build-topology.md) for the
+build variant, the full manifest, and the artifact-cleanliness proof.
+
+- `VRG_TEST_REAP` — receives one line with the child's reaped wait
   status (`signal: killed`, `exit status 0`) immediately after `Wait`.
   This is the evidence side channel proving vrg's reap path ran, rather
   than inferring reaping from a missing pid. Wired to
   `Config.ReapReport`.
-- `VRG_TEST_GATE_FIFO` — boundary-level `PrepareGate`: preparation is
+- `VRG_TEST_GATE` — boundary-level `PrepareGate`: preparation is
   held until a writer opens and closes the fifo.
-- `VRG_TEST_FAIL_FIFO` — the controlled-failure hook described above.
-- `VRG_TEST_DIAG_ACK_FILE` (Issue #11) — receives one acknowledgement
-  line per diagnostic the model processes into the session collection;
-  the application-side evidence replay tests wait on before sending an
-  exit key. Wired to `Config.DiagAck`.
+- `VRG_TEST_FAIL_TRIGGER` — the controlled-failure hook described
+  above; `VRG_TEST_FAIL_DIAGNOSTIC` supplies the failure's diagnostic
+  text.
+- `VRG_TEST_COLLECT_ACK` (Issue #11, renamed by Issue #45) — receives
+  one acknowledgement line per diagnostic the model processes into the
+  session collection; the application-side evidence replay tests wait
+  on before sending an exit key. Wired to `Config.DiagAck`.
+- `VRG_TEST_DIAGNOSTIC_TRIGGER` / `VRG_TEST_DIAGNOSTIC_TEXT` (Issue
+  #45) — inject one line into the session collection on a fifo
+  handshake. Wired to `Config.DiagInject`.
+- `VRG_TEST_RUN_FINAL_MODEL` / `VRG_TEST_RUN_ERROR` (Issue #45) — the
+  program-runner return-shape controls at the real `program.Run()`
+  site.
 
 The PTY harness (`cmd/vrg/pty_test.go`, Linux-only) opens `/dev/ptmx`,
 gives the child a session with the slave as controlling terminal

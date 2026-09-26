@@ -3,7 +3,7 @@
 The diagnostic-replay contract delivered by
 [Issue #11](../issues/011-stderr-replay-of-collected-diagnostics.md),
 implemented in `internal/app` (`app.go`, `search.go`, `overlay.go`) and
-wired by `cmd/vrg` (`main.go`, `hooks.go`). Relevant PRD sections:
+wired by `cmd/vrg` (`main.go`, `seams_testhooks.go`). Relevant PRD sections:
 *Colours, overlays, and key precedence* (the last bullet: diagnostics
 replayed to the terminal after exit) and *Outcome and exit-status
 contract* (the cleanup bullet).
@@ -97,8 +97,9 @@ escaped `wantDiag`/`wantPath` forms in the replayed output.
 
 `Config.DiagAck` is the new test-only seam: one acknowledgement line
 written for every diagnostic the model processes into the collection —
-wired at the process boundary as `VRG_TEST_DIAG_ACK_FILE` (opened
-append-only alongside the reap file in `wireTestHooks`). It is the
+wired at the process boundary as `VRG_TEST_COLLECT_ACK` (opened
+append-only alongside the reap file in `wireTestHooks`; Issue #45
+renamed it and moved it behind the `vrg_testhooks` build tag). It is the
 **application-side** evidence the PTY replay tests wait on before
 sending an exit key — proving the diagnostic was processed into the
 collection, where a child-side write handshake would prove only that
@@ -137,7 +138,8 @@ assumed the first command result was the completion. See
 - `cmd/vrg/main.go` — `runSearch`'s post-restoration `ReplayTo` on all
   three exit branches; `CollectDiagnostic` replacing the direct failure
   write.
-- `cmd/vrg/hooks.go` — `VRG_TEST_DIAG_ACK_FILE` → `Config.DiagAck`.
+- `cmd/vrg/seams_testhooks.go` — `VRG_TEST_COLLECT_ACK` → `Config.DiagAck`
+  (Issue #45; `vrg_testhooks`-only).
 
 See also: [cancellation-and-cleanup.md](cancellation-and-cleanup.md)
 (the cleanup boundary replay joins),

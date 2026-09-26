@@ -14,7 +14,9 @@ import (
 
 // binPath is the real cmd/vrg binary built once per test run; subprocess
 // assertions cover stream and exit-status ownership at the true process
-// boundary.
+// boundary. It is built with the vrg_testhooks tag so the VRG_TEST_*
+// seams — compiled out of the production binary — are present for the
+// harness to drive.
 var binPath string
 
 func TestMain(m *testing.M) {
@@ -23,9 +25,9 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	binPath = filepath.Join(dir, "vrg")
-	build := exec.Command("go", "build", "-o", binPath, ".")
+	build := exec.Command("go", "build", "-tags", "vrg_testhooks", "-o", binPath, ".")
 	if out, err := build.CombinedOutput(); err != nil {
-		panic("go build ./cmd/vrg failed: " + err.Error() + "\n" + string(out))
+		panic("go build -tags vrg_testhooks ./cmd/vrg failed: " + err.Error() + "\n" + string(out))
 	}
 	code := m.Run()
 	os.RemoveAll(dir)
@@ -256,16 +258,21 @@ func runVrgTUI(t *testing.T, workdir string, env []string, args ...string) runRe
 	return runVrgTUISteps(t, workdir, env, []tuiStep{{marker: "f.txt", keys: "q"}}, args...)
 }
 
-// runVrgTUISteps runs the built binary driving a sequence of marker/key
+func runVrgTUISteps(t *testing.T, workdir string, env []string, steps []tuiStep, args ...string) runResult {
+	t.Helper()
+	return runStepsBin(t, binPath, workdir, env, steps, args...)
+}
+
+// runStepsBin runs the binary at bin driving a sequence of marker/key
 // steps: each step's keys are written once its marker has appeared in
 // the captured stdout, letting a test dismiss an overlay before the
 // underlying screen's marker can appear. The context deadline bounds
 // the run so a wedged search fails rather than hangs.
-func runVrgTUISteps(t *testing.T, workdir string, env []string, steps []tuiStep, args ...string) runResult {
+func runStepsBin(t *testing.T, bin, workdir string, env []string, steps []tuiStep, args ...string) runResult {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, binPath, args...)
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = workdir
 	if env != nil {
 		cmd.Env = env

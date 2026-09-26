@@ -79,7 +79,7 @@ Catalog of all wiki pages for the vrg project.
   collection through `diagMsg` on the unbuffered event channel, the
   processed-versus-in-flight shutdown boundary, `ReplayTo` on the common
   post-restoration writer for every controlled exit, controlled-failure
-  unification, and the `VRG_TEST_DIAG_ACK_FILE` acknowledgement seam
+  unification, and the `VRG_TEST_COLLECT_ACK` acknowledgement seam
 - [viewport-scrolling.md](viewport-scrolling.md) — Issue #12: the
   rendered-row scroll units (one row, `max(1, floor(h/2))` half page,
   full content-height page), BOF/EOF clamping with no avoidable blank
@@ -300,6 +300,13 @@ Catalog of all wiki pages for the vrg project.
   emits standalone-only, and ordinary propagation through spans,
   wrapping, clipping, panning, and highlighting with no downstream
   special-casing
+- [test-hook-build-topology.md](test-hook-build-topology.md) — Issue
+  #45: the `vrg_testhooks` build variant, the two build-constrained
+  seam boundaries (`wireTestHooks` option/process wiring and the
+  `runProgram` program-runner wrapper), the explicit nine-name hook
+  manifest and why fixture variables are excluded, the `TestMain`
+  tagged build, the untagged-artifact boundary test, and the
+  Issues #46/#48 extension rule
 
 ## Catalogs
 

@@ -7,7 +7,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 - `cmd/vrg/main.go` — thin process boundary. `run` calls `cli.Parse` with
   `os.Stat` injected and maps the explicit result kind to stream/status:
   help → exit 0 (help already on stdout), search → `runSearch` starts an
-  `app.Session` and runs the Bubble Tea program (`WithInput(os.Stdin)`,
+  `app.Session` and runs the Bubble Tea program through the
+  `runProgram` seam boundary (`WithInput(os.Stdin)`,
   `WithWindowSize(80, 24)` fallback for piped output). After `Run`
   returns, every controlled exit funnels through one cleanup boundary:
   `sess.Cancel()` terminates a still-running child, `<-sess.Reaped()`
@@ -23,20 +24,30 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   sanitized diagnostic, exit 2, no TUI; usage error → sanitized
   diagnostic plus the generated usage block, exit 2. Boundary error
   text renders through `present.Diagnostic` since Issue #6.
-- `cmd/vrg/hooks.go` — the env-var test seams applied to `app.Config`:
-  `VRG_TEST_REAP_FILE` (reap-evidence side channel → `ReapReport`),
-  `VRG_TEST_GATE_FIFO` (boundary `PrepareGate`), `VRG_TEST_FAIL_FIFO`
-  (controlled-failure hook → `Program` context cancellation), and —
-  Issue #11 — `VRG_TEST_DIAG_ACK_FILE` (one acknowledgement line per
-  collected diagnostic → `DiagAck`). No-op
-  when unset.
+- `cmd/vrg/seams.go` / `cmd/vrg/seams_testhooks.go` — Issue #45's two
+  build-constrained seam boundaries (`//go:build !vrg_testhooks` /
+  `vrg_testhooks`). `wireTestHooks` is the option/process wiring: the
+  tagged file reads the `VRG_TEST_*` manifest variables into
+  `app.Config` (`VRG_TEST_REAP` → `ReapReport`, `VRG_TEST_GATE` →
+  `PrepareGate`, `VRG_TEST_FAIL_TRIGGER` → program-context
+  cancellation, `VRG_TEST_COLLECT_ACK` → `DiagAck`,
+  `VRG_TEST_DIAGNOSTIC_TRIGGER`/`_TEXT` → `DiagInject`) and the
+  untagged file returns a bare context. `runProgram` wraps
+  `tea.NewProgram(...).Run()`: untagged it delegates directly; tagged
+  it substitutes the (final model, error) tuple selected by
+  `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` and applies
+  `VRG_TEST_FAIL_DIAGNOSTIC`. All are inert when unset and absent from
+  the production binary — see
+  [test-hook-build-topology.md](test-hook-build-topology.md).
 
 ## internal/app
 
 - `internal/app/search.go` — the subprocess seam: `Config` (rg
   executable, protected argv, invocation working directory, `Drained`/
-  `PrepareGate`/`ReapReport` test hooks, and — Issue #11 — `DiagAck`,
-  the collection-acknowledgement side channel), `Start` (spawns
+  `PrepareGate`/`ReapReport` test hooks, — Issue #11 — `DiagAck`,
+  the collection-acknowledgement side channel, and — Issue #45 —
+  `DiagInject`, the session-diagnostic injection channel), `Start`
+  (spawns
   `exec.CommandContext` in the working directory with the child leading
   its own process group — `SysProcAttr.Setpgid`, and `cmd.Cancel`
   SIGKILLs the group so a scripted child's surviving grandchildren

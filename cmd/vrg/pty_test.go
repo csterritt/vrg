@@ -24,7 +24,7 @@ import (
 // slave as stdin, stdout, and stderr — the arrangement a real terminal
 // session has — while a controllable fake rg on PATH exposes explicit
 // readiness (a "ready" file carrying its pid) and completion (the exit
-// status vrg reports through its VRG_TEST_REAP_FILE side channel)
+// status vrg reports through its VRG_TEST_REAP side channel)
 // handshakes. Asserting the slave's termios after exit equals its
 // pre-launch value proves vrg restored the input modes; asserting the
 // captured stream carries the alt-screen-exit and cursor-show sequences
@@ -300,7 +300,7 @@ exit 0
 func TestPTYQWhileSearchingExits130(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgBlockScript)
 	reap := filepath.Join(capDir, "reap")
-	r := startVrgPTY(t, ptyEnv(fakeDir, capDir, "VRG_TEST_REAP_FILE="+reap), "foo")
+	r := startVrgPTY(t, ptyEnv(fakeDir, capDir, "VRG_TEST_REAP="+reap), "foo")
 	pid := awaitReadyPID(t, capDir)
 	r.waitFor(t, "Searching…")
 	r.send(t, "q")
@@ -320,7 +320,7 @@ func TestPTYQWhileSearchingExits130(t *testing.T) {
 func TestPTYCtrlCWhileSearchingExits130(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgBlockScript)
 	reap := filepath.Join(capDir, "reap")
-	r := startVrgPTY(t, ptyEnv(fakeDir, capDir, "VRG_TEST_REAP_FILE="+reap), "foo")
+	r := startVrgPTY(t, ptyEnv(fakeDir, capDir, "VRG_TEST_REAP="+reap), "foo")
 	pid := awaitReadyPID(t, capDir)
 	r.waitFor(t, "Searching…")
 	r.send(t, "\x03")
@@ -340,7 +340,7 @@ func TestPTYCtrlCWhileSearchingExits130(t *testing.T) {
 func TestPTYSIGINTWhileSearchingExits130(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgBlockScript)
 	reap := filepath.Join(capDir, "reap")
-	r := startVrgPTY(t, ptyEnv(fakeDir, capDir, "VRG_TEST_REAP_FILE="+reap), "foo")
+	r := startVrgPTY(t, ptyEnv(fakeDir, capDir, "VRG_TEST_REAP="+reap), "foo")
 	pid := awaitReadyPID(t, capDir)
 	r.waitFor(t, "Searching…")
 	if err := r.cmd.Process.Signal(syscall.SIGINT); err != nil {
@@ -368,8 +368,8 @@ func TestPTYQDuringGateHeldPreparationExits130(t *testing.T) {
 		t.Fatalf("mkfifo: %v", err)
 	}
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
-		"VRG_TEST_REAP_FILE="+reap,
-		"VRG_TEST_GATE_FIFO="+gate,
+		"VRG_TEST_REAP="+reap,
+		"VRG_TEST_GATE="+gate,
 	), "foo")
 	pid := awaitReadyPID(t, capDir)
 	r.waitFor(t, "Searching…")
@@ -396,7 +396,7 @@ func TestPTYQDuringGateHeldPreparationExits130(t *testing.T) {
 func TestPTYOrdinaryExitReapsChild(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgBlockScript)
 	reap := filepath.Join(capDir, "reap")
-	r := startVrgPTY(t, ptyEnv(fakeDir, capDir, "VRG_TEST_REAP_FILE="+reap), "foo")
+	r := startVrgPTY(t, ptyEnv(fakeDir, capDir, "VRG_TEST_REAP="+reap), "foo")
 	pid := awaitReadyPID(t, capDir)
 	r.waitFor(t, "Searching…")
 	if err := r.cmd.Process.Signal(syscall.SIGTERM); err != nil {
@@ -425,8 +425,8 @@ func TestPTYControlledFailureExits2(t *testing.T) {
 		t.Fatalf("mkfifo: %v", err)
 	}
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
-		"VRG_TEST_REAP_FILE="+reap,
-		"VRG_TEST_FAIL_FIFO="+fail,
+		"VRG_TEST_REAP="+reap,
+		"VRG_TEST_FAIL_TRIGGER="+fail,
 	), "foo")
 	pid := awaitReadyPID(t, capDir)
 	r.waitFor(t, "Searching…")
@@ -475,8 +475,8 @@ func TestControlledFailureDiagnosticOnStderr(t *testing.T) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binPath, "foo")
 	cmd.Env = ptyEnv(fakeDir, capDir,
-		"VRG_TEST_REAP_FILE="+reap,
-		"VRG_TEST_FAIL_FIFO="+fail,
+		"VRG_TEST_REAP="+reap,
+		"VRG_TEST_FAIL_TRIGGER="+fail,
 	)
 	cmd.Dir = t.TempDir()
 	// A held-open pipe for stdin: a pollable input that never delivers

@@ -59,15 +59,10 @@ func runSearch(res cli.Result, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "vrg: %s\n", present.Diagnostic(err.Error()))
 		return 2
 	}
-	// WithInput(os.Stdin) keeps the program reading real stdin rather
-	// than opening /dev/tty when stdin is already a pipe. WithWindowSize
-	// is only a fallback: a real terminal reports its own size and
-	// overrides it with a resize message.
-	fm, err := tea.NewProgram(sess.Model(),
-		tea.WithContext(progCtx),
-		tea.WithInput(os.Stdin),
-		tea.WithWindowSize(80, 24),
-	).Run()
+	// runProgram is the program-runner boundary: the untagged build
+	// delegates straight to tea.NewProgram().Run(); the vrg_testhooks
+	// build can substitute the returned (final model, error) tuple.
+	fm, err := runProgram(sess.Model(), progCtx)
 
 	// Run returned, so the display and input modes are already restored.
 	// Terminate the child if it is still running and wait for the

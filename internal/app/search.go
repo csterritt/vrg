@@ -47,6 +47,12 @@ type Config struct {
 	// application-side processing, where a child-side write handshake
 	// would prove only that bytes reached the pipe.
 	DiagAck io.Writer
+	// DiagInject, when non-nil, delivers additional diagnostic lines to
+	// the model through the same channel as live child stderr — the
+	// test-only injection seam behind the tagged binary's diagnostic
+	// trigger. Delivery ends when the channel closes or the session is
+	// cancelled.
+	DiagInject <-chan string
 }
 
 // searchDoneMsg delivers the finished collection to the model: the
@@ -133,6 +139,9 @@ func Start(ctx context.Context, cfg Config) (*Session, error) {
 	// unbuffered: every send pairs with the model's event wait, so the
 	// completion cannot overtake a diagnostic on the way to Update.
 	diags := make(chan string)
+	if cfg.DiagInject != nil {
+		go injectDiags(ctx, cfg.DiagInject, diags)
+	}
 	reaped := make(chan struct{})
 	go collect(ctx, cmd, stdout, stderr, cfg, reaped, done, diags)
 	m := newModel(done, cancel)
@@ -208,6 +217,20 @@ func collect(ctx context.Context, cmd *exec.Cmd, stdout, stderr io.Reader, cfg C
 		index:   ix,
 		stderr:  errBuf.Bytes(),
 		waitErr: waitErr,
+	}
+}
+
+// injectDiags forwards externally injected diagnostic lines onto the
+// model's diag channel under the same cancellation rule as live stderr
+// delivery: a line a cancelled model will never read is dropped rather
+// than blocking the injector.
+func injectDiags(ctx context.Context, in <-chan string, diags chan<- string) {
+	for line := range in {
+		select {
+		case diags <- line:
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 

@@ -1825,3 +1825,42 @@ Sources: `Notes/tasks/044-post-summary-context-integrity-failure.md`,
 `internal/searchindex/causes_test.go`,
 `internal/searchindex/lifecycle_test.go`,
 `internal/app/diagnostics_test.go`.
+
+## [2026-09-25] ingest | Issue #45 test-hook build topology — `vrg_testhooks` variant
+
+Issue #45 (`Notes/tasks/045-remove-test-hooks-from-production-binary.md`)
+moved every test hook out of the production binary behind two
+`//go:build` boundaries in `cmd/vrg`. `seams.go` (`!vrg_testhooks`)
+holds the inert halves — `wireTestHooks` returns a bare context and
+`runProgram` delegates directly to `tea.NewProgram(...).Run()` — while
+`seams_testhooks.go` (`vrg_testhooks`) holds every env-var read, fifo
+trigger, and watcher. The env names moved to the explicit hook
+manifest: `VRG_TEST_REAP`, `VRG_TEST_GATE`, `VRG_TEST_COLLECT_ACK`
+(formerly `VRG_TEST_REAP_FILE`/`VRG_TEST_GATE_FIFO`/`VRG_TEST_DIAG_ACK_FILE`),
+the new `VRG_TEST_FAIL_TRIGGER`/`VRG_TEST_FAIL_DIAGNOSTIC` and
+`VRG_TEST_DIAGNOSTIC_TRIGGER`/`VRG_TEST_DIAGNOSTIC_TEXT` injection
+pairs, and the `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR`
+program-runner controls that substitute the `Run()` return tuple at the
+executable's real boundary for Issue #46. `Config` gained
+`DiagInject`, forwarded onto the diagnostic channel by `injectDiags`.
+`TestMain` now builds the binary under test with `-tags vrg_testhooks`,
+so the whole suite exercises the hooked variant automatically.
+`testhooks_test.go` proves both directions: the untagged artifact
+ignores every manifest name and contains none of their strings, and the
+tagged build answers every return-shape tuple and injection seam.
+Fixture-owned variables (`VRG_CAPTURE_DIR`) are excluded from the
+manifest by construction; Issues #46/#48 extend this mechanism rather
+than adding production hooks.
+
+Created [test-hook-build-topology](test-hook-build-topology.md).
+Updated [cancellation-and-cleanup](cancellation-and-cleanup.md) (the
+renamed, tagged seam list), [stderr-replay](stderr-replay.md)
+(`VRG_TEST_COLLECT_ACK`), [source-code](source-code.md) (the seam
+files, `runProgram`, `Config.DiagInject`), [unit-tests](unit-tests.md)
+(the `TestMain` tagged build, renamed env vars, the `testhooks_test.go`
+catalog), and the index.
+Sources: `Notes/tasks/045-remove-test-hooks-from-production-binary.md`,
+`Notes/PRD-vrg.md` (*Outcome and exit-status contract*; *Testing
+Decisions*), `cmd/vrg/seams.go`, `cmd/vrg/seams_testhooks.go`,
+`cmd/vrg/main.go`, `cmd/vrg/testhooks_test.go`,
+`internal/app/search.go`.

@@ -14,7 +14,7 @@ import (
 // session collection is written to vrg's own stderr exactly once, in
 // collection order, strictly after the display-restoration sequence —
 // with the slave termios already back to its pre-launch state. The
-// VRG_TEST_DIAG_ACK_FILE side channel carries one line per collected
+// VRG_TEST_COLLECT_ACK side channel carries one line per collected
 // diagnostic: the application-side acknowledgement the tests wait for
 // before sending an exit key, proving the diagnostic was processed —
 // where a child-side write handshake would prove only that bytes
@@ -90,8 +90,8 @@ func TestPTYCtrlCAfterDiagnosticReplaysOnce(t *testing.T) {
 	ack := filepath.Join(capDir, "diag-ack")
 	reap := filepath.Join(capDir, "reap")
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
-		"VRG_TEST_DIAG_ACK_FILE="+ack,
-		"VRG_TEST_REAP_FILE="+reap), "foo")
+		"VRG_TEST_COLLECT_ACK="+ack,
+		"VRG_TEST_REAP="+reap), "foo")
 	pid := awaitReadyPID(t, capDir)
 	r.waitFor(t, "Searching…")
 	// Wait for the application-side acknowledgement — the diagnostic
@@ -118,8 +118,8 @@ func TestPTYQWhileSearchingReplaysDiagnostic(t *testing.T) {
 	ack := filepath.Join(capDir, "diag-ack")
 	reap := filepath.Join(capDir, "reap")
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
-		"VRG_TEST_DIAG_ACK_FILE="+ack,
-		"VRG_TEST_REAP_FILE="+reap), "foo")
+		"VRG_TEST_COLLECT_ACK="+ack,
+		"VRG_TEST_REAP="+reap), "foo")
 	pid := awaitReadyPID(t, capDir)
 	r.waitFor(t, "Searching…")
 	awaitFileContent(t, ack)
@@ -150,9 +150,9 @@ func TestPTYQDuringGateHeldPreparationReplaysDiagnostic(t *testing.T) {
 		t.Fatalf("mkfifo: %v", err)
 	}
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
-		"VRG_TEST_DIAG_ACK_FILE="+ack,
-		"VRG_TEST_REAP_FILE="+reap,
-		"VRG_TEST_GATE_FIFO="+gate), "foo")
+		"VRG_TEST_COLLECT_ACK="+ack,
+		"VRG_TEST_REAP="+reap,
+		"VRG_TEST_GATE="+gate), "foo")
 	pid := awaitReadyPID(t, capDir)
 	r.waitFor(t, "Searching…")
 	// The child has exited and been reaped while preparation stays
@@ -183,7 +183,7 @@ func TestPTYQuitAfterCompletedStreamReplaysWarning(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgWarnStreamScript)
 	ack := filepath.Join(capDir, "diag-ack")
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
-		"VRG_TEST_DIAG_ACK_FILE="+ack), "foo")
+		"VRG_TEST_COLLECT_ACK="+ack), "foo")
 	awaitReadyPID(t, capDir)
 	awaitFileContent(t, ack) // collected before the keypress
 	r.waitFor(t, "warn one") // the warning overlay over browse
@@ -212,9 +212,9 @@ func TestPTYControlledFailureReplaysAlongsideEarlierDiagnostics(t *testing.T) {
 		t.Fatalf("mkfifo: %v", err)
 	}
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
-		"VRG_TEST_DIAG_ACK_FILE="+ack,
-		"VRG_TEST_REAP_FILE="+reap,
-		"VRG_TEST_FAIL_FIFO="+fail), "foo")
+		"VRG_TEST_COLLECT_ACK="+ack,
+		"VRG_TEST_REAP="+reap,
+		"VRG_TEST_FAIL_TRIGGER="+fail), "foo")
 	pid := awaitReadyPID(t, capDir)
 	r.waitFor(t, "Searching…")
 	awaitFileContent(t, ack)
@@ -268,7 +268,7 @@ func TestPTYReplayEscapesEmbeddedFilename(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgBadPathScript)
 	ack := filepath.Join(capDir, "diag-ack")
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
-		"VRG_TEST_DIAG_ACK_FILE="+ack), "foo")
+		"VRG_TEST_COLLECT_ACK="+ack), "foo")
 	awaitReadyPID(t, capDir)
 	r.waitFor(t, "(unreadable)") // the failed load's placeholder
 	awaitFileContent(t, ack)     // the failure diagnostic is collected

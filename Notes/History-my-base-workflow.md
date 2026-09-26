@@ -471,3 +471,14 @@ Usage
  Input tokens: 137109 tokens
  Output tokens: 23791 tokens
  Cached input tokens: 5186692 tokens
+
+----
+Task 045-remove-test-hooks-from-production-binary.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 94 messages
+ Input tokens: 158857 tokens
+ Output tokens: 74986 tokens
+ Cached input tokens: 10412641 tokens

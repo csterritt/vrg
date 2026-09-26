@@ -1888,7 +1888,9 @@ measured-cell geometry:
 
 ## cmd/vrg (subprocess boundary)
 
-`main_test.go` builds the real binary once in `TestMain` and asserts
+`main_test.go` builds the real binary once in `TestMain` with `go
+build -tags vrg_testhooks` (Issue #45: the binary under test carries
+the hook seams the production build compiles out) and asserts
 stdout/stderr/status separately:
 
 - **`TestGeneratedHelpStdout`** (named group, rerun by Issue #6) — all
@@ -1948,11 +1950,11 @@ shell scripts (installed by `writeFakeRg` from `main_test.go`):
 `fakeRgBlockScript` writes its pid to a `ready` file then `exec sleep
 3600`; `fakeRgStreamScript` writes its pid, emits a complete one-match
 record stream, and exits 0. The `VRG_CAPTURE_DIR` env tells the scripts
-where to write `ready`; the `VRG_TEST_*` seams come from
-`cmd/vrg/hooks.go`:
+where to write `ready`; the `VRG_TEST_*` seams come from the
+`vrg_testhooks`-tagged `cmd/vrg/seams_testhooks.go` (Issue #45):
 
 - `TestPTYQWhileSearchingExits130` — `q` against a blocked fake rg:
-  exit 130, child pid gone (`ESRCH`), the `VRG_TEST_REAP_FILE` side
+  exit 130, child pid gone (`ESRCH`), the `VRG_TEST_REAP` side
   channel reports `killed`, the captured stream carries the
   display-restoration sequences (`\x1b[?1049l` leave-alt-screen,
   `\x1b[?25h` show-cursor), and `waitExit` asserts the slave's termios
@@ -1963,13 +1965,13 @@ where to write `ready`; the `VRG_TEST_*` seams come from
   process (surfacing as `tea.ErrInterrupted`): exit 130, child reaped,
   termios restored.
 - `TestPTYQDuringGateHeldPreparationExits130` — fake rg emits and exits
-  while `VRG_TEST_GATE_FIFO` holds index preparation; the reap file
+  while `VRG_TEST_GATE` holds index preparation; the reap file
   already shows `exit status 0` when `q` cancels from the gate-held
   window: exit 130, no browse filename rendered, termios restored.
 - `TestPTYOrdinaryExitReapsChild` — `SIGTERM` ends the program without
   a cancellation key while the fake rg still runs: exit 0, child reaped
   (`killed`), terminal restored — the ordinary path cleans up too.
-- `TestPTYControlledFailureExits2` — `VRG_TEST_FAIL_FIFO` injects a
+- `TestPTYControlledFailureExits2` — `VRG_TEST_FAIL_TRIGGER` injects a
   program error mid-search: exit 2, child reaped, termios restored, and
   the `vrg:` diagnostic appears in the PTY stream only after the
   restoration sequences, exactly once.
@@ -1996,7 +1998,7 @@ where to write `ready`; the `VRG_TEST_*` seams come from
 
 `pty_replay_test.go` (same Linux-only harness) is the Issue #11
 process-boundary replay coverage. Every test wires
-`VRG_TEST_DIAG_ACK_FILE` and waits on the acknowledgement — one line
+`VRG_TEST_COLLECT_ACK` and waits on the acknowledgement — one line
 per diagnostic processed into the session collection — before sending
 the exit key; `assertReplayedOnce`/`replayTail` assert on the captured
 stream after the `\x1b[?1049l` display-restoration sequence. Fake-rg
@@ -2012,7 +2014,7 @@ whose one match names a file with an embedded newline and ESC):
 - `TestPTYQWhileSearchingReplaysDiagnostic` — the same boundary for `q`
   while searching: exit 130, replay once.
 - `TestPTYQDuringGateHeldPreparationReplaysDiagnostic` — rg exited
-  (reap shows `exit status 0`) while `VRG_TEST_GATE_FIFO` holds
+  (reap shows `exit status 0`) while `VRG_TEST_GATE` holds
   preparation; the acknowledged warning replays once at 130 and the
   gate-held `missing summary` never appears — no waiting on
   undelivered work.
@@ -2020,9 +2022,38 @@ whose one match names a file with an embedded newline and ESC):
   overlay, `q` dismisses, `q` quits at 0; `warn one` replays once after
   restoration.
 - `TestPTYControlledFailureReplaysAlongsideEarlierDiagnostics` — ack
-  then the `VRG_TEST_FAIL_FIFO` handshake: exit 2, `warn one` and the
+  then the `VRG_TEST_FAIL_TRIGGER` handshake: exit 2, `warn one` and the
   `vrg:` diagnostic each exactly once across the whole captured stream
   (both mechanisms counted), in collection order.
 - `TestPTYReplayEscapesEmbeddedFilename` — the absent newline/ESC file
   fails its load; the replayed `cannot read` diagnostic carries the
   single-lined `we\nir^[d.txt` form and no raw control byte.
+
+`testhooks_test.go` (Linux-only, Issue #45) proves the build topology
+in both directions. `hookManifest` is the explicit list of the nine
+`VRG_TEST_*` names vrg consumes — the probe derives only from it, never
+from a `VRG_TEST_*` grep, because fixture variables like
+`VRG_CAPTURE_DIR` are fake-rg behaviour (Issue #48 appends its
+acknowledgement hooks here). `buildVrgVariant` compiles `cmd/vrg` into
+a temp dir with or without the tag:
+
+- `TestProductionBinaryHasNoTestHooks` — the untagged build: `--help`
+  under the full hook environment is identical to plain help; a full
+  search run with every manifest name set, both trigger fifos fired,
+  and the gate held exits 0 with clean stderr and no reap/ack side
+  files; then the artifact bytes are probed and none of the manifest
+  names appear — the seams are compiled out, not merely inert.
+- `TestTaggedRunnerSeamSelectsReturnShape` — the tagged build: the
+  artifact carries every manifest name, then the
+  `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` matrix runs against a
+  blocked fake rg — baseline exits 130 with `warn one` replayed, the
+  error override exits 2 with `vrg: boom`, the `nil`/`invalid` final
+  models still replay `vrg: boom` but drop `warn one` (proving the
+  injected model reached the real post-`Run()` site), and `nil` model
+  without error exits 0 where the real model would exit 130.
+- `TestTaggedInjectionSeams` — `VRG_TEST_DIAGNOSTIC_TRIGGER` +
+  `VRG_TEST_DIAGNOSTIC_TEXT` land the line in the session collection
+  (acknowledged, then replayed once at the 130 exit), and
+  `VRG_TEST_FAIL_TRIGGER` + `VRG_TEST_FAIL_DIAGNOSTIC` inject the
+  controlled failure: exit 2, the diagnostic exactly once, the child
+  reaped per `VRG_TEST_REAP`.
