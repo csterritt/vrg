@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/x/ansi"
+	"vrg/internal/present"
 )
 
 // renderNoResults composes the no-results screen: the message centred
@@ -19,15 +19,15 @@ func (m Model) renderNoResults() string {
 	if m.binarySkipped > 0 {
 		text = fmt.Sprintf("No results found (%d binary files skipped)", m.binarySkipped)
 	}
-	line := ansi.Truncate(text, m.width, "")
-	pad := max(0, (m.width-ansi.StringWidth(line))/2)
+	line := present.Truncate(text, m.width, "")
+	pad := max(0, (m.width-present.CellWidth(line))/2)
 	rows := make([]string, m.height)
 	for r := range rows {
 		row := ""
 		if r == m.height/2 {
 			row = strings.Repeat(" ", pad) + line
 		}
-		rows[r] = row + strings.Repeat(" ", max(0, m.width-ansi.StringWidth(row)))
+		rows[r] = row + strings.Repeat(" ", max(0, m.width-present.CellWidth(row)))
 	}
 	return strings.Join(rows, "\n")
 }

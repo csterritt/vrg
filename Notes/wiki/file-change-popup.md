@@ -45,11 +45,16 @@ anchors" (the one-stop no-op that issues no pop-up) in
 `renderPopup` recomputes geometry on every frame: the raw destination
 path captured at selection (`popupPath`) is escaped through
 `present.Path` — the Issue #6 single-line safe form — left-truncated
-with a leading `…` to the frame's interior width, framed by
-`theme.Overlay`'s plain single-line border, and centred by `composite`,
-the cell-exact splice `renderOverlay` was refactored onto (head and
-tail of the underlying row preserved, box rows clipped at the frame
-edge). Because centring and truncation derive from the current
+with a leading `…` to the frame's interior width by
+`present.TruncateLeft`, framed by `theme.Overlay`'s plain single-line
+border, and centred by `composite`, the cell-exact splice
+`renderOverlay` was refactored onto (head and tail of the underlying
+row preserved, box rows clipped at the frame edge). Since Issue #39
+the truncation, the border's padding, and the splice all measure
+through the shared grapheme/cell helper, so a decomposed combining
+mark or a wide CJK name counts by painted cells — the pop-up cannot
+assume `present.Path` output is free of combining marks. Because
+centring and truncation derive from the current
 `width`/`height` at render time, a `WindowSizeMsg` recentres and
 re-truncates the same instance — resize neither dismisses the pop-up
 nor restarts its timer. The pop-up composites under the diagnostics

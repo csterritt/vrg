@@ -1,0 +1,12 @@
+#!/bin/sh
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"mixed.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"mixed.txt"},"lines":{"text":"xéyz\n"},"line_number":1,"submatches":[{"match":{"text":"́"},"start":2,"end":4}]}}' \
+'{"type":"match","data":{"path":{"text":"mixed.txt"},"lines":{"text":"a👨‍👩‍👧c\n"},"line_number":2,"submatches":[{"match":{"text":"👩"},"start":8,"end":12}]}}' \
+'{"type":"match","data":{"path":{"text":"mixed.txt"},"lines":{"text":"p12345678世界xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n"},"line_number":3,"submatches":[{"match":{"text":"世界"},"start":9,"end":15}]}}' \
+'{"type":"end","data":{"path":{"text":"mixed.txt"},"binary_offset":null}}' \
+'{"type":"begin","data":{"path":{"text":"世界名.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"世界名.txt"},"lines":{"text":"content of wide file\n"},"line_number":1,"submatches":[{"match":{"text":"content"},"start":0,"end":7}]}}' \
+'{"type":"end","data":{"path":{"text":"世界名.txt"},"binary_offset":null}}' \
+'{"type":"summary","data":{}}'
+exit 0

@@ -4,7 +4,8 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
+
+	"vrg/internal/present"
 )
 
 // The fixed terminal minimum (Issue #33): below either dimension the
@@ -50,15 +51,15 @@ func (m Model) renderTooSmall() string {
 	if m.width <= 0 || m.height <= 0 {
 		return ""
 	}
-	line := ansi.Truncate("Terminal too small", m.width, "")
-	pad := max(0, (m.width-ansi.StringWidth(line))/2)
+	line := present.Truncate("Terminal too small", m.width, "")
+	pad := max(0, (m.width-present.CellWidth(line))/2)
 	rows := make([]string, m.height)
 	for r := range rows {
 		row := ""
 		if r == m.height/2 {
 			row = strings.Repeat(" ", pad) + line
 		}
-		rows[r] = row + strings.Repeat(" ", max(0, m.width-ansi.StringWidth(row)))
+		rows[r] = row + strings.Repeat(" ", max(0, m.width-present.CellWidth(row)))
 	}
 	return strings.Join(rows, "\n")
 }

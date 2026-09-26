@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"vrg/internal/present"
 	"vrg/internal/searchindex"
@@ -198,7 +197,7 @@ func (o overlay) layout(w, h int) (lines []string, interiorH, scroll int) {
 	}
 	maxLine := 0
 	for _, l := range o.lines {
-		if n := ansi.StringWidth(l); n > maxLine {
+		if n := present.CellWidth(l); n > maxLine {
 			maxLine = n
 		}
 	}
@@ -209,7 +208,7 @@ func (o overlay) layout(w, h int) (lines []string, interiorH, scroll int) {
 		iw = 1
 	}
 	for _, l := range o.lines {
-		for _, wl := range strings.Split(ansi.Wrap(l, iw, ""), "\n") {
+		for _, wl := range strings.Split(present.Wrap(l, iw, ""), "\n") {
 			lines = append(lines, wl)
 		}
 	}
@@ -281,7 +280,7 @@ func (m Model) composite(base, box string) string {
 	boxRows := strings.Split(box, "\n")
 	boxW := 0
 	for _, r := range boxRows {
-		boxW = max(boxW, ansi.StringWidth(r))
+		boxW = max(boxW, present.CellWidth(r))
 	}
 	boxW = min(boxW, m.width)
 
@@ -295,11 +294,11 @@ func (m Model) composite(base, box string) string {
 		if y+i >= len(rows) {
 			break
 		}
-		br = ansi.Truncate(br, m.width-x, "")
-		w := ansi.StringWidth(br)
-		head := ansi.Truncate(rows[y+i], x, "")
-		head += strings.Repeat(" ", max(0, x-ansi.StringWidth(head)))
-		tail := ansi.Cut(rows[y+i], x+w, m.width)
+		br = present.Truncate(br, m.width-x, "")
+		w := present.CellWidth(br)
+		head := present.Truncate(rows[y+i], x, "")
+		head += strings.Repeat(" ", max(0, x-present.CellWidth(head)))
+		tail := present.Cut(rows[y+i], x+w, m.width)
 		rows[y+i] = head + br + tail
 	}
 	return strings.Join(rows[:m.height], "\n")

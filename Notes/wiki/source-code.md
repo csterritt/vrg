@@ -189,7 +189,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   since Issue #31), `scrollOverlay` (the shared clamped up/down
   handler), `renderOverlay` (the centred
   `theme.Overlay` box composited over the base frame by cell-exact
-  `ansi.Truncate`/`ansi.Cut` splicing), and `renderBlank` (the frame
+  `present.Truncate`/`present.Cut` splicing), and `renderBlank` (the frame
   under a fatal-only overlay). Issue #15 adds `openOverlay` (the single
   overlay-opening route — appends lines when an overlay is already up,
   and cancels any live pop-up so it cannot return) and `composite`
@@ -275,7 +275,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [file-list-layout.md](file-list-layout.md)), adds `scrollList` (the
   minimal-movement active-entry scroll, run inside `syncLayout`), and
   rewrites `truncateLeft` as a grapheme-boundary cut that never
-  exceeds its budget. Issue #13 adds `navigate` (the `n`/`p` cursor step:
+  exceeds its budget — Issue #39 promotes that function to
+  `present.TruncateLeft` and routes every display-width consumer here
+  (`listWidth`'s longest-entry measure, entry padding, `filenameRule`,
+  row padding, placeholder truncation) through the shared
+  `present.CellWidth`/`Truncate`/`TruncateLeft` helpers. Issue #13 adds `navigate` (the `n`/`p` cursor step:
   strict no-op on zero/one stops, restyle within a file, and on a
   file crossing the departing anchor is saved, the destination's
   matching-key rows and saved anchor installed, and `ensureLoad`
@@ -469,6 +473,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
   [line-terminators-and-bom.md](line-terminators-and-bom.md),
   and [wrap-mode.md](wrap-mode.md).
+- `internal/present/cellwidth.go` — Issue #39's shared ANSI-aware
+  cell-width helper: `CellWidth` (painted cells), `TruncateLeft`
+  (leading-`…` fit that drops a straddling cluster whole and preserves
+  escape sequences for the kept text's styling), `Truncate`, `Cut`,
+  and `Wrap` — the single funnel every display-width/truncation
+  consumer calls so the renderer shares one grapheme/cell policy. It
+  is also the only production file where `utf8.DecodeRuneInString` may
+  occur, enforced by `internal/app/guard_test.go`. See
+  [safe-presentation.md](safe-presentation.md).
 - `internal/present/doc.go` — the shared all-sink utility contract.
 
 ## internal/filebuffer
@@ -606,7 +619,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   wrap), `Gutter`, `FileList`, `FilenameRule`, `Match` and `Indicator`
   (the scheme's true inverse pair via `scheme.inverse`),
   `CurrentMatch` (inverse + underline), `CurrentFile` (underline), and
-  `Overlay` (base colours, plain single-line border). `Plain` remains
+  `Overlay` (base colours, plain single-line border — sized and padded
+  through `present.CellWidth` since Issue #39). `Plain` remains
   the no-style composition path whose identity styles let sink-safety
   tests assert no escape bytes may legitimately appear. See
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).

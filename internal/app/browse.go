@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
+
 	"vrg/internal/filebuffer"
 	"vrg/internal/present"
 	"vrg/internal/searchindex"
@@ -359,7 +359,7 @@ func (m Model) listWidth(gutterW, res int) int {
 	}
 	maxW := 0
 	for _, f := range m.files {
-		if w := ansi.StringWidth(m.listEntry(f)); w > maxW {
+		if w := present.CellWidth(m.listEntry(f)); w > maxW {
 			maxW = w
 		}
 	}
@@ -557,9 +557,9 @@ func (m Model) renderBrowse() string {
 			fi := m.listTop + r
 			entry := ""
 			if fi < len(m.files) {
-				entry = truncateLeft(m.listEntry(m.files[fi]), listW)
+				entry = present.TruncateLeft(m.listEntry(m.files[fi]), listW)
 			}
-			w := ansi.StringWidth(entry)
+			w := present.CellWidth(entry)
 			if fi == curIdx && entry != "" {
 				entry = m.theme.CurrentFile(entry)
 			} else {
@@ -580,36 +580,10 @@ func (m Model) renderBrowse() string {
 		row := sb.String()
 		// Pad to the frame edge so the base style's background covers
 		// the whole row.
-		row += strings.Repeat(" ", max(0, m.width-ansi.StringWidth(row)))
+		row += strings.Repeat(" ", max(0, m.width-present.CellWidth(row)))
 		rows[r] = row
 	}
 	return strings.Join(rows, "\n")
-}
-
-// truncateLeft keeps the rightmost cells of s within a budget of n
-// cells, marking truncation with a leading "…" so basenames stay
-// visible. The cut lands only on a grapheme boundary: a cluster
-// straddling it is dropped whole, so the result never exceeds n cells
-// and never shows half a glyph.
-func truncateLeft(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	w := ansi.StringWidth(s)
-	if w <= n {
-		return s
-	}
-	// The "…" marker takes one cell; the kept suffix fits in n-1.
-	// Whole leading clusters drop until the suffix fits — a cluster
-	// straddling the cut is dropped rather than split.
-	drop := w - n + 1
-	acc, i := 0, 0
-	for i < len(s) && acc < drop {
-		cl, cw := ansi.FirstGraphemeCluster(s[i:], ansi.GraphemeWidth)
-		acc += cw
-		i += len(cl)
-	}
-	return "…" + s[i:]
 }
 
 // filenameRule embeds the escaped current path in a horizontal rule —
@@ -626,20 +600,20 @@ func filenameRule(path []byte, note string, w int) string {
 	if w <= 4 || path == nil {
 		return strings.Repeat("─", w)
 	}
-	if ansi.StringWidth(note)+4 > w {
+	if present.CellWidth(note)+4 > w {
 		note = ""
 	}
 	avail := w - 4 // "── " before the path, " " before the dash run
 	if note != "" {
-		avail -= ansi.StringWidth(note) + 1
+		avail -= present.CellWidth(note) + 1
 	}
-	shown := truncateLeft(present.Path(path), avail)
+	shown := present.TruncateLeft(present.Path(path), avail)
 	rule := "── " + shown
 	if shown != "" && note != "" {
 		rule += " "
 	}
 	rule += note + " "
-	if rw := ansi.StringWidth(rule); rw < w {
+	if rw := present.CellWidth(rule); rw < w {
 		rule += strings.Repeat("─", w-rw)
 	}
 	return rule
@@ -684,15 +658,15 @@ func (m Model) contentRow(row int, cur []byte, buf *filebuffer.Buffer, failed bo
 	if buf == nil {
 		if row == 0 && cur != nil {
 			if failed && m.loading[string(cur)] == 0 {
-				return gutter + ansi.Truncate("(unreadable)", textW, "")
+				return gutter + present.Truncate("(unreadable)", textW, "")
 			}
-			return gutter + ansi.Truncate("Loading…", textW, "")
+			return gutter + present.Truncate("Loading…", textW, "")
 		}
 		return ""
 	}
 	if buf.Unsupported() != "" {
 		if row == 0 && cur != nil {
-			return gutter + ansi.Truncate("(unsupported encoding)", textW, "")
+			return gutter + present.Truncate("(unsupported encoding)", textW, "")
 		}
 		return ""
 	}
@@ -734,7 +708,7 @@ func (m Model) contentRow(row int, cur []byte, buf *filebuffer.Buffer, failed bo
 	if r.Line == curLine && r.MatchHiddenRight {
 		right = m.theme.Indicator("*")
 	}
-	return gutter + cells + strings.Repeat(" ", max(0, textW-ansi.StringWidth(cells))) + right
+	return gutter + cells + strings.Repeat(" ", max(0, textW-present.CellWidth(cells))) + right
 }
 
 // renderCells emits a line's display cells clipped to textW columns with

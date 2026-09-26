@@ -39,7 +39,11 @@ Catalog of all wiki pages for the vrg project.
   `internal/present` utility (`Path`/`LineOf`/`Diagnostic`), the
   canonical per-sink-class escaping contracts, the `cli.Escape`
   replacement, the shared sink-safety table with its fixtures and
-  no-style composition method, and later-sink row ownership
+  no-style composition method, and later-sink row ownership; plus
+  Issue #39's `cellwidth.go` shared ANSI-aware cell-width helper
+  (`CellWidth`/`TruncateLeft`/`Truncate`/`Cut`/`Wrap`) every display
+  consumer routes through, under the `utf8.DecodeRuneInString`
+  allow-list guard
 - [no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md) —
   Issue #8: `binary_offset` end records dropping a file's collected
   stops with a distinct excluded-file tally, usable results as retained
@@ -168,7 +172,8 @@ Catalog of all wiki pages for the vrg project.
   `floor(0.40 × terminal width)`, terminal minus gutter-plus-ten-plus-
   reserved-indicator), the `left`/`tab` hide and `right`/`shift+tab`
   show preference surviving zero-width allocations, grapheme-safe
-  leading-`…` truncation, the filename-row buffer-status note slot
+  leading-`…` truncation (`present.TruncateLeft` since Issue #39),
+  the filename-row buffer-status note slot
   (real notes owned by Issues #26, #29, #30), minimal-movement list
   scrolling, and every width change routed through the Issue #17
   prepared-layout path preserving the logical anchor; plus Issue

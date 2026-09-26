@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/x/ansi"
+	"vrg/internal/present"
 )
 
 // scheme is one colour scheme's base foreground/background SGR pair:
@@ -119,17 +119,20 @@ func (t Theme) CurrentFile(s string) string {
 // Overlay frames inner lines in a plain single-line border painted in
 // the base colours: ┌─┐ above, │ sides, └─┘ below, with each line
 // padded to the widest. Under Plain the box is drawn without styling.
+// Widths come from the shared grapheme/cell helper, so wide and
+// combining text pads to the cells it paints and every border column
+// stays aligned.
 func (t Theme) Overlay(inner []string) string {
 	w := 0
 	for _, l := range inner {
-		if n := ansi.StringWidth(l); n > w {
+		if n := present.CellWidth(l); n > w {
 			w = n
 		}
 	}
 	var b strings.Builder
 	b.WriteString("┌" + strings.Repeat("─", w) + "┐")
 	for _, l := range inner {
-		b.WriteString("\n│" + l + strings.Repeat(" ", w-ansi.StringWidth(l)) + "│")
+		b.WriteString("\n│" + l + strings.Repeat(" ", w-present.CellWidth(l)) + "│")
 	}
 	b.WriteString("\n└" + strings.Repeat("─", w) + "┘")
 	return t.paint(b.String(), t.pair(t.s), t.pair(t.s))

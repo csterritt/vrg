@@ -71,6 +71,53 @@ embedded via `Path` keeps its single-line escaped form: **escape the
 filename first, then embed it**, and its newline can never become a
 diagnostic paragraph break.
 
+## Display geometry — the shared cell-width helper
+
+Issue #39 (task
+`Notes/tasks/039-render-from-shared-grapheme-cell-model.md`)
+gave the package a second role beside sanitization: the single
+authority for terminal display geometry. `internal/present/cellwidth.go`
+exposes `CellWidth` (cells a string paints), `TruncateLeft` (fit into n
+cells, leading `…` marking the cut), `Truncate`, `Cut` (the cell window
+`[left, right)`), and `Wrap` — all under one ANSI-aware grapheme
+policy: text segments into grapheme clusters (the rivo/uniseg rules —
+a base plus its combining marks is one cluster, an emoji ZWJ sequence
+is one two-cell cluster), each cluster occupies the cells of its
+widest glyph, and escape/control sequences paint no cells.
+`TruncateLeft`'s cut lands only on a cluster boundary — a cluster
+straddling it drops whole rather than painting half a glyph — and
+sequences survive the cut wherever they fall so kept text retains its
+styling state.
+
+Every display-width and truncation consumer routes through the helper:
+line rendering and match styling (`renderCells` emits `Line`'s cells
+directly — the file panel never re-derives positions from runes or
+bytes), `Diagnostic`'s tab-stop column counting, file-list entry
+padding and `listWidth`'s longest-entry measure, indicator-column
+sizing (`reservedW`), filename-row fitting (`filenameRule`), the
+file-change pop-up's truncation and centring (`renderPopup` +
+`composite`), the diagnostics overlay's wrap and box sizing
+(`overlay.layout`, `composite`), `Theme.Overlay`'s border sizing and
+padding, and the centred `No results found`/`Terminal too small`
+screens. Issue #24's `truncateLeft` — an app-local cluster walk —
+moved into the package as `TruncateLeft`, becoming ANSI-aware for the
+first time (sequences are skipped and preserved, not measured as
+clusters).
+
+The policy is enforced mechanically: a source-scanning test walks
+every non-test production `.go` file under `internal/` and `cmd/` and
+permits `utf8.DecodeRuneInString` in `internal/present/cellwidth.go`
+alone — a call anywhere else fails, including one in a newly added
+file or package, so no geometry consumer can grow a private
+rune-decoding width loop that evades the shared policy. (`Diagnostic`'s
+non-geometry byte decoding uses `utf8.DecodeRune`, a different
+symbol.)
+
+PRD cross-references: "Text, graphemes, and safe presentation" (one
+grapheme/cell policy for all display mapping) and "Navigation,
+viewport, and logical anchors" (clip and indicator geometry) in
+`Notes/PRD-vrg.md`.
+
 ## Sink wiring and the Issue #1 escaper replacement
 
 `cli.Escape` is gone. `internal/cli` now escapes every hostile
@@ -155,6 +202,9 @@ pass unmodified against the replacement.
 - `internal/present/present.go` — `Path`, `Diagnostic`.
 - `internal/present/line.go` — `Line` (raw bytes + text + cells +
   `lo`/`hi` maps), `LineOf`, `Cell`, `Span`.
+- `internal/present/cellwidth.go` — Issue #39's shared ANSI-aware
+  cell-width helper: `CellWidth`, `TruncateLeft`, `Truncate`, `Cut`,
+  `Wrap`; the only file where `utf8.DecodeRuneInString` may occur.
 - `internal/present/doc.go` — package contract.
 
 See also: [browse-tracer.md](browse-tracer.md) (the first sinks),

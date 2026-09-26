@@ -44,6 +44,6 @@ func (m *Model) openPopup(path []byte) tea.Cmd {
 // re-truncates without dismissing the instance or restarting its
 // timer.
 func (m Model) renderPopup(base string) string {
-	inner := truncateLeft(present.Path(m.popupPath), max(0, m.width-2))
+	inner := present.TruncateLeft(present.Path(m.popupPath), max(0, m.width-2))
 	return m.composite(base, m.theme.Overlay([]string{inner}))
 }

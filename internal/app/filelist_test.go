@@ -85,12 +85,12 @@ func TestTruncateLeftGraphemeSafe(t *testing.T) {
 		{"zwj emoji never split", "a👨‍👩‍👧b", 3, "…b"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := truncateLeft(tc.s, tc.n)
+			got := present.TruncateLeft(tc.s, tc.n)
 			if got != tc.want {
-				t.Fatalf("truncateLeft(%q, %d) = %q, want %q", tc.s, tc.n, got, tc.want)
+				t.Fatalf("TruncateLeft(%q, %d) = %q, want %q", tc.s, tc.n, got, tc.want)
 			}
 			if w := ansi.StringWidth(got); w > max(0, tc.n) {
-				t.Fatalf("truncateLeft(%q, %d) = %q is %d cells — over budget", tc.s, tc.n, got, w)
+				t.Fatalf("TruncateLeft(%q, %d) = %q is %d cells — over budget", tc.s, tc.n, got, w)
 			}
 		})
 	}

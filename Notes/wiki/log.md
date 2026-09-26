@@ -1570,3 +1570,53 @@ Sources: `Notes/tasks/038-viewport-content-panel-width.md`,
 `internal/app/browse.go`, `internal/app/app.go`,
 `internal/app/reveal_horizontal_test.go`, `internal/app/pan_test.go`,
 `internal/app/layout_test.go`, `internal/app/completion_test.go`.
+
+## [2026-09-24] ingest | Issue #39 shared grapheme/cell model end to end
+
+Issue #39 (`Notes/tasks/039-render-from-shared-grapheme-cell-model.md`)
+made `internal/present/cellwidth.go` the single authority for terminal
+display geometry: `CellWidth`, `TruncateLeft`, `Truncate`, `Cut`, and
+`Wrap` implement one ANSI-aware grapheme policy — text segments into
+grapheme clusters (a base plus its combining marks is one cluster, an
+emoji ZWJ sequence is one two-cell cluster), each cluster occupies the
+cells of its widest glyph, and escape/control sequences paint no
+cells. Every display-width and truncation consumer now routes through
+the helper: `renderCells` emits `present.Line` cells directly (the
+file panel never re-derives positions from runes or bytes),
+`Diagnostic`'s tab-stop column counting, `listWidth`'s longest-entry
+measure and list-entry padding, indicator-column sizing,
+`filenameRule`, the file-change pop-up's truncation and centring, the
+diagnostics overlay's wrap and box splice, `Theme.Overlay`'s border
+sizing and padding, and the centred no-results/too-small screens.
+Issue #24's `truncateLeft` moved into the package as
+`TruncateLeft`, becoming ANSI-aware — sequences are skipped and
+preserved so kept text retains its styling state. A source-scanning
+test (`internal/app/guard_test.go`) walks every non-test production
+`.go` file under `internal/` and `cmd/` and permits
+`utf8.DecodeRuneInString` in `internal/present/cellwidth.go` alone;
+`Diagnostic`'s non-geometry decoding now uses `utf8.DecodeRune`. The
+composed-view tests (`internal/app/cellmodel_test.go`) pin
+cluster-exact highlights for two-cell CJK, combining-only matches,
+and interior bytes of a ZWJ sequence; blanked split-cluster cells,
+wide/combining list entries and filename-rule fitting, indicator
+visibility for a split wide cluster, and the pop-up's width,
+truncation, and centring under decomposed combining marks.
+Updated [safe-presentation](safe-presentation.md) (new *Display
+geometry* section and the `cellwidth.go` file entry),
+[file-list-layout](file-list-layout.md) (the shared `TruncateLeft`),
+[file-change-popup](file-change-popup.md) (shared-helper truncation
+and centring), [theme-and-colour-toggle](theme-and-colour-toggle.md)
+(`Overlay`'s measured-cell sizing), [source-code](source-code.md)
+(the new helper plus its consumers), [unit-tests](unit-tests.md) (the
+new test files), and the index.
+New files: `internal/present/cellwidth.go`,
+`internal/present/cellwidth_test.go`, `internal/theme/cellwidth_test.go`,
+`internal/app/cellmodel_test.go`, `internal/app/guard_test.go`;
+`Notes/walkthroughs/039-04/` holds the walkthrough.
+Sources: `Notes/tasks/039-render-from-shared-grapheme-cell-model.md`,
+`Notes/PRD-vrg.md` (*Text, graphemes, and safe presentation*,
+*Navigation, viewport, and logical anchors*),
+`internal/present/cellwidth.go`, `internal/present/present.go`,
+`internal/app/browse.go`, `internal/app/overlay.go`,
+`internal/app/popup.go`, `internal/theme/theme.go`,
+`internal/app/cellmodel_test.go`, `internal/app/guard_test.go`.

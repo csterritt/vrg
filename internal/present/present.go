@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/charmbracelet/x/ansi"
 )
 
 // Path renders raw path bytes safe for single-line display — the
@@ -67,11 +65,12 @@ func Path(raw []byte) string {
 // escaped form intact and can never become a diagnostic paragraph
 // break.
 func Diagnostic(s string) string {
+	sb := []byte(s)
 	var b strings.Builder
 	b.Grow(len(s))
 	col := 0 // display column within the current diagnostic line
-	for i := 0; i < len(s); {
-		c := s[i]
+	for i := 0; i < len(sb); {
+		c := sb[i]
 		if c < utf8.RuneSelf {
 			switch {
 			case c == '\n':
@@ -102,7 +101,7 @@ func Diagnostic(s string) string {
 			i++
 			continue
 		}
-		r, size := utf8.DecodeRuneInString(s[i:])
+		r, size := utf8.DecodeRune(sb[i:])
 		if r == utf8.RuneError && size == 1 {
 			fmt.Fprintf(&b, `\x%02x`, c)
 			col += 4
@@ -114,7 +113,7 @@ func Diagnostic(s string) string {
 			col += 6
 		} else {
 			b.WriteString(s[i : i+size])
-			col += ansi.StringWidth(s[i : i+size])
+			col += CellWidth(s[i : i+size])
 		}
 		i += size
 	}

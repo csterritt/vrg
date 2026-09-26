@@ -100,15 +100,19 @@ text stays at the top in both directions of the round trip.
 
 ## Grapheme-safe left truncation
 
-`truncateLeft` keeps the rightmost cells of an over-wide entry or path
-within the budget, marking truncation with a leading `…` so basenames
-stay visible. The cut lands only on a grapheme boundary — it walks
-clusters with `ansi.FirstGraphemeCluster` and drops a cluster
-straddling the cut whole rather than splitting it, so the result never
-exceeds the budget and never shows half a glyph (the PRD's wide and
-combining characters). `ansi.TruncateLeft` alone could not guarantee
-this: it keeps a wide cluster straddling the cut, overflowing the
-budget by a cell.
+`present.TruncateLeft` — Issue #24's `truncateLeft`, promoted into the
+shared cell-width helper by Issue #39 — keeps the rightmost cells of an
+over-wide entry or path within the budget, marking truncation with a
+leading `…` so basenames stay visible. The cut lands only on a grapheme
+boundary: a cluster straddling it drops whole rather than splitting, so
+the result never exceeds the budget and never shows half a glyph (the
+PRD's wide and combining characters). `ansi.TruncateLeft` alone could
+not guarantee this: it keeps a wide cluster straddling the cut,
+overflowing the budget by a cell. The shared form is also ANSI-aware —
+escape sequences paint no cells and survive the cut — while
+`listWidth`'s longest-entry measure and the render loop's padding use
+`present.CellWidth`, so wide and combining names count by the cells
+they paint.
 
 ## The filename row's status slot
 
@@ -172,8 +176,11 @@ See [unit-tests.md](unit-tests.md) § `internal/app`.
   browse-key cases.
 - `internal/app/browse.go` — `listWidth` (the formula and the
   `listShow` gate), `scrollList`, `syncLayout`'s scroll and geometry
-  sequencing, `truncateLeft`'s cluster-boundary cut,
-  `filenameRule`'s note slot, `renderBrowse`'s `listTop` window.
+  sequencing, `filenameRule`'s note slot, `renderBrowse`'s `listTop`
+  window — width and truncation routed through `present.CellWidth`/
+  `present.TruncateLeft` since Issue #39.
+- `internal/present/cellwidth.go` — `TruncateLeft`'s cluster-boundary
+  cut, shared with every other truncation consumer.
 
 See also: [browse-tracer.md](browse-tracer.md) (the two-pane
 composition this lays out),

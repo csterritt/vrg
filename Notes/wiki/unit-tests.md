@@ -287,6 +287,23 @@ contracts of the shared utility:
   tab byte's span covers the whole expansion.
 - `TestLineRetainsRaw` — raw line bytes survive presentation.
 
+`cellwidth_test.go` (same package, Issue #39) pins the shared
+ANSI-aware grapheme/cell policy:
+
+- `TestCellWidthSharedGraphemePolicy` — painted-cell widths: two-cell
+  CJK, a base-plus-combining cluster as one cell, an emoji ZWJ
+  sequence as one two-cell cluster, escape sequences painting no
+  cells, and caret-escape forms counting their cells.
+- `TestTruncateLeftSharedGraphemePolicy` — the leading-`…` fit:
+  unchanged within budget, empty at zero/negative budgets, a wide
+  cluster straddling the cut dropped whole, combining and ZWJ clusters
+  never split, styled input keeping its escape sequences for the kept
+  text, and every result within its cell budget.
+- `TestTruncateCutAndWrapShareThePolicy` — `Truncate`, `Cut`, and
+  `Wrap` run the same policy: tail truncation inside budget, a
+  straddling cluster dropped, a window cut keeping whole clusters, and
+  a width break.
+
 ## internal/filebuffer
 
 `filebuffer_test.go` (same package) covers
@@ -602,7 +619,8 @@ anchor preservation through every relayout cause:
 - `TestTruncateLeftGraphemeSafe` — the leading-`…` cut fits the budget
   exactly and lands only on cluster boundaries: wide characters
   straddling the cut drop whole, combining clusters and ZWJ sequences
-  are never split, and zero/negative budgets yield empty strings.
+  are never split, and zero/negative budgets yield empty strings
+  (against `present.TruncateLeft` since Issue #39).
 - `TestFilenameRuleStatusSlot` — the note slot wins cells over the
   path (which left-truncates to nothing so the note paints whole), a
   too-wide note is dropped rather than clipped, and degenerate widths
@@ -633,6 +651,43 @@ anchor preservation through every relayout cause:
 - `TestStatusSlotRendersInFilenameRow` — a synthetic `statusNote`
   joins the filename rule at 80 columns, and at 30 columns the path
   truncates so the note still paints whole.
+
+`cellmodel_test.go` (same package, Issue #39) pins the composed view's
+cluster-exact rendering against the shared grapheme/cell model —
+decomposed combining marks throughout:
+
+- `TestComposedViewWideClusterMatchCoversExactlyItsCells` — a match
+  overlapping a two-cell CJK character styles that cluster's cells
+  exactly and never swallows the following character.
+- `TestComposedViewCombiningClusterStaysWhole` — a combining-only
+  match paints the whole base-plus-mark cell, and a panning clip edge
+  splitting a wide combining cluster blanks the in-window cell rather
+  than painting half the glyph.
+- `TestComposedViewZWJClusterMeasuredAndUnsplit` — an interior-bytes
+  match inside an emoji ZWJ sequence highlights the whole two-cell
+  cluster, never a fragment.
+- `TestComposedViewWidePathListAndRuleGeometry` — file-list entries
+  and the filename rule measure decomposed `e◌́` and `世界` names by
+  painted cells, padding and placing the rule by cell width.
+- `TestComposedViewIndicatorColumnWideText` — the gutter and reserved
+  edge indicators report a wide-cluster match hidden when only its
+  split-blanked cell shows, and partially visible once the whole
+  cluster paints.
+- `TestPopupWideAndCombiningPathGeometry` — the file-change pop-up's
+  interior width, leading-`…` truncation, and centring hold for wide
+  and decomposed combining paths — `present.Path` output is not
+  assumed free of combining marks.
+
+`guard_test.go` (same package, Issue #39) is the mechanical policy
+guard:
+
+- `TestDecodeRuneInStringOnlyInCellHelper` — an AST scan of every
+  non-test production `.go` file under `internal/` and `cmd/` permits
+  `utf8.DecodeRuneInString` only in
+  `internal/present/cellwidth.go`; a call anywhere else — including a
+  newly added file or package — fails, so no display-geometry consumer
+  can grow a private rune-decoding width or truncation loop outside
+  the shared helper. Test-only decoder utilities are excluded.
 
 `load_test.go` (same package, Issue #25) pins the asynchronous
 load-isolation contracts. Helpers: `gatedModel` (a browse model wired
@@ -1700,6 +1755,13 @@ exact-SGR granularity:
   border painted in the base colours.
 - `TestPlainIsIdentity` — every style is the identity under `Plain`
   and `Overlay` emits no escape byte.
+
+`cellwidth_test.go` (same package, Issue #39) pins `Overlay`'s
+measured-cell geometry:
+
+- `TestOverlaySizesByMeasuredCellWidth` — wide, combining, and ZWJ
+  lines each pad to the cells they paint so every border column
+  aligns, under both schemes and on `Plain`'s unstyled box.
 
 ## cmd/vrg (subprocess boundary)
 

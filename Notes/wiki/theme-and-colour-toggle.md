@@ -88,7 +88,11 @@ line.
 ## Files
 
 - `internal/theme/theme.go`, `internal/theme/theme_test.go` — schemes,
-  `Toggle`/`Light`, the style set, `Plain`, and their tests.
+  `Toggle`/`Light`, the style set, `Plain`, and their tests. Since
+  Issue #39 `Overlay` measures and pads through
+  `present.CellWidth` (`internal/theme/cellwidth_test.go` pins border
+  alignment for wide and combining text), so its box columns line up
+  under the shared grapheme/cell policy.
 - `internal/app/app.go` — `c` handling and the `Base` frame wrap.
 - `internal/app/browse.go` — style consumption, the `current` flag, and
   full-width row padding.
