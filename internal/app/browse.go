@@ -91,8 +91,9 @@ func (m Model) currentStop() (searchindex.Stop, bool) {
 // already cached, and its load is requested when the file is neither
 // cached nor in flight nor already failed — and opens the file-change
 // pop-up: a fresh instance whose one-second expiry command returns
-// alongside the load. The file list needs no wiring: its underlined
-// entry derives from the cursor.
+// alongside the load. A previously failed destination instead runs the
+// re-entry sequence and shows no pop-up. The file list needs no
+// wiring: its underlined entry derives from the cursor.
 func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 	depart := m.currentPath()
 	var step searchindex.Step
@@ -124,12 +125,16 @@ func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 		// The horizontal offset resets to zero on file change, ahead
 		// of the reveal's horizontal half.
 		m.vp.SetOffset(0)
-		pop = m.openPopup(step.Stop.Path)
+		// A failed destination gets the re-entry sequence's
+		// prior-failure overlay, not the file-change pop-up.
+		if !m.failed[string(step.Stop.Path)] {
+			pop = m.openPopup(step.Stop.Path)
+		}
 	}
 	// The destination reveal commits against installed rows or is
 	// carried as the pending intent for the newest stop.
 	m.reveal()
-	return m, tea.Batch(m.ensureLoad(), lay, pop)
+	return m, tea.Batch(m.entryLoad(step), lay, pop)
 }
 
 // reveal applies the destination reveal for the current stop: the
@@ -185,6 +190,31 @@ func (m Model) currentPath() []byte {
 	return nil
 }
 
+// entryLoad issues the load a navigation destination is owed. An
+// ordinary destination follows the first-load rules; a previously
+// failed file re-entered from a different file runs the re-entry
+// sequence instead (Issue #26): the prior failure's overlay opens at
+// once, the panel returns to "Loading…" for the retry, and exactly one
+// retry load starts while the overlay is up — dropped, not queued,
+// when that path's load is somehow already in flight, in which case
+// the existing load's settlement drives the panel update. A same-file
+// step never retries a failed file.
+func (m *Model) entryLoad(step searchindex.Step) tea.Cmd {
+	key := string(step.Stop.Path)
+	if !step.FileChanged || !m.failed[key] {
+		return m.ensureLoad()
+	}
+	if lines := m.failLines[key]; len(lines) > 0 {
+		m.openOverlay(lines)
+	}
+	if m.loading[key] != 0 {
+		return nil
+	}
+	m.loadSeq++
+	m.loading[key] = m.loadSeq
+	return m.loadCmd(step.Stop, m.loadSeq)
+}
+
 // ensureLoad starts the current file's load unless it is in flight or
 // settled; repeat requests are dropped, not queued — at most one load
 // is ever in flight per raw path. It mints the request's identity,
@@ -216,11 +246,15 @@ func (m Model) loadCmd(s searchindex.Stop, req int) tea.Cmd {
 	resolved := bytes.Clone(s.ResolvedPath)
 	stops := stopsForFile(m.index, path)
 	gate, mapGate := m.loadGate, m.mapGate
+	read := m.readFile
+	if read == nil {
+		read = filebuffer.ReadFile
+	}
 	return func() tea.Msg {
 		if gate != nil {
 			<-gate
 		}
-		data, err := filebuffer.ReadFile(resolved)
+		data, err := read(resolved)
 		if err != nil {
 			return loadDoneMsg{path: path, req: req, err: err}
 		}
@@ -460,7 +494,11 @@ func (m Model) renderBrowse() string {
 			sb.WriteString(strings.Repeat(" ", max(0, listW-w)))
 		}
 		if r == 0 {
-			sb.WriteString(m.theme.FilenameRule(filenameRule(cur, m.statusNote(cur), m.width-listW)))
+			note := m.statusNote
+			if note == nil {
+				note = m.bufferNote
+			}
+			sb.WriteString(m.theme.FilenameRule(filenameRule(cur, note(cur), m.width-listW)))
 		} else {
 			sb.WriteString(m.contentRow(r-1, cur, buf, failed, vis, gutterW-2, textW))
 		}
@@ -532,9 +570,23 @@ func filenameRule(path []byte, note string, w int) string {
 	return rule
 }
 
+// bufferNote is the real filename-row status provider: the
+// "(unreadable)" note while the path sits in the failed state. The
+// statusNote seam overrides it in tests; Issues #29 and #30 extend the
+// real provider with their own notes.
+func (m Model) bufferNote(path []byte) string {
+	if m.failed[string(path)] {
+		return "(unreadable)"
+	}
+	return ""
+}
+
 // contentRow renders one content-area row: row 0 is the first viewport
 // row. Until the buffer arrives the first row carries the placeholder
-// behind a minimal one-digit gutter; loaded rows carry the
+// behind a minimal one-digit gutter — "(unreadable)" for a failed file
+// with no load in flight, "Loading…" while any load runs — clipped to
+// the text area so a constrained width cannot overflow; loaded rows
+// carry the
 // right-justified line number, two spaces, then the escaped cells with
 // matches in inverse video — additionally underlined on the cursor's
 // current matched line.
@@ -542,10 +594,10 @@ func (m Model) contentRow(row int, cur []byte, buf *filebuffer.Buffer, failed bo
 	gutter := m.theme.Gutter(strings.Repeat(" ", digits) + "  ")
 	if buf == nil {
 		if row == 0 && cur != nil {
-			if failed {
-				return gutter + "(unreadable)"
+			if failed && m.loading[string(cur)] == 0 {
+				return gutter + ansi.Truncate("(unreadable)", textW, "")
 			}
-			return gutter + "Loading…"
+			return gutter + ansi.Truncate("Loading…", textW, "")
 		}
 		return ""
 	}

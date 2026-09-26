@@ -37,8 +37,12 @@ Three sources feed the collection:
   incrementally and collecting them again would break exactly-once —
   while `collectDiagnostics` still includes them for the overlay.
 - **Load failures** — a `loadDoneMsg` error collects `cannot read
-  <path>: <err>` through `Model.CollectDiagnostic`; the file renders
-  `(unreadable)` but the diagnostic is never displayed.
+  <path>: <err>` through `Model.CollectDiagnostic`. Since Issue #26 the
+  display side splits on whether the failed path is current: the
+  current file's diagnostic opens (or appends to) the overlay as well,
+  while a non-current file's is collected with nothing displayed at
+  all — it surfaces only by visiting the file or here, at exit. See
+  [read-failures.md](read-failures.md).
 
 ## The shutdown boundary
 

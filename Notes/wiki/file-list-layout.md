@@ -85,11 +85,12 @@ path and the trailing dash run. The note wins cells over the path: an
 oversized path left-truncates — down to nothing — so the note paints
 whole; a note too wide even for an empty path is dropped rather than
 clipped mid-text. Nothing overflows the panel width and degenerate
-widths fall back to dashes. `Model.statusNote` is the provider seam
-(returning "" until real notes arrive); tests drive it with a
-synthetic string. The real note texts are owned by Issues #26
-(unreadable/read-failure), #29 (file-changed), and #30 (unsupported
-encoding).
+widths fall back to dashes. `Model.statusNote` is the provider seam;
+tests drive it with a synthetic string while the production value
+comes from `bufferNote` — Issue #26 delivered the first real note,
+`(unreadable)` for a read-failed path (see
+[read-failures.md](read-failures.md)), and Issues #29 (file-changed)
+and #30 (unsupported encoding) own the rest.
 
 ## Minimal-movement list scrolling
 

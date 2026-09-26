@@ -40,32 +40,37 @@ const (
 // lifecycle state and renders the searching and browse screens.
 // cancel terminates the rg child and abandons collection; the process
 // boundary confirms the reap before exiting. File loads run off the
-// update path behind two test seams — loadGate holds the whole worker
+// update path behind three test seams — loadGate holds the whole worker
 // before its read, mapGate holds the decode/map phase alone after the
-// read; both are nil in production. loading maps each raw path to its
+// read, and readFile substitutes the read phase itself; all are nil in
+// production. loading maps each raw path to its
 // in-flight request's identity — at most one load per path, repeat
 // requests dropped not queued — which loadSeq mints; a completion
-// whose request identity does not match is discarded. diags is the
+// whose request identity does not match is discarded. failed marks
+// paths whose latest load failed and failLines retains that failure's
+// sanitized diagnostic lines so a cross-file re-entry can re-open the
+// prior-failure overlay before the retry settles (Issue #26). diags is the
 // session
 // diagnostic collection: every diagnostic the model has processed, in
 // collection order, independent of what any screen displayed. diagCh
 // carries the collector's incremental stderr lines and diagAck is the
 // test-only acknowledgement seam — both nil in plain unit-test models.
 type Model struct {
-	phase   phase
-	cancel  func()
-	done    <-chan searchDoneMsg
-	diagCh  <-chan string
-	diagAck io.Writer
-	diags   []string
-	index   *searchindex.Index
-	stops   []searchindex.Stop
-	files   [][]byte       // distinct raw paths in index order
-	fileIdx map[string]int // raw path → its files index
-	bufs    map[string]*filebuffer.Buffer
-	failed  map[string]bool
-	loading map[string]int // raw path → in-flight request identity
-	loadSeq int            // mints request identities
+	phase     phase
+	cancel    func()
+	done      <-chan searchDoneMsg
+	diagCh    <-chan string
+	diagAck   io.Writer
+	diags     []string
+	index     *searchindex.Index
+	stops     []searchindex.Stop
+	files     [][]byte       // distinct raw paths in index order
+	fileIdx   map[string]int // raw path → its files index
+	bufs      map[string]*filebuffer.Buffer
+	failed    map[string]bool
+	failLines map[string][]string // raw path → latest failure's overlay lines
+	loading   map[string]int      // raw path → in-flight request identity
+	loadSeq   int                 // mints request identities
 	// rows holds each file's installed prepared row model with the
 	// (path, content revision, text width, wrap mode) key it was built
 	// for — preparation runs off the update path and a completion
@@ -103,6 +108,10 @@ type Model struct {
 	vp       viewport.Viewport
 	loadGate <-chan struct{}
 	mapGate  <-chan struct{}
+	// readFile is the load worker's read phase — nil selects
+	// filebuffer.ReadFile. Tests inject a failing or scripted loader so
+	// read failures are deterministic without filesystem permissions.
+	readFile func([]byte) ([]byte, error)
 	width    int
 	height   int
 	// binarySkipped is the distinct count of files dropped by binary
@@ -126,9 +135,9 @@ type Model struct {
 	// substitute a counting fake to prove a frame touches only the
 	// visible window (Issue #17's render-cost guard). statusNote is
 	// the filename-row buffer-status slot provider: it returns the
-	// current file's status note — the real texts are owned by Issues
-	// #26, #29, and #30 — or "" for none; tests substitute a
-	// synthetic note to pin the slot's truncation.
+	// current file's status note — nil selects the real provider
+	// (Issue #26's unreadable note; Issues #29 and #30 add theirs);
+	// tests substitute a synthetic note to pin the slot's truncation.
 	listEntry  func([]byte) string
 	statusNote func([]byte) string
 	code       int
@@ -142,22 +151,22 @@ func newModel(done <-chan searchDoneMsg, cancel func()) Model {
 		cancel = func() {}
 	}
 	return Model{
-		phase:   phaseSearching,
-		cancel:  cancel,
-		done:    done,
-		bufs:    make(map[string]*filebuffer.Buffer),
-		failed:  make(map[string]bool),
-		loading: make(map[string]int),
-		rows:    make(map[string]installed),
-		revs:    make(map[string]int),
-		reqKey:  make(map[string]viewport.Key),
-		saved:   make(map[string]viewport.Target),
-		theme:   theme.Dark(),
+		phase:     phaseSearching,
+		cancel:    cancel,
+		done:      done,
+		bufs:      make(map[string]*filebuffer.Buffer),
+		failed:    make(map[string]bool),
+		failLines: make(map[string][]string),
+		loading:   make(map[string]int),
+		rows:      make(map[string]installed),
+		revs:      make(map[string]int),
+		reqKey:    make(map[string]viewport.Key),
+		saved:     make(map[string]viewport.Target),
+		theme:     theme.Dark(),
 		// The file-list item provider is the escaped path; tests
 		// substitute a counting fake. The filename-row status slot is
-		// empty until Issues #26, #29, and #30 supply real notes.
-		listEntry:  present.Path,
-		statusNote: func([]byte) string { return "" },
+		// nil: the real notes answer through bufferNote.
+		listEntry: present.Path,
 		// The file list is requested visible at startup; left/tab and
 		// right/shift+tab move the preference.
 		listShow: true,
@@ -270,15 +279,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.failed[key] = true
 			d := fmt.Sprintf("cannot read %s: %v", present.Path(msg.path), msg.err)
 			m.CollectDiagnostic(d)
+			// The failure's display lines are retained as the prior
+			// failure a cross-file re-entry re-opens before its retry
+			// settles.
+			m.failLines[key] = strings.Split(present.Diagnostic(d), "\n")
 			// A current-file failure interrupts with the error
-			// overlay; a non-current one stays diagnostic-only.
+			// overlay — appended as one new occurrence when it is
+			// already open — while a non-current one stays
+			// diagnostic-only.
 			if bytes.Equal(msg.path, m.currentPath()) {
-				m.openOverlay(strings.Split(present.Diagnostic(d), "\n"))
+				m.openOverlay(m.failLines[key])
 			}
 			return m, nil
 		}
 		m.bufs[key] = msg.buf
 		m.revs[key]++
+		// A successful load resolves the path's failed state.
+		delete(m.failed, key)
+		delete(m.failLines, key)
 		// The new revision stale-keys any installed layout and any
 		// request in flight for the old one.
 		delete(m.rows, key)

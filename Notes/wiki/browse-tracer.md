@@ -29,8 +29,9 @@ safe presentation", and "Module Design" in `Notes/PRD-vrg.md`.
   and `right`/`shift+tab` show toggle and the grapheme-safe leading-`…`
   truncation: see [file-list-layout.md](file-list-layout.md).
 - **Right pane — file panel.** Row 0 is the *filename rule*: `──`, the
-  escaped current path, the buffer-status note slot (Issue #24 — real
-  notes arrive with Issues #26, #29, and #30), then dashes to the
+  escaped current path, the buffer-status note slot (Issue #24 — Issue
+  #26's `bufferNote` supplies the first real note, `(unreadable)`, for
+  a failed path; #29 and #30 own the rest), then dashes to the
   panel edge, painted through `theme.FilenameRule`; an oversized
   path is left-truncated with a leading `…` so the basename tail stays
   visible. Rows below carry the current file's content. There are **no
@@ -78,11 +79,16 @@ Full-file work never lands on the UI update path:
 - Until the buffer arrives the panel shows `Loading…` behind a minimal
   one-digit gutter — scrolling and panning it are no-ops while
   navigation, the toggles, and the exit keys stay live — and a failed
-  load shows `(unreadable)`.
+  load shows `(unreadable)`; both placeholders clip to the text width.
+  `Loading…` also covers a failed path's in-flight retry (Issue #26 —
+  the re-entry sequence and the current/non-current notification split
+  are on [read-failures.md](read-failures.md)).
 - `Model.loadGate` is the test seam for the whole worker; Issue #25
   added `mapGate`, which holds only the decode/map phase after the
   read has completed, so tests can prove `ctrl+c`, `n`/`p`, `w`, `c`,
-  and resizes stay actionable while the expensive phase is held.
+  and resizes stay actionable while the expensive phase is held; Issue
+  #26 added `readFile`, the read-phase seam the failure tests inject
+  deterministic loaders through.
 - The current file opens at top-of-file — or at its saved anchor on a
   revisit — then the Issue #14 destination reveal scrolls a hidden
   navigation target to the one-third row (see

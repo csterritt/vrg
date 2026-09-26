@@ -566,6 +566,50 @@ in-flight request identity the same way):
   file) completes promptly even while `mapGate` is held, proving the
   gate sits after the read.
 
+`failures_test.go` (same package, Issue #26) pins the read-failure and
+re-entry contracts through the injected `readFile` seam — no
+filesystem permissions involved. Helpers: `failLoader`/`failLoaderFor`
+(all-fail and per-path failing loaders), `loaderModel` (a browse model
+wired with the injected loader, returning the startup load uninvoked),
+`gatedLoaderModel` (the loader plus `loadGate` so a retry can be
+parked in flight), `contentRow1` (the stripped first content row the
+placeholders occupy), and `overlayOccurrences` (diagnostic-occurrence
+count across the open overlay's lines):
+
+- `TestCurrentFileReadFailureNotifies` — the current file's failure
+  opens the overlay, the panel reads `(unreadable)`, the filename row
+  still names the path, and the retained stops stay navigable — a
+  same-file `n` moves the cursor and requests no reload.
+- `TestNonCurrentReadFailureIsDiagnosticOnly` — a completion landing
+  after the cursor left: no overlay, no indicator, byte-identical
+  frame, exactly one collected occurrence — and visiting the file
+  later surfaces its overlay.
+- `TestCrossFileReEntryRetriesOnce` — entering a failed file from a
+  different file opens the retained prior-failure overlay immediately,
+  returns the panel to `Loading…`, and issues exactly one retry.
+- `TestUnreadableComposedViewStaysWellFormed` — a long escaped path
+  through 80×24 down to 20×3: the filename row keeps the truncated
+  safe path (full tail at 80 cells), the placeholder clips to its
+  slot, no frame row overflows, layout stays nonnegative.
+- `TestReEntrySequenceGated` — the gated sequence: immediate prior
+  overlay plus `Loading…`, exactly one parked retry, `Esc` dismissing
+  the overlay without disturbing the in-flight load, and settlement
+  updating the panel without waiting for dismissal.
+- `TestReEntrySecondFailureAppendsPreservingScroll` — a second failure
+  appends exactly one occurrence to the open overlay with the reader's
+  scroll position preserved, and collects exactly one new occurrence
+  for the replay.
+- `TestReEntryRetrySuccessKeepsPriorOverlay` — a successful retry
+  collects nothing new; the content replaces `Loading…` while the
+  prior-failure overlay stays up until dismissed.
+- `TestReEntryRetrySettlesAfterNavigatingAway` — navigating away
+  mid-retry lets it settle as a non-current completion (a second
+  failure there is diagnostic-only), and a later re-entry repeats the
+  sequence against the new prior state.
+- `TestReEntryDuringInflightRetryIsDropped` — re-entry while a retry
+  is already in flight mints nothing: dropped, not queued, per the
+  Issue #25 one-load-per-path rule.
+
 `pan_test.go` (same package, Issue #18) drives the horizontal-pan
 keys through `Update`; `panRecords` builds a one-stop record set for a
 file whose first line is the match:
@@ -805,6 +849,13 @@ later issues extend it with rows rather than duplicating the decision:
   → no-results → 1) plus missing-`end` variants; rows carrying
   undecodable bytes use the `stream` field through `fixtureStream`,
   which pipes raw bytes into `Index.Feed` rather than decoding records.
+  Issue #26 added the `failAll`/`absent`/`viewHas`/`replayHas` row
+  fields — `failAll` marks every retained file's `loadDoneMsg` an
+  injected error and the new assertions check the overlay's absences,
+  the composed frame's `(unreadable)`/path forms, and the exit replay —
+  plus three rows: fixed-0 all-fail → still 0, fixed-2 current-file
+  failure → still 2, and the composed all-fail-with-fixed-2 row proving
+  the already-fixed fatal outcome is never recomputed.
 
 `overlay_test.go` (same package) pins the Issue #9 modal overlay:
 

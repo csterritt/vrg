@@ -1,6 +1,8 @@
 package app
 
 import (
+	"bytes"
+	"errors"
 	"os/exec"
 	"strings"
 	"testing"
@@ -61,6 +63,17 @@ var (
 	// A file left open when the stream ends, contributing no matches.
 	recsOpenNoMatches = []string{
 		`{"type":"begin","data":{"path":{"text":"f.txt"}}}`,
+		recSummary,
+	}
+	// Two matched files: f.txt precedes g.txt in index order, so
+	// f.txt is the current file at startup.
+	recsTwoMatches = []string{
+		`{"type":"begin","data":{"path":{"text":"f.txt"}}}`,
+		`{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		`{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}`,
+		`{"type":"begin","data":{"path":{"text":"g.txt"}}}`,
+		`{"type":"match","data":{"path":{"text":"g.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		`{"type":"end","data":{"path":{"text":"g.txt"},"binary_offset":null}}`,
 		recSummary,
 	}
 	// Unknown event types only: a complete stream, zero results.
@@ -129,6 +142,17 @@ type outcomeRow struct {
 	quitKey   string   // key that ends the session once no overlay is open
 	exit      int      // final process exit status
 	diags     []string // substrings the open overlay must carry
+	// Issue #26 row extensions. failAll fails every retained file's
+	// load after the outcome is fixed: the current file's own worker
+	// through the injected loader, each other file's in-flight request
+	// by injected completion. absent lists substrings the open overlay
+	// must NOT carry — a non-current failure stays diagnostic-only —
+	// viewHas lists substrings the composed frame must carry, and
+	// replayHas lists substrings the exit replay must contain.
+	failAll   bool
+	absent    []string
+	viewHas   []string
+	replayHas []string
 }
 
 // The outcome matrix: one table owning every Issue #9 outcome row so
@@ -350,6 +374,48 @@ var outcomeMatrix = []outcomeRow{
 		quitKey: "ctrl+c", exit: 130,
 		diags: []string{"exit status 3"},
 	},
+	// Issue #26 rows: load failures after the outcome is fixed can
+	// never move the exit status — not when every retained file fails,
+	// not on top of an already-fatal fixed status, and not both at
+	// once. The failures affect only file presentation and the
+	// diagnostic collection.
+	{
+		name: "every retained file failing to load keeps the fixed status 0",
+		recs: recsTwoMatches, code: 0, failAll: true,
+		overlay: true, screen: phaseBrowse,
+		dismiss: "esc", after: phaseBrowse,
+		quitKey: "q", exit: 0,
+		diags:     []string{"cannot read f.txt"},
+		absent:    []string{"cannot read g.txt"},
+		viewHas:   []string{"(unreadable)"},
+		replayHas: []string{"cannot read f.txt", "cannot read g.txt"},
+	},
+	{
+		name: "current-file load failure keeps the fixed status 2",
+		recs: recsOneMatch, code: 3, failAll: true,
+		overlay: true, screen: phaseBrowse,
+		dismiss: "esc", after: phaseBrowse,
+		quitKey: "q", exit: 2,
+		diags:     []string{"exit status 3", "cannot read f.txt"},
+		viewHas:   []string{"(unreadable)"},
+		replayHas: []string{"cannot read f.txt"},
+	},
+	{
+		// The composed row: usable results under a fatal search where
+		// every retained file then fails to load. The ordinary status
+		// stays 2 — the already-fixed fatal-search outcome is not
+		// recomputed — and the non-current failure reaches only the
+		// diagnostics and the replay, never the overlay.
+		name: "fatal search with usable results then all files fail keeps 2",
+		recs: recsTwoMatches, code: 3, failAll: true,
+		overlay: true, screen: phaseBrowse,
+		dismiss: "q", after: phaseBrowse,
+		quitKey: "q", exit: 2,
+		diags:     []string{"exit status 3", "cannot read f.txt"},
+		absent:    []string{"cannot read g.txt"},
+		viewHas:   []string{"(unreadable)"},
+		replayHas: []string{"cannot read f.txt", "cannot read g.txt"},
+	},
 }
 
 // pressKey delivers one named key through Update: the dismissal and
@@ -416,12 +482,33 @@ func TestOutcomeMatrix(t *testing.T) {
 			}
 
 			m := newModel(nil, nil)
+			if row.failAll {
+				m.readFile = failLoader(errors.New("denied"))
+			}
 			m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-			m, _ = update(t, m, searchDoneMsg{
+			m, load := update(t, m, searchDoneMsg{
 				index:   ix,
 				stderr:  []byte(row.stderr),
 				waitErr: waitFixture(t, row),
 			})
+			if row.failAll {
+				// The current file's own worker fails through the
+				// injected loader; every other retained file's
+				// in-flight request fails by injected completion.
+				// Load failures land after the outcome is fixed and
+				// can never move it.
+				m = settle(t, m, load)
+				for _, f := range m.files {
+					if bytes.Equal(f, m.currentPath()) {
+						continue
+					}
+					m, _ = update(t, m, loadDoneMsg{
+						path: f,
+						req:  mintLoad(&m, string(f)),
+						err:  errors.New("denied"),
+					})
+				}
+			}
 
 			// Initial presentation: underlying screen and overlay state.
 			if m.phase != row.screen {
@@ -439,6 +526,16 @@ func TestOutcomeMatrix(t *testing.T) {
 					if !strings.Contains(v, d) {
 						t.Fatalf("overlay lacks diagnostic %q: %q", d, v)
 					}
+				}
+				for _, d := range row.absent {
+					if strings.Contains(v, d) {
+						t.Fatalf("overlay carries a diagnostic it must not: %q", d)
+					}
+				}
+			}
+			for _, d := range row.viewHas {
+				if v := m.View().Content; !strings.Contains(v, d) {
+					t.Fatalf("composed frame lacks %q: %q", d, v)
 				}
 			}
 
@@ -482,6 +579,18 @@ func TestOutcomeMatrix(t *testing.T) {
 			}
 			if m2.ExitCode() != row.exit {
 				t.Fatalf("ExitCode = %d, want %d", m2.ExitCode(), row.exit)
+			}
+			for _, d := range row.replayHas {
+				found := false
+				for _, line := range replayed(t, m2) {
+					if strings.Contains(line, d) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Fatalf("exit replay lacks %q", d)
+				}
 			}
 		})
 	}

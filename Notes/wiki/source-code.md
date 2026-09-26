@@ -102,8 +102,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `left`/`tab` hide, `right`/`shift+tab` show, both browse-phase keys
   whose presses route through `syncLayout` like every other
   text-width change), `listTop` (the list window's first visible
-  entry), and `statusNote` (the filename-row buffer-status provider,
-  returning "" until Issues #26, #29, and #30 supply real notes);
+  entry), and `statusNote` (the filename-row buffer-status provider —
+  Issue #26's `bufferNote` supplies the real `(unreadable)` note;
+  #29 and #30 own the rest); Issue #26 adds `failLines` (the retained
+  per-path sanitized diagnostic lines a cross-file re-entry reopens),
+  `readFile` (the read-phase test seam — nil selects
+  `filebuffer.ReadFile`), and the `loadDoneMsg` error branch's
+  mark-retain-collect-overlay split on whether the failed path is
+  current;
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
   diagnostics box; Issue #15 adds the pop-up state (`popupID`,
@@ -154,7 +160,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   path and — Issue #25 — the minted request identity),
   `ensureLoad`/`loadCmd` (one async load per file; read, split,
   escape, and map all off the update path, behind `loadGate` and —
-  since Issue #25 — the post-read `mapGate` in tests),
+  since Issue #25 — the post-read `mapGate` in tests, with Issue #26's
+  `readFile` seam swapping the read phase),
   `renderBrowse` (raw-path-ordered file list — `FileList` entries with
   `CurrentFile` underline on the current one — painted from the
   `listTop` scrolled window,
@@ -163,9 +170,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   background covers it), `filenameRule` (Issue #24: the path joined by
   a buffer-status note slot that wins cells over the path, which
   left-truncates to nothing so the note paints whole; a note too wide
-  alone is dropped), `contentRow` (`Gutter`-styled
+  alone is dropped), `bufferNote` (Issue #26: the real `(unreadable)`
+  note for a read-failed path behind the `statusNote` seam),
+  `contentRow` (`Gutter`-styled
   right-justified number + two spaces over the viewport's visible-row
-  slice), and `renderCells` (inverse-video
+  slice; Issue #26 gives the placeholder forms — `Loading…` while a
+  request is in flight, `(unreadable)` once a failure has settled —
+  each clipped to the text width), and `renderCells` (inverse-video
   spans over escaped `present.Cell`s via `Match`/`CurrentMatch`,
   marker spans, clip-edge wide clusters — Issue #21: `Blank`-marked
   wrap/clip filler cells never take the match style). Issue #12 adds `scroll`
@@ -203,7 +214,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   newest stop. Issue #15 opens the file-change pop-up inside the
   `FileChanged`
   branch — selection time, before the destination loads — and batches
-  its instance-keyed expiry command with the load. Issue #18 adds
+  its instance-keyed expiry command with the load. Issue #26 routes the
+  destination's load through `entryLoad`: a previously failed path
+  skips the pop-up, re-opens its retained `failLines` overlay, and
+  mints exactly one retry (still dropped while a request is in
+  flight), so a same-file step inside a failed file requests nothing
+  and a cross-file entry retries once. Issue #18 adds
   `pan` (the six pan keys routed to `Viewport` units under the same
   loaded-buffer gate as `scroll`) and the file-entry offset reset:
   `navigate`'s `FileChanged` branch and the current-path

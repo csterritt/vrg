@@ -979,3 +979,48 @@ Sources: `Notes/issues/025-async-load-isolation.md`,
 consistency; Resources and responsiveness), `internal/app/app.go`,
 `internal/app/browse.go`, `internal/app/load_test.go`,
 `internal/filebuffer/filebuffer.go`.
+## [2026-09-24] ingest | Issue #26 read failures — "(unreadable)", notification split, and the gated re-entry retry
+
+Ingested the completed Issue #26 implementation: a `loadDoneMsg` error
+marks `failed`, retains its sanitized lines in `failLines`, collects one
+`cannot read <safe path>: <err>` occurrence, and opens the overlay only
+when the failed path is current — non-current failures stay
+diagnostic-only for the exit replay with a byte-identical frame. The
+filename row's Issue #24 note slot gained its first real provider,
+`bufferNote` → `(unreadable)`, and `contentRow` splits its placeholders
+— `Loading…` while a request is in flight (including a failed path's
+retry), `(unreadable)` once settled — each clipped to the text width.
+`navigate` routes destinations through `entryLoad`: same-file steps
+request nothing, while a cross-file entry into a failed path skips the
+pop-up, re-opens the retained overlay, and mints exactly one retry —
+dropped not queued when a request is in flight per Issue #25. `Esc`
+dismisses without disturbing the load; settlement updates the panel
+independent of dismissal; a second failure appends one occurrence via
+`openOverlay`'s scroll-preserving append; a success collects nothing
+and leaves the prior overlay up. `loadCmd` consults the new `readFile`
+seam (nil → `filebuffer.ReadFile`) so tests inject deterministic
+loaders rather than rely on permissions, and the outcome matrix gained
+`failAll`/`absent`/`viewHas`/`replayHas` plus the three fixed-status
+rows (all-fail-0, current-fail-2, composed all-fail-2). Created
+[read-failures](read-failures.md); updated
+[source-code](source-code.md) (`app.go`'s `failLines`/`readFile` and
+the current-split failure branch, `browse.go`'s `entryLoad`,
+`bufferNote`, and placeholder rules), [unit-tests](unit-tests.md) (the
+new `failures_test.go` catalog and the outcome-row extensions),
+[browse-tracer](browse-tracer.md) (the `readFile` seam and the real
+status note), [match-navigation](match-navigation.md) (the
+`entryLoad` routing on crossings),
+[async-load-isolation](async-load-isolation.md) (the three seams and
+the failed-path re-entry exception),
+[stderr-replay](stderr-replay.md) (the current/non-current display
+split), [error-overlay-and-fatal-outcomes](error-overlay-and-fatal-outcomes.md)
+(the retained-lines reopen, second-failure append, and new matrix
+rows), [file-list-layout](file-list-layout.md) (`bufferNote` behind
+the `statusNote` seam), and the index.
+New test file: `internal/app/failures_test.go`.
+Sources: `Notes/issues/026-read-failures-unreadable-retry-rules.md`,
+`Notes/tasks/026-read-failures-unreadable-retry-rules.md`,
+`Notes/PRD-vrg.md` (File loading, cache, reload, and selection
+consistency; Outcome and exit-status contract),
+`internal/app/app.go`, `internal/app/browse.go`,
+`internal/app/failures_test.go`, `internal/app/outcome_test.go`.

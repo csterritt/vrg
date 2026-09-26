@@ -161,11 +161,12 @@ form inside the border.
 
 A `loadDoneMsg` failure for the **current** path also opens the
 overlay — the `cannot read <safe path>: <err>` line through
-`openOverlay`, alongside the `(unreadable)` panel placeholder — the
-first slice of Issue #26's read-failure rules, delivered as the
-injected trigger Issue #15's pop-up cancellation is tested against. A
-failure for a non-current path still only joins the session collection
-for stderr replay.
+`openOverlay`, alongside the `(unreadable)` panel placeholder — and
+Issue #26 completed the read-failure rules around it: the retained
+`failLines` reopen on cross-file re-entry, a second failure appends
+one occurrence through the same scroll-preserving route, and a
+non-current failure stays diagnostic-only for the session collection.
+See [read-failures.md](read-failures.md).
 
 ## Fixed-status rule
 
@@ -187,7 +188,13 @@ retention with `Incomplete`, and open-at-end sealing.
 matrix covering every row above with dismissal and exit assertions —
 Issue #10 added the record-loss and unknown-warning rows plus a
 `stream`/`fixtureStream` path for fixtures containing undecodable
-bytes.
+bytes, and Issue #26 added the read-failure rows: `failAll` marks
+every retained file's `loadDoneMsg` an error and the row's
+`viewHas`/`absent`/`replayHas` assertions prove the fixed status is
+never recomputed — all-fail under fixed 0 still exits 0, a
+current-file failure under fixed 2 still exits 2, and the composed
+row (usable results, fixed 2, every retained file failing) stays 2
+with only presentation and diagnostics affected.
 `internal/app/overlay_test.go` pins scrolling, both dismissal keys,
 `ctrl+c`, ignored keys (including the unreachable `c` toggle),
 unbroken-line wrapping, and generated code-or-signal diagnostics.

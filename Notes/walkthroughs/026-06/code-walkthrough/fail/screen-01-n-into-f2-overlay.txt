@@ -1,0 +1,24 @@
+./a-first.txt   ── ./b-second.txt (unreadable) ─────────────────────────────────
+./b-second.txt     (unreadable)
+
+
+
+
+
+
+
+
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │cannot read ./b-second.txt: open /tmp/vrg26-fixture.Mp2s3f/./b-second.txt:│
+  │permission denied                                                         │
+  └──────────────────────────────────────────────────────────────────────────┘
+
+
+
+
+
+
+
+
+
+

@@ -177,6 +177,14 @@ Catalog of all wiki pages for the vrg project.
   with re-entry dropped not queued, session-long buffer retention,
   post-cancellation rejection, the separately gated decode/map phase,
   and the actionable input list while it is held
+- [read-failures.md](read-failures.md) — Issue #26: the
+  current-versus-non-current failure split (overlay + `(unreadable)`
+  panel and status note versus diagnostic-only), same-file steps never
+  retrying while a cross-file entry runs the five-step re-entry
+  sequence (prior overlay immediately, exactly one retry, settlement
+  without dismissal, second-failure append preserving scroll, away-
+  settled retries), and load failures never moving the fixed exit
+  status — all behind the injected `readFile` seam
 
 ## Catalogs
 

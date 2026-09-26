@@ -53,7 +53,11 @@ destination reveal; the latest-target rule is Issue #28's).
 - `ensureLoad` drops a request when the path is already `loading`,
   cached, or failed — dropped, not queued: re-entering a loading path
   returns no command and mints nothing, so the in-flight request's
-  identity is unchanged and its completion still installs.
+  identity is unchanged and its completion still installs. The
+  `failed` half has an Issue #26 exception: a cross-file entry routes
+  through `entryLoad`, which deliberately mints exactly one retry —
+  still dropped if a request is somehow in flight — see
+  [read-failures.md](read-failures.md).
 - `bufs` retains every successful buffer for the session — no
   eviction. A revisit shows the cached content and issues no new load;
   the only command it may return is an Issue #17 layout request when
@@ -64,10 +68,13 @@ destination reveal; the latest-target rule is Issue #28's).
 `filebuffer.Load` is split into `ReadFile` (the read phase) and
 `Prepare` (the decode/map phase — split, escape, map, validate), so a
 test can hold the expensive phase while the read has already
-completed. `loadCmd` consults two seams: `loadGate` before the read
-holds the whole worker, and `mapGate` after the read holds decode/map
+completed. `loadCmd` consults three seams: `loadGate` before the read
+holds the whole worker, `mapGate` after the read holds decode/map
 alone — a read-phase failure (missing file) completes without ever
-reaching `mapGate`, proving the two phases are independently gated.
+reaching `mapGate`, proving the two phases are independently gated —
+and Issue #26's `readFile` swaps the read phase itself, so failure
+tests inject deterministic loaders instead of relying on filesystem
+permissions.
 With `mapGate` held, `ctrl+c` exits 130, `n`/`p` navigate, `w`/`c`
 toggle, and resizes apply — none wait on the worker — because the
 completion already carries a *prepared* buffer and `Update` does no
@@ -103,11 +110,14 @@ See [unit-tests.md](unit-tests.md) § `internal/app`.
 ## Files
 
 - `internal/app/app.go` — `loading` (path → in-flight request
-  identity), `loadSeq` (the mint), `mapGate` (the second test seam),
+  identity), `loadSeq` (the mint), `mapGate` and Issue #26's
+  `readFile` (the decode/map and read-phase test seams),
   and the `loadDoneMsg` install guard in `Update`.
 - `internal/app/browse.go` — `loadDoneMsg`'s `req` field,
   `ensureLoad`'s mint-and-drop rule, `loadCmd`'s two-phase worker
-  (`ReadFile` then `Prepare` behind `mapGate`).
+  (`readFile`/`ReadFile` then `Prepare` behind `mapGate`), and Issue
+  #26's `entryLoad` (the failed-path re-entry exception minting
+  exactly one retry).
 - `internal/filebuffer/filebuffer.go` — `Load` split into `ReadFile` +
   `Prepare`; `Prepare` carries the split/escape/map/validate body.
 

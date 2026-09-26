@@ -85,7 +85,12 @@ actual transition ends in `reveal()` — see
   [async-load-isolation.md](async-load-isolation.md). Since Issue #15 a
   crossing also opens the file-change pop-up at selection time, its
   instance-keyed expiry batched with the load and layout commands —
-  see [file-change-popup.md](file-change-popup.md).
+  see [file-change-popup.md](file-change-popup.md). Since Issue #26 the
+  crossing routes the destination through `entryLoad`: a previously
+  failed destination skips the pop-up, re-opens its retained
+  prior-failure overlay, and issues exactly one retry behind `Loading…`
+  — while a same-file step inside a failed file requests nothing —
+  see [read-failures.md](read-failures.md).
 - **Manual scrolling** never touches the cursor: `n`/`p` continue from
   the last selected stop, not from the scrolled position.
 - **The file list is passive**: there is no direct selection route —

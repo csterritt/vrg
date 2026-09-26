@@ -1,0 +1,24 @@
+cannot read ./b-second.txt: open /tmp/vrg26-fixture.Mp2s3f/./b-second.txt: permi
+ssion denied
+cannot read ./b-second.txt: open /tmp/vrg26-fixture.Mp2s3f/./b-second.txt: permi
+ssion denied
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
