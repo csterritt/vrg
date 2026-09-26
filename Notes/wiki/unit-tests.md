@@ -132,14 +132,18 @@ coverage:
   `Incomplete` count, and the `BinaryExcluded` tally. Rows cover every
   transition: `begin` open/closed, `match` open/orphaned (never opened,
   after `end`), `end` open/orphaned/duplicate — including an orphaned
-  binary `end` still excluding — `context` inert in any position, a
+  binary `end` still excluding — `context` inert before the summary
+  (Issue #36 removed its after-summary exemption), a
   file open at stream end, summary positioning (alone = complete
-  zero-result stream, missing, second, records after it — including
-  malformed bytes), the trailing unterminated record's double
-  disposition mid-stream and after a complete stream, `text`/`bytes`
+  zero-result stream, missing, second = `extra summary record`,
+  records after it contributing only `record after summary` — including
+  malformed bytes — and never lifecycle-processed), the trailing
+  unterminated record's `unterminated final record` mid-stream and its
+  sole `record after summary` after a complete stream, `text`/`bytes`
   path-identity agreement (including non-UTF-8), interleaved open files
   pairing independently, and binary exclusion's precedence over orphan
-  retention.
+  retention with its own `match for <P> arrived after a
+  binary-excluding end` line.
 - `TestFeedDecodesTheWholeStream` — a complete newline-terminated
   stream is intact and indexes one stop.
 - `TestEmptyStreamIntegrity` — an empty stream reports the missing
@@ -160,8 +164,9 @@ deterministic-disposition coverage:
   `Malformed()` stays zero (a skipped record never becomes a lifecycle
   failure on its own).
 - `TestCompositeDispositions` — the two both-disposition rows: the
-  trailing unterminated record (malformed + `unterminated trailing
-  record`) and malformed bytes after `summary` (malformed +
+  trailing unterminated record (malformed + `unterminated final
+  record`, or the sole `record after summary` when the fragment sits
+  after the summary) and malformed bytes after `summary` (malformed +
   `record after summary`).
 
 `oversized_test.go` (external package) covers the Issue #10 resource
@@ -178,12 +183,43 @@ limit and unknown types:
 - `TestOversizedOnlyFileAbsentFromList` — a file whose match records
   were all oversized leaves no stops while its path still names the
   diagnostic.
-- `TestOversizedUnterminatedFinalRecord` — the triple disposition:
-  oversized + malformed + `unterminated trailing record`.
+- `TestOversizedUnterminatedFinalRecord` — the post-summary triple
+  disposition: oversized + malformed + the sole `record after summary`
+  cause.
 - `TestUnknownTypeDispositions` — the separate `Unknown()` tally, the
   `N unrecognised record types skipped` diagnostic, no lifecycle
   effect, no substitution for `summary`, and unknown-after-`summary`
   counted plus independently flagged.
+
+`causes_test.go` (external package) is the Issue #36 structured
+integrity-cause coverage — `TestIntegrityCauses` drives one
+exact-state table asserting the complete ordered `IntegrityCauses()`
+list (stable `CauseKind` plus the record's raw path bytes), the
+one-rendered-line-per-cause `IntegrityFailures()` derivation, and the
+independent `Malformed()`/`Oversized()`/`Unknown()` counters, retained
+stops, `Incomplete` marks, and `BinaryExcluded()` per row:
+
+- every Issue #9 lifecycle-failure row as a structured cause —
+  duplicate `begin`, orphaned and post-`end` matches, the
+  binary-exclusion late match's distinct `CauseMatchAfterEnd`, orphaned
+  and duplicate `end`s, open-at-stream-end, missing summary;
+- the overlap-precedence rows — a second summary contributing only
+  `CauseExtraSummary` (repeated uncapped for a third), post-summary
+  `begin`/`match`/`context` contributing only `CauseRecordAfterSummary`
+  and never touching lifecycle state (no opened file, no retained
+  match, no missing end);
+- the dual-representation rows — post-summary unterminated fragment
+  (cause + malformed count, no unterminated cause), post-summary
+  oversized (cause + oversized count), post-summary unknown type
+  (cause + unknown count), and the mid-stream unterminated fragment's
+  `CauseUnterminatedFinal` end-of-stream position after missing ends
+  and the missing summary;
+- the ordering rows — two still-open files reporting missing ends in
+  unsigned raw-path order regardless of open order, detection-order
+  mid-stream causes preceding end-of-stream causes, and repeated
+  identical orphaned matches emitting one cause each;
+- `TestOversizedAfterSummaryKeepsRecoveredPath` — the recovered
+  oversized path detail surviving under the sole post-summary cause.
 
 `cursor_test.go` (external package) is the Issue #13 matched-line
 cursor coverage; `cursorIndex` builds a two-file fixture whose records
@@ -1087,6 +1123,33 @@ later issues extend it with rows rather than duplicating the decision:
   all-unsupported row: every retained file detecting a UTF-16 BOM
   still exits with the fixed status 0, the overlay and the exit
   replay carrying the `unsupported encoding` diagnostic.
+
+`diagnostics_test.go` (same package) is the Issue #36 universal
+diagnostic-composition coverage:
+
+- `TestComposedDiagnostics` — the exact `composeDiagnostics` and
+  `completionDiagnostics` slices per row plus `decideOutcome`'s overlay
+  list matching: stderr under exit 0/1 as the whole process component,
+  stderr suppressing the generated line under a fatal code, the
+  generated `rg failed:` line only for fatal-without-stderr (code and
+  signal fixtures), no process line for exit 0/1, the full universal
+  order (stderr → causes → malformed aggregate → oversized aggregate →
+  per-path oversized details → unknown warnings), the post-summary
+  dual representation, uncapped repeated causes, and the
+  newline-path `present.Path` escape.
+- `TestOutcomeCodesFromInput` — the fixed statuses and screens from
+  the structured `outcomeInput`: usable results 0, intact empty 1,
+  fatal process/cause/record-loss 2, warnings (stderr, record loss
+  with usable results, unknown types) never fatal.
+- `TestComposedDiagnosticsFromIndexOrdering` — a real index with two
+  still-open files composing missing ends in unsigned raw-path order,
+  stable across 20 repeated builds.
+- `TestOverlayAndReplayShareComposedDiagnostics` — one composition
+  feeding both sinks: overlay lines and exit replay equal.
+- `TestFatalOverlayKeepsStderrCausesAndRecordLoss` — the fatal
+  completion through `searchDoneMsg` carrying real stderr, the
+  after-summary cause, and the malformed/unknown tallies together,
+  with no generated process line.
 
 `overlay_test.go` (same package) pins the Issue #9 modal overlay:
 

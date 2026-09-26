@@ -1,0 +1,7 @@
+#!/bin/sh
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"f.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+'{"type":"summary","data":{}}'
+# no end record for f.txt
+exit 0

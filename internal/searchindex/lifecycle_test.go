@@ -102,7 +102,9 @@ func TestLifecycleMatrix(t *testing.T) {
 		{
 			// Binary exclusion takes precedence over the general
 			// orphan-retention rule: the late match is not retained
-			// and the file stays excluded.
+			// and the file stays excluded. The binary-excluding end
+			// gives the violation its own cause kind — it is not an
+			// ordinary orphaned match.
 			name: "match after a binary end is not retained",
 			records: []string{
 				beginRec(jText("a.bin")),
@@ -111,7 +113,7 @@ func TestLifecycleMatrix(t *testing.T) {
 				matchRec(jText("a.bin"), jText("hit\n"), 7, subRec(jText("hit"), 0, 3)),
 				`{"type":"summary","data":{}}`,
 			},
-			failures: []string{"orphaned match for a.bin"},
+			failures: []string{"match for a.bin arrived after a binary-excluding end"},
 			excluded: 1,
 		},
 		{
@@ -149,7 +151,7 @@ func TestLifecycleMatrix(t *testing.T) {
 				matchRec(jText("a.bin"), jText("hit\n"), 1, subRec(jText("hit"), 0, 3)),
 				`{"type":"summary","data":{}}`,
 			},
-			failures: []string{"orphaned end for a.bin", "orphaned match for a.bin"},
+			failures: []string{"orphaned end for a.bin", "match for a.bin arrived after a binary-excluding end"},
 			excluded: 1,
 		},
 		{
@@ -202,12 +204,14 @@ func TestLifecycleMatrix(t *testing.T) {
 			stops:    1,
 		},
 		{
+			// A second summary is its own cause kind: it contributes
+			// only extra summary, never record after summary.
 			name: "second summary",
 			records: []string{
 				`{"type":"summary","data":{}}`,
 				`{"type":"summary","data":{}}`,
 			},
-			failures: []string{"second summary"},
+			failures: []string{"extra summary record"},
 		},
 		{
 			name: "match record after summary",
@@ -218,10 +222,11 @@ func TestLifecycleMatrix(t *testing.T) {
 				`{"type":"summary","data":{}}`,
 				matchRec(jText("b.txt"), jText("hit\n"), 2, subRec(jText("hit"), 0, 3)),
 			},
-			// The late match is also orphaned: b.txt never opened.
-			failures:   []string{"record after summary", "orphaned match for b.txt"},
-			stops:      2,
-			incomplete: 1,
+			// One cause per physical record: the late match is only a
+			// record after summary — it is not lifecycle-processed, so
+			// it is neither retained nor marked incomplete.
+			failures: []string{"record after summary"},
+			stops:    1,
 		},
 		{
 			// The summary-final rule is positional: any record after
@@ -240,9 +245,9 @@ func TestLifecycleMatrix(t *testing.T) {
 				`{"type":"summary","data":{}}`,
 				beginRec(jText("a.txt")),
 			},
-			// The begin still opens the file, so the seal reports its
-			// missing end as well.
-			failures: []string{"record after summary", "missing end for a.txt"},
+			// Post-summary records are not lifecycle-processed: the
+			// begin cannot open a.txt, so no missing end is owed.
+			failures: []string{"record after summary"},
 		},
 		{
 			// A record that fails decoding after the summary is both
@@ -254,23 +259,28 @@ func TestLifecycleMatrix(t *testing.T) {
 		{
 			// A trailing unterminated record is counted malformed (the
 			// tally is Issue #10's) and makes the stream incomplete;
-			// sitting after the summary it is also a record after
-			// summary.
+			// sitting after the summary the after-summary precedence
+			// replaces its unterminated cause with record after
+			// summary — one integrity cause for the one fragment.
 			name: "trailing unterminated record after a complete stream",
 			stream: beginRec(jText("a.txt")) + "\n" +
 				matchRec(jText("a.txt"), jText("hit\n"), 1, subRec(jText("hit"), 0, 3)) + "\n" +
 				endRec(jText("a.txt"), "null") + "\n" +
 				`{"type":"summary","data":{}}` + "\n" +
 				`{"type":"sum`,
-			failures: []string{"record after summary", "unterminated trailing record"},
+			failures: []string{"record after summary"},
 			stops:    1,
 		},
 		{
+			// End-of-stream causes append in their mandated order
+			// after every detection-time cause: still-open files by
+			// unsigned raw path bytes, then the missing summary, then
+			// the unterminated final record.
 			name: "trailing unterminated record mid-stream",
 			stream: beginRec(jText("a.txt")) + "\n" +
 				matchRec(jText("a.txt"), jText("hit\n"), 1, subRec(jText("hit"), 0, 3)) + "\n" +
 				`{"type":"end"`,
-			failures:   []string{"unterminated trailing record", "missing end for a.txt", "missing summary"},
+			failures:   []string{"missing end for a.txt", "missing summary", "unterminated final record"},
 			stops:      1,
 			incomplete: 1,
 		},

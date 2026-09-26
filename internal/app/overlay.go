@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"vrg/internal/present"
+	"vrg/internal/searchindex"
 )
 
 // overlay is the shared wrapped-scrollable modal component: sanitized
@@ -37,32 +38,45 @@ type outcome struct {
 	diags   []string
 }
 
+// outcomeInput is everything a completed search contributes to the
+// outcome decision and the diagnostic composition: the child's wait
+// error and collected stderr, the index's structured integrity causes,
+// the retained-stop count assessed after all filtering, the malformed
+// and oversized skip tallies, the per-path oversized detail lines, and
+// the unrecognised-type tally.
+type outcomeInput struct {
+	waitErr        error
+	stderr         []byte
+	causes         []searchindex.Cause
+	usable         int
+	malformed      int
+	oversized      int
+	oversizedDiags []string
+	unknown        int
+}
+
 // decideOutcome maps one completed search to its presentation and fixed
-// exit status. waitErr is the child's wait error — nil, the benign
-// "no matches" exit status 1, or a fatal outcome — failures are the
-// stream-integrity diagnostics, usable is the retained-stop count
-// assessed after all filtering, recordLoss is the malformed+oversized
-// skip tally, and recordDiags are the stream's record-skip diagnostic
-// lines. Any diagnostics make the outcome overlay-bearing; a fatal
-// outcome — a fatal process result, any integrity failure, or record
-// loss that left zero usable results — fixes status 2, usable results
-// fix 0, and an intact empty stream fixes 1. Unknown-type warnings are
-// diagnostics only and never turn fatal on their own.
-func decideOutcome(waitErr error, stderr []byte, failures []string, usable, recordLoss int, recordDiags []string) outcome {
-	fatal := processFatal(waitErr) || len(failures) > 0 || (recordLoss > 0 && usable == 0)
+// exit status. Any diagnostics make the outcome overlay-bearing; a
+// fatal outcome — a fatal process result, any integrity cause, or
+// record loss that left zero usable results — fixes status 2, usable
+// results fix 0, and an intact empty stream fixes 1. Unknown-type
+// warnings are diagnostics only and never turn fatal on their own.
+func decideOutcome(in outcomeInput) outcome {
+	fatal := processFatal(in.waitErr) || len(in.causes) > 0 ||
+		(in.malformed+in.oversized > 0 && in.usable == 0)
 	var o outcome
-	o.diags = collectDiagnostics(waitErr, stderr, failures, recordDiags)
+	o.diags = composeDiagnostics(in)
 	o.overlay = len(o.diags) > 0
 	switch {
 	case fatal:
 		o.code = 2
-	case usable > 0:
+	case in.usable > 0:
 		o.code = 0
 	default:
 		o.code = 1
 	}
 	switch {
-	case usable > 0:
+	case in.usable > 0:
 		o.screen = phaseBrowse
 	case fatal:
 		o.screen = phaseFatal
@@ -80,51 +94,62 @@ func processFatal(waitErr error) bool {
 	return waitErr != nil && !(errors.As(waitErr, &ee) && ee.ExitCode() == 1)
 }
 
-// collectDiagnostics assembles the overlay's diagnostic lines: a
-// generated line naming the exit code or signal when the process
-// outcome was fatal, the child's sanitized stderr, the stream-integrity
-// failures, then the record-skip diagnostics — the named oversized-path
-// lines and the malformed, oversized, and unrecognised-type tallies.
-// Everything passes through the Issue #6 diagnostic utility before it
-// can reach the screen.
-func collectDiagnostics(waitErr error, stderr []byte, failures, recordDiags []string) []string {
-	diags := processDiagnostic(waitErr)
-	if s := strings.TrimRight(string(stderr), "\n"); s != "" {
+// composeDiagnostics assembles the universal ordered component list
+// that feeds both the overlay and, through the session collection, the
+// exit replay — one composition, two sinks. The order is the Issue #36
+// contract: the process component first — the child's sanitized stderr
+// in collection order, or the generated exit-code/signal line only
+// when the process result was fatal and stderr carried nothing — then
+// the integrity causes, then the record-loss components (malformed
+// aggregate, oversized aggregate, per-path oversized details), then
+// the unrecognised-type warnings. A clean exit or the benign status 1
+// never produces a process-status line.
+func composeDiagnostics(in outcomeInput) []string {
+	var diags []string
+	if s := strings.TrimRight(string(in.stderr), "\n"); s != "" {
 		diags = append(diags, strings.Split(present.Diagnostic(s), "\n")...)
 	}
-	return append(diags, streamDiagnostics(failures, recordDiags)...)
+	return append(diags, completionDiagnostics(in)...)
 }
 
 // completionDiagnostics returns the diagnostic lines knowable only at
-// search completion — the generated process-failure line, the
-// integrity failures, and the record tallies — excluding child stderr,
+// search completion — the same composition minus the child stderr,
 // which the session collection already took line-by-line while the
-// search ran.
-func completionDiagnostics(waitErr error, failures, recordDiags []string) []string {
-	return append(processDiagnostic(waitErr), streamDiagnostics(failures, recordDiags)...)
-}
-
-// processDiagnostic is the generated diagnostic for a fatal process
-// outcome — one line naming the exit code or signal — or nothing when
-// the child's exit was clean or the benign status 1.
-func processDiagnostic(waitErr error) []string {
-	if processFatal(waitErr) {
-		return []string{fmt.Sprintf("rg failed: %s", waitErr)}
-	}
-	return nil
-}
-
-// streamDiagnostics escapes the stream-integrity failures and
-// record-skip diagnostic lines for display and collection.
-func streamDiagnostics(failures, recordDiags []string) []string {
+// search ran: the generated process-failure line when a fatal process
+// result carried no explanatory stderr, the integrity causes, the
+// malformed and oversized aggregates, the per-path oversized details,
+// and the unrecognised-type warnings.
+func completionDiagnostics(in outcomeInput) []string {
 	var diags []string
-	for _, f := range failures {
-		diags = append(diags, strings.Split(present.Diagnostic(f), "\n")...)
+	if processFatal(in.waitErr) &&
+		strings.TrimSpace(string(in.stderr)) == "" {
+		diags = append(diags, fmt.Sprintf("rg failed: %s", in.waitErr))
 	}
-	for _, d := range recordDiags {
-		diags = append(diags, strings.Split(present.Diagnostic(d), "\n")...)
+	for _, c := range in.causes {
+		diags = append(diags, c.Line())
+	}
+	if in.malformed > 0 {
+		diags = append(diags, fmt.Sprintf("%d malformed record%s skipped",
+			in.malformed, plural(in.malformed)))
+	}
+	if in.oversized > 0 {
+		diags = append(diags, fmt.Sprintf("%d oversized record%s skipped",
+			in.oversized, plural(in.oversized)))
+	}
+	diags = append(diags, in.oversizedDiags...)
+	if in.unknown > 0 {
+		diags = append(diags, fmt.Sprintf("%d unrecognised record types skipped",
+			in.unknown))
 	}
 	return diags
+}
+
+// plural is the English plural suffix for a count's noun.
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // overlayKey handles one key while the diagnostics overlay is open:

@@ -1431,3 +1431,52 @@ file `Notes/tasks/035-final-integration-verification.md`),
 `Notes/PRD-vrg.md` (Testing Decisions), `internal/app/search.go`,
 `internal/app/subprocess_test.go`, `scripts/smoke.py`, the clean
 worktree gate output, and the smoke run.
+## [2026-09-24] ingest | Issue #36 stream-integrity fatal diagnostics — structured causes, post-summary precedence, universal composition
+
+Ingested the completed Issue #36 implementation. `internal/searchindex`
+gained `cause.go`: the exported `Cause`/`CauseKind` model — nine stable
+kinds, each carrying the offending record's raw path bytes where it
+names one, rendered by `Cause.Line()` through `present.Path` — with
+`IntegrityCauses()` returning the ordered list and `IntegrityFailures()`
+deriving one line per cause. `index.go` replaced the string `failures`
+with the `causes` slice plus the `unterminated` flag, added the `Add`
+post-summary gate (a second summary is only `extra summary record`;
+every other post-summary record is only `record after summary` and is
+never lifecycle-processed — a `begin` cannot open, a `match` is dropped
+unretained, `context` lost its exemption, unknown types still tally),
+split the trailing fragment on summary state (post-summary →
+`record after summary` + malformed count; otherwise the deferred
+`unterminated final record` cause + malformed count), and made `seal`
+append end-of-stream causes in the mandated order (missing ends sorted
+by unsigned raw path bytes, missing summary, unterminated final).
+Post-summary malformed/oversized/unknown records keep the dual
+representation — sole cause plus independent tallies — and
+`OversizedDiagnostics()` exposes the per-path detail lines.
+`internal/app/overlay.go` replaced `collectDiagnostics`/
+`processDiagnostic`/`streamDiagnostics` with `outcomeInput` and the
+universal `composeDiagnostics` order — process component (collected
+stderr, or the generated `rg failed:` line only for a fatal result
+without stderr; never a line for exit 0/1), integrity causes, malformed
+and oversized aggregates, per-path oversized details, unknown warnings —
+shared by the overlay and the `completionDiagnostics` collection subset
+replayed verbatim; fatal branches can no longer suppress causes or
+record-loss tallies. `app.go` gathers the index's structured accessors
+into `outcomeInput`.
+Created
+[stream-integrity-fatal-diagnostics](stream-integrity-fatal-diagnostics.md);
+updated
+[error-overlay-and-fatal-outcomes](error-overlay-and-fatal-outcomes.md)
+(lifecycle rows, cause model, stderr classification),
+[record-robustness](record-robustness.md) (dual representation,
+component order), [source-code](source-code.md) (`cause.go`,
+`index.go`, `overlay.go` entries), [unit-tests](unit-tests.md)
+(`causes_test.go`, `diagnostics_test.go`, corrected row descriptions),
+and the index.
+New files: `internal/searchindex/cause.go`,
+`internal/searchindex/causes_test.go`, `internal/app/diagnostics_test.go`,
+`Notes/wiki/stream-integrity-fatal-diagnostics.md`.
+Sources: `Notes/tasks/036-stream-integrity-fatal-diagnostics.md`,
+`Notes/PRD-vrg.md` (*Result index, records, and stream integrity*,
+*Outcome and exit-status contract*), `internal/searchindex/index.go`,
+`internal/searchindex/cause.go`, `internal/app/overlay.go`,
+`internal/app/app.go`, the new and corrected test files.

@@ -1,0 +1,7 @@
+rg: something failed
+orphaned end for g.txt
+record after summary
+record after summary
+record after summary
+1 malformed record skipped
+1 unrecognised record types skipped

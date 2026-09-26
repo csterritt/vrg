@@ -258,6 +258,18 @@ Catalog of all wiki pages for the vrg project.
   `-count=1` PTY/subprocess re-runs, the five smoke outcomes through
   `scripts/smoke.py`), and the regression it caught — the process-group
   cancellation kill plus the seeded harness's marker alignment
+- [stream-integrity-fatal-diagnostics.md](stream-integrity-fatal-diagnostics.md) —
+  Issue #36: the structured `Cause`/`CauseKind` integrity model
+  (`IntegrityCauses`, `Cause.Line()` through `present.Path`), the
+  one-cause-per-physical-record overlap precedence (extra summary,
+  post-summary lifecycle suppression, the removed context exemption,
+  unterminated-fragment split, dual tallies), deterministic
+  detection-order then end-of-stream ordering with unsigned raw-path
+  missing ends, uncapped one-line-per-record multiplicity, the
+  `outcomeInput`-driven `composeDiagnostics` universal order
+  (process → integrity → record-loss aggregates and per-path details →
+  unknown warnings) shared by overlay and replay, stderr suppressing
+  the generated line, and no process-status line for exit 0/1
 
 ## Catalogs
 

@@ -161,7 +161,7 @@ func TestIntegrityDispositions(t *testing.T) {
 				`{"type":"summary","data":{}}`,
 				`{"type":"summary","data":{}}`,
 			),
-			failures: []string{"second summary"},
+			failures: []string{"extra summary record"},
 		},
 		{
 			name: "decodable record after summary",
@@ -239,9 +239,10 @@ func TestIntegrityDispositions(t *testing.T) {
 func TestCompositeDispositions(t *testing.T) {
 	// A trailing record that would decode cleanly — a complete end
 	// record — still counts malformed when its newline never arrives:
-	// the rule is unconditional on the record's content. It is never
-	// decoded, so no orphaned-end diagnostic appears; only the
-	// positional and unterminated failures fire.
+	// the rule is unconditional on the record's content. Sitting after
+	// the summary its whole integrity representation is the
+	// after-summary cause — one cause per physical record — so no
+	// unterminated-final-record diagnostic fires alongside it.
 	t.Run("unterminated trailing record", func(t *testing.T) {
 		ix := searchindex.New("/work")
 		ix.Feed([]byte(streamOf(
@@ -256,7 +257,7 @@ func TestCompositeDispositions(t *testing.T) {
 			t.Fatalf("Malformed = %d, want 1 for the unterminated record", n)
 		}
 		failures := ix.IntegrityFailures()
-		want := []string{"record after summary", "unterminated trailing record"}
+		want := []string{"record after summary"}
 		if len(failures) != len(want) {
 			t.Fatalf("IntegrityFailures = %v, want %v", failures, want)
 		}

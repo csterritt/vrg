@@ -372,3 +372,14 @@ Usage
  Input tokens: 147317 tokens
  Output tokens: 65183 tokens
  Cached input tokens: 7928407 tokens
+
+----
+Task 036-stream-integrity-fatal-diagnostics.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 74 messages
+ Input tokens: 318798 tokens
+ Output tokens: 56179 tokens
+ Cached input tokens: 8411136 tokens

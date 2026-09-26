@@ -65,10 +65,15 @@ type Index struct {
 	// incomplete holds raw paths whose lifecycle metadata is damaged —
 	// an orphaned match was retained or the end never arrived.
 	incomplete map[string]bool
-	// failures accumulates integrity diagnostics in stream order.
-	failures   []string
-	sawSummary bool
-	sealed     bool
+	// causes accumulates the structured integrity violations in stream
+	// order: mid-stream causes at detection, then the end-of-stream
+	// causes seal appends. unterminated marks a trailing fragment seen
+	// outside the post-summary state, whose cause seal emits after the
+	// missing-summary cause.
+	causes       []Cause
+	sawSummary   bool
+	unterminated bool
+	sealed       bool
 	// malformed counts records skipped for violating the per-record
 	// schema, including the trailing unterminated record. It is kept
 	// strictly separate from the integrity failures: lifecycle
@@ -128,8 +133,11 @@ const maxRecordPayload = 64 << 20
 // non-empty trailing chunk without its terminator is an unterminated
 // record — counted malformed without a decode attempt and an integrity
 // failure, since a cut stream is incomplete — and when it also exceeds
-// the payload limit it is counted oversized too: all three
-// dispositions hold for that one record.
+// the payload limit it is counted oversized too. After a valid summary
+// the fragment's sole integrity cause is record after summary under
+// the one-cause-per-record precedence; otherwise its unterminated
+// cause is deferred to seal, where it follows the missing ends and
+// the missing summary.
 func (ix *Index) Feed(stream []byte) {
 	lines := bytes.Split(stream, []byte("\n"))
 	for _, line := range lines[:len(lines)-1] {
@@ -149,13 +157,14 @@ func (ix *Index) Feed(stream []byte) {
 	}
 	if last := lines[len(lines)-1]; len(bytes.TrimSpace(last)) != 0 {
 		if ix.sawSummary {
-			ix.fail("record after summary", nil)
+			ix.fail(CauseRecordAfterSummary, nil)
+		} else {
+			ix.unterminated = true
 		}
 		ix.malformed++
 		if len(last) > maxRecordPayload {
 			ix.countOversized(last[:maxRecordPayload])
 		}
-		ix.fail("unterminated trailing record", nil)
 	}
 }
 
@@ -167,7 +176,7 @@ func (ix *Index) Feed(stream []byte) {
 func (ix *Index) skipMalformed() {
 	ix.malformed++
 	if ix.sawSummary {
-		ix.fail("record after summary", nil)
+		ix.fail(CauseRecordAfterSummary, nil)
 	}
 }
 
@@ -177,7 +186,7 @@ func (ix *Index) skipMalformed() {
 // were recovered from the consumed prefix.
 func (ix *Index) skipOversized(prefix []byte) {
 	if ix.sawSummary {
-		ix.fail("record after summary", nil)
+		ix.fail(CauseRecordAfterSummary, nil)
 	}
 	ix.countOversized(prefix)
 }
@@ -193,29 +202,37 @@ func (ix *Index) countOversized(prefix []byte) {
 	}
 }
 
-// fail records one integrity diagnostic; path is escaped for display.
-func (ix *Index) fail(format string, path []byte) {
-	if path == nil {
-		ix.failures = append(ix.failures, format)
-		return
-	}
-	ix.failures = append(ix.failures, fmt.Sprintf(format, present.Path(path)))
+// fail records one structured integrity cause — the kind plus the
+// record's raw path bytes where it names one.
+func (ix *Index) fail(kind CauseKind, path []byte) {
+	ix.causes = append(ix.causes, Cause{Kind: kind, Path: path})
 }
 
 // Add applies one decoded record to the index and the lifecycle
-// tracker. Any record after the summary is a positional violation —
-// the summary must be final — and the record's own transition is then
-// evaluated as usual. Path identity is the decoded raw path bytes, so
-// the text and bytes encodings of one path agree.
+// tracker. After the first valid summary every further record is only
+// a positional violation — the summary must be final — and is never
+// lifecycle-processed: a second summary is the extra-summary cause,
+// anything else is record after summary carrying the record's raw
+// path when it names one, and a post-summary unknown type still
+// tallies its independent count. Path identity is the decoded raw path
+// bytes, so the text and bytes encodings of one path agree.
 func (ix *Index) Add(rec Record) {
-	if ix.sawSummary && rec.Kind != KindSummary {
-		ix.fail("record after summary", nil)
+	if ix.sawSummary {
+		if rec.Kind == KindSummary {
+			ix.fail(CauseExtraSummary, nil)
+			return
+		}
+		ix.fail(CauseRecordAfterSummary, rec.Path)
+		if rec.Kind == KindUnknown {
+			ix.unknown++
+		}
+		return
 	}
 	switch rec.Kind {
 	case KindBegin:
 		key := string(rec.Path)
 		if ix.open[key] {
-			ix.fail("duplicate begin for %s", rec.Path)
+			ix.fail(CauseDuplicateBegin, rec.Path)
 		} else {
 			ix.open[key] = true
 		}
@@ -223,7 +240,7 @@ func (ix *Index) Add(rec Record) {
 	case KindEnd:
 		key := string(rec.Path)
 		if !ix.open[key] {
-			ix.fail("orphaned end for %s", rec.Path)
+			ix.fail(CauseOrphanedEnd, rec.Path)
 		} else {
 			delete(ix.open, key)
 		}
@@ -235,19 +252,12 @@ func (ix *Index) Add(rec Record) {
 		}
 		return
 	case KindSummary:
-		// A second summary is the duplicate kind of record after
-		// summary; it gets its own diagnostic.
-		if ix.sawSummary {
-			ix.fail("second summary", nil)
-		}
 		ix.sawSummary = true
 		return
 	case KindMatch:
 	case KindUnknown:
 		// Unknown types carry no lifecycle meaning but are tallied
-		// separately and reported; the after-summary check above has
-		// already flagged the position independently, so an unknown
-		// type there is both counted and an integrity failure.
+		// separately and reported.
 		ix.unknown++
 		return
 	default:
@@ -259,11 +269,11 @@ func (ix *Index) Add(rec Record) {
 		// Binary exclusion takes precedence over the general
 		// orphan-retention rule: a match after a binary-excluding end
 		// is not retained and the file stays excluded.
-		ix.fail("orphaned match for %s", rec.Path)
+		ix.fail(CauseMatchAfterEnd, rec.Path)
 		return
 	}
 	if !ix.open[key] {
-		ix.fail("orphaned match for %s", rec.Path)
+		ix.fail(CauseOrphanedMatch, rec.Path)
 		ix.incomplete[key] = true
 	}
 	k := stopKey{path: key, line: rec.LineNumber}
@@ -325,9 +335,13 @@ func (ix *Index) Prepare() {
 	ix.sorted = true
 }
 
-// seal applies the end-of-stream lifecycle rules once: every file still
-// open is missing its end (its matches stay retained, marked
-// incomplete) and a stream without a summary is incomplete.
+// seal applies the end-of-stream lifecycle rules once, appending the
+// end-of-stream causes after every detection-time cause in their
+// mandated order: missing end for each file still open ordered by
+// unsigned raw path bytes (its matches stay retained, marked
+// incomplete), then the missing summary, then the unterminated final
+// record when a valid summary did not already claim the fragment
+// under after-summary precedence.
 func (ix *Index) seal() {
 	if ix.sealed {
 		return
@@ -340,22 +354,39 @@ func (ix *Index) seal() {
 	}
 	slices.Sort(dangling)
 	for _, p := range dangling {
-		ix.fail("missing end for %s", []byte(p))
+		ix.fail(CauseMissingEnd, []byte(p))
 	}
 	if !ix.sawSummary {
-		ix.fail("missing summary", nil)
+		ix.fail(CauseMissingSummary, nil)
+	}
+	if ix.unterminated {
+		ix.fail(CauseUnterminatedFinal, nil)
 	}
 }
 
-// IntegrityFailures returns the stream-integrity diagnostics in stream
-// order, empty when the lifecycle metadata is complete and consistent.
-// Integrity is assessed separately from the child's exit status: a
-// process can fail between complete records and a clean exit can carry
-// a damaged stream. The slice shares the index's storage and must not
-// be mutated.
-func (ix *Index) IntegrityFailures() []string {
+// IntegrityCauses returns the structured stream-integrity causes in
+// order — mid-stream violations in detection order, then the
+// end-of-stream causes seal appends — empty when the lifecycle
+// metadata is complete and consistent. Integrity is assessed
+// separately from the child's exit status: a process can fail between
+// complete records and a clean exit can carry a damaged stream. The
+// slice shares the index's storage and must not be mutated.
+func (ix *Index) IntegrityCauses() []Cause {
 	ix.seal()
-	return ix.failures
+	return ix.causes
+}
+
+// IntegrityFailures returns the stream-integrity diagnostics in the
+// same order as IntegrityCauses — one stable line per cause — empty
+// when the lifecycle metadata is complete and consistent. The slice
+// does not share the index's storage.
+func (ix *Index) IntegrityFailures() []string {
+	causes := ix.IntegrityCauses()
+	diags := make([]string, len(causes))
+	for i, c := range causes {
+		diags[i] = c.Line()
+	}
+	return diags
 }
 
 // Malformed returns the count of records skipped for violating the
@@ -382,6 +413,20 @@ func (ix *Index) Oversized() int {
 // never by themselves change the outcome's exit status.
 func (ix *Index) Unknown() int {
 	return ix.unknown
+}
+
+// OversizedDiagnostics returns one "oversized record skipped for
+// <escaped path>" line per oversized record whose type and data.path
+// were recovered from the consumed prefix, in stream order — the
+// per-path detail lines of the record-loss component, whose aggregate
+// the app composes separately. The slice does not share the index's
+// storage.
+func (ix *Index) OversizedDiagnostics() []string {
+	diags := make([]string, len(ix.oversizedPaths))
+	for i, p := range ix.oversizedPaths {
+		diags[i] = "oversized record skipped for " + p
+	}
+	return diags
 }
 
 // RecordDiagnostics returns the nonfatal record-skip diagnostics in a

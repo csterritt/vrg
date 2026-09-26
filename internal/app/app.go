@@ -258,23 +258,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case searchDoneMsg:
 		m.index = msg.index
-		var failures, recordDiags []string
-		recordLoss := 0
+		in := outcomeInput{waitErr: msg.waitErr, stderr: msg.stderr}
 		if m.index != nil {
 			m.stops = m.index.Stops()
 			m.binarySkipped = m.index.BinaryExcluded()
-			failures = m.index.IntegrityFailures()
-			recordDiags = m.index.RecordDiagnostics()
-			recordLoss = m.index.Malformed() + m.index.Oversized()
+			in.causes = m.index.IntegrityCauses()
+			in.malformed = m.index.Malformed()
+			in.oversized = m.index.Oversized()
+			in.oversizedDiags = m.index.OversizedDiagnostics()
+			in.unknown = m.index.Unknown()
 		}
-		o := decideOutcome(msg.waitErr, msg.stderr, failures, len(m.stops), recordLoss, recordDiags)
+		in.usable = len(m.stops)
+		o := decideOutcome(in)
 		m.code = o.code
 		m.phase = o.screen
 		// The completion's own diagnostics join the collection. Child
 		// stderr is absent here: it was already collected line-by-line
 		// while the search ran, and collecting it again would break
 		// exactly-once.
-		for _, d := range completionDiagnostics(msg.waitErr, failures, recordDiags) {
+		for _, d := range completionDiagnostics(in) {
 			m.collect(d)
 		}
 		if o.overlay {

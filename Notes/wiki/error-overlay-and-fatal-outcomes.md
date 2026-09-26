@@ -32,17 +32,30 @@ The transition matrix and its dispositions:
 | `match(P)` while P is not open (never opened, or after `end`) | integrity failure: `orphaned match`; the match is **retained** and P's stops are marked `Incomplete` |
 | `end(P)` while P is open | valid; P closes; a non-null `binary_offset` excludes P |
 | `end(P)` while P is not open | integrity failure: `orphaned end`; a non-null `binary_offset` still excludes — exclusion is a safety property, not a reward for valid metadata |
-| `context(P)` anywhere | ignored; no lifecycle effect |
+| `context(P)` before the summary | ignored; no lifecycle effect |
 | P open when the stream ends | integrity failure: `missing end for P`; P's stops are marked `Incomplete` |
 | exactly one `summary`, final | valid; a lone summary is a complete zero-result stream |
 | missing `summary` | integrity failure: `missing summary` |
-| second `summary` | integrity failure: `second summary` |
-| any record after `summary`, including malformed bytes | integrity failure: `record after summary` |
-| trailing unterminated record | malformed **and** incomplete: `unterminated trailing record` — plus `record after summary` when it follows the summary, a deliberate double disposition |
+| second `summary` | integrity failure: `extra summary record` (its sole cause — never also `record after summary`) |
+| any other record after `summary`, including malformed bytes and `context` | integrity failure: `record after summary`; the record is **not lifecycle-processed** — a `begin` cannot open, a `match` is neither retained nor marked incomplete |
+| trailing unterminated record | malformed **and** an integrity failure: `unterminated final record` — or, positioned after the summary, only `record after summary` plus the malformed count |
 
 **Binary exclusion takes precedence over orphan retention**: a match
 arriving after a binary-excluding `end(P)` is not retained and P stays
-excluded.
+excluded — its distinct cause line is `match for P arrived after a
+binary-excluding end`. Issue #36 owns the removal of the old
+`context`-after-`summary` exemption — the summary-is-final rule is
+positional — and the one-cause-per-physical-record precedence:
+post-summary malformed/oversized/unknown records keep their
+independent tallies alongside the sole `record after summary` cause.
+
+Since Issue #36 the violations are structured `Cause` values (stable
+`CauseKind` plus the record's raw path bytes), returned by
+`IntegrityCauses()` — `IntegrityFailures()` derives one rendered line
+per cause. Ordering is deterministic: mid-stream causes in detection
+order, then the end-of-stream causes `seal` appends — missing ends
+sorted by unsigned raw path bytes, then missing summary, then the
+unterminated final record.
 
 End-of-stream sealing runs once inside `Prepare` (and inside
 `IntegrityFailures`), so either accessor finalizes the lifecycle.
@@ -58,11 +71,13 @@ classification is unconfirmed even though they remain browsable.
 ## The outcome decision
 
 `decideOutcome` in `internal/app/overlay.go` is the pure function of
-the completed search's independent inputs: the child's wait error, the
-captured stderr, the stream-integrity failures, the usable-results
-count (retained stops — `Index.LineCount`), and — since Issue #10 —
-the record-loss count (malformed + oversized) with the record-skip
-diagnostic lines (`Index.RecordDiagnostics`). It returns the underlying
+the completed search's independent inputs — the `outcomeInput` struct
+since Issue #36: the child's wait error, the captured stderr, the
+structured stream-integrity causes (`Index.IntegrityCauses`), the
+usable-results count (retained stops), and the record-loss components
+(the malformed and oversized tallies, the per-path oversized detail
+lines from `Index.OversizedDiagnostics`, and the unknown-type tally).
+It returns the underlying
 screen, whether the overlay opens, the fixed exit status, and the
 diagnostic lines. `Update`'s `searchDoneMsg` branch applies it exactly
 once; the status never changes afterwards except through `ctrl+c`.
@@ -106,27 +121,35 @@ the `Esc`/`q` dismissal-outcome table — in
 
 Captured stderr is classified regardless of rg's exit code: non-empty
 stderr under a clean exit or exit 1 is a *warning* diagnostic shown in
-the overlay, and under a fatal outcome it joins the process diagnostic.
-When a fatal process result supplies **no** stderr, a generated
-diagnostic names the wait status — `rg failed: exit status 3` or
-`rg failed: signal: killed` — so the overlay never opens empty.
-Diagnostics assemble in order: the generated process line, the
-sanitized stderr text, the stream-integrity failures, then — since
-Issue #10 — the record-skip diagnostics (`oversized record skipped for
-<path>` lines first, then the malformed/oversized/unknown tallies).
+the overlay, and under a fatal outcome it is the process component —
+since Issue #36 explanatory stderr **suppresses** the generated line,
+which exists only when a fatal process result (signal death or exit
+code other than 0/1) supplies **no** stderr: `rg failed: exit status 3`
+or `rg failed: signal: killed`. Exit 0 and exit 1 never produce a
+process-status line — a damaged stream under a clean exit names its
+causes, never `ripgrep exited with code 0`.
+Since Issue #36 diagnostics assemble in the universal order
+`composeDiagnostics` produces — process component, integrity causes,
+record-loss components (malformed aggregate, oversized aggregate, then
+the per-path `oversized record skipped for <escaped path>` details),
+then the unrecognised-type warnings — and fatal branches drop none of
+them: a fatal stream with real stderr shows stderr, causes, and
+tallies together.
 Everything
 passes through `present.Diagnostic` — the Issue #6 utility — before it
-can reach the screen; see
+can reach the screen; embedded paths were already escaped through
+`present.Path` inside `Cause.Line()`. See
 [safe-presentation.md](safe-presentation.md).
 
-Since Issue #11 the display list is assembled by `collectDiagnostics`
-while the **session collection** takes the completion-only subset from
-`completionDiagnostics` (process line, integrity failures, record-skip
-lines — `processDiagnostic`/`streamDiagnostics`) — child stderr is
-excluded there because the collection already took it line-by-line
-through `diagMsg` while the search ran, so collecting it again would
-double-count. Display and collection are independent; see
-[stderr-replay.md](stderr-replay.md).
+The **session collection** takes the completion-only subset from
+`completionDiagnostics` — the same composition minus the child stderr
+the collection already took line-by-line through `diagMsg` while the
+search ran, so collecting it again would double-count. One composition
+therefore feeds both sinks: the overlay displays the full list and
+`cmd/vrg` replays the collected text verbatim. Display and collection
+are independent; see
+[stderr-replay.md](stderr-replay.md) and
+[stream-integrity-fatal-diagnostics.md](stream-integrity-fatal-diagnostics.md).
 
 ## The modal overlay
 
@@ -192,8 +215,12 @@ cleanup runs identically on every exit; see
 `internal/searchindex/lifecycle_test.go` pins the lifecycle matrix
 table-driven — every transition row, binary-exclusion precedence,
 `text`/`bytes` path-identity agreement, interleaved open files, the
-trailing-unterminated double disposition, summary positioning, orphan
-retention with `Incomplete`, and open-at-end sealing.
+trailing-unterminated disposition mid-stream and after a complete
+stream, summary positioning, orphan retention with `Incomplete`, and
+open-at-end sealing — with Issue #36 correcting the
+post-`summary` rows (sole `record after summary` causes, the removed
+`context` exemption) and `causes_test.go` adding the exact structured
+`Cause` assertions.
 `internal/app/outcome_test.go` is the single table-driven outcome
 matrix covering every row above with dismissal and exit assertions —
 Issue #10 added the record-loss and unknown-warning rows plus a
@@ -209,7 +236,12 @@ with only presentation and diagnostics affected.
 `ctrl+c`, ignored keys (including the unreachable `c` toggle),
 unbroken-line wrapping, and generated code-or-signal diagnostics.
 `sinksafety_test.go` gained the `error overlay` row with per-fixture
-`wantDiag` expectations. `cmd/vrg/pty_test.go` gained the non-zero-exit
+`wantDiag` expectations. `diagnostics_test.go` (Issue #36) pins the
+universal composition: exact `composeDiagnostics`/`completionDiagnostics`
+slices, stderr precedence over the generated line, no process line for
+exit 0/1, the post-summary dual representation, uncapped repetition,
+escaped paths, index-derived ordering, and the shared overlay/replay
+text. `cmd/vrg/pty_test.go` gained the non-zero-exit
 handshake test and the 1 MiB stderr-content fixture asserting head and
 tail visibility on a large PTY; `main_test.go`'s flood boundary test
 now steps through the warning overlay (`^@` marker) before the browse
@@ -218,12 +250,18 @@ marker. See [unit-tests.md](unit-tests.md).
 ## Files
 
 - `internal/searchindex/index.go` — `Feed`, the `open`/`incomplete`
-  lifecycle state, `IntegrityFailures`, `Stop.Incomplete`, `seal`.
-- `internal/app/overlay.go` — `decideOutcome`, `collectDiagnostics`,
-  `processFatal`, the `overlay` type, `overlayKey`, `layout`,
+  lifecycle state, `IntegrityFailures`, `Stop.Incomplete`, `seal`;
+  Issue #36 added `cause.go` (`Cause`/`CauseKind`/`Cause.Line()`),
+  `IntegrityCauses()`, the `Add` post-summary gate, and
+  `OversizedDiagnostics()`.
+- `internal/app/overlay.go` — `decideOutcome`, `processFatal`, the
+  `overlay` type, `overlayKey`, `layout`,
   `maxScroll`, `renderOverlay`, `renderBlank`; Issue #11 split the
-  collection side
-  out as `completionDiagnostics`/`processDiagnostic`/`streamDiagnostics`;
+  collection side out as `completionDiagnostics`; Issue #36 unified the
+  composition — `outcomeInput`, `composeDiagnostics` (the universal
+  ordered list) and `completionDiagnostics` (its collection subset),
+  replacing `collectDiagnostics`/`processDiagnostic`/
+  `streamDiagnostics`;
   Issue #15 added `openOverlay` (open-or-append plus pop-up
   cancellation) and `composite` (the shared centred splice);
   Issue #31 generalized the component into value methods and the

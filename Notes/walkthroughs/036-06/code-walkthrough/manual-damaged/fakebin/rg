@@ -1,0 +1,12 @@
+#!/bin/sh
+echo "rg: something failed" >&2
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"f.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+'{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}' \
+'{"type":"end","data":{"path":{"text":"g.txt"},"binary_offset":null}}' \
+'{"type":"summary","data":{}}' \
+'{"type":"match","data":{"path":{"text":"q.txt"},"lines":{"text":"late\n"},"line_number":2,"submatches":[{"match":{"text":"late"},"start":0,"end":4}]}}' \
+'this is not json' \
+'{"type":"weird","data":{"x":1}}'
+exit 3

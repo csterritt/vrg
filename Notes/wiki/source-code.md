@@ -166,17 +166,21 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   post-restoration replay writer the boundary runs on every controlled
   exit).
 - `internal/app/overlay.go` — the Issue #9 outcome contract:
-  `decideOutcome` (the pure function of wait error, stderr, integrity
-  failures, usable results, and — consumed since Issue #10 — the
-  record-loss count and record-skip diagnostics, returning screen,
+  `outcomeInput` (Issue #36's structured inputs: wait error, stderr,
+  integrity causes, usable results, the malformed/oversized/unknown
+  tallies, and the per-path oversized detail lines),
+  `decideOutcome` (the pure function of `outcomeInput`, returning screen,
   overlay flag, fixed status, and diagnostic lines),
   `processFatal` (any wait error but benign exit 1),
-  `collectDiagnostics` (generated code-or-signal line, sanitized
-  stderr, integrity failures, record-skip lines — all through
-  `present.Diagnostic` — the display list), and — Issue #11 —
-  `completionDiagnostics`/`processDiagnostic`/`streamDiagnostics` (the
-  collection subset, child stderr excluded because the session
-  collection already took it incrementally); the
+  `composeDiagnostics` (Issue #36's universal ordered component list —
+  process component, integrity causes, malformed and oversized
+  aggregates, per-path oversized details, unknown warnings; the
+  generated code-or-signal line only for a fatal process result
+  without stderr, never for exit 0/1), and `completionDiagnostics`
+  (the same composition minus the child stderr the session collection
+  already took incrementally — one composition feeding both the
+  overlay and the exit replay, replacing Issue #11's
+  `collectDiagnostics`/`processDiagnostic`/`streamDiagnostics`); the
   modal `overlay` state, `overlayKey`, `layout`/`maxScroll` (the
   hard-wrapped interior geometry sized from the frame — value methods
   since Issue #31), `scrollOverlay` (the shared clamped up/down
@@ -188,8 +192,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   and cancels any live pop-up so it cannot return) and `composite`
   (the shared centred cell-exact splice `renderOverlay` and
   `renderPopup` both consume). See
-  [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md)
-  and [file-change-popup.md](file-change-popup.md).
+  [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md),
+  [file-change-popup.md](file-change-popup.md), and
+  [stream-integrity-fatal-diagnostics.md](stream-integrity-fatal-diagnostics.md).
 - `internal/app/help.go` — the Issue #31 modal help overlay:
   `helpBinding`/`helpBindings` (the single binding table — key spelling
   → description — covering navigation, scrolling, panning, wrap,
@@ -382,10 +387,25 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   Issue #13 adds the `cursor` field — an index into the sorted `order`
   clamped in `Prepare` — and the `export` helper sharing the
   `stop`→`Stop` projection between `Stops()` and the cursor methods.
+  Issue #36 replaces the string `failures` with structured `Cause`
+  records (`IntegrityCauses()`; `IntegrityFailures()` derives the
+  rendered lines), adds the `Add` post-summary gate (a second summary
+  is `extra summary record`; anything else is `record after summary`,
+  never lifecycle-processed), the `unterminated` flag whose cause
+  `seal` emits after the unsigned-raw-path-sorted missing ends and the
+  missing summary, and `OversizedDiagnostics()` (the per-path
+  oversized detail lines the app composes after the aggregates).
   See
   [no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md),
   [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md),
-  and [record-robustness.md](record-robustness.md).
+  [record-robustness.md](record-robustness.md), and
+  [stream-integrity-fatal-diagnostics.md](stream-integrity-fatal-diagnostics.md).
+- `internal/searchindex/cause.go` — Issue #36's structured integrity
+  causes: `CauseKind` (the nine stable violation kinds), `Cause`
+  (kind plus the offending record's raw path bytes where it names
+  one), and `Cause.Line()` (the stable diagnostic line with the path
+  escaped through `present.Path`). See
+  [stream-integrity-fatal-diagnostics.md](stream-integrity-fatal-diagnostics.md).
 - `internal/searchindex/cursor.go` — Issue #13's matched-line cursor:
   `Step` (the selected `Stop` plus `Moved`/`FileChanged`/`Wrapped`
   transition flags), `Current()` (the first stop at startup, false when

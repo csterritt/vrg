@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"vrg/internal/searchindex"
 	"vrg/internal/theme"
 )
 
@@ -54,13 +55,16 @@ func TestREADMEExitStatusDocumentation(t *testing.T) {
 		name string
 		code int
 	}{
-		{"clean stream with usable results", decideOutcome(nil, nil, nil, 3, 0, nil).code},
-		{"anomalous rg 1 with usable results", decideOutcome(exitErr(t, 1), nil, nil, 1, 0, nil).code},
-		{"complete stream with no usable results", decideOutcome(nil, nil, nil, 0, 0, nil).code},
-		{"fatal exit code with usable results", decideOutcome(exitErr(t, 3), nil, nil, 2, 0, nil).code},
-		{"fatal exit code without usable results", decideOutcome(exitErr(t, 3), nil, nil, 0, 0, nil).code},
-		{"integrity failure with usable results", decideOutcome(nil, nil, []string{"missing summary"}, 1, 0, nil).code},
-		{"record loss leaving no usable results", decideOutcome(nil, nil, nil, 0, 1, []string{"1 malformed record skipped"}).code},
+		{"clean stream with usable results", decideOutcome(outcomeInput{usable: 3}).code},
+		{"anomalous rg 1 with usable results", decideOutcome(outcomeInput{waitErr: exitErr(t, 1), usable: 1}).code},
+		{"complete stream with no usable results", decideOutcome(outcomeInput{}).code},
+		{"fatal exit code with usable results", decideOutcome(outcomeInput{waitErr: exitErr(t, 3), usable: 2}).code},
+		{"fatal exit code without usable results", decideOutcome(outcomeInput{waitErr: exitErr(t, 3)}).code},
+		{"integrity failure with usable results", decideOutcome(outcomeInput{
+			usable: 1,
+			causes: []searchindex.Cause{{Kind: searchindex.CauseMissingSummary}},
+		}).code},
+		{"record loss leaving no usable results", decideOutcome(outcomeInput{malformed: 1}).code},
 	}
 	documented := map[int]bool{}
 	for _, code := range []int{0, 1, 2, 130} {

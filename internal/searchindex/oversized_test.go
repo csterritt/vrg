@@ -198,10 +198,10 @@ func TestOversizedOnlyFileAbsentFromList(t *testing.T) {
 	}
 }
 
-// An oversized final record without a trailing newline carries all
-// three dispositions at once: the oversized count, the malformed count
-// for its missing termination, and the incomplete-stream integrity
-// failure — the trailing-unterminated rule has no oversized exception.
+// An oversized final record without a trailing newline sitting after
+// the summary carries the dual representation: the oversized count,
+// the malformed count for its missing termination, and the sole
+// after-summary integrity cause — one cause per physical record.
 func TestOversizedUnterminatedFinalRecord(t *testing.T) {
 	ix := searchindex.New("/work")
 	ix.Feed([]byte(streamOf(
@@ -219,7 +219,10 @@ func TestOversizedUnterminatedFinalRecord(t *testing.T) {
 		t.Fatalf("Malformed = %d, want 1 — the unterminated record counts malformed", n)
 	}
 	failures := ix.IntegrityFailures()
-	want := []string{"record after summary", "unterminated trailing record"}
+	// After the summary the fragment's only integrity cause is record
+	// after summary; its malformed and oversized counts are retained
+	// independently — the dual representation.
+	want := []string{"record after summary"}
 	if len(failures) != len(want) {
 		t.Fatalf("IntegrityFailures = %v, want %v", failures, want)
 	}

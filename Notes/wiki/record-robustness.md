@@ -28,11 +28,14 @@ dispositions:
 
 - A **trailing unterminated record** is counted malformed (no decode is
   attempted — the rule is unconditional on content) *and* fails
-  integrity as `unterminated trailing record` (plus `record after
-  summary` when positioned there).
+  integrity — since Issue #36 as `unterminated final record`, or, when
+  the fragment sits after a valid summary, as the sole `record after
+  summary` cause (the one-cause-per-record precedence replaces the old
+  double integrity disposition).
 - A **malformed record after `summary`** is counted malformed *and*
-  flagged `record after summary` — the after-summary check runs before
-  the malformed tally so position never suppresses skip accounting.
+  contributes its sole `record after summary` cause — the independent
+  tally and the positional cause both survive (Issue #36's dual
+  representation).
 
 `Index.Malformed()` exposes the tally; the malformed count stays
 separate from `IntegrityFailures()`.
@@ -62,7 +65,10 @@ arrived, the record is counted anonymously: the tally line only.
 **Unterminated oversized final record.** The trailing-unterminated rule
 carries no oversized exception: a final record over the limit without
 its newline is counted oversized **and** malformed **and** fails
-integrity — all three dispositions for one record.
+integrity — all three dispositions for one record. Since Issue #36 an
+oversized post-summary record keeps the same dual representation: the
+sole `record after summary` cause plus the oversized tally and any
+recovered path detail.
 
 ## Unknown types
 
@@ -72,17 +78,21 @@ Unknown types never change the exit status independently, never satisfy
 required completion events (a stream of only unknown records still
 reports `missing summary`), and the counting rule is unqualified by
 position: an unknown type after `summary` is counted in the
-unknown-type tally *and* its position is separately flagged as an
-after-`summary` integrity failure — the skip reason and the ordering
-violation recorded independently, mirroring the malformed-after-summary
-composite.
+unknown-type tally *and* contributes its sole `record after summary`
+cause — the skip reason and the ordering violation recorded
+independently (Issue #36's dual representation), mirroring the
+malformed-after-summary composite.
 
 `Index.RecordDiagnostics()` assembles the nonfatal record-skip lines in
 a fixed order — each recovered `oversized record skipped for <path>`
 line in stream order, then the `N malformed record(s) skipped`,
 `N oversized record(s) skipped`, and `N unrecognised record types
-skipped` tallies for each nonzero count — for the app to append after
-the integrity failures.
+skipped` tallies for each nonzero count. Since Issue #36 the app
+composes the components itself in the universal order — malformed
+aggregate, oversized aggregate, the per-path oversized details from
+`Index.OversizedDiagnostics()` (the Issue #37 stream order), then the
+unknown warnings — so the unknown warning can never sit between the
+malformed and oversized components.
 
 ## Missing `end`
 
@@ -94,8 +104,8 @@ matches, marked `Stop.Incomplete`, and reports `missing end for <path>`
 ## Record-loss outcomes
 
 `decideOutcome` in `internal/app/overlay.go` now consumes the record-loss
-inputs: `recordLoss` (malformed + oversized) and `recordDiags`
-(`RecordDiagnostics`). "No usable results" is assessed **after all
+inputs — since Issue #36 the `outcomeInput` fields `malformed`,
+`oversized`, `oversizedDiags`, and `unknown`. "No usable results" is assessed **after all
 filtering** — the retained-stop count — so a stream whose sole retained
 file was binary-excluded after a skipped record follows the record-loss
 fatal row, not the no-results row. The new outcome rows:
@@ -126,8 +136,12 @@ drives the lifecycle rows asserting `Malformed()` stays zero;
 `internal/searchindex/oversized_test.go` covers the 64 MiB boundary
 (accepted at the limit, skipped one byte over), discard-and-resync, the
 recoverable and unrecoverable oversized diagnostics, the
-oversized-only-file absence, the triple-disposition unterminated
-oversized final record, and the unknown-type counting rules.
+oversized-only-file absence, the post-summary triple-disposition
+unterminated oversized final record (oversized + malformed + the sole
+`record after summary` cause, Issue #36), and the unknown-type counting
+rules. `causes_test.go` (Issue #36) pins the dual representations
+exactly — sole causes plus independent tallies — including the
+recovered-path oversized row.
 `internal/app/outcome_test.go` extends the single outcome matrix with
 the record-loss and unknown-warning rows (rows feeding malformed bytes
 use the new `stream` field through `fixtureStream`). See
@@ -138,11 +152,15 @@ use the new `stream` field through `fixtureStream`). See
 - `internal/searchindex/index.go` — `maxRecordPayload`, the `malformed`/
   `oversized`/`unknown` tallies, `oversizedPaths`, `skipMalformed`/
   `skipOversized`/`countOversized`, `Malformed()`/`Oversized()`/
-  `Unknown()`/`RecordDiagnostics()`.
+  `Unknown()`/`RecordDiagnostics()`; Issue #36 added
+  `OversizedDiagnostics()` (the per-path detail lines alone) and the
+  `Cause`-based integrity model described in
+  [stream-integrity-fatal-diagnostics.md](stream-integrity-fatal-diagnostics.md).
 - `internal/searchindex/record.go` — `recoverRecordPath`/
   `recoverDataPath` token-streamed path recovery over the consumed
   prefix.
 - `internal/app/overlay.go` — `decideOutcome`'s record-loss inputs and
-  fatal row; `collectDiagnostics` appends the record-skip lines.
+  fatal row; `composeDiagnostics` orders the record-loss components
+  (aggregates before per-path details, unknown warnings last).
 - `internal/app/app.go` — the `searchDoneMsg` branch wires the index's
   tallies and diagnostics into the outcome decision.
