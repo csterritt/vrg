@@ -65,6 +65,15 @@ directory with a plain separator — no canonicalization — so `./rel.go`
 and `a/../b.go` keep their emitted form. Identity and ordering always
 use the raw bytes, never the resolved path.
 
+## Binary exclusion
+
+Since Issue #8, an `end` record with a non-null `binary_offset` drops
+its file and all stops collected from it; the `excluded` set keeps the
+distinct-file tally exposed by `BinaryExcluded()`, and `LineCount()` —
+retained stops after filtering — is the usable-results value the app
+outcome consumes. See
+[no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md).
+
 ## Tests
 
 See [unit-tests.md](unit-tests.md) § `internal/searchindex`.

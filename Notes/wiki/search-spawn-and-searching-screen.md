@@ -49,12 +49,16 @@ parsing, stop merging, sorting, and highlight preparation all run after
 the child has exited and both pipes are drained, proving the searching
 state outlasts rg itself. Resize messages are handled in any state.
 
-## Interim summary
+## Completion destination
 
-The done message moves the model to `phaseSummary`, rendering
-`N files, M matched lines` (singular forms for 1) from the index's
-`FileCount`/`LineCount`. `q` on that screen quits with exit 0. This is
-the interim result screen; the real browser replaces it in later issues.
+The done message branches on usable results — retained stops after
+binary exclusion: zero enters `phaseNoResults` (the centred "No results
+found" screen, fixed exit 1 — see
+[no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md)),
+otherwise `phaseBrowse` shows the
+[two-pane browse view](browse-tracer.md) and `q` quits with exit 0.
+(Issue #3's interim `N files, M matched lines` summary was replaced by
+the browse view in Issue #5.)
 
 ## Process boundary
 

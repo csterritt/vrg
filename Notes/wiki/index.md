@@ -40,6 +40,12 @@ Catalog of all wiki pages for the vrg project.
   canonical per-sink-class escaping contracts, the `cli.Escape`
   replacement, the shared sink-safety table with its fixtures and
   no-style composition method, and later-sink row ownership
+- [no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md) —
+  Issue #8: `binary_offset` end records dropping a file's collected
+  stops with a distinct excluded-file tally, usable results as retained
+  stops (`LineCount`), and the centred "No results found" screen with
+  its "(N binary files skipped)" suffix — `q` → 1, `Esc` no-op,
+  `ctrl+c` → 130
 - [theme-and-colour-toggle.md](theme-and-colour-toggle.md) — Issue #7:
   the dark/light schemes (white-on-black / black-on-white), the
   in-memory `c` toggle, the named style set (base, gutter, true-inverse

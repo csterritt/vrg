@@ -46,6 +46,10 @@ type Index struct {
 	stops  map[stopKey]*stop
 	order  []*stop
 	sorted bool
+	// excluded is the set of raw paths whose file was dropped by a
+	// binary end record; a file stays excluded once its end reports a
+	// non-null binary_offset.
+	excluded map[string]bool
 }
 
 // stop is the mutable per-stop accumulation behind Stop.
@@ -61,14 +65,27 @@ type stop struct {
 // the invocation working directory. Resolution is a plain join — no
 // canonicalization — so raw path identity is preserved.
 func New(dir string) *Index {
-	return &Index{dir: dir, stops: make(map[stopKey]*stop)}
+	return &Index{dir: dir, stops: make(map[stopKey]*stop), excluded: make(map[string]bool)}
 }
 
-// Add applies one decoded record. Only match records build stops; the
-// lifecycle meaning of begin, end, summary, and context records is
-// Issue #9's, and record-loss accounting is Issue #10's.
+// Add applies one decoded record. Match records build stops unless
+// their file is already binary-excluded; an end record with a non-null
+// binary_offset drops that file and all its previously collected stops
+// and counts it once among the excluded. The remaining lifecycle
+// meaning of begin, end, summary, and context records is Issue #9's,
+// and record-loss accounting is Issue #10's.
 func (ix *Index) Add(rec Record) {
-	if rec.Kind != KindMatch {
+	switch rec.Kind {
+	case KindEnd:
+		if rec.BinaryOffset != nil {
+			ix.exclude(rec.Path)
+		}
+		return
+	case KindMatch:
+	default:
+		return
+	}
+	if ix.excluded[string(rec.Path)] {
 		return
 	}
 	k := stopKey{path: string(rec.Path), line: rec.LineNumber}
@@ -82,6 +99,23 @@ func (ix *Index) Add(rec Record) {
 		ix.stops[k] = s
 	}
 	s.subs = mergeSubmatches(s.subs, rec.Submatches)
+	ix.sorted = false
+}
+
+// exclude drops every stop collected for a raw path and marks the file
+// binary-excluded. Exclusion is idempotent: the distinct-file tally
+// counts each path once.
+func (ix *Index) exclude(path []byte) {
+	key := string(path)
+	if ix.excluded[key] {
+		return
+	}
+	ix.excluded[key] = true
+	for k := range ix.stops {
+		if k.path == key {
+			delete(ix.stops, k)
+		}
+	}
 	ix.sorted = false
 }
 
@@ -126,10 +160,18 @@ func (ix *Index) Stops() []Stop {
 }
 
 // LineCount returns the number of navigation stops — the count of
-// matched lines.
+// matched lines retained after binary exclusion. This is the
+// usable-results value the outcome logic consumes.
 func (ix *Index) LineCount() int {
 	ix.Prepare()
 	return len(ix.order)
+}
+
+// BinaryExcluded returns the number of distinct files dropped by a
+// binary end record — each raw path whose end event carried a non-null
+// binary_offset, counted once.
+func (ix *Index) BinaryExcluded() int {
+	return len(ix.excluded)
 }
 
 // FileCount returns the number of distinct raw paths holding at least

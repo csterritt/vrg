@@ -39,8 +39,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   and [cancellation-and-cleanup.md](cancellation-and-cleanup.md).
 - `internal/app/app.go` — the Bubble Tea `Model`: `phaseSearching` renders
   `Searching…` until the prepared index arrives (spanning post-exit
-  preparation), `phaseBrowse` renders the two-pane browse view and `q`
-  quits with `ExitCode` 0; `ctrl+c` in any state or `q` while searching
+  preparation); a done message with zero usable results (retained stops
+  after filtering) enters `phaseNoResults` and fixes `ExitCode` at 1,
+  otherwise `phaseBrowse` renders the two-pane browse view and `q` quits
+  with `ExitCode` 0; `ctrl+c` in any state or `q` while searching
   cancels (kills the child context, `ExitCode` 130), `Esc` is a no-op,
   `c` in browse toggles the theme between its dark and light schemes
   (Issue #7), and once `quit` is set `Update` discards all messages so a
@@ -48,7 +50,15 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   frame in `theme.Base` and sets `AltScreen` for the exit restoration
   sequence; resize handled in any state.
   Issue #5 state: `stops`/`files`/`cursor`, the `bufs`/`loading`/
-  `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam.
+  `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam;
+  Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
+  on the no-results screen.
+- `internal/app/noresults.go` — `renderNoResults` (Issue #8): the
+  centred "No results found" message on the frame's middle row, with
+  "(N binary files skipped)" appended when exclusion emptied the list,
+  clipped to the frame width, every row padded so `Base` covers the
+  screen. See
+  [no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md).
 - `internal/app/browse.go` — the Issue #5 browse composition:
   `loadDoneMsg` (the worker's prepared-buffer completion keyed by raw
   path), `ensureLoad`/`loadCmd` (one async load per file; read, split,
@@ -77,6 +87,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   sort by `(start, end)`, `Prepare` sorts stops by unsigned raw path
   bytes then line and computes union `Highlights`; `ResolvedPath` joins
   relative paths onto the working directory without canonicalization.
+  Issue #8 adds binary exclusion: an `end` with non-null
+  `binary_offset` drops the file's stops and marks its raw path in the
+  `excluded` set (later matches for it drop too), `BinaryExcluded()`
+  returns the distinct-file tally, and `LineCount()` is the
+  usable-results value — retained stops after filtering. See
+  [no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md).
 
 ## internal/cli
 

@@ -206,3 +206,33 @@ distinction. Created
 Design → Theme), `internal/theme/theme.go`,
 `internal/theme/theme_test.go`, `internal/app/app.go`,
 `internal/app/browse.go`, `internal/app/browse_test.go`.
+
+## [2026-09-23] ingest | Issue #8 no-results screen and binary exclusion
+
+Ingested the completed Issue #8 implementation: `internal/searchindex`
+gained binary exclusion — `Index.Add` now dispatches end records, a
+non-null `binary_offset` drops the file's collected stops and marks its
+raw path in the `excluded` set (idempotent distinct-file tally via
+`BinaryExcluded()`; later matches for an excluded path drop too), and
+`LineCount()` is documented as the usable-results value — retained
+stops after filtering — that the outcome logic consumes. `internal/app`
+gained `phaseNoResults` and `renderNoResults` (`noresults.go`): a done
+message with zero usable results fixes `ExitCode` at 1 and shows the
+centred "No results found" screen, appending "(N binary files skipped)"
+when exclusion emptied the list — identical for rg-1 empty and rg-0
+all-filtered streams — with `q` quitting 1 through the ordinary path,
+`Esc` a no-op, and `ctrl+c` overriding to 130. `waitErr`/`stderr` remain
+unconsumed cargo pending Issue #9's outcome function. Created
+[no-results-and-binary-exclusion](no-results-and-binary-exclusion.md);
+updated [searchindex-records-and-stops](searchindex-records-and-stops.md)
+(binary exclusion section), [search-spawn-and-searching-screen](
+search-spawn-and-searching-screen.md) (stale interim-summary section
+replaced by the completion-destination branch),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. Sources:
+`Notes/issues/008-no-results-screen-and-binary-exclusion.md`,
+`Notes/tasks/008-no-results-screen-and-binary-exclusion.md`,
+`Notes/PRD-vrg.md` (Result index, records, and stream integrity;
+Outcome and exit-status contract), `internal/searchindex/index.go`,
+`internal/searchindex/searchindex_test.go`, `internal/app/app.go`,
+`internal/app/noresults.go`, `internal/app/noresults_test.go`.

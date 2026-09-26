@@ -20,6 +20,10 @@ const (
 	// phaseBrowse is the two-pane browse view: file list on the left,
 	// the current file's content on the right.
 	phaseBrowse
+	// phaseNoResults is the centred "No results found" screen shown
+	// after a complete search whose usable results — retained stops
+	// after binary exclusion — are zero. Its fixed exit status is 1.
+	phaseNoResults
 )
 
 // Model is the Bubble Tea application model: it owns the search
@@ -44,8 +48,11 @@ type Model struct {
 	loadGate <-chan struct{}
 	width    int
 	height   int
-	code     int
-	quit     bool
+	// binarySkipped is the distinct count of files dropped by binary
+	// exclusion, reported on the no-results screen.
+	binarySkipped int
+	code          int
+	quit          bool
 }
 
 // newModel returns a searching model awaiting the collection result on
@@ -79,8 +86,10 @@ func (m Model) Init() tea.Cmd {
 // Update applies one message. Resize is handled in any state so the UI
 // stays responsive during collection and loads; a search-done message
 // moves the model to the browse view and starts the current file's
-// load; a load-done message stores the prepared buffer without any
-// full-file work here; q quits the browse view with exit 0. ctrl+c in
+// load — or to the no-results screen with fixed status 1 when usable
+// results (retained stops after filtering) are zero; a load-done
+// message stores the prepared buffer without any full-file work here;
+// q quits a completed state with its fixed exit status. ctrl+c in
 // any state — and q while searching, which covers the post-exit
 // preparation window — cancel the search and exit 130. Esc is a
 // base-state no-op. Once the model has committed to quitting, late
@@ -94,9 +103,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.relayout()
 	case searchDoneMsg:
-		m.phase = phaseBrowse
 		m.index = msg.index
-		m.stops = msg.index.Stops()
+		if m.index != nil {
+			m.stops = m.index.Stops()
+			m.binarySkipped = m.index.BinaryExcluded()
+		}
+		if len(m.stops) == 0 {
+			// No usable results: the ordinary status fixes at 1 and
+			// the centred no-results screen replaces browse.
+			m.phase = phaseNoResults
+			m.code = 1
+			return m, nil
+		}
+		m.phase = phaseBrowse
 		m.files = distinctPaths(m.stops)
 		m.cursor = 0
 		m.relayout()
@@ -145,13 +164,17 @@ func (m Model) cancelled() Model {
 // exit Bubble Tea emits the display-restoration sequence (leave alt
 // screen, cursor visible). During the whole collection and post-exit
 // preparation span the screen is "Searching…"; afterwards it is the
-// two-pane browse view. The theme's base style wraps each frame so the
+// two-pane browse view or, with no usable results, the centred
+// no-results screen. The theme's base style wraps each frame so the
 // active scheme's colours cover the screen.
 func (m Model) View() tea.View {
 	var v tea.View
-	if m.phase == phaseBrowse {
+	switch m.phase {
+	case phaseBrowse:
 		v = tea.NewView(m.theme.Base(m.renderBrowse()))
-	} else {
+	case phaseNoResults:
+		v = tea.NewView(m.theme.Base(m.renderNoResults()))
+	default:
 		v = tea.NewView(m.theme.Base("Searching…\n"))
 	}
 	v.AltScreen = true

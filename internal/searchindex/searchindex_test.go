@@ -479,3 +479,92 @@ func TestRelativePathResolution(t *testing.T) {
 		}
 	}
 }
+
+// A valid end record carrying a non-null binary_offset drops the file:
+// every stop collected from its earlier match records is removed, the
+// file is absent from the index, and the binary-excluded tally counts
+// it once.
+func TestBinaryEndDropsEarlierMatches(t *testing.T) {
+	ix := searchindex.New("/work")
+	feed(t, ix,
+		beginRec(jText("bin.dat")),
+		matchRec(jText("bin.dat"), jText("hit\n"), 1, subRec(jText("hit"), 0, 3)),
+		matchRec(jText("bin.dat"), jText("hit hit\n"), 4,
+			subRec(jText("hit"), 0, 3), subRec(jText("hit"), 4, 7)),
+		endRec(jText("bin.dat"), "37"),
+		`{"type":"summary","data":{}}`,
+	)
+	ix.Prepare()
+
+	if stops := ix.Stops(); len(stops) != 0 {
+		t.Fatalf("Stops = %+v, want none after binary exclusion", stops)
+	}
+	if n := ix.LineCount(); n != 0 {
+		t.Fatalf("LineCount = %d, want 0 after binary exclusion", n)
+	}
+	if n := ix.FileCount(); n != 0 {
+		t.Fatalf("FileCount = %d, want 0 after binary exclusion", n)
+	}
+	if n := ix.BinaryExcluded(); n != 1 {
+		t.Fatalf("BinaryExcluded = %d, want 1", n)
+	}
+}
+
+// The binary-excluded tally counts distinct raw paths: a second
+// excluding end for an already-excluded file does not recount it, a
+// match arriving after the file's excluding end stays dropped, a file
+// excluded without any collected match still counts, and a null
+// binary_offset excludes nothing.
+func TestBinaryExclusionCountsDistinctFiles(t *testing.T) {
+	ix := searchindex.New("/work")
+	feed(t, ix,
+		beginRec(jText("a.bin")),
+		matchRec(jText("a.bin"), jText("hit\n"), 1, subRec(jText("hit"), 0, 3)),
+		endRec(jText("a.bin"), "9"),
+		endRec(jText("a.bin"), "9"), // excluding again: still one file
+		matchRec(jText("a.bin"), jText("hit\n"), 7, subRec(jText("hit"), 0, 3)),
+		beginRec(jText("b.bin")),
+		endRec(jText("b.bin"), "0"), // excluded with no collected matches
+		beginRec(jText("c.txt")),
+		matchRec(jText("c.txt"), jText("hit\n"), 2, subRec(jText("hit"), 0, 3)),
+		endRec(jText("c.txt"), "null"),
+		`{"type":"summary","data":{}}`,
+	)
+	ix.Prepare()
+
+	if n := ix.BinaryExcluded(); n != 2 {
+		t.Fatalf("BinaryExcluded = %d, want 2 distinct files", n)
+	}
+	stops := ix.Stops()
+	if len(stops) != 1 || string(stops[0].Path) != "c.txt" || stops[0].Line != 2 {
+		t.Fatalf("Stops = %+v, want only the retained c.txt:2 stop", stops)
+	}
+}
+
+// "Usable results" — the single value the outcome logic consumes — is
+// the count of retained stops after binary exclusion, never the number
+// of match events received: four match events arrive here but only one
+// stop survives filtering.
+func TestUsableResultsIsRetainedStops(t *testing.T) {
+	ix := searchindex.New("/work")
+	feed(t, ix,
+		beginRec(jText("a.bin")),
+		matchRec(jText("a.bin"), jText("hit\n"), 1, subRec(jText("hit"), 0, 3)),
+		matchRec(jText("a.bin"), jText("hit\n"), 5, subRec(jText("hit"), 0, 3)),
+		matchRec(jText("a.bin"), jText("hit hit\n"), 9,
+			subRec(jText("hit"), 0, 3), subRec(jText("hit"), 4, 7)),
+		endRec(jText("a.bin"), "12"),
+		beginRec(jText("b.txt")),
+		matchRec(jText("b.txt"), jText("hit\n"), 3, subRec(jText("hit"), 0, 3)),
+		endRec(jText("b.txt"), "null"),
+		`{"type":"summary","data":{}}`,
+	)
+	ix.Prepare()
+
+	if n := ix.LineCount(); n != 1 {
+		t.Fatalf("usable results = %d, want 1 retained stop", n)
+	}
+	if n := ix.BinaryExcluded(); n != 1 {
+		t.Fatalf("BinaryExcluded = %d, want 1", n)
+	}
+}

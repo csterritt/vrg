@@ -96,6 +96,18 @@ and base64 `{"bytes"}` encodings freely:
 - `TestRelativePathResolution` — `ResolvedPath` joins the invocation
   working directory with no canonicalization (`./`, `a/../b` survive);
   absolute paths pass through.
+- `TestBinaryEndDropsEarlierMatches` (Issue #8) — an `end` with a
+  non-null `binary_offset` removes every stop collected from that
+  file's earlier `match` records; the file is absent from the index and
+  `BinaryExcluded()` counts it once.
+- `TestBinaryExclusionCountsDistinctFiles` (Issue #8) — the excluded
+  tally counts distinct raw paths: a repeated excluding `end` does not
+  recount, a match after exclusion stays dropped, an excluded file with
+  no matches still counts, and a null `binary_offset` excludes nothing.
+- `TestUsableResultsIsRetainedStops` (Issue #8) — usable results
+  (`LineCount`) is the retained-stop count after filtering, not the
+  received `match`-event count: four match events for a binary-excluded
+  file plus one retained stop yield 1.
 
 ## internal/present
 
@@ -206,6 +218,26 @@ composition:
 - `TestCurrentLineMatchUnderlined` (Issue #7) — the current matched
   line's span emits `CurrentMatch` (inverse pair + underline) while a
   match on another matched line emits plain `Match`.
+
+`noresults_test.go` (same package) covers the Issue #8 no-results
+outcome; `exitErr` builds a real `*exec.ExitError` child wait error and
+`noResultsModel` lands the model on the screen after a done message:
+
+- `TestEmptyStreamShowsNoResults` — an rg-1 summary-only stream shows
+  the centred `No results found` screen (32-cell pad at 80 columns,
+  middle of 24 rows), no suffix, no load command, neither the
+  searching nor browse screens.
+- `TestAllBinaryStreamShowsSkipCount` — an rg-0 stream whose every
+  matched file was binary-excluded appends `(N binary files skipped)`
+  with the distinct-file count.
+- `TestMixedStreamBrowsesRetained` — one excluded and one retained file
+  browse with usable results 1; the excluded file never appears.
+- `TestQOnNoResultsExitsOne` — `q` quits with `ExitCode` 1 through the
+  ordinary path, not cancellation.
+- `TestEscOnNoResultsIsNoOp` — `Esc` changes nothing; the fixed status
+  stays 1 and the screen stays up.
+- `TestCtrlCOnNoResultsExits130` — `ctrl+c` overrides the fixed status
+  with 130.
 
 `sinksafety_test.go` (same package) holds the Issue #6 shared
 sink-safety table:
