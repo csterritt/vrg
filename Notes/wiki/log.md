@@ -1977,3 +1977,29 @@ Sources: `Notes/tasks/048-pty-tests-deterministic-handshakes.md`,
 `cmd/vrg/acksteps_test.go`, `cmd/vrg/handshake_test.go`,
 `cmd/vrg/pty_test.go`, `cmd/vrg/pty_replay_test.go`,
 `cmd/vrg/pty_returnshape_test.go`, `cmd/vrg/main_test.go`.
+
+## [2026-09-25] ingest | Issue #49 dependency-manifest tidy — Bubbles and Lip Gloss removed
+
+Issue #49 (`Notes/tasks/049-tidy-dependency-manifests.md`) records the
+product owner's 2026-09-14 removal decision: the implementation
+imports neither `charm.land/bubbles/v2` nor `charm.land/lipgloss/v2`,
+so both were dropped from the dependency manifest rather than retained
+by token imports. The remaining TUI dependency is
+`charm.land/bubbletea/v2`; VRG's `internal/theme` styles and
+`internal/present` rendering primitives continue to own presentation.
+`go mod tidy` produced no manifest drift — `go mod tidy -diff` is
+empty, `go mod verify` passes, and `go build`/`go vet`/`go test ./...`
+are all green against the committed `go.mod`/`go.sum`.
+
+Updated [project-overview](project-overview.md) (the Stack section now
+lists Bubble Tea alone, with the removal noted), the wiki `AGENTS.md`
+Scope paragraph (vrg stack stated without the removed libraries), the
+PRD *Further Notes* stack line,
+`Notes/skills/code-writing/styling-tui.md`, and the
+`code-writing/styling-tui` entry in
+`Notes/skills/AGENTS.md`. Historical decision/issue/critique records
+(`Notes/decisions/001`, early issues, `Notes/Ideas.md`) were left
+unchanged — they explain the decision rather than state current
+requirements.
+Sources: `Notes/tasks/049-tidy-dependency-manifests.md`,
+`Notes/PRD-vrg.md` (*Further Notes*), `go.mod`, `go.sum`.

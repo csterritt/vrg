@@ -59,4 +59,4 @@ Periodically health-check the wiki:
 
 ## Scope
 
-This wiki covers the Sqloid project: a Go terminal application for browsing and editing SQLite databases (including local Cloudflare D1 databases) using Bubble Tea/Lip Gloss for the TUI, `mow.cli` for command parsing, and the pure-Go `modernc.org/sqlite` driver.
+This wiki covers the vrg project: a Go terminal application for browsing ripgrep results using Bubble Tea for the TUI (without Bubbles or Lip Gloss — the `theme`/`present` packages own presentation) and `mow.cli` for command parsing.

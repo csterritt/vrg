@@ -13,8 +13,9 @@ current file's contents with matches highlighted.
 
 - Go (`go 1.27.1`), module path `vrg`
 - `github.com/jawher/mow.cli v1.2.0` for command-line parsing
-- Charm v2 stack pinned for the TUI: `charm.land/bubbletea/v2 v2.0.9`,
-  `charm.land/bubbles/v2 v2.2.1`, `charm.land/lipgloss/v2 v2.0.6`
+- `charm.land/bubbletea/v2 v2.0.9` for the TUI; Bubbles and Lip Gloss
+  are not used (removed from the manifest under Issue #49) — the
+  `theme` and `present` packages own presentation
 - ripgrep 15.x is the reference search child, spawned with the
   protected `--json` argv from Issue #3 onward
 
