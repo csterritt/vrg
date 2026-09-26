@@ -363,7 +363,7 @@ func renderBrowseSink(t *testing.T, fx hostileFixture, inName bool, styled bool)
 	}
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, cmd := update(t, m, searchDoneMsg{index: ix})
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 	return m.View().Content
 }
 

@@ -69,6 +69,30 @@ func keyPress(s string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Text: s, Code: []rune(s)[0]}
 }
 
+// settle pumps a command's messages through Update, following each
+// message's returned command until the chain runs dry — the load →
+// layout-preparation → install sequence resolves to the settled
+// model. A nil command is a no-op.
+func settle(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	for _, msg := range cmdMsgs(cmd) {
+		var next tea.Cmd
+		m, next = update(t, m, msg)
+		m = settle(t, m, next)
+	}
+	return m
+}
+
+// pump feeds one message through Update and settles the command chain
+// it returns — the way the event loop delivers a worker completion and
+// then runs any follow-up commands it produced.
+func pump(t *testing.T, m Model, msg tea.Msg) Model {
+	t.Helper()
+	var cmd tea.Cmd
+	m, cmd = update(t, m, msg)
+	return settle(t, m, cmd)
+}
+
 // ctrlCPress is the message a raw-mode terminal delivers for ctrl+c.
 func ctrlCPress() tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}

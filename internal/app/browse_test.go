@@ -83,7 +83,7 @@ func TestLoadCompletionRendersContent(t *testing.T) {
 	if _, ok := msg.(loadDoneMsg); !ok {
 		t.Fatalf("load command message = %T, want loadDoneMsg", msg)
 	}
-	m2, _ := update(t, m, msg)
+	m2 := pump(t, m, msg)
 	v := m2.View().Content
 	if strings.Contains(v, "Loading…") {
 		t.Fatalf("loaded view still shows the placeholder: %q", v)
@@ -113,7 +113,7 @@ func TestMatchRendersInverse(t *testing.T) {
 		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m2, _ := update(t, m, cmd())
+	m2 := settle(t, m, cmd)
 	v := m2.View().Content
 	if !strings.Contains(v, "\x1b[30;47;4mhit\x1b[24;37;40m") {
 		t.Fatalf("match not rendered inverse+underlined: %q", v)
@@ -166,7 +166,7 @@ func TestGatedLoadKeepsResponsive(t *testing.T) {
 	close(gate)
 	select {
 	case msg := <-done:
-		m4, _ := update(t, m3, msg)
+		m4 := pump(t, m3, msg)
 		if v := m4.View().Content; !strings.Contains(v, "payload") {
 			t.Fatalf("view after gate release lacks content: %q", v)
 		}
@@ -283,7 +283,7 @@ func TestBrowseRendering(t *testing.T) {
 		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m2, _ := update(t, m, cmd())
+	m2 := settle(t, m, cmd)
 	v := m2.View().Content
 
 	// Current file underlined in the list.
@@ -325,7 +325,7 @@ func TestColourToggleFlipsViewStyling(t *testing.T) {
 		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 
 	if v := m.View().Content; !strings.HasPrefix(v, "\x1b[37;40m") {
 		t.Fatalf("initial view is not dark-scheme base: %q", v)
@@ -358,7 +358,7 @@ func TestCurrentLineMatchUnderlined(t *testing.T) {
 		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 	v := m.View().Content
 	// The first stop is the current matched line until Issue #13.
 	if !strings.Contains(v, "\x1b[30;47;4mhit\x1b[24;37;40m") {

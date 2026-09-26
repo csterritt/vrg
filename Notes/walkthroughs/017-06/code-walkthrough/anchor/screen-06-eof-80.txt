@@ -1,0 +1,24 @@
+big.txt  ── big.txt ────────────────────────────────────────────────────────────
+         72  u000072
+         73  u000073
+         74  u000074
+         75  u000075
+         76  u000076
+         77  u000077
+         78  u000078
+         79  u000079
+         80  u000080
+         81  u000081
+         82  u000082
+         83  u000083
+         84  u000084
+         85  u000085
+         86  u000086
+         87  u000087
+         88  u000088
+         89  u000089
+         90  zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+             zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+             zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+             zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
+             zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz

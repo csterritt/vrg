@@ -582,3 +582,63 @@ display), `internal/present/line.go`, `internal/viewport/rows.go`,
 `internal/app/browse.go`, `internal/viewport/wrap_test.go`,
 `internal/filebuffer/cluster_test.go`, `internal/app/wrap_test.go`,
 `internal/present/line_test.go`, `internal/app/scroll_test.go`.
+
+## [2026-09-23] ingest | Issue #17 logical anchor and off-UI layout preparation
+
+Ingested the completed Issue #17 implementation: the reading position
+is now a width-independent logical anchor — `Viewport.anchor`, a
+`(source line, display-column offset)` `Target` — and `Resize`/
+`SetRows`/`SetAnchor` resolve the effective top through
+`Rows.RowOf(anchor)` instead of keeping a row ordinal. `Row` gained
+`Start` (the display-column offset where a rendered row begins), so a
+wrapped continuation row maps back to logical coordinates; a scroll
+that moves replaces the anchor with the new top row's location while a
+clamped no-move keeps it, a `Reveal` that moves replaces it while a
+no-scroll reveal preserves the retained column, and the EOF clamp is
+deliberately lossy — when it pulls the top off the anchor's row the
+anchor rewrites to the clamped row, so a later shrink does not restore
+the pre-clamp position. `Model.saved` became `map[string]viewport.
+Target`, so per-file state survives rewraps while a file is away, and
+resize preserves the cursor selection since only the derived top
+moves. Preparation moved off the update path: `layoutCmd` workers run
+`viewport.Prepare` and deliver `layoutDoneMsg{key, rows}`; a
+completion installs only while its `(path, revision, text width, wrap
+mode)` key equals the model's current `layoutKey`, with `reqKey`
+deduplicating in-flight requests — out-of-order and superseded
+completions are discarded without touching the panel, anchor, saved
+state, or the pending reveal intent. `reveal()` now pends
+(`pendingReveal`) when no matching layout is installed and commits for
+the newest selected stop via `commitReveal`; `navigate` installs a
+destination's cached rows only while their key matches (the fast path
+commits immediately, stale-keyed caches get a fresh request). A
+`listEntry` provider seam plus cached `listW`/`textW`/`fileIdx` keep
+frame rendering to the visible rows and visible list window — the
+`relayout`/`prepW`/`prepWrap` machinery is gone. Created
+[logical-anchor-and-layout](logical-anchor-and-layout.md); updated
+[viewport-scrolling](viewport-scrolling.md) (anchor semantics, anchor-
+keyed saved state, `Row.Start`),
+[destination-reveal](destination-reveal.md) (pending intent, newest-
+stop commit),
+[wrap-mode](wrap-mode.md) (async `w` toggle, keyed install guard),
+[match-navigation](match-navigation.md) (the anchor handoff and
+carried intent on crossings),
+[browse-tracer](browse-tracer.md) (layout workers, visible-window
+list),
+[cancellation-and-cleanup](cancellation-and-cleanup.md) (`ctrl+c`/`q`
+actionable while a layout worker is held), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. New test files:
+`internal/viewport/anchor_test.go` (rewrap round trips, wrap-toggle
+column retention, scroll/reveal anchor replacement, lossy EOF clamp),
+`internal/app/anchor_test.go` (cursor preservation and anchor-text-at-
+top through resize), `internal/app/layout_test.go` (off-path resize
+requests, held-worker input actionability, out-of-order/superseded
+discards, departed-file caching, pending-intent preservation,
+stale-layout and matching-layout navigation, list render-cost guard).
+Sources: `Notes/issues/017-logical-anchor-through-rewrap-and-resize.md`,
+`Notes/tasks/017-logical-anchor-through-rewrap-and-resize.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors;
+Resources and responsiveness), `internal/viewport/viewport.go`,
+`internal/viewport/rows.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/viewport/anchor_test.go`,
+`internal/app/anchor_test.go`, `internal/app/layout_test.go`,
+`internal/app/model_test.go`, `internal/app/scroll_test.go`.

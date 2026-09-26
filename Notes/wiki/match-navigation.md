@@ -65,19 +65,22 @@ actual transition ends in `reveal()` — see
   hidden one scrolls it to the one-third row (Issue #14; see
   [destination-reveal.md](destination-reveal.md)).
 - **File-crossing steps** (`step.FileChanged`) save the departing
-  file's top row into `m.saved`, relayout the panel (installing the new
-  file's prepared rows or none), and `SetTop` to the new file's saved
-  vertical state — top of file on a first visit — then reveal the
-  destination target over that starting point when the file is cached.
-  `ensureLoad` then requests the destination's load when it is neither
+  file's logical anchor into `m.saved`, recompute the layout geometry
+  (the destination's gutter may differ), install the destination's
+  cached rows only while their key matches the current parameters —
+  Issue #17's fast path — and `SetAnchor` its saved position, top of
+  file on a first visit. A stale-keyed or missing cached layout gets
+  a keyed preparation request; the saved-anchor restore resolves when
+  it installs and the carried reveal intent then commits for the
+  newest selected stop — see
+  [logical-anchor-and-layout.md](logical-anchor-and-layout.md).
+  `ensureLoad` requests the destination's load when it is neither
   cached nor in flight, so an uncached destination shows `Loading…`
-  until its `loadDoneMsg` arrives — whose completion path applies the
-  same saved-state restore plus reveal. Since Issue #15 a crossing
-  also opens the file-change pop-up at selection time, its
-  instance-keyed expiry batched with the load command — see
-  [file-change-popup.md](file-change-popup.md). Issue #17 owns the
-  stale-layout request path; this issue's handoff is the immediate
-  switch plus the saved-viewport restore the reveal overrides.
+  until its `loadDoneMsg` arrives — whose completion issues the
+  layout request that completes the same sequence. Since Issue #15 a
+  crossing also opens the file-change pop-up at selection time, its
+  instance-keyed expiry batched with the load and layout commands —
+  see [file-change-popup.md](file-change-popup.md).
 - **Manual scrolling** never touches the cursor: `n`/`p` continue from
   the last selected stop, not from the scrolled position.
 - **The file list is passive**: there is no direct selection route —
@@ -99,12 +102,14 @@ Issue #14 added in `internal/app/reveal_test.go`. See
   `Prev`, `step`.
 - `internal/searchindex/index.go` — the `cursor` field, its clamp in
   `Prepare`, and the shared `export` helper.
-- `internal/app/browse.go` — `navigate`, `reveal` (Issue #14), and
-  `currentStop` reading the index cursor.
+- `internal/app/browse.go` — `navigate`, `reveal` (Issue #14; pending
+  intent since Issue #17), and `currentStop` reading the index cursor.
 - `internal/app/app.go` — the `n`/`p` key case; the model's own cursor
   field is gone.
 
-See also: [destination-reveal.md](destination-reveal.md) (the reveal
+See also: [logical-anchor-and-layout.md](logical-anchor-and-layout.md)
+(the anchor handoff and pending reveal intent a crossing carries),
+[destination-reveal.md](destination-reveal.md) (the reveal
 every actual transition now triggers),
 [file-change-popup.md](file-change-popup.md) (the pop-up every file
 crossing now opens),

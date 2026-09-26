@@ -25,10 +25,10 @@ scroll keys' units as methods, all in *rendered rows*:
   `pgdown`).
 
 *Content height* is the file-panel height minus the filename rule row:
-`Model.relayout` resizes the viewport with `m.height - 1` and with the
+`Model.syncLayout` resizes the viewport with `m.height - 1` and with the
 terminal width minus the file list and the gutter.
 
-## Clamping
+## Clamping and the logical anchor
 
 `clamp` keeps the top row in `[0, max(0, count − height)]`:
 
@@ -40,9 +40,18 @@ terminal width minus the file list and the gutter.
 - **Short files**: content shorter than the viewport has `maxTop` 0, so
   every scroll key is a no-op and the unused rows are simply left
   blank — natural underscroll, not overscroll.
-- **Resize**: `Resize` re-clamps; growth that would expose avoidable
-  blanks pulls the top upward. Per the PRD this EOF clamp is
-  intentionally lossy — a later shrink need not restore the old top.
+- **Resize**: `Resize` re-resolves the top from the retained anchor and
+  re-clamps; growth that would expose avoidable blanks pulls the top
+  upward. Per the PRD this EOF clamp is intentionally lossy — the
+  anchor is rewritten to the clamped row, so a later shrink need not
+  restore the old top.
+
+Since Issue #17 the true position is the logical anchor — a `(source
+line, display-column offset)` `Target` the effective top resolves from
+after every rewrap or row swap; a scroll that moves replaces it with
+the resulting top row's location while one clamped to no movement
+keeps it. See
+[logical-anchor-and-layout.md](logical-anchor-and-layout.md).
 
 ## Placeholder no-op
 
@@ -67,17 +76,18 @@ state. The full contract and its triggers live in
 
 ## Per-file saved vertical state
 
-`Model.saved` (`map[string]int`, keyed by raw path bytes) records each
-file's top rendered row whenever a scroll key moves it — the per-file
-vertical viewport state the PRD requires for revisits. When a load
-completes for the *current* path, `Update` restores `SetTop(saved)`
-after `relayout` installs the prepared rows: a first visit (no saved
-entry) starts at top-of-file, and a revisit resumes its position.
-Since Issue #13 `n`/`p` file crossings drive the same restore on entry
-— `navigate` saves the departing file's top and `SetTop`s the
-destination's saved state — and since Issue #14 the destination reveal
-then runs over that starting point: a moving reveal replaces the saved
-top with the new one, while a no-scroll reveal leaves it (see
+`Model.saved` (`map[string]viewport.Target`, keyed by raw path bytes —
+row ordinals until Issue #17) records each file's logical anchor
+whenever a scroll key moves it — the per-file vertical viewport state
+the PRD requires for revisits, now width-independent so it survives
+rewraps while the file is away. Entering a file `SetAnchor`s its saved
+value — absent means a first visit, the zero-valued top-of-file anchor —
+and the prepared layout resolves it on install. Since Issue #13 `n`/`p`
+file crossings drive the same restore on entry — `navigate` saves the
+departing file's anchor and `SetAnchor`s the destination's saved state —
+and since Issue #14 the destination reveal then runs over that starting
+point: a moving reveal replaces the saved anchor with the new one,
+while a no-scroll reveal leaves it, logical column included (see
 [destination-reveal.md](destination-reveal.md)). Manual scrolling never
 moves the matched-line cursor, which lives in `Index` itself (see
 [match-navigation.md](match-navigation.md)).
@@ -87,16 +97,18 @@ moves the matched-line cursor, which lives in `Index` itself (see
 Rendering no longer scans the buffer per frame:
 
 - `viewport.Rows` is the prepared rendered-row provider — `Len()` plus
-  `Row(i)` returning a `viewport.Row{Line, Cont, Cells, Spans}` — built
-  when a load completes and reinstalled on the viewport when `relayout`
-  runs. Since Issue #16 the provider is `viewport.Model` built by
-  `viewport.Prepare` over `*filebuffer.Buffer` (satisfying
-  `viewport.Source`): wrap mode makes the row→line mapping many-to-one
-  with `Cont` continuation rows, and run-off-edge keeps row *i* =
-  source line *i* (the Issue #12 `bufferRows` adapter is gone). The
-  model is keyed by path, content revision, text width, and wrap mode —
-  Issue #17 owns the async and obsolete-layout contract. See
-  [wrap-mode.md](wrap-mode.md).
+  `Row(i)` returning a `viewport.Row{Line, Start, Cont, Cells, Spans}`;
+  `Start` (Issue #17) is the row's display-column offset in its source
+  line, the logical location an anchor restores. Since Issue #16 the
+  provider is `viewport.Model` built by `viewport.Prepare` over
+  `*filebuffer.Buffer` (satisfying `viewport.Source`): wrap mode makes
+  the row→line mapping many-to-one with `Cont` continuation rows, and
+  run-off-edge keeps row *i* = source line *i* (the Issue #12
+  `bufferRows` adapter is gone). Since Issue #17 `Prepare` runs in a
+  worker command and `Update` installs the delivered model only while
+  its `(path, revision, width, wrap)` key matches the current
+  parameters. See [wrap-mode.md](wrap-mode.md) and
+  [logical-anchor-and-layout.md](logical-anchor-and-layout.md).
 - `Viewport.Visible()` materializes only the visible slice —
   `min(height, count − top)` rows — so the provider's `Row` is queried
   once per shown row and never for rows outside the frame. The
@@ -108,21 +120,24 @@ Rendering no longer scans the buffer per frame:
 
 ## Files
 
-- `internal/viewport/viewport.go` — `Row`, `Target`, the `Rows`
-  provider interface (now with `RowOf`), and `Viewport` (`Resize`,
-  `SetRows`, `SetTop`/`Top`, `Height`, the six scroll methods,
-  `Reveal`, `Visible`).
+- `internal/viewport/viewport.go` — `Row` (with `Start`), `Target`,
+  the `Rows` provider interface (now with `RowOf`), and `Viewport`
+  (`Resize`, `SetRows`, `SetAnchor`/`Anchor`, `SetTop`/`Top`,
+  `Height`, the six scroll methods, `Reveal`, `Visible`, `resolve`).
 - `internal/app/browse.go` — `Model.scroll`, `Model.reveal`,
-  `relayout`'s prepared-row rebuild and reinstall, `contentRow` over
-  the visible slice (continuation rows behind a blank gutter).
+  `syncLayout`/`ensureLayout`'s keyed layout requests and installs,
+  `contentRow` over the visible slice (continuation rows behind a
+  blank gutter).
 - `internal/viewport/rows.go` — `Source`, `Key`, `Prepare`, `Model` —
   the swappable prepared row model (Issue #16; see
   [wrap-mode.md](wrap-mode.md)).
-- `internal/app/app.go` — the `rows`/`saved`/`revs` maps and
-  `prepW`/`prepWrap`, the scroll-key case in `Update`, and the
-  saved-state restore plus reveal on current-path load completion.
+- `internal/app/app.go` — the `rows`/`reqKey`/`saved`/`revs` maps, the
+  `listW`/`textW`/`fileIdx` caches, the scroll-key case in `Update`,
+  and the `layoutDoneMsg` install guard.
 
-See also: [destination-reveal.md](destination-reveal.md) (the Issue #14
+See also: [logical-anchor-and-layout.md](logical-anchor-and-layout.md)
+(the Issue #17 anchor and prepared-layout contract),
+[destination-reveal.md](destination-reveal.md) (the Issue #14
 reveal contract built on this position),
 [browse-tracer.md](browse-tracer.md) (the two-pane view this
 scrolls), [searchindex-records-and-stops.md](searchindex-records-and-stops.md)

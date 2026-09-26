@@ -124,8 +124,10 @@ func TestLoadCompletionDoesNotRestartPopup(t *testing.T) {
 	m, load := popupModel(t, 8, 4)
 	id := m.popupID
 	m, cmd := update(t, m, load())
-	if cmd != nil {
-		t.Fatalf("load completion produced a command %T — the timer must not restart", cmd)
+	for _, msg := range cmdMsgs(cmd) {
+		if _, ok := msg.(popupExpiredMsg); ok {
+			t.Fatal("load completion restarted the pop-up timer")
+		}
 	}
 	if m.popupID != id {
 		t.Fatalf("load completion changed the pop-up instance %d → %d", id, m.popupID)
@@ -165,7 +167,7 @@ func TestPopupInstanceKeyedExpiry(t *testing.T) {
 // the same update: down dismisses and scrolls.
 func TestPopupKeyDismissalStillActs(t *testing.T) {
 	m, load := popupModel(t, 8, 30)
-	m, _ = update(t, m, load()) // b.txt arrives; the pop-up stays up
+	m = pump(t, m, load()) // b.txt arrives; the pop-up stays up
 	if m.popupID == 0 {
 		t.Fatal("load completion dismissed the pop-up")
 	}
@@ -254,7 +256,7 @@ func TestPopupLeftTruncatesLongPath(t *testing.T) {
 	recs = append(recs, fileWithStops(t, dir, name, 4, 1)...)
 	recs = append(recs, `{"type":"summary","data":{}}`)
 	m, cmd := browseModel(t, dir, 80, 24, recs...)
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 	m.theme = theme.Plain()
 	m, _ = update(t, m, keyPress("n"))
 	id := m.popupID
@@ -269,10 +271,7 @@ func TestPopupLeftTruncatesLongPath(t *testing.T) {
 			inner, ansi.StringWidth(inner))
 	}
 
-	m, cmd = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 24})
-	if cmd != nil {
-		t.Fatalf("resize produced a command %T", cmd)
-	}
+	m = pump(t, m, tea.WindowSizeMsg{Width: 120, Height: 24})
 	if m.popupID != id {
 		t.Fatalf("resize changed the pop-up instance %d → %d", id, m.popupID)
 	}

@@ -16,8 +16,8 @@ import (
 // keys report their special code rather than printable text.
 func codePress(code rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: code} }
 
-// loadedModel returns a browse model whose a.txt load has completed:
-// lines a001..aNNN with a match stop on line 1.
+// loadedModel returns a browse model whose a.txt load and layout have
+// completed: lines a001..aNNN with a match stop on line 1.
 func loadedModel(t *testing.T, w, h, lines int) Model {
 	t.Helper()
 	dir := t.TempDir()
@@ -32,8 +32,7 @@ func loadedModel(t *testing.T, w, h, lines int) Model {
 		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m, _ = update(t, m, cmd())
-	return m
+	return settle(t, m, cmd)
 }
 
 // countingRows is the prepared-rows fake: every Row query is recorded
@@ -219,26 +218,27 @@ func TestPerFileSavedViewportState(t *testing.T) {
 		`{"type":"end","data":{"path":{"text":"b.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m, _ = update(t, m, cmd()) // a.txt loaded at top
+	m = settle(t, m, cmd) // a.txt loaded and laid out at top
 	m, _ = update(t, m, codePress(tea.KeyDown))
 	m, _ = update(t, m, codePress(tea.KeyDown))
 	m, _ = update(t, m, codePress(tea.KeyDown))
-	if m.saved["a.txt"] != 3 {
-		t.Fatalf("saved a.txt top = %d, want 3", m.saved["a.txt"])
+	if m.saved["a.txt"] != (viewport.Target{Line: 3}) {
+		t.Fatalf("saved a.txt anchor = %v, want (3, 0)", m.saved["a.txt"])
 	}
 
-	// n moves the cursor to b.txt's stop — Issue #13's real
-	// mechanism — and returns its load command; seed b.txt's saved
-	// state before the load completes: the panel starts at the saved
-	// top while a.txt's state is untouched. The saved 1 keeps the
-	// line-2 target row on screen, so the destination reveal leaves
-	// the restored position alone (Issue #14).
+	// Seed b.txt's saved state, then n moves the cursor to b.txt's
+	// stop — Issue #13's real mechanism — and returns its load
+	// command: the saved anchor is the carried intent, restored when
+	// the prepared layout installs, while a.txt's state is untouched.
+	// The saved 1 keeps the line-2 target row on screen, so the
+	// destination reveal leaves the restored position alone
+	// (Issue #14).
+	m.saved["b.txt"] = viewport.Target{Line: 1}
 	m, load := update(t, m, keyPress("n"))
 	if load == nil {
 		t.Fatal("no load command for b.txt")
 	}
-	m.saved["b.txt"] = 1
-	m, _ = update(t, m, load())
+	m = settle(t, m, load)
 	if m.vp.Top() != 1 {
 		t.Fatalf("b.txt top after load = %d, want the saved 1", m.vp.Top())
 	}
@@ -246,11 +246,11 @@ func TestPerFileSavedViewportState(t *testing.T) {
 	if !strings.Contains(v, "b002") || strings.Contains(v, "b001") {
 		t.Fatalf("b.txt view does not start at the saved row: %q", v)
 	}
-	if m.saved["b.txt"] != 1 {
-		t.Fatalf("no-scroll reveal changed b.txt saved to %d, want 1", m.saved["b.txt"])
+	if m.saved["b.txt"] != (viewport.Target{Line: 1}) {
+		t.Fatalf("no-scroll reveal changed b.txt saved to %v, want (1, 0)", m.saved["b.txt"])
 	}
-	if m.saved["a.txt"] != 3 {
-		t.Fatalf("a.txt saved state changed to %d", m.saved["a.txt"])
+	if m.saved["a.txt"] != (viewport.Target{Line: 3}) {
+		t.Fatalf("a.txt saved state changed to %v", m.saved["a.txt"])
 	}
 }
 
@@ -259,8 +259,7 @@ func TestPerFileSavedViewportState(t *testing.T) {
 func TestRenderQueriesOnlyVisibleRows(t *testing.T) {
 	m := loadedModel(t, 80, 24, 60)
 	fake := &countingRows{n: 60}
-	m.rows["a.txt"] = fake
-	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = pump(t, m, layoutDoneMsg{key: m.wantKey("a.txt"), rows: fake})
 	fake.calls = nil
 	_ = m.View()
 

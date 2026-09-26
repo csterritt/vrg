@@ -21,11 +21,16 @@ and 71 under "Wrapping, indicators, and text display" in
 - **Wrap mode is on initially** (`Model.wrap = true` in `newModel`).
   Every source line packs its grapheme clusters into rendered rows of
   at most the text width.
-- **`w` in browse flips the flag** and runs `relayout`, rebuilding
-  every cached row model for the new mode and text width. In
-  run-off-edge mode each source line is one rendered row carrying its
-  full cells for the frame to clip — there is no horizontal panning
-  yet (Issues #17–19 own pan and anchors).
+- **`w` in browse flips the flag** immediately and issues a keyed
+  layout request for the new mode — since Issue #17 preparation runs
+  off the update path (`syncLayout`/`ensureLayout` → `layoutCmd` →
+  `layoutDoneMsg`), so the toggle stays responsive while the rewrap
+  runs; a rapid second `w` supersedes the first request and its stale
+  completion is discarded by the install guard. The retained anchor
+  resolves against whichever model installs, restoring the logical
+  column. In run-off-edge mode each source line is one rendered row
+  carrying its full cells for the frame to clip — there is no
+  horizontal panning yet (Issues #18–19 own pan).
 - **Text width** is `panel width − gutter width − reserved indicator
   width`, where `reservedW()` returns **0 in wrap mode and 1 in
   run-off-edge mode** — the rightmost indicator column is reserved now
@@ -93,12 +98,18 @@ translates the line's spans into row-local cells on demand — coverage
 spans clipped to the row, marker spans painted on the row owning their
 position — so a frame touches only the lines behind its visible rows.
 
-App-side, `Model.rows` caches the prepared model per path and
-`m.revs` counts each path's content revision (bumped on every
-successful load). `relayout` rebuilds models whose layout or revision
-is stale — at load completion, wrap toggle, or resize — synchronously,
-which Issue #16 accepts; Issue #17 moves preparation off the update
-path. `Viewport.Reveal` resolves a wrapped display target through
+App-side, `Model.rows` caches the prepared model per path as
+`installed{key, rows}` and `m.revs` counts each path's content
+revision (bumped on every successful load). Since Issue #17
+preparation is asynchronous: `syncLayout` recomputes the geometry and
+`ensureLayout` issues a `layoutCmd` worker keyed by the current
+parameters when the installed model is missing or stale; the
+`layoutDoneMsg` installs only while its key still equals
+`layoutKey(path)`, so out-of-order and superseded completions are
+inert — and `reqKey` keeps a superseded in-flight request from being
+reissued or installed. See
+[logical-anchor-and-layout.md](logical-anchor-and-layout.md).
+`Viewport.Reveal` resolves a wrapped display target through
 `RowOf`: the last of the line's rows whose first cell does not pass
 the target cell, with boundary positions belonging to the next row —
 so a match far down a source line taller than several screens lands
@@ -131,19 +142,24 @@ See [unit-tests.md](unit-tests.md) for the full catalog.
 ## Files
 
 - `internal/viewport/rows.go` — `Source`, `Key`, `Model`, `Prepare`,
-  `Row`, `RowOf`, `wrapLine`.
+  `Row` (Issue #17 adds `Start`, the row's logical location),
+  `RowOf`, `wrapLine`.
 - `internal/viewport/viewport.go` — `Row.Cont`; `Rows`/`Target` doc
-  updates for the many-to-one mapping.
+  updates for the many-to-one mapping; Issue #17's `anchor` resolves
+  the effective top through the installed model.
 - `internal/present/line.go` — `Cell.Lead`, the tab expansion, the
   `lead` flag through `emit` and the fallback cluster path.
-- `internal/app/browse.go` — `reservedW`, `relayout`'s stale-model
-  rebuild and row installation, `contentRow`'s blank continuation
-  gutter.
+- `internal/app/browse.go` — `reservedW`, `syncLayout`/`ensureLayout`/
+  `layoutCmd` (Issue #17's off-path preparation), `currentRows`'s
+  keyed install read, `contentRow`'s blank continuation gutter.
 - `internal/app/app.go` — the `wrap` field (on initially), the `w`
-  key case, `revs`/`prepW`/`prepWrap` preparation bookkeeping, the
+  key case issuing the new-mode layout request, `revs`/`reqKey`
+  preparation bookkeeping, the `layoutDoneMsg` install guard, the
   `loadDoneMsg` revision bump.
 
-See also: [viewport-scrolling.md](viewport-scrolling.md) (the rendered-
+See also: [logical-anchor-and-layout.md](logical-anchor-and-layout.md)
+(the async preparation and install-guard contract built on this key),
+[viewport-scrolling.md](viewport-scrolling.md) (the rendered-
 row position this model feeds),
 [destination-reveal.md](destination-reveal.md) (the `RowOf` seam this
 implements),

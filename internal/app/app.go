@@ -55,21 +55,33 @@ type Model struct {
 	diags   []string
 	index   *searchindex.Index
 	stops   []searchindex.Stop
-	files   [][]byte // distinct raw paths in index order
+	files   [][]byte       // distinct raw paths in index order
+	fileIdx map[string]int // raw path → its files index
 	bufs    map[string]*filebuffer.Buffer
 	failed  map[string]bool
 	loading map[string]bool
-	// rows holds each loaded file's prepared rendered-row model — built
-	// when its load completes and rebuilt when the layout or wrap mode
-	// changes; revs is each path's content revision, bumped on every
-	// successful load, and prepW/prepWrap record the layout the cached
-	// models were prepared for. saved holds each file's vertical
-	// viewport state — the top rendered row — for revisits (Issue #13).
-	rows     map[string]viewport.Rows
-	revs     map[string]int
-	prepW    int
-	prepWrap bool
-	saved    map[string]int
+	// rows holds each file's installed prepared row model with the
+	// (path, content revision, text width, wrap mode) key it was built
+	// for — preparation runs off the update path and a completion
+	// installs only while its key matches the current parameters
+	// (Issue #17). revs is each path's content revision, bumped on
+	// every successful load; reqKey is the latest requested key per
+	// path, so superseded in-flight requests are neither reissued nor
+	// installed. saved holds each file's vertical viewport state — the
+	// logical anchor — for revisits (Issue #13); being
+	// width-independent it survives rewraps while the file is away.
+	rows   map[string]installed
+	revs   map[string]int
+	reqKey map[string]viewport.Key
+	saved  map[string]viewport.Target
+	// pendingReveal carries the reveal intent for the newest selected
+	// stop while no layout matching the current parameters is
+	// installed; it commits when one installs. listW and textW are the
+	// cached file-list and content widths, recomputed on the update
+	// path so a frame render never rescans the list.
+	pendingReveal bool
+	listW         int
+	textW         int
 	// wrap is the wrap-mode flag: on means lines wrap at grapheme
 	// boundaries, off means run-off-edge with the reserved indicator
 	// column. On initially; w toggles.
@@ -95,8 +107,13 @@ type Model struct {
 	popupSeq   int
 	popupPath  []byte
 	popupTimer func(id int) tea.Cmd
-	code       int
-	quit       bool
+	// listEntry is the file-list item provider: it renders one entry's
+	// label from its raw path. Production uses the escaped path; tests
+	// substitute a counting fake to prove a frame touches only the
+	// visible window (Issue #17's render-cost guard).
+	listEntry func([]byte) string
+	code      int
+	quit      bool
 }
 
 // newModel returns a searching model awaiting the collection result on
@@ -112,10 +129,14 @@ func newModel(done <-chan searchDoneMsg, cancel func()) Model {
 		bufs:    make(map[string]*filebuffer.Buffer),
 		failed:  make(map[string]bool),
 		loading: make(map[string]bool),
-		rows:    make(map[string]viewport.Rows),
+		rows:    make(map[string]installed),
 		revs:    make(map[string]int),
-		saved:   make(map[string]int),
+		reqKey:  make(map[string]viewport.Key),
+		saved:   make(map[string]viewport.Target),
 		theme:   theme.Dark(),
+		// The file-list item provider is the escaped path; tests
+		// substitute a counting fake.
+		listEntry: present.Path,
 		// Wrapping is on initially; w toggles run-off-edge and back.
 		wrap: true,
 		// Same fallback the process boundary hands Bubble Tea; a real
@@ -168,7 +189,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.relayout()
+		cmd := m.syncLayout()
+		return m, cmd
 	case searchDoneMsg:
 		m.index = msg.index
 		var failures, recordDiags []string
@@ -197,8 +219,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.files = distinctPaths(m.stops)
-		m.relayout()
-		return m, m.ensureLoad()
+		m.fileIdx = make(map[string]int, len(m.files))
+		for i, f := range m.files {
+			m.fileIdx[string(f)] = i
+		}
+		cmd := m.syncLayout()
+		// The first stop's reveal is owed once its layout installs.
+		m.reveal()
+		return m, tea.Batch(m.ensureLoad(), cmd)
 	case diagMsg:
 		// The shutdown boundary: a diagnostic counts as collected once
 		// the model has processed the message carrying it.
@@ -216,21 +244,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if bytes.Equal(msg.path, m.currentPath()) {
 				m.openOverlay(strings.Split(present.Diagnostic(d), "\n"))
 			}
-		} else {
-			m.bufs[key] = msg.buf
-			m.revs[key]++
-			// The new content's row model is stale-keyed; relayout
-			// rebuilds it for the current layout.
-			delete(m.rows, key)
+			return m, nil
 		}
-		m.relayout()
-		if bytes.Equal(msg.path, m.currentPath()) {
-			// A load completing for the current file starts from its
-			// saved vertical state — absent means a first visit, which
-			// starts at the top — then reveals the latest selected
-			// target over that starting point.
-			m.vp.SetTop(m.saved[key])
-			m.reveal()
+		m.bufs[key] = msg.buf
+		m.revs[key]++
+		// The new revision stale-keys any installed layout and any
+		// request in flight for the old one.
+		delete(m.rows, key)
+		delete(m.reqKey, key)
+		if !bytes.Equal(msg.path, m.currentPath()) {
+			return m, nil
+		}
+		// The current file's saved anchor already sits in the
+		// viewport — set when the file became current — so the
+		// prepared layout resolves it on install and the pending
+		// reveal commits over it.
+		cmd := m.syncLayout()
+		return m, cmd
+	case layoutDoneMsg:
+		// A prepared layout installs only while its key equals the
+		// current parameters for its path; out-of-order and superseded
+		// completions are discarded without touching the viewport, the
+		// anchor, saved state, or the pending reveal intent.
+		key := msg.key
+		if m.reqKey[key.Path] == key {
+			delete(m.reqKey, key.Path)
+		}
+		if key != m.layoutKey(key.Path) {
+			return m, nil
+		}
+		m.rows[key.Path] = installed{key: key, rows: msg.rows}
+		if cur := m.currentPath(); cur != nil && key.Path == string(cur) {
+			m.vp.SetRows(msg.rows)
+			m.commitReveal()
 		}
 	case popupExpiredMsg:
 		// Only the instance that scheduled this expiry answers it —
@@ -256,12 +302,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "w":
 			// The wrap toggle is a browse key: it flips between wrap
-			// and run-off-edge modes, changing the reserved indicator
-			// width and therefore the text width every cached row
-			// model is rebuilt for.
+			// and run-off-edge modes immediately and requests the
+			// current file's layout for the new mode — preparation
+			// runs off this path.
 			if m.phase == phaseBrowse {
 				m.wrap = !m.wrap
-				m.relayout()
+				cmd := m.syncLayout()
+				return m, cmd
 			}
 		case "q":
 			if m.phase == phaseSearching {

@@ -63,14 +63,19 @@ Full-file work never lands on the UI update path:
 - `Model.loadGate` is the test seam: when set, the worker blocks on the
   channel before its read and decode/map phases, letting tests prove
   keys and resizes are still processed mid-load.
-- The current file opens at top-of-file — or at its saved vertical
-  state on a revisit — then the Issue #14 destination reveal scrolls a
-  hidden navigation target to the one-third row (see
+- The current file opens at top-of-file — or at its saved anchor on a
+  revisit — then the Issue #14 destination reveal scrolls a hidden
+  navigation target to the one-third row (see
   [destination-reveal.md](destination-reveal.md)). Issue #12 turned the
   `viewport.Viewport` seam into the real
   reading position: prepared rows, the six scroll units, clamped top,
   and the visible-range slice — see
-  [viewport-scrolling.md](viewport-scrolling.md).
+  [viewport-scrolling.md](viewport-scrolling.md). Issue #17 moved row
+  layout off the update path the same way: `layoutCmd` workers deliver
+  `layoutDoneMsg{key, rows}` that install only while their key matches
+  the current parameters, and the file list renders through the
+  `listEntry` provider only for its visible window — see
+  [logical-anchor-and-layout.md](logical-anchor-and-layout.md).
 
 ## Safe-presentation core
 
@@ -146,16 +151,20 @@ follows an unescaped ESC.
   `FileList`, `FilenameRule`, `Match`, `CurrentMatch`, `Indicator`,
   `CurrentFile`, `Overlay`). See
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
-- `internal/app/browse.go` — `loadDoneMsg`, `ensureLoad`/`loadCmd`,
+- `internal/app/browse.go` — `loadDoneMsg`, `layoutDoneMsg`/
+  `installed` (Issue #17), `ensureLoad`/`loadCmd`,
+  `syncLayout`/`ensureLayout`/`layoutCmd`/`currentRows` (Issue #17),
   `scroll`, `navigate` (Issue #13 cursor steps and the file-crossing
-  viewport handoff), `reveal` (Issue #14), `reservedW` (Issue #16's
+  viewport handoff), `reveal`/`commitReveal` (Issue #14; pending
+  intent since Issue #17), `reservedW` (Issue #16's
   zero-or-one indicator column),
   `renderBrowse`, `filenameRule`, `contentRow` (Issue #16 blank
   continuation gutters), `renderCells`.
 - `internal/app/app.go` — `phaseBrowse`, buffer/loading/failed maps,
-  the Issue #12 `rows`/`saved` maps, the Issue #16 `wrap` flag
-  (`w` toggles) and `revs`/`prepW`/`prepWrap` preparation bookkeeping,
-  files/stops, `relayout`; the
+  the `rows`/`reqKey`/`revs` layout bookkeeping and `saved` anchors
+  (Issue #17), the Issue #16 `wrap` flag (`w` toggles), `fileIdx`/
+  `listW`/`textW` caches and the `listEntry` seam (Issue #17),
+  files/stops; the
   matched-line cursor itself lives in `searchindex.Index` since
   Issue #13.
 

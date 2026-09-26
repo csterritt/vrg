@@ -163,3 +163,14 @@ Usage
  Input tokens: 153982 tokens
  Output tokens: 51701 tokens
  Cached input tokens: 6276217 tokens
+
+----
+Task 017-logical-anchor-through-rewrap-and-resize.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 79 messages
+ Input tokens: 341779 tokens
+ Output tokens: 61630 tokens
+ Cached input tokens: 10467017 tokens

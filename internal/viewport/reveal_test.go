@@ -118,6 +118,7 @@ func TestRevealUsesRenderedRowContainingTarget(t *testing.T) {
 		return t.Line*2 + t.Cell/5
 	}}
 	v.SetRows(rows)
+	rows.seen = nil // installing rows resolves the anchor through the provider too
 	if !v.Reveal(Target{Line: 7, Cell: 12}) {
 		t.Fatal("Reveal reported no move")
 	}
@@ -178,6 +179,9 @@ func TestRevealClampsOutOfRangeTarget(t *testing.T) {
 	var v Viewport
 	v.Resize(10, 10) // floor(10/3) = 3; 20 rows → maxTop 10
 	v.SetRows(&mappingRows{n: 20, rowOf: func(Target) int { return 99 }})
+	// Installing the pathological provider resolved the zero anchor to
+	// row 99 and clamped the top to the last page; restore the start.
+	v.SetTop(0)
 	if !v.Reveal(Target{Line: 99}) {
 		t.Fatal("Reveal reported no move")
 	}

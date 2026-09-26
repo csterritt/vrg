@@ -49,12 +49,17 @@ implements the contract:
   sits higher than the one-third row; near the tail it lands lower —
   available content wins over exact placement.
 - **The move report drives saved state.** `Reveal` returns whether the
-  viewport actually moved; the app replaces the file's `saved` top only
-  on a move, so a no-scroll reveal leaves saved state untouched and a
-  moving reveal overwrites it.
-- **No content → no-op.** With no prepared rows (the `Loading…` and
-  `(unreadable)` placeholders) the reveal is inert — matching the
-  placeholder scroll no-op.
+  viewport actually moved; the app replaces the file's `saved` anchor
+  only on a move, so a no-scroll reveal leaves saved state untouched —
+  including a retained mid-line logical column since Issue #17 — and a
+  moving reveal overwrites it with the new top's location.
+- **No content → the intent is carried.** With no rows matching the
+  current parameters (uncached file, or a stale-keyed layout mid-
+  rewrap since Issue #17) the reveal cannot run: `reveal()` sets the
+  model's `pendingReveal` and the intent commits when a matching
+  layout installs — reading the live cursor, so the *newest* selected
+  stop is revealed. See
+  [logical-anchor-and-layout.md](logical-anchor-and-layout.md).
 
 ## The starting-viewport sequence on entry
 
@@ -62,22 +67,27 @@ Entering a file — including the startup file — always runs the same
 sequence, per the PRD's file-change rule:
 
 1. **Start from the saved per-file viewport** on a revisit
-   (`SetTop(m.saved[path])`), or from the **top of the file** on a
-   first visit — the absent map entry reads as 0.
+   (`SetAnchor(m.saved[path])` — a logical anchor since Issue #17), or
+   from the **top of the file** on a first visit — the absent map
+   entry is the zero-valued anchor.
 2. **Apply the destination reveal** over that starting point: a saved
    position that already shows the target survives untouched; one that
    hides it is overridden by the one-third placement.
 
-`navigate` runs this inline for a file crossing whose destination is
-already cached — saved top installed, then `reveal()`. When the
-destination is uncached or in flight, its rows are absent and the
-reveal no-ops; the `loadDoneMsg` path runs the identical sequence when
-the buffer arrives (`SetTop` of the saved state, then `reveal()`),
-which is also the startup-after-load trigger — and because `reveal`
-reads the live cursor, a load completing after further navigation
-reveals the *latest* selected stop, the behavior Issue #28 formalizes.
-A same-file step keeps the current viewport and simply reveals the new
-stop against it.
+`navigate` runs this inline for a file crossing: the destination's
+cached rows install only while their key matches the current
+parameters (the Issue #17 fast path), the saved anchor becomes the
+reading position, and `reveal()` runs over it — or pends. When the
+destination is uncached or its cached layout is stale-keyed, a
+prepared-layout request is issued; the `layoutDoneMsg` install
+resolves the retained anchor and `commitReveal` runs the pending
+intent — the startup-after-load trigger flows through the same path
+(the load's `syncLayout` requests the layout; its install commits the
+reveal). Because the intent reads the live cursor at commit time,
+navigation taken while a worker is held reveals the *latest* selected
+stop — the behavior Issue #28 formalizes. A same-file step keeps the
+current viewport and simply reveals the new stop against it — pending
+likewise when a rewrap is still in flight.
 
 Horizontal reveal of the target cell is Issue #19's; nothing here
 pans left or right.
@@ -101,15 +111,17 @@ See [unit-tests.md](unit-tests.md) § `internal/viewport` and
 ## Files
 
 - `internal/viewport/viewport.go` — `Target`, `Rows.RowOf`, and
-  `Viewport.Reveal`.
-- `internal/app/browse.go` — `reveal` and the `navigate` reveal
-  trigger.
+  `Viewport.Reveal` (a move replaces the anchor; no move keeps it).
+- `internal/app/browse.go` — `reveal` (with the pending intent),
+  `commitReveal`, and the `navigate` reveal trigger.
 - `internal/viewport/rows.go` — `Model.RowOf`, the wrap-aware answer
   (Issue #16).
-- `internal/app/app.go` — the `loadDoneMsg` saved-state-plus-reveal
-  sequence for the current path.
+- `internal/app/app.go` — the `layoutDoneMsg` case committing the
+  pending reveal on a current-path install.
 
-See also: [match-navigation.md](match-navigation.md) (the cursor steps
+See also: [logical-anchor-and-layout.md](logical-anchor-and-layout.md)
+(the pending intent and install guard this reveal flows through),
+[match-navigation.md](match-navigation.md) (the cursor steps
 that trigger the reveal),
 [viewport-scrolling.md](viewport-scrolling.md) (the clamped top and
 per-file saved state the reveal consumes and replaces),

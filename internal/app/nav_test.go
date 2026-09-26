@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"vrg/internal/viewport"
 )
 
 // twoFileModel builds the standard navigation fixture: a.txt with
@@ -43,8 +44,7 @@ func twoFileModel(t *testing.T, dir string, w, h, aLines, bLines int) Model {
 		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m, _ = update(t, m, cmd())
-	return m
+	return settle(t, m, cmd)
 }
 
 // Startup selects the first stop in path-then-line order: although
@@ -81,7 +81,7 @@ func TestStartupSelectsFirstStopInPathOrder(t *testing.T) {
 	if !ok || string(ld.path) != "a.txt" {
 		t.Fatalf("startup load = %T %v, want loadDoneMsg for a.txt", msg, msg)
 	}
-	m, _ = update(t, m, msg)
+	m = pump(t, m, msg)
 	v = m.View().Content
 	if !strings.Contains(v, "\x1b[30;47;4mhit\x1b[24;37;40m a1") {
 		t.Fatalf("first stop's match not inverse+underlined: %q", v)
@@ -145,7 +145,7 @@ func TestNextAcrossFileSwitchesPanelAndLoads(t *testing.T) {
 	if !strings.Contains(v, "── b.txt ") || !strings.Contains(v, "Loading…") {
 		t.Fatalf("panel did not switch to loading b.txt: %q", v)
 	}
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 	v = m.View().Content
 	if !strings.Contains(v, "\x1b[30;47;4mhit\x1b[24;37;40m b002") {
 		t.Fatalf("b.txt's match not inverse+underlined: %q", v)
@@ -153,8 +153,8 @@ func TestNextAcrossFileSwitchesPanelAndLoads(t *testing.T) {
 	if m.vp.Top() != 0 {
 		t.Fatalf("first visit to b.txt started at top %d, want 0", m.vp.Top())
 	}
-	if m.saved["a.txt"] != 0 {
-		t.Fatalf("departing a.txt viewport saved as %d, want 0 — the reveal moved it", m.saved["a.txt"])
+	if m.saved["a.txt"] != (viewport.Target{}) {
+		t.Fatalf("departing a.txt viewport saved as %v, want (0, 0) — the reveal moved it", m.saved["a.txt"])
 	}
 }
 
@@ -168,7 +168,7 @@ func TestNavigationWrapsBothEnds(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("crossing to uncached b.txt returned no load command")
 	}
-	m, _ = update(t, m, cmd())           // b.txt loads
+	m = settle(t, m, cmd)                // b.txt loads and lays out
 	m, cmd = update(t, m, keyPress("n")) // last stop → first
 	if cmd != nil {
 		t.Fatalf("wrap to cached a.txt returned a command %T", cmd)
@@ -204,7 +204,7 @@ func TestOneStopIndexIgnoresNP(t *testing.T) {
 		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 	before := m.View().Content
 	for _, k := range []string{"n", "p"} {
 		var c tea.Cmd
@@ -258,7 +258,7 @@ func TestDepartingViewportSavedAndRestoredOnRevisit(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("crossing to uncached b.txt returned no load command")
 	}
-	m, _ = update(t, m, cmd())           // b.txt loads at top 0
+	m = settle(t, m, cmd)                // b.txt loads at top 0
 	m, cmd = update(t, m, keyPress("p")) // b.txt:2 → a.txt:3, cached
 	if cmd != nil {
 		t.Fatalf("revisit to cached a.txt returned a command %T", cmd)

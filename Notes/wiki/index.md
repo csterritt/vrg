@@ -105,6 +105,15 @@ Catalog of all wiki pages for the vrg project.
   the provisional `→`, blank continuation gutters, the reserved
   indicator width of zero or one, and the swappable row model keyed by
   path, content revision, text width, and wrap mode
+- [logical-anchor-and-layout.md](logical-anchor-and-layout.md) —
+  Issue #17: the width-independent logical anchor (`Row.Start`, anchor
+  resolution, scroll/moving-reveal replacement, no-scroll column
+  retention, deliberately lossy EOF clamp), off-UI layout preparation
+  with (path, revision, width, wrap) keys and install-only-on-match
+  guards discarding out-of-order completions, the pending reveal
+  intent committing for the newest stop, cached-file stale-layout
+  navigation with its fast path, and the visible-range render-cost
+  guarantees for rows and list entries
 
 ## Catalogs
 

@@ -3,12 +3,18 @@ package viewport
 import "vrg/internal/present"
 
 // Row is one rendered row's prepared data: the source line the row
-// leads with or continues plus the display cells and highlight spans a
+// leads with or continues, the display-cell offset within that line
+// where the row begins, plus the display cells and highlight spans a
 // frame paints, translated into row-local cells. In run-off-edge mode
-// rendered row i is source line i; wrap mode makes the mapping
-// many-to-one.
+// rendered row i is source line i with Start 0; wrap mode makes the
+// mapping many-to-one.
 type Row struct {
 	Line int
+	// Start is the display-column offset within the source line where
+	// the row begins — a wrapped continuation row starts mid-line, a
+	// run-off-edge row at 0. (Line, Start) is the row's logical
+	// location: the anchor coordinates a rewrap restores.
+	Start int
 	// Cont marks a continuation row: it paints the next cells of a
 	// line already started above, behind a blank gutter rather than a
 	// line number.
@@ -28,9 +34,10 @@ type Target struct {
 }
 
 // Rows is the prepared rendered-row model of one loaded buffer at the
-// current content width and wrap mode, built when a load completes or
-// the layout changes (Issue #17 owns the asynchronous contract). Frame
-// rendering queries it only for the visible range.
+// current content width and wrap mode, delivered by an off-path
+// layout-preparation job and installed when its key matches the
+// current parameters. Frame rendering queries it only for the visible
+// range.
 type Rows interface {
 	// Len returns the total rendered-row count.
 	Len() int
@@ -43,27 +50,32 @@ type Rows interface {
 }
 
 // Viewport owns the current file's vertical reading position: the
-// prepared rows, the content dimensions, and the top rendered row. The
-// top is clamped to valid content — never below 0 and never past the
-// last full page, so no avoidable blank rows appear below EOF; content
-// shorter than the viewport pins the top to 0 and leaves its unused
-// rows naturally. With no prepared rows (the loading and unreadable
-// placeholders) every scroll is a no-op, reveal is inert, and queries
-// stay empty. Horizontal panning and logical anchors arrive with
-// Issues 17–19.
+// prepared rows, the content dimensions, the effective top rendered
+// row, and the logical anchor. The anchor is a (source line,
+// display-column offset) location independent of wrap width; after a
+// rewrap, wrap toggle, or row-model swap the effective top is the row
+// containing the anchor's location, not the row with the same former
+// ordinal. The top is clamped to valid content — never below 0 and
+// never past the last full page, so no avoidable blank rows appear
+// below EOF; content shorter than the viewport pins the top to 0 and
+// leaves its unused rows naturally. With no prepared rows (the loading
+// and unreadable placeholders) every scroll is a no-op, reveal is
+// inert, and queries stay empty. Horizontal panning arrives with
+// Issues 18–19.
 type Viewport struct {
 	width  int // text columns available to content
 	height int // content rows
 	rows   Rows
-	top    int // first visible rendered row
+	top    int    // first visible rendered row
+	anchor Target // logical reading position: source line + display column
 }
 
-// Resize sets the content-area dimensions in cells and re-clamps the
-// top row: growth that would leave avoidable blank rows below EOF
-// pulls the top upward, the documented lossy clamp.
+// Resize sets the content-area dimensions in cells and re-resolves the
+// top row from the anchor: growth that would leave avoidable blank
+// rows below EOF pulls the top upward, the documented lossy clamp.
 func (v *Viewport) Resize(width, height int) {
 	v.width, v.height = width, height
-	v.clamp()
+	v.resolve()
 }
 
 // Height returns the content height in rows.
@@ -72,19 +84,39 @@ func (v *Viewport) Height() int { return v.height }
 // Top returns the first visible rendered row.
 func (v *Viewport) Top() int { return v.top }
 
+// Anchor returns the logical reading position — the source line and
+// display-column offset the effective top resolves from. It is the
+// width-independent form of the reading position: callers persist it
+// as per-file viewport state rather than a row ordinal.
+func (v *Viewport) Anchor() Target { return v.anchor }
+
+// SetAnchor moves the reading position to a logical location —
+// a previously saved per-file anchor — and resolves the effective top
+// to the row containing it under the installed rows, clamped to valid
+// content.
+func (v *Viewport) SetAnchor(t Target) {
+	v.anchor = t
+	v.resolve()
+}
+
 // SetTop moves the top row to a previously saved position, clamped to
-// the current content — the per-file revisit seam.
+// the current content, and replaces the anchor with the resulting top
+// row's location.
 func (v *Viewport) SetTop(top int) {
 	v.top = top
 	v.clamp()
+	if v.count() > 0 {
+		v.anchor = v.loc(v.top)
+	}
 }
 
-// SetRows installs the current file's prepared rows — on load
-// completion and when a layout change rebuilds them — preserving the
-// top row clamped to the new content. nil marks unavailable content.
+// SetRows installs the current file's prepared rows — when a prepared
+// layout for the current parameters arrives — and re-resolves the top
+// row from the retained anchor. nil marks unavailable content: the
+// viewport empties but the anchor is retained for the next install.
 func (v *Viewport) SetRows(rows Rows) {
 	v.rows = rows
-	v.clamp()
+	v.resolve()
 }
 
 // Down scrolls one rendered row down.
@@ -123,14 +155,53 @@ func (v *Viewport) Reveal(t Target) bool {
 	before := v.top
 	v.top = row - v.height/3
 	v.clamp()
+	if v.top != before {
+		v.anchor = v.loc(v.top)
+	}
 	return v.top != before
 }
 
 func (v *Viewport) half() int { return max(1, v.height/2) }
 
+// scroll moves the top row by delta rendered rows, clamped to valid
+// content. A scroll that moves replaces the logical anchor with the
+// resulting top row's location; one clamped to no movement keeps it —
+// a retained logical column survives an ineffective scroll.
 func (v *Viewport) scroll(delta int) {
+	if v.count() == 0 {
+		v.top = 0
+		return
+	}
+	before := v.top
 	v.top += delta
 	v.clamp()
+	if v.top != before {
+		v.anchor = v.loc(v.top)
+	}
+}
+
+// loc returns the logical location of rendered row i: its source line
+// and the display-column offset where it begins.
+func (v *Viewport) loc(i int) Target {
+	r := v.rows.Row(i)
+	return Target{Line: r.Line, Cell: r.Start}
+}
+
+// resolve recomputes the effective top as the row containing the
+// anchor under the installed rows, then clamps to valid content. The
+// clamp is deliberately lossy: when it moves the top off the anchor's
+// row the anchor is rewritten to the clamped top's location, so a
+// later shrink or rewrap does not restore the pre-clamp position.
+func (v *Viewport) resolve() {
+	if v.count() == 0 {
+		v.top = 0
+		return
+	}
+	want := v.rows.RowOf(v.anchor)
+	v.top = min(max(want, 0), v.maxTop())
+	if v.top != want {
+		v.anchor = v.loc(v.top)
+	}
 }
 
 // clamp keeps the top row within valid content: at least 0, and no

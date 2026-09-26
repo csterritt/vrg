@@ -15,7 +15,11 @@ and the cleanup bullet), *Colours, overlays, and key precedence*
 and exit 130. "Searching" spans the whole collection **and** the
 post-exit preparation window: `q` after rg has exited but before the
 prepared index arrives (the gate-held window proven by
-`Config.PrepareGate`) is still cancellation, not a browse quit. `q` on
+`Config.PrepareGate`) is still cancellation, not a browse quit. The
+same holds while a layout worker is held mid-rewrap since Issue #17 —
+`ctrl+c` exits 130 and `q` the fixed status without waiting for
+preparation (see
+[logical-anchor-and-layout.md](logical-anchor-and-layout.md)). `q` on
 a completed screen remains the ordinary quit with its fixed status. `Esc` during
 searching is a strict no-op — it is an overlay-dismissal key only and
 never exits a base state.

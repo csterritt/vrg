@@ -33,11 +33,11 @@ type rowSpan struct {
 }
 
 // Model is the prepared rendered-row model of one buffer at one text
-// width and wrap mode — a value swapped in when a load completes, the
-// wrap mode toggles, or the layout changes (Issue #17 moves
-// preparation off the update path). Layout is computed once in
-// Prepare; Row materializes a queried row's cells and spans on demand,
-// so a frame touches only the lines behind its visible rows.
+// width and wrap mode — a value swapped in when a prepared-layout job
+// completes for the current parameters (Issue #17 keeps preparation
+// off the update path). Layout is computed once in Prepare; Row
+// materializes a queried row's cells and spans on demand, so a frame
+// touches only the lines behind its visible rows.
 type Model struct {
 	key   Key
 	src   Source
@@ -112,7 +112,7 @@ func (m Model) Row(i int) Row {
 			spans = append(spans, present.Span{Start: lo - s.start, End: hi - s.start})
 		}
 	}
-	return Row{Line: s.line, Cont: i != m.first[s.line], Cells: cells, Spans: spans}
+	return Row{Line: s.line, Start: s.start, Cont: i != m.first[s.line], Cells: cells, Spans: spans}
 }
 
 // RowOf returns the rendered row containing the display target: in

@@ -335,15 +335,16 @@ contracts; `codePress` synthesizes the special-key messages and
   `Loading…` panel return no command, move nothing, and write no saved
   state.
 - `TestPerFileSavedViewportState` — scrolling writes
-  `saved[raw path]`; since Issue #13 an `n` keypress crosses to the
-  other file and its load completing for the current path starts at
-  its seeded saved top (`SetTop`) while the departed file's saved state
-  is untouched — the seeded position keeps the destination match on
-  screen, so Issue #14's no-scroll reveal leaves it alone.
+  `saved[raw path]` (a `viewport.Target` anchor since Issue #17); an
+  `n` keypress crosses to the other file with its saved anchor seeded
+  first, and the load-plus-layout completion restores it while the
+  departed file's saved state is untouched — the seeded position keeps
+  the destination match on screen, so Issue #14's no-scroll reveal
+  leaves it alone.
 - `TestRenderQueriesOnlyVisibleRows` — the render-cost guard: a
-  `countingRows` fake installed through `m.rows` + relayout records
-  exactly the visible `Row` indices per `View()`, before and after a
-  scroll — never O(N) over the buffer.
+  `countingRows` fake installed through a `layoutDoneMsg` (Issue #17)
+  records exactly the visible `Row` indices per `View()`, before and
+  after a scroll — never O(N) over the buffer.
 - `TestBufferPreparesAsRowSource` — a real `*filebuffer.Buffer`
   satisfies `viewport.Source`: `Prepare` maps rendered row i to
   source line i in run-off-edge mode with the buffer's cells (the
@@ -363,6 +364,60 @@ through `Update`:
 - `TestNRevealInsideWrappedLine` — a match near the end of a
   screen-tall wrapped line is revealed on its own rendered row at
   `floor(h/3)` — at startup, after `n` away, and after `p` back.
+
+`anchor_test.go` (same package, Issue #17) covers the model-level
+anchor contract:
+
+- `TestResizePreservesCursorSelection` — a resize keeps the cursor's
+  selected stop: the underline stays on the same matched line.
+- `TestResizeKeepsAnchorTextAtTop` — scrolling partway into a wrapped
+  long line then narrowing and widening keeps the same text at the
+  panel's top; the ordinal of the top row changes, the logical anchor
+  does not.
+
+`layout_test.go` (same package, Issue #17) covers off-UI preparation
+and obsolete-layout isolation. Helpers: `longLineModel` and
+`twoFileLayoutModel` (settled browse fixtures), `wantKey` (the model's
+current `(path, rev, width, wrap)` formula), `mustLayout` (assert an
+update issued a layout request and return it), and `pump`/`settle`
+from `model_test.go` (drive a command's message chain through
+`Update`). Holding the worker is simply retaining the returned command
+uninvoked; `pump` on it delivers the `layoutDoneMsg` completion:
+
+- `TestResizeRequestsLayoutOffUpdatePath` — a resize returns a layout
+  command immediately without re-laying out on the update path; the
+  keyed completion installs the new row model.
+- `TestLayoutWorkerHeldKeepsEveryInputActionable` — with the layout
+  worker held after a resize: `ctrl+c` exits 130, `q` the fixed
+  status, `n`/`p` move the cursor immediately with the newest stop's
+  reveal intent preserved, `w` flips wrap and issues the new-mode
+  request without releasing the held one, and a second resize is
+  accepted — all while the gate stays held; releasing it then reveals
+  the newest stop per Issue #14.
+- `TestCtrlCWhileLayoutPendingExits130` /
+  `TestQWhileLayoutPendingQuitsFixedStatus` — the exit contracts while
+  a worker is held.
+- `TestOutOfOrderLayoutCompletionsInstallNewestOnly` — W1→W2→W3
+  resizes complete out of order; only the W3-keyed layout installs
+  and the anchor is unaffected by the discards.
+- `TestRapidWrapToggleDiscardsStaleMode` — rapid `w` toggles
+  supersede each other; stale-mode completions never install.
+- `TestLayoutForDepartedFileLeavesPanelAndSavedState` — a matching
+  layout for a file that is no longer current caches for the revisit
+  without touching the visible panel, the anchor, or saved state.
+- `TestObsoleteLayoutDoesNotConsumePendingReveal` — a stale
+  completion neither installs nor consumes the pending reveal; the
+  intent still commits when the matching layout lands.
+- `TestStaleLayoutNavigationCarriesSavedAndRevealIntent` — navigating
+  to a cached file whose installed layout is stale-keyed requests a
+  prepared layout for the current parameters and carries the
+  saved-viewport-plus-reveal intent to commit on installation.
+- `TestMatchingLayoutNavigationCommitsImmediately` — the fast path:
+  a cached file whose installed layout already matches commits with
+  no request issued.
+- `TestRenderQueriesOnlyVisibleListEntries` — the file-list
+  render-cost guard: a counting `listEntry` fake sees only the
+  scrolled window's entries, never the whole list.
 
 `nav_test.go` (same package) covers the Issue #13 `n`/`p` navigation
 wiring; `twoFileModel` lands the model in browse on a.txt:1 with stops
@@ -440,8 +495,9 @@ with no sleeps) and `popupBox` locates the box in a frame:
   the destination's `loadDoneMsg` plus `popupExpiredMsg` carrying the
   instance ID — the pop-up starts at selection, not at load.
 - `TestLoadCompletionDoesNotRestartPopup` — the load completing
-  leaves the same instance active (content renders beneath) and
-  returns no command; the instance's own expiry then dismisses.
+  leaves the same instance active (content renders beneath); its
+  follow-up command is the Issue #17 layout request, not a pop-up
+  restart, and the instance's own expiry then dismisses.
 - `TestPopupInstanceKeyedExpiry` — a second crossing mints a fresh
   instance; the first's stale expiry leaves the newer pop-up up, and
   only its own expiry clears it.
@@ -625,6 +681,29 @@ contracts against the `countingRows` provider fake:
   clamp); width-only resizes don't move it.
 - `TestSetRowsClampsToNewContent` — swapped rows preserve the top
   clamped to the new count; the clamp loss is permanent.
+
+`anchor_test.go` (same package, Issue #17) pins the logical-anchor
+contract against real prepared `viewport.Model`s at alternating widths
+and wrap modes:
+
+- `TestAnchorRoundTripThroughRewrap` /
+  `TestAnchorRoundTripOnLaterLine` — narrowing then widening (and the
+  reverse) lands the effective top back on the row containing the
+  anchor's text, on the wrapped lead line and on later lines.
+- `TestAnchorRoundTripThroughWrapToggle` — wrap off then on restores
+  the retained logical column rather than the line's first row.
+- `TestScrollReplacesAnchor` — a scroll that moves rewrites the
+  anchor to the resulting top row's logical location.
+- `TestMovingRevealReplacesAnchor` /
+  `TestMovingRevealInRunOffEdgeDropsColumn` — a reveal that moves the
+  viewport replaces the anchor; in run-off-edge mode a retained
+  mid-line column is dropped for the row's own start.
+- `TestNoScrollRevealKeepsAnchorColumn` — a reveal whose target is
+  already visible leaves the anchor — logical column included —
+  untouched.
+- `TestEOFClampRewritesAnchorLossy` — growth that pulls the top off
+  the anchor's row rewrites the anchor to the clamped row; a later
+  shrink does not restore the pre-clamp position.
 
 `reveal_test.go` (same package) pins the Issue #14 `Reveal` contract
 against `countingRows` plus `mappingRows` — a provider fake whose

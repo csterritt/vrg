@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"vrg/internal/viewport"
 )
 
 // fileWithStops writes a lines-line file whose stopped lines read
@@ -47,15 +48,15 @@ func TestStartupRevealPlacesHiddenTargetOneThirdDown(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("search completion returned no load command")
 	}
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 	if m.vp.Top() != 192 {
 		t.Fatalf("top after startup reveal = %d, want 192 (row 199 at row 7)", m.vp.Top())
 	}
 	if v := m.View().Content; !strings.Contains(v, "\x1b[30;47;4mhit\x1b[24;37;40m00200") {
 		t.Fatalf("revealed view lacks the line-200 match: %q", v)
 	}
-	if m.saved["a.txt"] != 192 {
-		t.Fatalf("moving reveal left saved = %d, want 192", m.saved["a.txt"])
+	if m.saved["a.txt"] != (viewport.Target{Line: 192}) {
+		t.Fatalf("moving reveal left saved = %v, want (192, 0)", m.saved["a.txt"])
 	}
 }
 
@@ -67,7 +68,7 @@ func TestStartupRevealVisibleTargetDoesNotScroll(t *testing.T) {
 	recs := fileWithStops(t, dir, "a.txt", 300, 3)
 	recs = append(recs, `{"type":"summary","data":{}}`)
 	m, cmd := browseModel(t, dir, 80, 24, recs...)
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 	if m.vp.Top() != 0 {
 		t.Fatalf("top after visible-target startup = %d, want 0", m.vp.Top())
 	}
@@ -102,7 +103,7 @@ func TestStartupRevealAppliesOnLoadCompletion(t *testing.T) {
 		t.Fatalf("gate-held view: top=%d view=%q", m.vp.Top(), v)
 	}
 	close(gate)
-	m, _ = update(t, m, <-done)
+	m = pump(t, m, <-done)
 	if m.vp.Top() != 192 {
 		t.Fatalf("top after load completion = %d, want 192", m.vp.Top())
 	}
@@ -117,7 +118,7 @@ func TestNPRevealHiddenTargets(t *testing.T) {
 	recs := fileWithStops(t, dir, "a.txt", 300, 5, 200)
 	recs = append(recs, `{"type":"summary","data":{}}`)
 	m, cmd := browseModel(t, dir, 80, 24, recs...)
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 	if m.vp.Top() != 0 {
 		t.Fatalf("startup top = %d, want 0 — line 5 is on screen", m.vp.Top())
 	}
@@ -132,8 +133,8 @@ func TestNPRevealHiddenTargets(t *testing.T) {
 	if m.vp.Top() != 192 {
 		t.Fatalf("top after n = %d, want 192", m.vp.Top())
 	}
-	if m.saved["a.txt"] != 192 {
-		t.Fatalf("moving reveal left saved = %d, want 192", m.saved["a.txt"])
+	if m.saved["a.txt"] != (viewport.Target{Line: 192}) {
+		t.Fatalf("moving reveal left saved = %v, want (192, 0)", m.saved["a.txt"])
 	}
 	if v := m.View().Content; !strings.Contains(v, "\x1b[30;47;4mhit\x1b[24;37;40m00200") {
 		t.Fatalf("line-200 match not underlined after n: %q", v)
@@ -148,8 +149,8 @@ func TestNPRevealHiddenTargets(t *testing.T) {
 	if m.vp.Top() != 0 {
 		t.Fatalf("top after p = %d, want 0 — BOF clamp beats one-third", m.vp.Top())
 	}
-	if m.saved["a.txt"] != 0 {
-		t.Fatalf("moving reveal left saved = %d, want 0", m.saved["a.txt"])
+	if m.saved["a.txt"] != (viewport.Target{}) {
+		t.Fatalf("moving reveal left saved = %v, want (0, 0)", m.saved["a.txt"])
 	}
 }
 
@@ -160,7 +161,7 @@ func TestNToVisibleTargetDoesNotScroll(t *testing.T) {
 	recs := fileWithStops(t, dir, "a.txt", 50, 5, 10)
 	recs = append(recs, `{"type":"summary","data":{}}`)
 	m, cmd := browseModel(t, dir, 80, 24, recs...)
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 	before := m.vp.Top()
 	m, cmd = update(t, m, keyPress("n"))
 	if cmd != nil {
@@ -189,7 +190,7 @@ func TestRevisitStartsFromSavedViewport(t *testing.T) {
 	recs = append(recs, fileWithStops(t, dir, "b.txt", 10, 2)...)
 	recs = append(recs, `{"type":"summary","data":{}}`)
 	m, cmd := browseModel(t, dir, 80, 24, recs...)
-	m, _ = update(t, m, cmd()) // a.txt loads; line 30 reveals to top 22
+	m = settle(t, m, cmd) // a.txt loads; line 30 reveals to top 22
 	if m.vp.Top() != 22 {
 		t.Fatalf("startup reveal top = %d, want 22", m.vp.Top())
 	}
@@ -201,9 +202,9 @@ func TestRevisitStartsFromSavedViewport(t *testing.T) {
 	if load == nil {
 		t.Fatal("crossing to uncached b.txt returned no load command")
 	}
-	m, _ = update(t, m, load())
-	if m.saved["a.txt"] != 192 {
-		t.Fatalf("departing a.txt saved = %d, want 192", m.saved["a.txt"])
+	m = pump(t, m, load())
+	if m.saved["a.txt"] != (viewport.Target{Line: 192}) {
+		t.Fatalf("departing a.txt saved = %v, want (192, 0)", m.saved["a.txt"])
 	}
 	m, cmd = update(t, m, keyPress("p")) // → a.txt:200, cached
 	if cmd != nil {
@@ -226,17 +227,17 @@ func TestRevisitRevealOverridesHiddenSavedViewport(t *testing.T) {
 	recs = append(recs, fileWithStops(t, dir, "b.txt", 10, 2)...)
 	recs = append(recs, `{"type":"summary","data":{}}`)
 	m, cmd := browseModel(t, dir, 80, 24, recs...)
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 	m, _ = update(t, m, keyPress("n"))     // a.txt:200
 	m, load := update(t, m, keyPress("n")) // b.txt:2
-	m, _ = update(t, m, load())
-	m.saved["a.txt"] = 50              // a saved position that hides line 200
-	m, _ = update(t, m, keyPress("p")) // → a.txt:200
+	m = pump(t, m, load())
+	m.saved["a.txt"] = viewport.Target{Line: 50} // a saved position that hides line 200
+	m, _ = update(t, m, keyPress("p"))           // → a.txt:200
 	if m.vp.Top() != 192 {
 		t.Fatalf("top = %d, want 192 — reveal overrides the hidden saved viewport", m.vp.Top())
 	}
-	if m.saved["a.txt"] != 192 {
-		t.Fatalf("moving reveal left saved = %d, want 192", m.saved["a.txt"])
+	if m.saved["a.txt"] != (viewport.Target{Line: 192}) {
+		t.Fatalf("moving reveal left saved = %v, want (192, 0)", m.saved["a.txt"])
 	}
 }
 
@@ -251,7 +252,7 @@ func TestFirstVisitStartsAtTopThenReveals(t *testing.T) {
 	recs = append(recs, fileWithStops(t, dir, "b.txt", 300, 250)...)
 	recs = append(recs, `{"type":"summary","data":{}}`)
 	m, cmd := browseModel(t, dir, 80, 24, recs...)
-	m, _ = update(t, m, cmd()) // a.txt loads; line 1 visible, top 0
+	m = settle(t, m, cmd) // a.txt loads; line 1 visible, top 0
 	m, load := update(t, m, keyPress("n"))
 	if load == nil {
 		t.Fatal("crossing to uncached b.txt returned no load command")
@@ -262,14 +263,14 @@ func TestFirstVisitStartsAtTopThenReveals(t *testing.T) {
 	if m.vp.Top() != 0 {
 		t.Fatalf("first visit top = %d, want 0 before the reveal", m.vp.Top())
 	}
-	m, _ = update(t, m, load())
+	m = pump(t, m, load())
 	if m.vp.Top() != 242 {
 		t.Fatalf("top after first-visit reveal = %d, want 242 (row 249 at row 7)", m.vp.Top())
 	}
 	if v := m.View().Content; !strings.Contains(v, "\x1b[30;47;4mhit\x1b[24;37;40m00250") {
 		t.Fatalf("revealed view lacks the line-250 match: %q", v)
 	}
-	if m.saved["b.txt"] != 242 {
-		t.Fatalf("moving reveal left saved = %d, want 242", m.saved["b.txt"])
+	if m.saved["b.txt"] != (viewport.Target{Line: 242}) {
+		t.Fatalf("moving reveal left saved = %v, want (242, 0)", m.saved["b.txt"])
 	}
 }

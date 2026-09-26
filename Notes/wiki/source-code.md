@@ -75,16 +75,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam —
   the Issue #5 `cursor` field is gone since Issue #13, the matched-line
   cursor living in `searchindex.Index` instead;
-  Issue #12 adds `rows` (per-path prepared `viewport.Rows`, built on
-  load completion) and `saved` (per-path top row for revisits), the
-  `up`/`down`/`u`/`d`/`pgup`/`pgdown` key case, and the saved-state
-  `SetTop` restore when a load completes for the current path —
-  Issue #14 runs `reveal` immediately after that restore, covering the
-  startup-after-load trigger; Issue #16 adds `wrap` (on initially),
-  the `w` browse key flipping between wrap and run-off-edge modes, and
-  the preparation bookkeeping (`revs` — a per-path content revision
-  bumped on each successful load — plus `prepW`/`prepWrap` recording
-  the layout the cached models were built for);
+  Issue #12 adds `saved` (per-path vertical state for revisits —
+  `viewport.Target` logical anchors since Issue #17) and the
+  `up`/`down`/`u`/`d`/`pgup`/`pgdown` key case; Issue #14's `reveal`
+  runs after the saved-state restore, covering the startup-after-load
+  trigger; Issue #16 adds `wrap` (on initially) and the `w` browse key
+  flipping between wrap and run-off-edge modes; Issue #17 adds the
+  prepared-layout bookkeeping — `rows` (per-path `installed{key,
+  rows}`), `revs` (per-path content revision bumped on each successful
+  load), `reqKey` (latest requested key per path) — plus
+  `pendingReveal` (the newest-stop reveal intent awaiting a matching
+  layout), the `listW`/`textW`/`fileIdx` caches and `listEntry` seam
+  keeping `View()` off the whole file list, the `layoutDoneMsg`
+  install-only-on-match case, and layout requests on the resize, `w`,
+  load-completion, and search-completion paths;
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
   diagnostics box; Issue #15 adds the pop-up state (`popupID`,
@@ -143,26 +147,34 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   slice), and `renderCells` (inverse-video
   spans over escaped `present.Cell`s via `Match`/`CurrentMatch`,
   marker spans, clip-edge wide clusters). Issue #12 adds `scroll`
-  (the six scroll keys routed to `Viewport` units, then saving the top
-  row per path — a no-op on placeholders and outside browse) and the
-  prepared-row install in `relayout` — the Issue #12 `bufferRows`
-  adapter is gone since Issue #16, which builds real `viewport.Model`
-  values via `viewport.Prepare` and caches them per path. Issue #16
+  (the six scroll keys routed to `Viewport` units, then saving the
+  anchor per path — a no-op on placeholders and outside browse) — the
+  Issue #12 `bufferRows` adapter is gone since Issue #16, which builds
+  real `viewport.Model` values via `viewport.Prepare`. Issue #16
   also adds `reservedW` (the right-indicator column: zero in wrap
-  mode, one in run-off-edge, pending Issue #20's content), makes
-  `relayout` compute text width as panel minus gutter minus the
-  reserved column and rebuild models whose width, wrap mode, or
-  content revision is stale, and gives `contentRow` the blank
-  continuation gutter (`Row.Cont`). Issue #13 adds `navigate` (the `n`/`p` cursor step:
+  mode, one in run-off-edge, pending Issue #20's content) and gives
+  `contentRow` the blank continuation gutter (`Row.Cont`). Issue #17
+  adds `layoutDoneMsg`/`installed` (the keyed prepared-layout
+  completion and its cached form) and moves preparation off the
+  update path: `syncLayout` recomputes the geometry after any
+  parameter change (list width, text width, viewport resize),
+  `layoutKey`/`currentRows` express the (path, revision, text width,
+  wrap mode) install contract, `ensureLayout`/`layoutCmd` issue the
+  worker command, and `renderBrowse` consumes the cached widths and
+  paints the file list through `listEntry` only for its visible
+  window. Issue #13 adds `navigate` (the `n`/`p` cursor step:
   strict no-op on zero/one stops, restyle within a file, and on a
-  file crossing the departing top row is saved, the destination's
-  prepared rows and saved-or-top state installed, and `ensureLoad`
+  file crossing the departing anchor is saved, the destination's
+  matching-key rows and saved anchor installed, and `ensureLoad`
   requests the load when uncached) and moves `currentStop`/
   `currentPath` onto `Index.Current()`. Issue #14 adds `reveal` (the
   target = the destination line's smallest span start cell, reported to
   `Viewport.Reveal`; the `saved` entry is replaced only when the
-  viewport moved) and calls it at the end of every moved `navigate`.
-  Issue #15 opens the file-change pop-up inside the `FileChanged`
+  viewport moved) and calls it at the end of every moved `navigate`;
+  since Issue #17 it carries the pending intent when no matching
+  layout is installed, committed by `commitReveal` on install for the
+  newest stop. Issue #15 opens the file-change pop-up inside the
+  `FileChanged`
   branch — selection time, before the destination loads — and batches
   its instance-keyed expiry command with the load. See
   [browse-tracer.md](browse-tracer.md),
@@ -171,6 +183,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   [file-change-popup.md](file-change-popup.md),
   [viewport-scrolling.md](viewport-scrolling.md),
   [wrap-mode.md](wrap-mode.md),
+  [logical-anchor-and-layout.md](logical-anchor-and-layout.md),
   [safe-presentation.md](safe-presentation.md), and
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
 - `internal/app/popup.go` — the Issue #15 file-change pop-up:
@@ -286,29 +299,38 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 
 - `internal/viewport/viewport.go` — Issue #12's reading position:
   `Row` (source line + cells + spans of one rendered row — Issue #16
-  adds `Cont` marking a continuation row), the `Rows`
+  adds `Cont` marking a continuation row; Issue #17 adds `Start`, the
+  display-column offset where the row begins, giving every rendered
+  row its logical location), the `Rows`
   prepared-row provider interface built at load or layout time —
   Issue #14 adds `RowOf(Target)` so the provider resolves a display
-  target to its rendered row — and `Viewport` — content dimensions, the
-  clamped top rendered row
-  (`[0, max(0, count − height)]`, lossy on EOF), the scroll units
-  (`Up`/`Down` one row, `HalfUp`/`HalfDown` `max(1, floor(h/2))`,
-  `PageUp`/`PageDown` the content height), `SetTop` for saved-state
-  restore, Issue #14's `Reveal` (visible target → no scroll; hidden
-  target → `row − floor(height/3)` top, clamped; reports whether the
-  top moved), and `Visible`, which queries the provider only for the
-  shown range. Anchors and panning remain Issues 17–19.
+  target to its rendered row — and `Viewport` — content dimensions,
+  the clamped top rendered row
+  (`[0, max(0, count − height)]`), and — Issue #17 — the `anchor`, a
+  `(source line, display-column offset)` logical position the
+  effective top resolves from after every resize or row-model swap:
+  `resolve` lands the top on the row containing the anchor, and the
+  deliberately lossy EOF clamp rewrites the anchor to the clamped row
+  when it pulls the top upward. A scroll that moves replaces the
+  anchor with the new top row's location (a clamped no-move keeps it);
+  `Reveal` does likewise only on a move (visible target → no scroll;
+  hidden target → `row − floor(height/3)` top, clamped; reports
+  whether the top moved); `Anchor`/`SetAnchor` are the logical entry
+  points, `SetTop` the ordinal one; `Visible` queries the provider
+  only for the shown range. Panning remains Issues 18–19.
   See [viewport-scrolling.md](viewport-scrolling.md),
-  [destination-reveal.md](destination-reveal.md), and
+  [destination-reveal.md](destination-reveal.md),
+  [logical-anchor-and-layout.md](logical-anchor-and-layout.md), and
   [wrap-mode.md](wrap-mode.md).
 - `internal/viewport/rows.go` — Issue #16's prepared row model:
   `Source` (the per-line cell/span interface `*filebuffer.Buffer`
   satisfies), `Key` (path, content revision, text width, wrap mode —
-  the staleness contract Issue #17's async preparation consumes),
+  the staleness contract Issue #17's install guard consumes),
   `Prepare` (one-time layout: run-off-edge maps row i to line i; wrap
   mode packs clusters greedily into Width-cell rows, moving an unfit
   cluster whole and splitting an over-wide one as a last resort, with
-  an extra row for an end-of-line marker past a full final row), and
+  an extra row for an end-of-line marker past a full final row — runs
+  in a worker command since Issue #17), and
   `Model` (`Len`/`Row`/`RowOf` — `Row` materializes cells and
   row-local spans per query, blanking a split cluster's clipped lead).
 

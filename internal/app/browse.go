@@ -24,6 +24,26 @@ type loadDoneMsg struct {
 	err  error
 }
 
+// layoutDoneMsg delivers one file's prepared row model from the
+// layout worker: Prepare — the row mapping over the whole buffer —
+// ran off the update path, so Update only installs the result. The
+// (path, content revision, text width, wrap mode) key is what the
+// request was minted with; Update installs only while it equals the
+// current parameters, so out-of-order and superseded completions are
+// inert.
+type layoutDoneMsg struct {
+	key  viewport.Key
+	rows viewport.Rows
+}
+
+// installed is one file's cached prepared layout with the key it was
+// built for — the value the install guard compares against the current
+// parameters.
+type installed struct {
+	key  viewport.Key
+	rows viewport.Rows
+}
+
 // distinctPaths returns the distinct raw paths across the index-ordered
 // stops: the file list's order.
 func distinctPaths(stops []searchindex.Stop) [][]byte {
@@ -81,21 +101,29 @@ func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 	if !step.Moved {
 		return m, nil
 	}
-	var pop tea.Cmd
+	var pop, lay tea.Cmd
 	if step.FileChanged {
 		if depart != nil {
-			m.saved[string(depart)] = m.vp.Top()
+			m.saved[string(depart)] = m.vp.Anchor()
 		}
-		m.relayout()
-		// The new file starts at its saved vertical state — absent
-		// means a first visit, which starts at the top. A load
-		// completing for it later applies the same restore before the
-		// reveal; the reveal then overrides either starting point.
-		m.vp.SetTop(m.saved[string(step.Stop.Path)])
+		// The destination's gutter may change the geometry, so the
+		// current parameters are recomputed first; a request for the
+		// destination's layout joins the batch when its cached rows
+		// are missing or stale-keyed.
+		lay = m.syncLayout()
+		// The destination installs its own rows — only while their
+		// key matches — or empties the viewport behind the
+		// placeholder; then its saved anchor becomes the reading
+		// position, resolving when a matching layout installs (the
+		// zero value is the top of the file — a first visit).
+		m.vp.SetRows(m.currentRows())
+		m.vp.SetAnchor(m.saved[string(step.Stop.Path)])
 		pop = m.openPopup(step.Stop.Path)
 	}
+	// The destination reveal commits against installed rows or is
+	// carried as the pending intent for the newest stop.
 	m.reveal()
-	return m, tea.Batch(m.ensureLoad(), pop)
+	return m, tea.Batch(m.ensureLoad(), lay, pop)
 }
 
 // reveal applies the destination reveal for the current stop: the
@@ -104,17 +132,23 @@ func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 // first surviving validated span supplies it (stale-entry fallbacks
 // are Issue #29's). A reveal that moves the viewport replaces the
 // file's saved vertical state; a no-scroll reveal — an already-visible
-// target or unloaded content — leaves it.
+// target — leaves it. With no installed layout matching the current
+// parameters the reveal cannot run: it is carried as the pending
+// intent and committed when a matching layout installs — always for
+// whichever stop is newest at commit time.
 func (m *Model) reveal() {
 	s, ok := m.currentStop()
 	if !ok {
+		m.pendingReveal = false
 		return
 	}
 	key := string(s.Path)
 	buf := m.bufs[key]
-	if buf == nil {
+	if buf == nil || m.currentRows() == nil {
+		m.pendingReveal = true
 		return
 	}
+	m.pendingReveal = false
 	t := viewport.Target{Line: int(s.Line) - 1}
 	for i, sp := range buf.Spans(t.Line) {
 		if i == 0 || sp.Start < t.Cell {
@@ -122,7 +156,16 @@ func (m *Model) reveal() {
 		}
 	}
 	if m.vp.Reveal(t) {
-		m.saved[key] = m.vp.Top()
+		m.saved[key] = m.vp.Anchor()
+	}
+}
+
+// commitReveal runs the pending reveal intent after a matching layout
+// installs; reveal re-pends it when the install still leaves the
+// current file without current rows.
+func (m *Model) commitReveal() {
+	if m.pendingReveal {
+		m.reveal()
 	}
 }
 
@@ -194,36 +237,79 @@ func (m Model) reservedW() int {
 func (m Model) listWidth(gutterW, res int) int {
 	maxW := 0
 	for _, f := range m.files {
-		if w := ansi.StringWidth(present.Path(f)); w > maxW {
+		if w := ansi.StringWidth(m.listEntry(f)); w > maxW {
 			maxW = w
 		}
 	}
 	return max(0, min(min(maxW+2, m.width*2/5), m.width-(gutterW+10+res)))
 }
 
-// relayout recomputes the viewport's content dimensions after any state
-// change that can alter them — resize, wrap toggle, search completion,
-// or a load changing the gutter — rebuilds prepared row models whose
-// layout or content revision is stale, and reinstalls the current
-// file's rows. The text width is the panel width minus the gutter and
-// the reserved right-indicator column. Unavailable content installs
-// nil, which empties the viewport.
-func (m *Model) relayout() {
+// syncLayout recomputes the content geometry after any state change
+// that can alter it — resize, wrap toggle, search completion, a load
+// changing the gutter, or a file switch — resizes the viewport, and
+// caches the list and text widths so a frame render never rescans the
+// file list. It returns the current file's layout request when its
+// installed rows are missing or stale-keyed; preparation runs off this
+// path and installs on completion.
+func (m *Model) syncLayout() tea.Cmd {
 	res := m.reservedW()
 	gutterW := m.gutterDigits() + 2
-	textW := max(0, m.width-m.listWidth(gutterW, res)-gutterW-res)
-	m.vp.Resize(textW, max(0, m.height-1))
-	stale := textW != m.prepW || m.wrap != m.prepWrap
-	m.prepW, m.prepWrap = textW, m.wrap
-	for k, b := range m.bufs {
-		if stale || m.rows[k] == nil {
-			m.rows[k] = viewport.Prepare(b, viewport.Key{
-				Path: k, Rev: m.revs[k], Width: textW, Wrap: m.wrap,
-			})
-		}
+	m.listW = m.listWidth(gutterW, res)
+	m.textW = max(0, m.width-m.listW-gutterW-res)
+	m.vp.Resize(m.textW, max(0, m.height-1))
+	return m.ensureLayout()
+}
+
+// layoutKey is the (path, content revision, text width, wrap mode) a
+// prepared layout must carry to be current for path — the request key
+// minted at issue time and the install guard's comparison.
+func (m Model) layoutKey(path string) viewport.Key {
+	return viewport.Key{Path: path, Rev: m.revs[path], Width: m.textW, Wrap: m.wrap}
+}
+
+// currentRows returns the current file's installed row model while its
+// key matches the current parameters — nil when the layout is missing
+// or stale, leaving the viewport empty behind the placeholder until
+// the prepared layout installs.
+func (m Model) currentRows() viewport.Rows {
+	cur := m.currentPath()
+	if cur == nil {
+		return nil
 	}
-	if cur := m.currentPath(); cur != nil {
-		m.vp.SetRows(m.rows[string(cur)])
+	if inst, ok := m.rows[string(cur)]; ok && inst.key == m.layoutKey(string(cur)) {
+		return inst.rows
+	}
+	return nil
+}
+
+// ensureLayout returns a preparation command for the current file when
+// its installed layout does not match the current parameters and no
+// request for that key is already in flight; repeat requests are
+// dropped, not queued.
+func (m *Model) ensureLayout() tea.Cmd {
+	cur := m.currentPath()
+	if cur == nil {
+		return nil
+	}
+	key := string(cur)
+	buf := m.bufs[key]
+	if buf == nil {
+		return nil
+	}
+	want := m.layoutKey(key)
+	if m.rows[key].key == want || m.reqKey[key] == want {
+		return nil
+	}
+	m.reqKey[key] = want
+	return m.layoutCmd(buf, want)
+}
+
+// layoutCmd returns the layout worker command for one file: the whole
+// row model is prepared off the update path and delivered as a keyed
+// completion — like a file load.
+func (m Model) layoutCmd(buf *filebuffer.Buffer, key viewport.Key) tea.Cmd {
+	return func() tea.Msg {
+		return layoutDoneMsg{key: key, rows: viewport.Prepare(buf, key)}
 	}
 }
 
@@ -254,7 +340,7 @@ func (m *Model) scroll(key string) {
 	case "pgdown":
 		m.vp.PageDown()
 	}
-	m.saved[string(cur)] = m.vp.Top()
+	m.saved[string(cur)] = m.vp.Anchor()
 }
 
 // renderBrowse composes the two-pane frame: the file list on the left
@@ -270,17 +356,9 @@ func (m Model) renderBrowse() string {
 	failed := m.failed[string(cur)]
 	vis := m.vp.Visible()
 	gutterW := m.gutterDigits() + 2
-	res := m.reservedW()
-	listW := m.listWidth(gutterW, res)
-	textW := max(0, m.width-listW-gutterW-res)
-
-	curIdx := 0
-	for i, f := range m.files {
-		if bytes.Equal(f, cur) {
-			curIdx = i
-			break
-		}
-	}
+	listW := m.listW // cached by syncLayout — no per-frame list scan
+	textW := m.textW
+	curIdx := m.fileIdx[string(cur)]
 	// Keep the current entry within the scrolled list window.
 	listTop := 0
 	if curIdx >= m.height {
@@ -294,7 +372,7 @@ func (m Model) renderBrowse() string {
 			fi := listTop + r
 			entry := ""
 			if fi < len(m.files) {
-				entry = truncateLeft(present.Path(m.files[fi]), listW)
+				entry = truncateLeft(m.listEntry(m.files[fi]), listW)
 			}
 			w := ansi.StringWidth(entry)
 			if fi == curIdx && entry != "" {

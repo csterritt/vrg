@@ -23,7 +23,7 @@ func TestWrapOnByDefaultBlankContinuationGutter(t *testing.T) {
 		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 
 	// listW = 7 (a.txt + padding), gutterW = 3, reserved 0 → textW 70.
 	// The single file occupies only list row 0, so content rows carry
@@ -56,12 +56,9 @@ func TestWTogglesRunOffEdge(t *testing.T) {
 		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 
-	m, c := update(t, m, keyPress("w"))
-	if c != nil {
-		t.Fatalf("w produced a command %T, want none", c)
-	}
+	m = pump(t, m, keyPress("w"))
 	lines := strings.Split(ansi.Strip(m.View().Content), "\n")
 	// Run-off-edge reserves one indicator column: textW = 69.
 	if want := "       1  " + strings.Repeat("x", 69); strings.TrimRight(lines[1], " ") != want {
@@ -71,7 +68,7 @@ func TestWTogglesRunOffEdge(t *testing.T) {
 		t.Fatalf("run-off-edge still wraps: %q", lines[2])
 	}
 
-	m, _ = update(t, m, keyPress("w"))
+	m = pump(t, m, keyPress("w"))
 	lines = strings.Split(ansi.Strip(m.View().Content), "\n")
 	if want := "          " + strings.Repeat("x", 30); strings.TrimRight(lines[2], " ") != want {
 		t.Fatalf("after w again continuation row = %q, want %q", strings.TrimRight(lines[2], " "), want)
@@ -104,7 +101,7 @@ func TestNRevealInsideWrappedLine(t *testing.T) {
 		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
-	m, _ = update(t, m, cmd())
+	m = settle(t, m, cmd)
 
 	// Startup reveal: the 2000-cell line wraps into rows 0..28; cell
 	// 1900 sits in row 27 and floor(23/3) = 7, so the top lands at 20.
