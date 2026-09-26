@@ -71,6 +71,12 @@ Catalog of all wiki pages for the vrg project.
   processed-versus-in-flight shutdown boundary, `ReplayTo` on the common
   post-restoration writer for every controlled exit, controlled-failure
   unification, and the `VRG_TEST_DIAG_ACK_FILE` acknowledgement seam
+- [viewport-scrolling.md](viewport-scrolling.md) — Issue #12: the
+  rendered-row scroll units (one row, `max(1, floor(h/2))` half page,
+  full content-height page), BOF/EOF clamping with no avoidable blank
+  rows, the placeholder no-op, per-file saved top row restored on load,
+  and prepared `viewport.Rows` rendering queried only for the visible
+  range
 
 ## Catalogs
 

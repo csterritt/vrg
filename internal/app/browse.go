@@ -11,6 +11,7 @@ import (
 	"vrg/internal/present"
 	"vrg/internal/searchindex"
 	"vrg/internal/theme"
+	"vrg/internal/viewport"
 )
 
 // loadDoneMsg delivers a prepared buffer for one raw path: the worker
@@ -121,11 +122,58 @@ func (m Model) listWidth(gutterW int) int {
 }
 
 // relayout recomputes the viewport's content dimensions after any state
-// change that can alter them: resize, search completion, or a load
-// changing the gutter.
+// change that can alter them — resize, search completion, or a load
+// changing the gutter — and reinstalls the current file's prepared
+// rows, rebuilt for the new layout. Unavailable content installs nil,
+// which empties the viewport.
 func (m *Model) relayout() {
 	listW := m.listWidth(m.gutterDigits() + 2)
 	m.vp.Resize(max(0, m.width-listW-m.gutterDigits()-2), max(0, m.height-1))
+	if cur := m.currentPath(); cur != nil {
+		m.vp.SetRows(m.rows[string(cur)])
+	}
+}
+
+// scroll applies one vertical scroll key to the current file's
+// viewport and records the resulting top row as that file's saved
+// vertical state for revisits. Outside browse, and on a file with no
+// loaded buffer — the "Loading…" and "(unreadable)" placeholders —
+// every scroll key is a no-op.
+func (m *Model) scroll(key string) {
+	if m.phase != phaseBrowse {
+		return
+	}
+	cur := m.currentPath()
+	if cur == nil || m.bufs[string(cur)] == nil {
+		return
+	}
+	switch key {
+	case "up":
+		m.vp.Up()
+	case "down":
+		m.vp.Down()
+	case "u":
+		m.vp.HalfUp()
+	case "d":
+		m.vp.HalfDown()
+	case "pgup":
+		m.vp.PageUp()
+	case "pgdown":
+		m.vp.PageDown()
+	}
+	m.saved[string(cur)] = m.vp.Top()
+}
+
+// bufferRows adapts a loaded buffer to the viewport's prepared-row
+// provider: unwrapped mode maps rendered row i to source line i, and
+// the buffer's prepared cells and validated spans answer each query,
+// so a frame touches only the rows it paints.
+type bufferRows struct{ buf *filebuffer.Buffer }
+
+func (r bufferRows) Len() int { return r.buf.LineCount() }
+
+func (r bufferRows) Row(i int) viewport.Row {
+	return viewport.Row{Line: i, Cells: r.buf.Cells(i), Spans: r.buf.Spans(i)}
 }
 
 // renderBrowse composes the two-pane frame: the file list on the left
@@ -139,6 +187,7 @@ func (m Model) renderBrowse() string {
 	cur := m.currentPath()
 	buf := m.bufs[string(cur)]
 	failed := m.failed[string(cur)]
+	vis := m.vp.Visible()
 	gutterW := m.gutterDigits() + 2
 	listW := m.listWidth(gutterW)
 	textW := max(0, m.width-listW-gutterW)
@@ -177,7 +226,7 @@ func (m Model) renderBrowse() string {
 		if r == 0 {
 			sb.WriteString(m.theme.FilenameRule(filenameRule(cur, m.width-listW)))
 		} else {
-			sb.WriteString(m.contentRow(r-1, cur, buf, failed, gutterW-2, textW))
+			sb.WriteString(m.contentRow(r-1, cur, buf, failed, vis, gutterW-2, textW))
 		}
 		row := sb.String()
 		// Pad to the frame edge so the base style's background covers
@@ -224,7 +273,7 @@ func filenameRule(path []byte, w int) string {
 // right-justified line number, two spaces, then the escaped cells with
 // matches in inverse video — additionally underlined on the current
 // matched line, which is the first stop until Issue #13.
-func (m Model) contentRow(row int, cur []byte, buf *filebuffer.Buffer, failed bool, digits, textW int) string {
+func (m Model) contentRow(row int, cur []byte, buf *filebuffer.Buffer, failed bool, vis []viewport.Row, digits, textW int) string {
 	gutter := m.theme.Gutter(strings.Repeat(" ", digits) + "  ")
 	if buf == nil {
 		if row == 0 && cur != nil {
@@ -235,17 +284,16 @@ func (m Model) contentRow(row int, cur []byte, buf *filebuffer.Buffer, failed bo
 		}
 		return ""
 	}
-	first, n := m.vp.Range(buf.LineCount())
-	li := first + row
-	if row >= n || li >= buf.LineCount() {
+	if row >= len(vis) {
 		return ""
 	}
+	r := vis[row]
 	curLine := -1
 	if s, ok := m.currentStop(); ok && bytes.Equal(s.Path, cur) {
 		curLine = int(s.Line) - 1
 	}
-	gutter = m.theme.Gutter(fmt.Sprintf("%*d", digits, li+1) + "  ")
-	return gutter + renderCells(buf.Cells(li), buf.Spans(li), textW, m.theme, li == curLine)
+	gutter = m.theme.Gutter(fmt.Sprintf("%*d", digits, r.Line+1) + "  ")
+	return gutter + renderCells(r.Cells, r.Spans, textW, m.theme, r.Line == curLine)
 }
 
 // renderCells emits a line's display cells clipped to textW columns with

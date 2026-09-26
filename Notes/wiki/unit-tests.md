@@ -281,6 +281,37 @@ composition:
   line's span emits `CurrentMatch` (inverse pair + underline) while a
   match on another matched line emits plain `Match`.
 
+`scroll_test.go` (same package) covers the Issue #12 scrolling
+contracts; `codePress` synthesizes the special-key messages and
+`loadedModel` lands a completed a.txt load:
+
+- `TestDownUpMoveOneRenderedRow` — `down`/`up` move the top row by one
+  rendered row, the frame shows the shifted rows, and `cursor` stays
+  put (manual scroll never moves the matched-line cursor).
+- `TestHalfPageScrollUsesContentHeight` — `d`/`u` move
+  `max(1, floor(h/2))` of the content height (panel height minus the
+  filename row): 24→11, 22→10, and the one-row-content floor 2→1.
+- `TestPageScrollUsesContentHeight` — `pgdown`/`pgup` move the full
+  content height.
+- `TestScrollClampsAtEOFAndBOF` — `up` at BOF leaves the view
+  byte-identical; `pgdown`+`down` clamp at the last full page with the
+  file's final row rendered at the bottom.
+- `TestScrollOnShortFileIsNoOp` — a file shorter than the viewport
+  ignores every scroll key.
+- `TestScrollOnPlaceholderIsNoOp` — all six scroll keys on a
+  `Loading…` panel return no command, move nothing, and write no saved
+  state.
+- `TestPerFileSavedViewportState` — scrolling writes
+  `saved[raw path]`; a load completing for the current path starts at
+  its saved top (`SetTop`) while another file's saved state is
+  untouched.
+- `TestRenderQueriesOnlyVisibleRows` — the render-cost guard: a
+  `countingRows` fake installed through `m.rows` + relayout records
+  exactly the visible `Row` indices per `View()`, before and after a
+  scroll — never O(N) over the buffer.
+- `TestBufferRowsAdaptsBuffer` — the `bufferRows` adapter maps
+  rendered row i to source line i with the buffer's cells.
+
 `noresults_test.go` (same package) covers the Issue #8 no-results
 outcome; `exitErr` builds a real `*exec.ExitError` child wait error and
 `noResultsModel` lands the model on the screen after a done message:
@@ -412,6 +443,32 @@ completion arrives (bounded — a missing follow-up or timeout fails).
   `block` fake rg: the child pid disappears (`ESRCH`), `Reaped` closes
   promptly, and `ReapReport` receives the `signal: killed` wait status —
   proving vrg's own `Wait` path ran.
+
+## internal/viewport
+
+`viewport_test.go` (same package) pins the Issue #12 scroll and clamp
+contracts against the `countingRows` provider fake:
+
+- `TestScrollUnits` — the per-key table: `Down`/`Up` one rendered row,
+  `HalfDown`/`HalfUp` `max(1, floor(h/2))` including odd heights and
+  the height-1 floor, `PageDown`/`PageUp` the content height.
+- `TestScrollSequence` — a mixed sequence lands on accumulated
+  offsets.
+- `TestClampAtBOF` / `TestClampAtEOF` — `up`/`u`/`pgup` at the top do
+  nothing; downward units clamp at the last full page with the final
+  row on the bottom row.
+- `TestFileShorterThanViewport` / `TestFileEqualToViewport` — short
+  and exact-fit content pin the top at 0; short content shows only its
+  own rows.
+- `TestEmptyContentIsInert` — nil and zero-row providers give empty
+  `Visible()` and inert scrolls.
+- `TestVisibleQueriesOnlyVisibleRows` /
+  `TestVisibleNearEOFQueriesRemainder` — the provider records exactly
+  the shown row indices, including the truncated range near EOF.
+- `TestResizeReclampsTop` — growth re-clamps the top (the lossy EOF
+  clamp); width-only resizes don't move it.
+- `TestSetRowsClampsToNewContent` — swapped rows preserve the top
+  clamped to the new count; the clamp loss is permanent.
 
 ## internal/theme
 

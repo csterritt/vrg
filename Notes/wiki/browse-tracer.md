@@ -60,9 +60,12 @@ Full-file work never lands on the UI update path:
 - `Model.loadGate` is the test seam: when set, the worker blocks on the
   channel before its read and decode/map phases, letting tests prove
   keys and resizes are still processed mid-load.
-- The current file opens at top-of-file with no destination reveal
-  (that is Issue #12's); the `viewport.Viewport` seam only carries
-  content dimensions and the clamped visible range.
+- The current file opens at top-of-file — or at its saved vertical
+  state on a revisit — with no destination reveal (that is Issue
+  #14's). Issue #12 turned the `viewport.Viewport` seam into the real
+  reading position: prepared rows, the six scroll units, clamped top,
+  and the visible-range slice — see
+  [viewport-scrolling.md](viewport-scrolling.md).
 
 ## Safe-presentation core
 
@@ -125,17 +128,19 @@ follows an unescaped ESC.
   validation against raw line bytes: out-of-bounds and mismatched
   ranges dropped), `LineCount`, `GutterWidth`/`GutterDigits`, `Text`,
   `Cells`, `Spans`.
-- `internal/viewport/viewport.go` — minimal seam: dimensions plus
-  `Range` clamped to the loaded line count.
+- `internal/viewport/viewport.go` — Issue #12: `Row`/`Rows` prepared
+  content, clamped `top`, the six scroll units, and `Visible`. See
+  [viewport-scrolling.md](viewport-scrolling.md).
 - `internal/theme/theme.go` — the Issue #7 module: `Dark`/`Plain`
   constructors, `Toggle`/`Light`, and the style set (`Base`, `Gutter`,
   `FileList`, `FilenameRule`, `Match`, `CurrentMatch`, `Indicator`,
   `CurrentFile`, `Overlay`). See
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
 - `internal/app/browse.go` — `loadDoneMsg`, `ensureLoad`/`loadCmd`,
-  `renderBrowse`, `filenameRule`, `contentRow`, `renderCells`.
+  `bufferRows` (Issue #12 prepared rows), `scroll`, `renderBrowse`,
+  `filenameRule`, `contentRow`, `renderCells`.
 - `internal/app/app.go` — `phaseBrowse`, buffer/loading/failed maps,
-  cursor/files/stops, `relayout`.
+  the Issue #12 `rows`/`saved` maps, cursor/files/stops, `relayout`.
 
 See also: [theme-and-colour-toggle.md](theme-and-colour-toggle.md) (the
 scheme toggle and the style set this view consumes),

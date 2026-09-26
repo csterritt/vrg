@@ -1,0 +1,7 @@
+#!/bin/sh
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"long.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"long.txt"},"lines":{"text":"line-001\n"},"line_number":1,"submatches":[{"match":{"text":"line-001"},"start":0,"end":8}]}}' \
+'{"type":"end","data":{"path":{"text":"long.txt"},"binary_offset":null}}' \
+'{"type":"summary","data":{}}'
+exit 0

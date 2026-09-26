@@ -1,0 +1,24 @@
+long.txt  ── long.txt ──────────────────────────────────────────────────────────
+            1  line-001
+            2  line-002
+            3  line-003
+            4  line-004
+            5  line-005
+            6  line-006
+            7  line-007
+            8  line-008
+            9  line-009
+           10  line-010
+           11  line-011
+           12  line-012
+           13  line-013
+           14  line-014
+           15  line-015
+           16  line-016
+           17  line-017
+           18  line-018
+           19  line-019
+           20  line-020
+           21  line-021
+           22  line-022
+           23  line-023

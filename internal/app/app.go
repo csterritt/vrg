@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
@@ -45,19 +46,25 @@ const (
 // carries the collector's incremental stderr lines and diagAck is the
 // test-only acknowledgement seam — both nil in plain unit-test models.
 type Model struct {
-	phase    phase
-	cancel   func()
-	done     <-chan searchDoneMsg
-	diagCh   <-chan string
-	diagAck  io.Writer
-	diags    []string
-	index    *searchindex.Index
-	stops    []searchindex.Stop
-	files    [][]byte // distinct raw paths in index order
-	cursor   int      // index into stops of the current matched line
-	bufs     map[string]*filebuffer.Buffer
-	failed   map[string]bool
-	loading  map[string]bool
+	phase   phase
+	cancel  func()
+	done    <-chan searchDoneMsg
+	diagCh  <-chan string
+	diagAck io.Writer
+	diags   []string
+	index   *searchindex.Index
+	stops   []searchindex.Stop
+	files   [][]byte // distinct raw paths in index order
+	cursor  int      // index into stops of the current matched line
+	bufs    map[string]*filebuffer.Buffer
+	failed  map[string]bool
+	loading map[string]bool
+	// rows holds each loaded file's prepared rendered-row model — built
+	// when its load completes and reinstalled on the viewport when the
+	// layout changes. saved holds each file's vertical viewport state —
+	// the top rendered row — for revisits (Issue #13).
+	rows     map[string]viewport.Rows
+	saved    map[string]int
 	theme    theme.Theme
 	vp       viewport.Viewport
 	loadGate <-chan struct{}
@@ -86,6 +93,8 @@ func newModel(done <-chan searchDoneMsg, cancel func()) Model {
 		bufs:    make(map[string]*filebuffer.Buffer),
 		failed:  make(map[string]bool),
 		loading: make(map[string]bool),
+		rows:    make(map[string]viewport.Rows),
+		saved:   make(map[string]int),
 		theme:   theme.Dark(),
 		// Same fallback the process boundary hands Bubble Tea; a real
 		// terminal's first resize overrides it.
@@ -181,8 +190,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.CollectDiagnostic(fmt.Sprintf("cannot read %s: %v", present.Path(msg.path), msg.err))
 		} else {
 			m.bufs[key] = msg.buf
+			m.rows[key] = bufferRows{buf: msg.buf}
 		}
 		m.relayout()
+		if bytes.Equal(msg.path, m.currentPath()) {
+			// A load completing for the current file starts from its
+			// saved vertical state — absent means a first visit, which
+			// starts at the top. Destination reveal is Issue #14's.
+			m.vp.SetTop(m.saved[key])
+		}
 	case tea.KeyPressMsg:
 		if m.overlay != nil {
 			return m.overlayKey(msg.String())
@@ -202,6 +218,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.quit = true
 			return m, tea.Quit
+		case "up", "down", "u", "d", "pgup", "pgdown":
+			m.scroll(msg.String())
 		}
 	}
 	return m, nil

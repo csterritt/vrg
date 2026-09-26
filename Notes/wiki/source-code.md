@@ -72,6 +72,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   sequence; resize handled in any state.
   Issue #5 state: `stops`/`files`/`cursor`, the `bufs`/`loading`/
   `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam;
+  Issue #12 adds `rows` (per-path prepared `viewport.Rows`, built on
+  load completion) and `saved` (per-path top row for revisits), the
+  `up`/`down`/`u`/`d`/`pgup`/`pgdown` key case, and the saved-state
+  `SetTop` restore when a load completes for the current path;
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
   diagnostics box; Issue #11 adds `diags` (the session diagnostic
@@ -115,10 +119,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `FilenameRule`, `Loading…`/`(unreadable)` placeholders — path sinks
   via `present.Path`; each row padded to the frame edge so `Base`'s
   background covers it), `filenameRule`, `contentRow` (`Gutter`-styled
-  right-justified number + two spaces), and `renderCells` (inverse-video
+  right-justified number + two spaces over the viewport's visible-row
+  slice), and `renderCells` (inverse-video
   spans over escaped `present.Cell`s via `Match`/`CurrentMatch`,
-  marker spans, clip-edge wide clusters). See
+  marker spans, clip-edge wide clusters). Issue #12 adds `scroll`
+  (the six scroll keys routed to `Viewport` units, then saving the top
+  row per path — a no-op on placeholders and outside browse) and
+  `bufferRows` (the prepared `viewport.Rows` adapter over
+  `*filebuffer.Buffer`: unwrapped row i = source line i), with
+  `relayout` reinstalling the current file's prepared rows on every
+  layout change. See
   [browse-tracer.md](browse-tracer.md),
+  [viewport-scrolling.md](viewport-scrolling.md),
   [safe-presentation.md](safe-presentation.md), and
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
 
@@ -204,10 +216,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 
 ## internal/viewport
 
-- `internal/viewport/viewport.go` — the minimal Issue #5 seam:
-  content dimensions plus `Range`, the visible window clamped to the
-  loaded line count. Top-of-file only; scrolling/reveal are Issues
-  12–19.
+- `internal/viewport/viewport.go` — Issue #12's reading position:
+  `Row` (source line + cells + spans of one rendered row), the `Rows`
+  prepared-row provider interface built at load or layout time, and
+  `Viewport` — content dimensions, the clamped top rendered row
+  (`[0, max(0, count − height)]`, lossy on EOF), the scroll units
+  (`Up`/`Down` one row, `HalfUp`/`HalfDown` `max(1, floor(h/2))`,
+  `PageUp`/`PageDown` the content height), `SetTop` for saved-state
+  restore, and `Visible`, which queries the provider only for the
+  shown range. Wrap, anchors, panning, and reveal remain Issues 13–19.
+  See [viewport-scrolling.md](viewport-scrolling.md).
 
 ## internal/theme
 

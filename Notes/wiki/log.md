@@ -352,3 +352,40 @@ exit-status contract), `internal/app/app.go`, `internal/app/search.go`,
 `internal/app/model_test.go`, `internal/app/subprocess_test.go`,
 `internal/app/sinksafety_test.go`, `cmd/vrg/main.go`,
 `cmd/vrg/hooks.go`, `cmd/vrg/main_test.go`, `cmd/vrg/pty_replay_test.go`.
+
+## [2026-09-23] ingest | Issue #12 manual vertical scrolling and per-file viewport
+
+Ingested the completed Issue #12 implementation. `internal/viewport`
+grew from the Issue #5 seam into the real reading position: `Row`
+(source line + cells + spans) and the `Rows` prepared-row provider
+interface; `Viewport` now holds the prepared rows and the clamped top
+rendered row — `[0, max(0, count − height)]`, lossy on EOF per the PRD
+— with `Up`/`Down` (one rendered row), `HalfUp`/`HalfDown`
+(`max(1, floor(h/2))`), `PageUp`/`PageDown` (the content height),
+`SetTop` for saved-state restore, and `Visible`, which queries the
+provider once per shown row only. `internal/app` gained the `rows`
+(prepared `viewport.Rows` per path, built on load completion and
+reinstalled by `relayout`) and `saved` (per-path top row) maps, the
+`up`/`down`/`u`/`d`/`pgup`/`pgdown` key case routed through
+`Model.scroll` — a no-op outside browse and on `Loading…`/`(unreadable)`
+placeholders — and the saved-state `SetTop` restore when a load
+completes for the current path; `bufferRows` adapts `*filebuffer.Buffer`
+(unwrapped row i = source line i) and `contentRow` renders from the
+`Visible()` slice. Created
+[viewport-scrolling](viewport-scrolling.md); updated
+[browse-tracer](browse-tracer.md) (the viewport seam description and
+file list), [source-code](source-code.md),
+[unit-tests](unit-tests.md), and the index. New test files:
+`internal/viewport/viewport_test.go` (scroll units incl. odd heights,
+BOF/EOF clamps, short/equal/long content, empty-content inertness,
+counting-fake visible-range queries, resize and SetRows clamps) and
+`internal/app/scroll_test.go` (key-level scroll units over content
+height = panel minus filename row, EOF/BOF clamps, short-file and
+placeholder no-ops, per-file saved state saved and restored, the
+render-cost counting-fake guard, the `bufferRows` adapter). Sources:
+`Notes/issues/012-manual-vertical-scrolling-and-per-file-viewport.md`,
+`Notes/tasks/012-manual-vertical-scrolling-and-per-file-viewport.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors; Module
+Design → Viewport), `internal/viewport/viewport.go`,
+`internal/app/app.go`, `internal/app/browse.go`,
+`internal/viewport/viewport_test.go`, `internal/app/scroll_test.go`.
