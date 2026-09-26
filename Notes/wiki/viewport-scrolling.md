@@ -61,9 +61,12 @@ vertical viewport state the PRD requires for revisits. When a load
 completes for the *current* path, `Update` restores `SetTop(saved)`
 after `relayout` installs the prepared rows: a first visit (no saved
 entry) starts at top-of-file, and a revisit resumes its position.
-Issue #13's `n`/`p` file changes will drive the same restore on entry;
-Issue #14's destination reveal then takes precedence over it. Manual
-scrolling never moves the matched-line `cursor`.
+Since Issue #13 `n`/`p` file crossings drive the same restore on entry
+— `navigate` saves the departing file's top and `SetTop`s the
+destination's saved state — and Issue #14's destination reveal then
+takes precedence over it. Manual scrolling never moves the matched-line
+cursor, which now lives in `Index` itself (see
+[match-navigation.md](match-navigation.md)).
 
 ## Prepared-row rendering
 

@@ -84,6 +84,11 @@ type Index struct {
 	// unknown counts records whose string type is outside the five
 	// known events — a warning tally, never record loss.
 	unknown int
+	// cursor is the matched-line navigation position: an index into
+	// order. Its zero value selects the first stop once Prepare has
+	// sorted — the startup contract — and it is clamped back into
+	// range whenever the sorted stop set is rebuilt.
+	cursor int
 }
 
 // stop is the mutable per-stop accumulation behind Stop.
@@ -314,6 +319,9 @@ func (ix *Index) Prepare() {
 		}
 		return cmp.Compare(a.line, b.line)
 	})
+	if ix.cursor >= len(ix.order) {
+		ix.cursor = 0
+	}
 	ix.sorted = true
 }
 
@@ -418,16 +426,23 @@ func (ix *Index) Stops() []Stop {
 	ix.Prepare()
 	out := make([]Stop, len(ix.order))
 	for i, s := range ix.order {
-		out[i] = Stop{
-			Path:         s.path,
-			ResolvedPath: s.resolved,
-			Line:         s.line,
-			Submatches:   s.subs,
-			Highlights:   s.highlights,
-			Incomplete:   ix.incomplete[string(s.path)],
-		}
+		out[i] = ix.export(s)
 	}
 	return out
+}
+
+// export returns one accumulated stop in its public Stop form, looking
+// up the per-path Incomplete flag. The exported slices share the
+// index's storage and must not be mutated.
+func (ix *Index) export(s *stop) Stop {
+	return Stop{
+		Path:         s.path,
+		ResolvedPath: s.resolved,
+		Line:         s.line,
+		Submatches:   s.subs,
+		Highlights:   s.highlights,
+		Incomplete:   ix.incomplete[string(s.path)],
+	}
 }
 
 // LineCount returns the number of navigation stops — the count of

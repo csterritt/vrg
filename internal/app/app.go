@@ -55,7 +55,6 @@ type Model struct {
 	index   *searchindex.Index
 	stops   []searchindex.Stop
 	files   [][]byte // distinct raw paths in index order
-	cursor  int      // index into stops of the current matched line
 	bufs    map[string]*filebuffer.Buffer
 	failed  map[string]bool
 	loading map[string]bool
@@ -130,8 +129,9 @@ func (m Model) awaitEvent() tea.Msg {
 // the diagnostics overlay opening whenever the completion carries
 // diagnostics — and starts the current file's load when browse is the
 // underlying screen; a load-done message stores the prepared buffer
-// without any full-file work here; q quits a completed state with its
-// fixed exit status. An open overlay owns the keyboard: up/down scroll,
+// without any full-file work here; n/p step the matched-line cursor in
+// the browse view; q quits a completed state with its fixed exit
+// status. An open overlay owns the keyboard: up/down scroll,
 // q and Esc dismiss (quitting outright when nothing underlies it),
 // other keys are ignored. ctrl+c in any state — and q while searching,
 // which covers the post-exit preparation window — cancel the search and
@@ -174,7 +174,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.files = distinctPaths(m.stops)
-		m.cursor = 0
 		m.relayout()
 		return m, m.ensureLoad()
 	case diagMsg:
@@ -220,6 +219,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "up", "down", "u", "d", "pgup", "pgdown":
 			m.scroll(msg.String())
+		case "n", "p":
+			// Matched-line navigation is a browse key; during
+			// searching ordinary keys stay inert.
+			if m.phase == phaseBrowse {
+				return m.navigate(msg.String() == "n")
+			}
 		}
 	}
 	return m, nil

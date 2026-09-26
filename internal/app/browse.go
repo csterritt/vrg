@@ -47,13 +47,49 @@ func stopsForFile(ix *searchindex.Index, path []byte) []searchindex.Stop {
 	return out
 }
 
-// currentStop returns the cursor's stop, or false when the index is
-// empty.
+// currentStop returns the cursor's stop — the index owns the
+// matched-line navigation position — or false when no index has
+// arrived or it holds no stops.
 func (m Model) currentStop() (searchindex.Stop, bool) {
-	if m.cursor < 0 || m.cursor >= len(m.stops) {
+	if m.index == nil {
 		return searchindex.Stop{}, false
 	}
-	return m.stops[m.cursor], true
+	return m.index.Current()
+}
+
+// navigate applies one matched-line cursor step: n advances and p
+// retreats, both circularly. The zero- and one-stop indexes are strict
+// no-ops — no command, no state change. A step within the same file
+// changes only the current-line styling; destination reveal is Issue
+// #14's. A step into another file switches the panel: the departing
+// file's top row joins its saved state, the viewport reinstalls the
+// new file's prepared rows at its own saved top — top of file on a
+// first visit — and its load is requested when the file is neither
+// cached nor in flight nor already failed. The file list needs no
+// wiring: its underlined entry derives from the cursor.
+func (m Model) navigate(forward bool) (Model, tea.Cmd) {
+	depart := m.currentPath()
+	var step searchindex.Step
+	if forward {
+		step = m.index.Next()
+	} else {
+		step = m.index.Prev()
+	}
+	if !step.Moved {
+		return m, nil
+	}
+	if step.FileChanged {
+		if depart != nil {
+			m.saved[string(depart)] = m.vp.Top()
+		}
+		m.relayout()
+		// The new file starts at its saved vertical state — absent
+		// means a first visit, which starts at the top. A load
+		// completing for it later applies the same restore, and
+		// Issue #14's destination reveal overrides both.
+		m.vp.SetTop(m.saved[string(step.Stop.Path)])
+	}
+	return m, m.ensureLoad()
 }
 
 // currentPath returns the raw path of the current file, or nil.
@@ -271,8 +307,8 @@ func filenameRule(path []byte, w int) string {
 // row. Until the buffer arrives the first row carries the placeholder
 // behind a minimal one-digit gutter; loaded rows carry the
 // right-justified line number, two spaces, then the escaped cells with
-// matches in inverse video — additionally underlined on the current
-// matched line, which is the first stop until Issue #13.
+// matches in inverse video — additionally underlined on the cursor's
+// current matched line.
 func (m Model) contentRow(row int, cur []byte, buf *filebuffer.Buffer, failed bool, vis []viewport.Row, digits, textW int) string {
 	gutter := m.theme.Gutter(strings.Repeat(" ", digits) + "  ")
 	if buf == nil {

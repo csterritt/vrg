@@ -70,8 +70,8 @@ func TestDownUpMoveOneRenderedRow(t *testing.T) {
 	if m.vp.Top() != 1 {
 		t.Fatalf("top after up = %d, want 1", m.vp.Top())
 	}
-	if m.cursor != 0 {
-		t.Fatalf("manual scrolling moved the cursor to %d", m.cursor)
+	if s, ok := m.currentStop(); !ok || s.Line != 1 {
+		t.Fatalf("manual scrolling moved the cursor to %+v", s)
 	}
 }
 
@@ -223,20 +223,15 @@ func TestPerFileSavedViewportState(t *testing.T) {
 		t.Fatalf("saved a.txt top = %d, want 3", m.saved["a.txt"])
 	}
 
-	// Move the cursor to b.txt as Issue #13's navigation will, seed its
-	// saved state, and let its load complete: the panel starts at the
-	// saved top while a.txt's state is untouched.
-	for i, s := range m.stops {
-		if string(s.Path) == "b.txt" {
-			m.cursor = i
-			break
-		}
-	}
-	m.saved["b.txt"] = 7
-	load := m.ensureLoad()
+	// n moves the cursor to b.txt's stop — Issue #13's real
+	// mechanism — and returns its load command; seed b.txt's saved
+	// state before the load completes: the panel starts at the saved
+	// top while a.txt's state is untouched.
+	m, load := update(t, m, keyPress("n"))
 	if load == nil {
 		t.Fatal("no load command for b.txt")
 	}
+	m.saved["b.txt"] = 7
 	m, _ = update(t, m, load())
 	if m.vp.Top() != 7 {
 		t.Fatalf("b.txt top after load = %d, want 7", m.vp.Top())

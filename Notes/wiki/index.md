@@ -77,6 +77,13 @@ Catalog of all wiki pages for the vrg project.
   rows, the placeholder no-op, per-file saved top row restored on load,
   and prepared `viewport.Rows` rendering queried only for the visible
   range
+- [match-navigation.md](match-navigation.md) — Issue #13: the single
+  global matched-line cursor in `Index` (`Current`/`Next`/`Prev`
+  returning `Step` with `Moved`/`FileChanged`/`Wrapped`), path-then-line
+  stop order with startup on the first stop, circular `n`/`p` with
+  zero- and one-stop strict no-ops, the cursor-derived current file
+  with load requests and the saved-viewport handoff, manual scrolling
+  leaving the cursor unchanged, and the passive file list
 
 ## Catalogs
 

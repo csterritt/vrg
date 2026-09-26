@@ -171,6 +171,24 @@ limit and unknown types:
   effect, no substitution for `summary`, and unknown-after-`summary`
   counted plus independently flagged.
 
+`cursor_test.go` (external package) is the Issue #13 matched-line
+cursor coverage; `cursorIndex` builds a two-file fixture whose records
+arrive out of order so the index order (a.txt:1, a.txt:3, a.txt:5,
+b.txt:2, b.txt:4) proves path-then-line ordering rather than arrival:
+
+- `TestCursorStartsAtFirstStop` — `Current` selects the first stop in
+  index order before any navigation.
+- `TestCursorNextAdvancesAndWraps` / `TestCursorPrevRetreatsAndWraps` —
+  the full step tables in both directions: each `Step`'s destination
+  stop plus `Moved`, `FileChanged` (only on a real file crossing), and
+  `Wrapped` (only at an index end).
+- `TestCursorOneStopIsStrictNoOp` / `TestCursorEmptyIndexIsNoOp` — a
+  single stop and an empty index both leave `Moved`/`FileChanged`/
+  `Wrapped` false and the selection unchanged.
+- `TestCursorSubmatchesShareOneStop` — a line carrying three submatches
+  is one stop; the wrap back stays within the same file (`FileChanged`
+  false).
+
 ## internal/present
 
 `present_test.go` (same package) covers the path and diagnostic
@@ -286,8 +304,8 @@ contracts; `codePress` synthesizes the special-key messages and
 `loadedModel` lands a completed a.txt load:
 
 - `TestDownUpMoveOneRenderedRow` — `down`/`up` move the top row by one
-  rendered row, the frame shows the shifted rows, and `cursor` stays
-  put (manual scroll never moves the matched-line cursor).
+  rendered row, the frame shows the shifted rows, and the matched-line
+  cursor (`currentStop`) stays put (manual scroll never moves it).
 - `TestHalfPageScrollUsesContentHeight` — `d`/`u` move
   `max(1, floor(h/2))` of the content height (panel height minus the
   filename row): 24→11, 22→10, and the one-row-content floor 2→1.
@@ -302,15 +320,47 @@ contracts; `codePress` synthesizes the special-key messages and
   `Loading…` panel return no command, move nothing, and write no saved
   state.
 - `TestPerFileSavedViewportState` — scrolling writes
-  `saved[raw path]`; a load completing for the current path starts at
-  its saved top (`SetTop`) while another file's saved state is
-  untouched.
+  `saved[raw path]`; since Issue #13 an `n` keypress crosses to the
+  other file and its load completing for the current path starts at
+  its seeded saved top (`SetTop`) while the departed file's saved state
+  is untouched.
 - `TestRenderQueriesOnlyVisibleRows` — the render-cost guard: a
   `countingRows` fake installed through `m.rows` + relayout records
   exactly the visible `Row` indices per `View()`, before and after a
   scroll — never O(N) over the buffer.
 - `TestBufferRowsAdaptsBuffer` — the `bufferRows` adapter maps
   rendered row i to source line i with the buffer's cells.
+
+`nav_test.go` (same package) covers the Issue #13 `n`/`p` navigation
+wiring; `twoFileModel` lands the model in browse on a.txt:1 with stops
+a.txt:1, a.txt:3, b.txt:2 (records emitted b.txt-first) and b.txt
+uncached:
+
+- `TestStartupSelectsFirstStopInPathOrder` — the cursor starts on the
+  first stop in path order: the filename rule and list underline show
+  a.txt, the startup load command is for a.txt, and its line-1 match
+  renders `CurrentMatch` (inverse + underline) while line 3's stays
+  plain `Match`.
+- `TestNextWithinFileMovesCurrentLine` — `n` moves the underline to
+  the line-3 match with no command and no viewport movement
+  (destination reveal is Issue #14's).
+- `TestNextAcrossFileSwitchesPanelAndLoads` — `n` into b.txt returns
+  the uncached file's load command, moves the list underline and
+  filename rule immediately, shows `Loading…` until the buffer lands,
+  starts the new file at top 0, and saves the departing file's
+  viewport.
+- `TestNavigationWrapsBothEnds` — `n` on the last stop wraps to the
+  first and `p` on the first wraps to the last, both cached-file
+  crossings returning no command.
+- `TestOneStopIndexIgnoresNP` — `n`/`p` on a one-stop index return no
+  command and leave a byte-identical frame.
+- `TestManualScrollThenNContinuesFromStop` — scrolling deep into the
+  file then `n` still advances from the last selected stop, and the
+  viewport stays where the user put it.
+- `TestDepartingViewportSavedAndRestoredOnRevisit` — `p` back into
+  cached a.txt restores its saved top.
+- `TestFileListHasNoDirectSelection` — non-navigation keys move neither
+  the cursor nor the view: the file list is passive.
 
 `noresults_test.go` (same package) covers the Issue #8 no-results
 outcome; `exitErr` builds a real `*exec.ExitError` child wait error and

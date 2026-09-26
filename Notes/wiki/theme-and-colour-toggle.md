@@ -47,7 +47,8 @@ nested styles compose inside a `Base`-painted frame.
   white and a light-scheme match is white on black.
 - `CurrentMatch` — `Match` plus underline: inverse pair and SGR 4 on,
   underline and the base pair restored after. Renders matches on the
-  current matched line (the first stop until Issue #13).
+  current matched line (the matched-line cursor's selected stop since
+  Issue #13; see [match-navigation.md](match-navigation.md)).
 - `Indicator` — the inverse pair, for the hidden-content `_`/`*`
   markers (consumed by Issue #20's gutter and right-column indicators).
 - `CurrentFile` — underline only; the ambient base colours are

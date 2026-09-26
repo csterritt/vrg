@@ -389,3 +389,51 @@ render-cost counting-fake guard, the `bufferRows` adapter). Sources:
 Design → Viewport), `internal/viewport/viewport.go`,
 `internal/app/app.go`, `internal/app/browse.go`,
 `internal/viewport/viewport_test.go`, `internal/app/scroll_test.go`.
+
+## [2026-09-23] ingest | Issue #13 circular matched-line cursor and navigation wiring
+
+Ingested the completed Issue #13 implementation. `internal/searchindex`
+gained `cursor.go`: the `Index` owns the single global matched-line
+cursor (`cursor` field — an index into the sorted `order`, zero value
+selecting the first stop at startup, clamped in `Prepare`), `Current()`
+returns the selected stop (false when empty), and `Next()`/`Prev()`
+step circularly returning a `Step` — the destination `Stop` plus
+`Moved` (false for the strict zero- and one-stop no-ops), `FileChanged`
+(raw-path comparison of departed and destination stops), and `Wrapped`
+(the step passed an index end); `export` now shares the `stop`→`Stop`
+projection between `Stops()` and the cursor methods. `internal/app`
+dropped its own `cursor` field: `currentStop`/`currentPath` read
+`Index.Current()` so the panel, filename rule, current-line
+`CurrentMatch` underline, and file-list underline all derive from the
+cursor; `Update` routes `n`/`p` to `Model.navigate` in `phaseBrowse`
+(strict no-op when `Moved` is false, styling-only same-file steps — the
+viewport stays put pending Issue #14's reveal — and on `FileChanged`
+the departing file's top row is saved, the destination's prepared rows
+install at its saved-or-top state via `relayout` + `SetTop`, and
+`ensureLoad` requests the load when uncached). The file list stays
+passive — no direct selection route. Created
+[match-navigation](match-navigation.md); updated
+[searchindex-records-and-stops](searchindex-records-and-stops.md)
+(cursor section), [viewport-scrolling](viewport-scrolling.md) (the
+saved-state restore now driven by `n`/`p` crossings),
+[browse-tracer](browse-tracer.md) (passive list, cursor ownership),
+[theme-and-colour-toggle](theme-and-colour-toggle.md) (the
+current-line match is the cursor's stop),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. New test files: `internal/searchindex/cursor_test.go` (startup
+selection, next/prev step tables with `FileChanged`/`Wrapped` flags,
+one-stop and empty strict no-ops, submatches sharing one stop) and
+`internal/app/nav_test.go` (startup selection in path order, same-file
+underline move without scrolling, cross-file panel switch with load
+request and `Loading…`, wrap at both ends, one-stop `n`/`p` no-op,
+manual-scroll independence, departing-viewport save/restore, passive
+file list); `scroll_test.go`'s saved-state test now drives the real `n`
+mechanism. Sources:
+`Notes/issues/013-match-navigation-n-p-circular-cursor.md`,
+`Notes/tasks/013-match-navigation-n-p-circular-cursor.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors; Module
+Design → SearchIndex), `internal/searchindex/cursor.go`,
+`internal/searchindex/index.go`,
+`internal/searchindex/cursor_test.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/app/nav_test.go`,
+`internal/app/scroll_test.go`.

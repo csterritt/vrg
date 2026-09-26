@@ -87,6 +87,16 @@ directory with a plain separator — no canonicalization — so `./rel.go`
 and `a/../b.go` keep their emitted form. Identity and ordering always
 use the raw bytes, never the resolved path.
 
+## Navigation cursor
+
+Since Issue #13 the `Index` also owns the single global matched-line
+cursor (`cursor.go`): `Current()` returns the selected stop — the first
+stop in index order at startup, by zero value — and `Next()`/`Prev()`
+step circularly, reporting a `Step` with the destination stop plus
+`Moved`/`FileChanged`/`Wrapped` flags. Zero- and one-stop indexes are
+strict no-ops (`Moved` false). See
+[match-navigation.md](match-navigation.md).
+
 ## Binary exclusion
 
 Since Issue #8, an `end` record with a non-null `binary_offset` drops

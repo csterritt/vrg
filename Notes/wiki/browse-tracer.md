@@ -19,7 +19,10 @@ safe presentation", and "Module Design" in `Notes/PRD-vrg.md`.
   (unsigned raw path bytes, inherited from the Issue #3 stop ordering),
   each painted through `theme.FileList` — the current entry through
   `theme.CurrentFile` (underline) — and the list window
-  scrolls just enough to keep it visible. Width is provisional: the
+  scrolls just enough to keep it visible. The list is passive: the
+  underlined entry derives from the matched-line cursor and no key
+  selects a file directly (Issue #13; see
+  [match-navigation.md](match-navigation.md)). Width is provisional: the
   longest escaped path plus padding, capped at 40% of the terminal and
   by the file panel's minimum — Issue #24 owns the real formula.
 - **Right pane — file panel.** Row 0 is the *filename rule*: `──`, the
@@ -137,10 +140,13 @@ follows an unescaped ESC.
   `CurrentFile`, `Overlay`). See
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
 - `internal/app/browse.go` — `loadDoneMsg`, `ensureLoad`/`loadCmd`,
-  `bufferRows` (Issue #12 prepared rows), `scroll`, `renderBrowse`,
-  `filenameRule`, `contentRow`, `renderCells`.
+  `bufferRows` (Issue #12 prepared rows), `scroll`, `navigate` (Issue
+  #13 cursor steps and the file-crossing viewport handoff),
+  `renderBrowse`, `filenameRule`, `contentRow`, `renderCells`.
 - `internal/app/app.go` — `phaseBrowse`, buffer/loading/failed maps,
-  the Issue #12 `rows`/`saved` maps, cursor/files/stops, `relayout`.
+  the Issue #12 `rows`/`saved` maps, files/stops, `relayout`; the
+  matched-line cursor itself lives in `searchindex.Index` since
+  Issue #13.
 
 See also: [theme-and-colour-toggle.md](theme-and-colour-toggle.md) (the
 scheme toggle and the style set this view consumes),

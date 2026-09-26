@@ -65,13 +65,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   cancels, other keys ignored); `ctrl+c` in any state or `q` while
   searching cancels (kills the child context, `ExitCode` 130), `Esc` is
   a base-state no-op, `c` in browse toggles the theme between its dark
-  and light schemes (Issue #7), and once `quit` is set `Update`
+  and light schemes (Issue #7), `n`/`p` in browse step the matched-line
+  cursor through `navigate` (Issue #13), and once `quit` is set `Update`
   discards all messages so a late completion cannot revive a cancelled
   UI; every view wraps the frame in `theme.Base`, composites the
   overlay while open, and sets `AltScreen` for the exit restoration
   sequence; resize handled in any state.
-  Issue #5 state: `stops`/`files`/`cursor`, the `bufs`/`loading`/
-  `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam;
+  Issue #5 state: `stops`/`files`, the `bufs`/`loading`/
+  `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam —
+  the Issue #5 `cursor` field is gone since Issue #13, the matched-line
+  cursor living in `searchindex.Index` instead;
   Issue #12 adds `rows` (per-path prepared `viewport.Rows`, built on
   load completion) and `saved` (per-path top row for revisits), the
   `up`/`down`/`u`/`d`/`pgup`/`pgdown` key case, and the saved-state
@@ -128,8 +131,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `bufferRows` (the prepared `viewport.Rows` adapter over
   `*filebuffer.Buffer`: unwrapped row i = source line i), with
   `relayout` reinstalling the current file's prepared rows on every
-  layout change. See
+  layout change. Issue #13 adds `navigate` (the `n`/`p` cursor step:
+  strict no-op on zero/one stops, styling-only within a file, and on a
+  file crossing the departing top row is saved, the destination's
+  prepared rows and saved-or-top state installed, and `ensureLoad`
+  requests the load when uncached) and moves `currentStop`/
+  `currentPath` onto `Index.Current()`. See
   [browse-tracer.md](browse-tracer.md),
+  [match-navigation.md](match-navigation.md),
   [viewport-scrolling.md](viewport-scrolling.md),
   [safe-presentation.md](safe-presentation.md), and
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
@@ -166,10 +175,19 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `oversized`/`unknown` tallies exposed by `Malformed()`/`Oversized()`/
   `Unknown()`, `oversizedPaths` recovered per skipped oversized record,
   and `RecordDiagnostics()` assembling the nonfatal record-skip lines.
+  Issue #13 adds the `cursor` field — an index into the sorted `order`
+  clamped in `Prepare` — and the `export` helper sharing the
+  `stop`→`Stop` projection between `Stops()` and the cursor methods.
   See
   [no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md),
   [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md),
   and [record-robustness.md](record-robustness.md).
+- `internal/searchindex/cursor.go` — Issue #13's matched-line cursor:
+  `Step` (the selected `Stop` plus `Moved`/`FileChanged`/`Wrapped`
+  transition flags), `Current()` (the first stop at startup, false when
+  empty), and `Next()`/`Prev()` — circular steps where zero- and
+  one-stop indexes are strict no-ops. See
+  [match-navigation.md](match-navigation.md).
 
 ## internal/cli
 
@@ -224,7 +242,7 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   (`Up`/`Down` one row, `HalfUp`/`HalfDown` `max(1, floor(h/2))`,
   `PageUp`/`PageDown` the content height), `SetTop` for saved-state
   restore, and `Visible`, which queries the provider only for the
-  shown range. Wrap, anchors, panning, and reveal remain Issues 13–19.
+  shown range. Wrap, anchors, panning, and reveal remain Issues 14–21.
   See [viewport-scrolling.md](viewport-scrolling.md).
 
 ## internal/theme

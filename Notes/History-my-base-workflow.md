@@ -119,3 +119,14 @@ Usage
  Input tokens: 129881 tokens
  Output tokens: 56519 tokens
  Cached input tokens: 5519084 tokens
+
+----
+Task 013-match-navigation-n-p-circular-cursor.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 32 messages
+ Input tokens: 64682 tokens
+ Output tokens: 26223 tokens
+ Cached input tokens: 2113797 tokens
