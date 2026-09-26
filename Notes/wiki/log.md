@@ -868,3 +868,40 @@ Sources: `Notes/issues/022-line-terminators-final-line-empty-file-utf8-bom.md`,
 and stale-content validation; Testing Decisions → FileBuffer),
 `internal/filebuffer/filebuffer.go`, `internal/present/line.go`,
 `internal/filebuffer/lines_test.go`.
+## [2026-09-24] ingest | Issue #23 zero-width match markers
+
+Ingested the completed Issue #23 implementation: the one-cell
+inverse-video marker for zero-width submatches. Most marker machinery
+predated the issue — `present.Line.Span` has emitted `Start == End`
+marker positions since Issue #22, `filebuffer.Load` validates empty
+submatches against raw bytes and `clusterSpan` passes the positions
+through, `wrapLine` gives an end-of-line marker an overflow row after
+a completely full wrap row, `clipRow` translates markers like cells,
+`hiddenMarks` counts a marker as painted wherever it sits,
+`revealCell`/`markedAt` reveal marker targets as one-cell units, and
+`renderCells` paints the inverse space in place or appended at line
+end under `Match`/`CurrentMatch`. The remaining gap was
+`lineExtent`, which now counts markers as one-cell units: an
+end-of-line marker extends the content extent by one cell (a
+marker-only line has extent 1, maximum offset 0) and every marker is
+a paintable boundary at its position, so the Issue #18 maximum can
+land on it even past an unfittable final cluster. The terminator-only
+`$` marker on `hit\r\n` at display column 3 is an ordinary marker in
+every rule — no special case. Created
+[zero-width-match-markers](zero-width-match-markers.md); updated
+[source-code](source-code.md) (`lineExtent`'s marker counting and the
+`Spans` marker channel), [unit-tests](unit-tests.md) (both new
+`marker_test.go` files), [horizontal-panning](horizontal-panning.md)
+(marker extents in the paintable-boundary maximum),
+[line-terminators-and-bom](line-terminators-and-bom.md),
+[hidden-content-indicators](hidden-content-indicators.md),
+[minimal-horizontal-reveal](minimal-horizontal-reveal.md),
+[destination-reveal](destination-reveal.md), and the index.
+New test files: `internal/filebuffer/marker_test.go`,
+`internal/viewport/marker_test.go`.
+Sources: `Notes/issues/023-zero-width-match-markers.md`,
+`Notes/tasks/023-zero-width-match-markers.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation —
+zero-width bullets; Testing Decisions → FileBuffer / Viewport),
+`internal/viewport/viewport.go`, `internal/filebuffer/filebuffer.go`,
+`internal/filebuffer/marker_test.go`, `internal/viewport/marker_test.go`.

@@ -326,11 +326,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   terminate lines with their bytes retained in each line's raw view,
   and a leading UTF-8 BOM sends line one through `LineOfBOM` and
   shifts that line's rg submatch offsets by three into the raw view
-  before validating. See
+  before validating. Issue #23's zero-width markers ride the same
+  `Spans` channel as `Start == End` positions — empty submatches
+  validate against the raw bytes like any other, and `clusterSpan`
+  passes their cell-precise positions through. See
   [wrap-mode.md](wrap-mode.md),
   [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
-  and
-  [line-terminators-and-bom.md](line-terminators-and-bom.md).
+  [line-terminators-and-bom.md](line-terminators-and-bom.md), and
+  [zero-width-match-markers.md](zero-width-match-markers.md).
 
 ## internal/viewport
 
@@ -382,12 +385,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   matches counting visible, and an entirely hidden match attributed to
   the side its hidden cells stand on. Issue #21 marks the substituted
   clip-edge cells `Blank` so a covering span never styles the filler.
+  Issue #23 makes `lineExtent` count marker spans as one-cell units:
+  an end-of-line marker extends the content extent by one cell (a
+  marker-only line has extent 1) and every marker is a paintable
+  boundary at its position, so the maximum can land on it even past an
+  unfittable final cluster.
   See [viewport-scrolling.md](viewport-scrolling.md),
   [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
   [hidden-content-indicators.md](hidden-content-indicators.md),
   [horizontal-panning.md](horizontal-panning.md),
   [destination-reveal.md](destination-reveal.md),
   [minimal-horizontal-reveal.md](minimal-horizontal-reveal.md),
+  [zero-width-match-markers.md](zero-width-match-markers.md),
   [logical-anchor-and-layout.md](logical-anchor-and-layout.md), and
   [wrap-mode.md](wrap-mode.md).
 - `internal/viewport/rows.go` — Issue #16's prepared row model:

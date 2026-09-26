@@ -325,8 +325,11 @@ func (v *Viewport) maxOffset() int {
 // it is fully paintable at that offset. A line whose final cluster
 // cannot fit starting inside it reports the last fitting cluster's
 // start; a line with no cluster fitting w at all reports 0.
-// End-of-line marker cells join both values with Issue #23 — a marker
-// extends the extent by one cell and is itself a paintable cell.
+// Marker cells join both values as one-cell units (Issue #23): a
+// marker at end of line extends the extent by one cell — a marker-only
+// line has extent 1 — and a marker is itself a paintable cell wherever
+// it sits, so the boundary can land on it even past an unfittable
+// final cluster.
 func lineExtent(r Row, w int) (extent, paintable int) {
 	extent = len(r.Cells)
 	for i := 0; i < extent; {
@@ -338,6 +341,17 @@ func lineExtent(r Row, w int) (extent, paintable int) {
 			paintable = i
 		}
 		i = e
+	}
+	for _, s := range r.Spans {
+		if s.Start != s.End {
+			continue
+		}
+		if s.Start+1 > extent {
+			extent = s.Start + 1
+		}
+		if w >= 1 && s.Start > paintable {
+			paintable = s.Start
+		}
 	}
 	return extent, paintable
 }

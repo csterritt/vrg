@@ -153,6 +153,14 @@ Catalog of all wiki pages for the vrg project.
   visible text only, and the leading UTF-8 BOM invisible with its
   three-byte raw-file/rg-line coordinate shift — non-leading U+FEFF
   staying ordinary content
+- [zero-width-match-markers.md](zero-width-match-markers.md) —
+  Issue #23: the one-cell inverse marker (`Start == End` span) painted
+  without shifting text and underlined on the current matched line,
+  cluster-start position mapping, the effective-width extension for
+  end-of-line and empty lines, the marker overflow row after a full
+  wrap row, marker extents in the paintable-boundary maximum, markers
+  as reveal targets and indicator inputs, and the terminator-only `$`
+  marker's ordinary-rule treatment
 
 ## Catalogs
 

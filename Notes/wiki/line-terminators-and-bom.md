@@ -49,9 +49,10 @@ end land. So byte 4 of `hit\r\n` maps to display column 3, a recorded
 match solely on removed terminator bytes becomes an end-of-line marker
 position (`Start == End`), and a span covering visible text plus the
 terminator — like rg's real `t\r?$` match `t\r` at bytes 2–4 — maps to
-the visible text alone (`{2,3}` covers the `t` cell). The marker
-rendering these positions produce is Issue #23's; the mapping itself
-is already cell-precise.
+the visible text alone (`{2,3}` covers the `t` cell). The marker these
+positions paint is Issue #23's
+([zero-width-match-markers.md](zero-width-match-markers.md)); the
+mapping itself is already cell-precise.
 
 ## Raw-file and rg-line coordinates
 
@@ -79,9 +80,9 @@ views:
 
 The same `bytes`-vs-`text` JSON encodings feed the same path — the
 recorded `Submatch.Bytes` are compared against the shifted raw range.
-The end-of-line *marker* for terminator-only matches is Issue #23's,
-and the stale-note consumption of the retained raw bytes is Issue
-#29's.
+The end-of-line *marker* for terminator-only matches is Issue #23's
+([zero-width-match-markers.md](zero-width-match-markers.md)), and the
+stale-note consumption of the retained raw bytes is Issue #29's.
 
 ## Tests
 

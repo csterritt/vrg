@@ -18,7 +18,8 @@ and "Testing Decisions → Viewport" in `Notes/PRD-vrg.md`.
 The reveal target is a *display location*, not a source-line ordinal:
 `viewport.Target{Line, Cell}` carries the zero-based source line and the
 display cell of the destination line's **first submatch's start** — the
-marker cell when the submatch is zero-width. `Model.reveal`
+marker cell when the submatch is zero-width
+([zero-width-match-markers.md](zero-width-match-markers.md)). `Model.reveal`
 (`internal/app/browse.go`) computes it from the buffer's validated
 spans: the smallest `Start` among the destination line's spans, so a
 stale-content drop automatically falls through to the first surviving

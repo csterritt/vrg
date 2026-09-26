@@ -134,6 +134,8 @@ clamp the reveal deliberately bypasses, and `clipRow`'s blanking),
 it),
 [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md)
 (the expanded spans the target's start cell comes from),
+[zero-width-match-markers.md](zero-width-match-markers.md) (the marker
+targets `markedAt` resolves),
 [safe-presentation.md](safe-presentation.md) (the shared grapheme
 policy), and [logical-anchor-and-layout.md](
 logical-anchor-and-layout.md) (the pending intent that carries the

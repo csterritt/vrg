@@ -129,6 +129,8 @@ match styling the indicators join),
 [theme-and-colour-toggle.md](theme-and-colour-toggle.md) (the inverse
 `Indicator` style),
 [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md)
-(the expanded spans the flags classify), and
+(the expanded spans the flags classify),
+[zero-width-match-markers.md](zero-width-match-markers.md) (the marker
+cells the flags count), and
 [safe-presentation.md](safe-presentation.md)
 (the shared grapheme policy).

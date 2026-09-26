@@ -54,8 +54,10 @@ outside browse is a strict no-op.
 The clamp follows the **widest currently rendered source line**, not
 the widest line in the file. Three definitions stay distinct:
 
-- **Content extent** — a line's effective display width in cells; an
-  Issue #23 end-of-line marker cell will extend it by one.
+- **Content extent** — a line's effective display width in cells;
+  since Issue #23 an end-of-line marker cell extends it by one, so a
+  marker-only line has extent 1
+  ([zero-width-match-markers.md](zero-width-match-markers.md)).
 - **Extent policy** — the maximum is taken over only the visible rows
   of the prepared layout.
 - **Maximum valid offset** — `max(0, S)` where `S` is the *paintable
@@ -63,10 +65,12 @@ the widest line in the file. Three definitions stay distinct:
   which one of its grapheme clusters (or a marker cell) starts and
   whose cell width fits within the text width. At that offset the
   whole cluster still paints, so clamping alone can never blank the
-  text area or draw half a glyph. Among equally wide lines the
-  smallest boundary wins; a widest line with no cluster fitting at all
-  reports 0 — the documented **unpaintable-cluster exception**, where
-  the in-window portion renders clipping blanks by design.
+  text area or draw half a glyph. A marker is a one-cell unit that
+  always fits, so the boundary can land on it — even past an
+  unfittable final cluster. Among equally wide lines the smallest
+  boundary wins; a widest line with no cluster or marker fitting at
+  all reports 0 — the documented **unpaintable-cluster exception**,
+  where the in-window portion renders clipping blanks by design.
 
 A 300-cell single-cell line with a 10-cell text area gives S = 299;
 once it scrolls out and only 10-cell lines remain the maximum is 9.

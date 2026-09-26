@@ -299,6 +299,17 @@ contracts and the raw-file/rg-line coordinate split:
   line's start is ordinary content: it joins the previous cell or
   takes the `◌` fallback cell, matches, and highlights normally.
 
+`marker_test.go` (same package, Issue #23) pins the zero-width marker
+positions through `Load`:
+
+- `TestZeroWidthMarkerPositions` — empty submatches validate like any
+  other and map to marker spans: BOL on text and empty lines,
+  mid-line, at EOL, positions inside a wide pair and a ZWJ cluster
+  landing on the cluster's start cell, and positions on or covering
+  LF/CRLF terminator bytes landing on the display end-of-line column.
+- `TestMarkersOnEveryLine` — `^`-style per-line markers accumulate on
+  every line of a multi-line file, empty lines included.
+
 ## internal/app
 
 `model_test.go` (same package) drives `Update` directly:
@@ -1005,6 +1016,23 @@ mark on substituted cells:
 - `TestClipBlanksAreMarked` — `clipRow` marks the in-window cells of a
   cluster split at either clip edge `Blank` while the clipped span
   still covers them.
+
+`marker_test.go` (same package, Issue #23) pins marker participation
+in the shared rules against `lineSource`-backed models:
+
+- `TestMarkerExtentAndPanClamp` — an end-of-line marker extends the
+  line's extent so the pan maximum lands on the marker's own cell,
+  including past a final cluster too wide to fit.
+- `TestMarkerOnlyLineExtent` — a marker on an empty line gives extent
+  1 and maximum offset 0.
+- `TestMarkerHiddenDrivesIndicators` — an entirely hidden marker
+  upgrades the gutter signpost even on a marker-only line with no
+  text to hide; the `hit\r\n` marker flags hidden left.
+- `TestTerminatorMarkerIsOrdinary` — the `hit\r\n` marker at display
+  column 3 follows the shared extent, reveal, clip, right-indicator,
+  and wrap-overflow rules unchanged.
+- `TestInteriorMarkers` — BOL and mid-line markers follow their cells
+  through clipping and set the hidden-side flags when clipped away.
 
 ## internal/theme
 
