@@ -54,7 +54,10 @@ const (
 // validation — the "file changed since search" state (Issue #29):
 // it is not cleared by a reload's start, only by a completion, so the
 // note persists through the reread and disappears only when the newly
-// loaded content validates fully. diags is the
+// loaded content validates fully. encLines retains each path's
+// latest unsupported-encoding diagnostic lines (Issue #30) so a
+// re-entry can re-open the explanatory overlay; a clean or failed
+// reload clears them. diags is the
 // session
 // diagnostic collection: every diagnostic the model has processed, in
 // collection order, independent of what any screen displayed. diagCh
@@ -75,6 +78,7 @@ type Model struct {
 	failed    map[string]bool
 	stale     map[string]bool     // raw path → latest completed load validated stale (Issue #29)
 	failLines map[string][]string // raw path → latest failure's overlay lines
+	encLines  map[string][]string // raw path → latest unsupported-encoding overlay lines (Issue #30)
 	loading   map[string]int      // raw path → in-flight request identity
 	loadSeq   int                 // mints request identities
 	// rows holds each file's installed prepared row model with the
@@ -175,6 +179,7 @@ func newModel(done <-chan searchDoneMsg, cancel func()) Model {
 		failed:    make(map[string]bool),
 		stale:     make(map[string]bool),
 		failLines: make(map[string][]string),
+		encLines:  make(map[string][]string),
 		loading:   make(map[string]int),
 		reloading: make(map[string]bool),
 		rows:      make(map[string]installed),
@@ -298,6 +303,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		delete(m.reloading, key)
 		if msg.err != nil {
 			m.failed[key] = true
+			delete(m.encLines, key)
 			d := fmt.Sprintf("cannot read %s: %v", present.Path(msg.path), msg.err)
 			m.CollectDiagnostic(d)
 			// The failure's display lines are retained as the prior
@@ -326,6 +332,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// request in flight for the old one.
 		delete(m.rows, key)
 		delete(m.reqKey, key)
+		// A BOM-marked UTF-16/32 load is the "(unsupported encoding)"
+		// placeholder (Issue #30): the explanatory diagnostic collects
+		// once per detection — replayed at exit — while the Issue #26
+		// split decides notification: an overlay when the file is
+		// current, the collection alone otherwise. The retained lines
+		// re-open the overlay on a later visit; any other load outcome
+		// clears them.
+		if enc := msg.buf.Unsupported(); enc != "" {
+			d := fmt.Sprintf("cannot display %s: unsupported encoding %s", present.Path(msg.path), enc)
+			m.CollectDiagnostic(d)
+			m.encLines[key] = strings.Split(present.Diagnostic(d), "\n")
+			if bytes.Equal(msg.path, m.currentPath()) {
+				m.openOverlay(m.encLines[key])
+			}
+		} else {
+			delete(m.encLines, key)
+		}
 		if !bytes.Equal(msg.path, m.currentPath()) {
 			return m, nil
 		}

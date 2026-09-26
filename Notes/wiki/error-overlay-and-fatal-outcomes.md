@@ -220,3 +220,8 @@ marker. See [unit-tests.md](unit-tests.md).
   `View` compositing.
 - `internal/app/search.go` — `prepareIndex` feeds the stream through
   `Index.Feed`; `searchDoneMsg`'s `stderr`/`waitErr` are now consumed.
+
+See also:
+[unsupported-encodings.md](unsupported-encodings.md) — Issue #30's
+detection overlay rides the same open-or-append route and the
+all-unsupported outcome-matrix row keeps the fixed status at 0.

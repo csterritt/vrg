@@ -1,0 +1,2 @@
+cannot display ./u16.txt: unsupported encoding UTF-16 LE
+cannot display ./u16.txt: unsupported encoding UTF-16 LE

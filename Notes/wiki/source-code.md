@@ -104,8 +104,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   whose presses route through `syncLayout` like every other
   text-width change), `listTop` (the list window's first visible
   entry), and `statusNote` (the filename-row buffer-status provider —
-  Issue #26's `bufferNote` supplies the real `(unreadable)` note;
-  #29 and #30 own the rest); Issue #26 adds `failLines` (the retained
+  `bufferNote` supplies the real notes: Issue #26's `(unreadable)`,
+  #29's `file changed since search`, #30's `(unsupported encoding)`);
+  Issue #26 adds `failLines` (the retained
   per-path sanitized diagnostic lines a cross-file re-entry reopens),
   `readFile` (the read-phase test seam — nil selects
   `filebuffer.ReadFile`), and the `loadDoneMsg` error branch's
@@ -124,7 +125,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   load's `Buffer.Stale()` verdict — written only on success, so it
   persists through a reread's placeholder until the new verdict
   lands), its `loadDoneMsg` success-branch write, and
-  `bufferNote`'s stale branch;
+  `bufferNote`'s stale branch; Issue #30 adds `encLines` (the
+  per-path retained unsupported-encoding overlay lines a re-entry
+  re-opens) and the `loadDoneMsg` success branch's
+  detect-collect-retain-overlay split — the encoding diagnostic
+  collects once per detection and interrupts only when the path is
+  current;
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
   diagnostics box; Issue #15 adds the pop-up state (`popupID`,
@@ -188,12 +194,14 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   alone is dropped), `bufferNote` (the real filename-row status
   provider behind the `statusNote` seam: Issue #26's `(unreadable)`
   for a read-failed path, outranking Issue #29's `file changed since
-  search` for a stale-validating one),
+  search` for a stale-validating one and Issue #30's
+  `(unsupported encoding)` for a BOM-classified buffer),
   `contentRow` (`Gutter`-styled
   right-justified number + two spaces over the viewport's visible-row
   slice; Issue #26 gives the placeholder forms — `Loading…` while a
   request is in flight, `(unreadable)` once a failure has settled —
-  each clipped to the text width), and `renderCells` (inverse-video
+  and Issue #30 adds `(unsupported encoding)` for a buffer whose file
+  is BOM-marked UTF-16/UTF-32, each clipped to the text width), and `renderCells` (inverse-video
   spans over escaped `present.Cell`s via `Match`/`CurrentMatch`,
   marker spans, clip-edge wide clusters — Issue #21: `Blank`-marked
   wrap/clip filler cells never take the match style). Issue #12 adds `scroll`
@@ -240,7 +248,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   skips the pop-up, re-opens its retained `failLines` overlay, and
   mints exactly one retry (still dropped while a request is in
   flight), so a same-file step inside a failed file requests nothing
-  and a cross-file entry retries once. Issue #27 adds `pendingIntent`
+  and a cross-file entry retries once. Issue #30's branch opens the
+  retained `encLines` overlay for an already-classified unsupported
+  destination in place of the file-change pop-up. Issue #27 adds `pendingIntent`
   (`intentNone`/`intentReveal`/`intentAnchor` — the anchor intent a
   reload completion records when no reveal is already carried) and
   `reload()` (the `r` handler: drop the cached buffer, re-open the
@@ -413,12 +423,20 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   returns a stop's reveal location — the first surviving span's start
   cell, else the earliest recorded start clamped to the line's bytes
   (BOM-shifted on line one, end-of-line mappings falling back to the
-  last rendered cell), else the last source line's start. See
+  last rendered cell), else the last source line's start. Issue #30
+  adds the UTF-16/UTF-32 classification ahead of everything: the
+  longest-first `unsupportedBOMs` table (`unsupportedEncoding`)
+  detects the four marks — UTF-32 LE's `FF FE 00 00` before the
+  UTF-16 LE mark it overlaps — and a detected buffer returns early
+  carrying only `enc` (the encoding name `Unsupported()` reports):
+  no lines, no spans, no stale verdict, since the encoded bytes are
+  never split and never validated. See
   [wrap-mode.md](wrap-mode.md),
   [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
   [line-terminators-and-bom.md](line-terminators-and-bom.md),
-  [zero-width-match-markers.md](zero-width-match-markers.md), and
-  [stale-match-validation.md](stale-match-validation.md).
+  [zero-width-match-markers.md](zero-width-match-markers.md),
+  [stale-match-validation.md](stale-match-validation.md), and
+  [unsupported-encodings.md](unsupported-encodings.md).
 
 ## internal/viewport
 

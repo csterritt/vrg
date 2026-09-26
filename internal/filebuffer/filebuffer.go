@@ -24,11 +24,43 @@ type Buffer struct {
 	// stale marks a buffer whose recorded submatches did not all
 	// validate — the "file changed since search" state (Issue #29).
 	stale bool
+	// enc names the encoding a leading UTF-16/UTF-32 byte-order mark
+	// declared — "UTF-16 LE", "UTF-16 BE", "UTF-32 LE", or
+	// "UTF-32 BE" — when the buffer is the "(unsupported encoding)"
+	// placeholder: no lines, no spans, no stale verdict (Issue #30).
+	enc string
 }
 
 // utf8BOM is the UTF-8 byte order mark: invisible at the start of a
 // file, where rg removes its three bytes from first-line data.
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
+// unsupportedBOMs are the byte-order marks vrg detects but does not
+// decode, paired with the encoding names their diagnostics carry.
+// Longer marks precede the shorter ones they overlap: UTF-32 LE's
+// FF FE 00 00 opens with UTF-16 LE's own bytes, so checking UTF-16
+// first would misclassify it.
+var unsupportedBOMs = []struct {
+	mark []byte
+	name string
+}{
+	{[]byte{0xFF, 0xFE, 0x00, 0x00}, "UTF-32 LE"},
+	{[]byte{0x00, 0x00, 0xFE, 0xFF}, "UTF-32 BE"},
+	{[]byte{0xFF, 0xFE}, "UTF-16 LE"},
+	{[]byte{0xFE, 0xFF}, "UTF-16 BE"},
+}
+
+// unsupportedEncoding returns the encoding name a leading UTF-16 or
+// UTF-32 byte-order mark declares, "" when the bytes open with no
+// unsupported mark.
+func unsupportedEncoding(data []byte) string {
+	for _, m := range unsupportedBOMs {
+		if bytes.HasPrefix(data, m.mark) {
+			return m.name
+		}
+	}
+	return ""
+}
 
 // ReadFile is the read phase of a load: the file's raw bytes. It is
 // separate from Prepare — the decode/map phase — so the caller can
@@ -60,11 +92,18 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 // splits the first line's coordinate views: its raw bytes retain the
 // BOM while rg's first-line data omits it, so rg offsets on that line
 // shift by its length into the raw view before validating and mapping.
-// UTF-16/32 classification is Issue #30's; until it lands every loaded
-// file runs this validation, which is correct for the raw-byte
-// comparison it performs.
+// A leading UTF-16/UTF-32 BOM classifies the file as an unsupported
+// encoding instead (Issue #30): its bytes are not displayable UTF-8
+// text, so the buffer carries no lines or spans and skips the
+// raw-byte validation entirely — rg's recorded submatches describe the
+// transcoded text and can never equal these bytes.
 func Prepare(data []byte, stops []searchindex.Stop) *Buffer {
 	b := &Buffer{spans: make(map[int][]present.Span)}
+	if enc := unsupportedEncoding(data); enc != "" {
+		b.enc = enc
+		b.digits = 1 // the placeholder's minimal one-digit gutter
+		return b
+	}
 	if bytes.HasPrefix(data, utf8BOM) {
 		b.bom = len(utf8BOM)
 	}
@@ -144,6 +183,13 @@ func (b *Buffer) Spans(i int) []present.Span { return b.spans[i] }
 // check is best-effort correspondence, not a snapshot — same-text
 // moves and edits outside matched spans go undetected.
 func (b *Buffer) Stale() bool { return b.stale }
+
+// Unsupported reports the encoding name a leading UTF-16/UTF-32
+// byte-order mark declared when the buffer is the "(unsupported
+// encoding)" placeholder — a buffer whose file the terminal cannot
+// display as text — or "" for ordinary displayable content (Issue
+// #30).
+func (b *Buffer) Unsupported() string { return b.enc }
 
 // RevealTarget returns the display location — the zero-based source
 // line and display cell — that stop s's navigation reveal must show

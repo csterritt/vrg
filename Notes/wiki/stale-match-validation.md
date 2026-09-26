@@ -45,10 +45,13 @@ The leading UTF-8 BOM splits line one's coordinate views before
 validation: rg's first-line offsets omit the BOM's three bytes while
 the raw view retains them, so first-line `start`/`end` shift by three
 before the checks and before display mapping. UTF-16/UTF-32 detection
-is Issue #30's; until it lands every loaded file runs this validation,
-which is correct for the raw-byte comparison it performs — the PRD's
-explicit exclusion applies to *detected* UTF-16/32 files once
-detection exists.
+is Issue #30's and has landed: a file whose leading BOM classifies as
+an unsupported encoding never reaches this validation — `Prepare`
+returns before the loop, since rg's transcoded submatch offsets can
+never equal the encoded raw bytes (see
+[unsupported-encodings.md](unsupported-encodings.md)). The PRD's
+explicit exclusion applies to exactly those detected files; every
+other loaded file runs this validation.
 
 Every failure drops **that submatch alone** and marks the buffer
 stale; the line's other valid submatches still map to their
@@ -200,6 +203,8 @@ recomputes the note),
 occupies),
 [read-failures.md](read-failures.md) (the `(unreadable)` note that
 outranks it),
+[unsupported-encodings.md](unsupported-encodings.md) (the BOM-classified
+files excluded from this validation),
 [line-terminators-and-bom.md](line-terminators-and-bom.md) (the raw
 bytes and BOM coordinate split validation depends on),
 [zero-width-match-markers.md](zero-width-match-markers.md) (the marker

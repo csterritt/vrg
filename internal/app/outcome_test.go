@@ -432,6 +432,22 @@ var outcomeMatrix = []outcomeRow{
 		quitKey: "q", exit: 0,
 		viewHas: []string{"file changed since search"},
 	},
+	// Issue #30: every retained file detecting an unsupported encoding
+	// changes only the presentation — the "(unsupported encoding)"
+	// placeholder and its explanatory overlay — never the fixed
+	// search-derived exit status.
+	{
+		name: "every retained file unsupported keeps the fixed status 0",
+		recs: recsOneMatch, code: 0,
+		fileData:    "\xff\xfeh\x00i\x00t\x00\n\x00",
+		loadCurrent: true,
+		overlay:     true, screen: phaseBrowse,
+		dismiss: "esc", after: phaseBrowse,
+		quitKey: "q", exit: 0,
+		diags:     []string{"unsupported encoding"},
+		viewHas:   []string{"(unsupported encoding)"},
+		replayHas: []string{"unsupported encoding"},
+	},
 }
 
 // pressKey delivers one named key through Update: the dismissal and

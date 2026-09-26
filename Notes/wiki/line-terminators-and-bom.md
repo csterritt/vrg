@@ -86,6 +86,12 @@ The end-of-line *marker* for terminator-only matches is Issue #23's
 stale-note consumption of the retained raw bytes is Issue #29's
 ([stale-match-validation.md](stale-match-validation.md)) — the BOM
 shift applying to validation and the clamped fallback start alike.
+The UTF-16/UTF-32 marks are different: Issue #30 detects them before
+any splitting and classifies the whole file as an unsupported
+encoding — no lines, no validation, the `(unsupported encoding)`
+placeholder ([unsupported-encodings.md](unsupported-encodings.md)).
+The UTF-8 BOM is the only supported mark; it must never take that
+path.
 
 ## Tests
 

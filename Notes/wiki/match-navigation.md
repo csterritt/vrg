@@ -135,6 +135,8 @@ crossing now opens),
 saved state this handoff consumes),
 [searchindex-records-and-stops.md](searchindex-records-and-stops.md)
 (the stop ordering the cursor walks),
+[unsupported-encodings.md](unsupported-encodings.md) (Issue #30's
+BOM-marked files staying navigable stops behind their placeholder),
 [browse-tracer.md](browse-tracer.md) (the two-pane view it drives),
 [theme-and-colour-toggle.md](theme-and-colour-toggle.md) (the
 current-line underline it moves).

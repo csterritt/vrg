@@ -211,6 +211,15 @@ Catalog of all wiki pages for the vrg project.
   three clamped fallback landing rules inventing no highlights or
   markers, the fallback riding the Issue #28 commit, and the fixed
   exit status
+- [unsupported-encodings.md](unsupported-encodings.md) — Issue #30:
+  the four UTF-16/UTF-32 BOM marks detected longest-first (UTF-32 LE
+  winning the `FF FE` overlap) with the UTF-8 BOM never
+  misclassified, the `(unsupported encoding)` placeholder and
+  filename-row note, the collected `cannot display …: unsupported
+  encoding <name>` diagnostic under the current/non-current overlay
+  split with re-entry re-open, retained stops and `r` reloadability,
+  the exclusion of encoded bytes from stale validation, and the fixed
+  exit status
 
 ## Catalogs
 

@@ -92,7 +92,8 @@ comes from `bufferNote` — Issue #26 delivered the first real note,
 [read-failures.md](read-failures.md)), Issue #29 added `file changed
 since search` for a stale-validating buffer (see
 [stale-match-validation.md](stale-match-validation.md)), and Issue #30
-owns the remaining unsupported-encoding note.
+added `(unsupported encoding)` for a BOM-classified buffer (see
+[unsupported-encodings.md](unsupported-encodings.md)).
 
 ## Minimal-movement list scrolling
 

@@ -172,5 +172,7 @@ logical anchor, keyed layout installs, and the pending-intent seam),
 [destination-reveal.md](destination-reveal.md) (the reveal the
 navigation intent commits),
 [match-navigation.md](match-navigation.md) (the stops and cursor `r`
-never touches), and [stderr-replay.md](stderr-replay.md) (where a
-reload failure's collected occurrence replays).
+never touches), [stderr-replay.md](stderr-replay.md) (where a
+reload failure's collected occurrence replays), and
+[unsupported-encodings.md](unsupported-encodings.md) (the BOM-marked
+file `r` rereads into the restored placeholder and a fresh overlay).

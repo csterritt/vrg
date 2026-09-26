@@ -1163,3 +1163,56 @@ Decisions → FileBuffer), `internal/filebuffer/filebuffer.go`,
 `internal/filebuffer/stale_test.go`, `internal/app/app.go`,
 `internal/app/browse.go`, `internal/app/stale_test.go`,
 `internal/app/outcome_test.go`.
+
+## [2026-09-24] ingest | Issue #30 unsupported encodings — UTF-16/UTF-32 BOM detection, "(unsupported encoding)" placeholder, and the notification split
+
+Ingested the completed Issue #30 implementation: `filebuffer.Prepare`
+classifies the raw bytes through the longest-first `unsupportedBOMs`
+table before any splitting or validation — `FF FE 00 00` UTF-32 LE,
+`00 00 FE FF` UTF-32 BE, `FF FE` UTF-16 LE, `FE FF` UTF-16 BE, the
+UTF-32 LE mark checked before the UTF-16 LE mark its prefix overlaps —
+while the leading UTF-8 BOM keeps its Issue #22 supported path and
+non-leading marks stay ordinary content. A classified buffer carries
+only `enc` (`Unsupported()`): no lines, no spans, no stale verdict,
+an inert `(0,0)` reveal target — the encoded bytes never reach
+`present.LineOf` and never face Issue #29's raw-byte validation, the
+PRD's explicit exclusion applied where every load funnels through.
+The app presents `contentRow`'s third placeholder `(unsupported
+encoding)` behind the minimal gutter plus `bufferNote`'s third
+filename-row note, collects `cannot display <path>: unsupported
+encoding <name>` once per detection into the session collection, and
+follows the Issue #26 split — overlay when the path is current,
+collection alone when it is not — with the retained `encLines`
+re-opening the overlay on a later visit in place of the file-change
+pop-up. `r` remains the reload route (swallowed by the open overlay,
+then `Loading…`, exactly one reread, placeholder and fresh overlay on
+a still-encoded completion), the file stays an indexed cursor stop,
+and the fixed exit status never moves — the outcome matrix gained
+the all-unsupported row. Created
+[unsupported-encodings](unsupported-encodings.md); updated
+[stale-match-validation](stale-match-validation.md) (detection landed;
+encoded bytes skip validation),
+[line-terminators-and-bom](line-terminators-and-bom.md) (the UTF-16/32
+marks versus the supported UTF-8 BOM),
+[read-failures](read-failures.md) (the shared notification split),
+[explicit-reload](explicit-reload.md) (the rereading placeholder),
+[match-navigation](match-navigation.md) (unsupported files stay
+stops),
+[error-overlay-and-fatal-outcomes](error-overlay-and-fatal-outcomes.md)
+(the new fixed-status row),
+[file-list-layout](file-list-layout.md) (the third real status note),
+[source-code](source-code.md) (`filebuffer.go`'s classification,
+`app.go`'s `encLines` and completion split, `browse.go`'s placeholder,
+note, and overlay route), [unit-tests](unit-tests.md) (the two new
+`encoding_test.go` catalogs and the outcome-matrix row), and the
+index.
+New test files: `internal/filebuffer/encoding_test.go`,
+`internal/app/encoding_test.go`.
+Sources: `Notes/issues/030-unsupported-encodings-utf16-utf32.md`,
+`Notes/tasks/030-unsupported-encodings-utf16-utf32.md`,
+`Notes/PRD-vrg.md` (Encodings and stale-content validation; Invocation
+and child process; Exit statuses; Testing Decisions → FileBuffer),
+`internal/filebuffer/filebuffer.go`,
+`internal/filebuffer/encoding_test.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/app/encoding_test.go`,
+`internal/app/outcome_test.go`.

@@ -171,6 +171,9 @@ that distinguish same-file from cross-file), [browse-tracer.md](browse-tracer.md
 (the placeholders and filename row), [stderr-replay.md](stderr-replay.md)
 (the diagnostic-only collection and exit replay),
 [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md)
-(the overlay and the fixed-status matrix rows), and
+(the overlay and the fixed-status matrix rows),
+[unsupported-encodings.md](unsupported-encodings.md) (Issue #30's
+diagnostic following the same current/non-current split and re-entry
+overlay), and
 [file-list-layout.md](file-list-layout.md) (the status-note slot the
 unreadable note occupies).

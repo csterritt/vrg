@@ -92,8 +92,10 @@ func (m Model) currentStop() (searchindex.Stop, bool) {
 // cached nor in flight nor already failed — and opens the file-change
 // pop-up: a fresh instance whose one-second expiry command returns
 // alongside the load. A previously failed destination instead runs the
-// re-entry sequence and shows no pop-up. The file list needs no
-// wiring: its underlined entry derives from the cursor.
+// re-entry sequence and shows no pop-up; a destination already
+// classified as an unsupported encoding re-opens its explanatory
+// overlay and likewise shows no pop-up (Issue #30). The file list
+// needs no wiring: its underlined entry derives from the cursor.
 func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 	depart := m.currentPath()
 	var step searchindex.Step
@@ -126,8 +128,12 @@ func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 		// of the reveal's horizontal half.
 		m.vp.SetOffset(0)
 		// A failed destination gets the re-entry sequence's
-		// prior-failure overlay, not the file-change pop-up.
-		if !m.failed[string(step.Stop.Path)] {
+		// prior-failure overlay, not the file-change pop-up; an
+		// already-classified unsupported destination re-opens its
+		// explanatory overlay instead (Issue #30).
+		if lines := m.encLines[string(step.Stop.Path)]; len(lines) > 0 {
+			m.openOverlay(lines)
+		} else if !m.failed[string(step.Stop.Path)] {
 			pop = m.openPopup(step.Stop.Path)
 		}
 	}
@@ -625,18 +631,24 @@ func filenameRule(path []byte, note string, w int) string {
 
 // bufferNote is the real filename-row status provider: the
 // "(unreadable)" note while the path sits in the failed state — a
-// failure outranks staleness — and the "file changed since search"
-// note while its latest completed load validates stale (Issue #29).
-// The stale verdict persists through a reread: it is replaced by the
+// failure outranks staleness — the "file changed since search" note
+// while its latest completed load validates stale (Issue #29), and
+// the "(unsupported encoding)" note while its cached buffer is a
+// BOM-classified placeholder (Issue #30 — a state that is never
+// stale, since validation does not run on encoded bytes). The stale
+// verdict persists through a reread: it is replaced by the
 // completion's own verdict, so the note disappears only when the new
 // content validates fully. The statusNote seam overrides the provider
-// in tests; Issue #30 extends it with its own note.
+// in tests.
 func (m Model) bufferNote(path []byte) string {
 	if m.failed[string(path)] {
 		return "(unreadable)"
 	}
 	if m.stale[string(path)] {
 		return "file changed since search"
+	}
+	if b := m.bufs[string(path)]; b != nil && b.Unsupported() != "" {
+		return "(unsupported encoding)"
 	}
 	return ""
 }
@@ -645,8 +657,9 @@ func (m Model) bufferNote(path []byte) string {
 // row. Until the buffer arrives the first row carries the placeholder
 // behind a minimal one-digit gutter — "(unreadable)" for a failed file
 // with no load in flight, "Loading…" while any load runs — clipped to
-// the text area so a constrained width cannot overflow; loaded rows
-// carry the
+// the text area so a constrained width cannot overflow; a BOM-marked
+// unsupported file's row 0 carries "(unsupported encoding)" instead of
+// its undisplayable bytes (Issue #30); loaded rows carry the
 // right-justified line number, two spaces, then the escaped cells with
 // matches in inverse video — additionally underlined on the cursor's
 // current matched line.
@@ -658,6 +671,12 @@ func (m Model) contentRow(row int, cur []byte, buf *filebuffer.Buffer, failed bo
 				return gutter + ansi.Truncate("(unreadable)", textW, "")
 			}
 			return gutter + ansi.Truncate("Loading…", textW, "")
+		}
+		return ""
+	}
+	if buf.Unsupported() != "" {
+		if row == 0 && cur != nil {
+			return gutter + ansi.Truncate("(unsupported encoding)", textW, "")
 		}
 		return ""
 	}

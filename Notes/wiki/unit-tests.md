@@ -343,6 +343,27 @@ helpers drive it in memory:
   shift by three into the raw view for validation and for the
   fallback start alike.
 
+`encoding_test.go` (same package, Issue #30) pins the UTF-16/UTF-32
+BOM classification and its exclusion from display and validation:
+
+- `TestUnsupportedBOMsClassify` — all four marks plus the bare UTF-16
+  mark name their encoding through `Unsupported()` while the buffer
+  carries no lines, no spans, no stale verdict, and the inert `(0,0)`
+  reveal target.
+- `TestUTF32LEWinsOverlapWithUTF16LE` — `FF FE 00 00` classifies as
+  UTF-32 LE, the longest-first ordering beating the UTF-16 LE mark it
+  overlaps.
+- `TestLoadReportsUnsupported` — the `ReadFile`-backed `Load` path
+  detects the mark the same way.
+- `TestUTF8BOMIsNotMisclassified` — the leading UTF-8 BOM stays
+  supported content: one line, the shifted validation, no encoding
+  name.
+- `TestNonBOMPrefixesStaySupported` — a lone `FF`, a non-leading
+  `FF FE`, a truncated `00 00 FE`, and plain text classify nothing.
+- `TestUnsupportedBytesSkipStaleValidation` — recorded submatches
+  that could never equal the encoded bytes (mismatched and
+  out-of-range) mark no staleness and produce no spans.
+
 ## internal/app
 
 `model_test.go` (same package) drives `Update` directly:
@@ -767,6 +788,37 @@ reveal through the two-stage commit, and the fixed exit status:
   lands at the last source line's start, clamped to the frame's
   bottom.
 
+`encoding_test.go` (same package, Issue #30) pins the
+unsupported-encoding integration — the `(unsupported encoding)`
+placeholder, the explanatory diagnostic's notification split, and
+the reloadability and stale-exclusion contracts, all driven through
+`Update` over real UTF-16 LE fixture files (`u16le`):
+
+- `TestUnsupportedCurrentFileNotifies` — the current file's
+  detection opens the explanatory overlay (`cannot display …:
+  unsupported encoding UTF-16 LE`), collects one diagnostic, and
+  paints the placeholder plus the filename-row note with no file
+  bytes and no inverse video anywhere.
+- `TestUnsupportedFileRemainsACursorStop` — `n`/`p` traverse the
+  file's stops like any file's, and re-entering it re-opens the
+  retained explanatory overlay instead of the file-change pop-up,
+  without re-collecting.
+- `TestUnsupportedNonCurrentIsDiagnosticOnly` — a detection settling
+  while another file is current collects once, opens no overlay, and
+  repaints nothing; visiting the file then surfaces the same overlay
+  over the placeholder.
+- `TestUnsupportedReloadReissuesAndPreserves` — `r` is the overlay's
+  while it is open; dismissed, `r` drops the placeholder to
+  `Loading…`, issues exactly one reread, and the still-encoded
+  completion restores the placeholder with a fresh overlay and a
+  second collection.
+- `TestUnsupportedFileIsNeverStale` — encoded bytes never produce
+  the stale mark or the `file changed since search` note.
+- `TestUnsupportedComposedViewStaysWellFormed` — a long escaped path
+  at 80→20 columns: the truncated safe path stays identifiable, the
+  placeholder paints, no row overflows, and no dimension goes
+  negative.
+
 `pan_test.go` (same package, Issue #18) drives the horizontal-pan
 keys through `Update`; `panRecords` builds a one-stop record set for a
 file whose first line is the match:
@@ -1017,7 +1069,10 @@ later issues extend it with rows rather than duplicating the decision:
   fixture's bytes so the load can validate stale and `loadCurrent`
   settles the load before the assertions — and the all-stale row
   proving every retained stop validating stale still exits with the
-  fixed status 0.
+  fixed status 0. Issue #30 reuses those fields for the
+  all-unsupported row: every retained file detecting a UTF-16 BOM
+  still exits with the fixed status 0, the overlay and the exit
+  replay carrying the `unsupported encoding` diagnostic.
 
 `overlay_test.go` (same package) pins the Issue #9 modal overlay:
 

@@ -1,0 +1,24 @@
+./a.txt    ── ./u16.txt (unsupported encoding) ─────────────────────────────────
+./u16.txt     (unsupported encoding)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
