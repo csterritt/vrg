@@ -1,0 +1,20 @@
+#!/bin/sh
+# Run B's stream: fast.txt's line-1 match then slow.txt's line-200
+# match. The same script serves run A through $VRG_FIXTURE_FILTER.
+if [ "${VRG_FIXTURE_FILTER:-b}" = "a" ]; then
+	printf '%s\n' \
+	'{"type":"begin","data":{"path":{"text":"slow.txt"}}}' \
+	'{"type":"match","data":{"path":{"text":"slow.txt"},"lines":{"text":"hit00200\n"},"line_number":200,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+	'{"type":"end","data":{"path":{"text":"slow.txt"},"binary_offset":null}}' \
+	'{"type":"summary","data":{}}'
+else
+	printf '%s\n' \
+	'{"type":"begin","data":{"path":{"text":"fast.txt"}}}' \
+	'{"type":"match","data":{"path":{"text":"fast.txt"},"lines":{"text":"hit one\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+	'{"type":"end","data":{"path":{"text":"fast.txt"},"binary_offset":null}}' \
+	'{"type":"begin","data":{"path":{"text":"slow.txt"}}}' \
+	'{"type":"match","data":{"path":{"text":"slow.txt"},"lines":{"text":"hit00200\n"},"line_number":200,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+	'{"type":"end","data":{"path":{"text":"slow.txt"},"binary_offset":null}}' \
+	'{"type":"summary","data":{}}'
+fi
+exit 0

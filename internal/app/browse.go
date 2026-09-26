@@ -247,11 +247,15 @@ func (m *Model) entryLoad(step searchindex.Step) tea.Cmd {
 
 // reload issues the explicit r reload: exactly one reread of the
 // current file's raw path — never an rg rerun, never a cursor or stop
-// change. A press while that path's load is in flight is dropped, not
-// queued: the placeholder's change off "Loading…" is the only
-// completion signal. The cached buffer is dropped up front so the
-// panel reads "Loading…" — scrolling is a placeholder no-op — and a
-// failed reread can never present stale content as refreshed. A
+// change. Admission is atomic (Issue #42): the in-flight check is the
+// single decision point, so a press while that path's load is in
+// flight is dropped before any state moves — no reread mark, no
+// buffer drop, no minted identity — leaving the in-flight load under
+// its original classification; the placeholder's change off
+// "Loading…" is the only completion signal. Once admitted, the
+// cached buffer is dropped up front so the panel reads "Loading…" —
+// scrolling is a placeholder no-op — and a failed reread can never
+// present stale content as refreshed. A
 // previously failed file's r is its retry route — the only one in a
 // one-stop index — and re-opens the prior-failure overlay while the
 // retry runs, as in the cross-file re-entry sequence. The request is

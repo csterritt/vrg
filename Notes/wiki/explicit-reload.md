@@ -8,6 +8,9 @@ the cursor stops, drops duplicate presses while the load is in flight,
 preserves the cursor and logical anchor clamped to the new content
 through the keyed prepared-layout install, and replaces the old display
 with `(unreadable)` plus the failure overlay when the reread fails.
+Issue #42 (`Notes/tasks/042-dropped-reload-no-intent-mutation.md`)
+pinned the load-admission boundary as atomic: a dropped `r` commits
+nothing, and navigation re-entry is deliberately ungated.
 
 PRD cross-references: "File loading, cache, reload, and selection
 consistency" (the one-load-per-path bullet, the reload bullets, and the
@@ -29,7 +32,7 @@ path)`), so the panel switches to `Loading…` for the duration and
 scrolling/panning fall back to the placeholder no-op — and a failed
 reread leaves no old buffer behind to be presented as refreshed.
 
-## Dropped, not queued
+## Dropped, not queued — and atomic
 
 A second `r` — or a cross-file re-entry — while a load for the path is
 in flight returns no command and mints nothing: the Issue #25
@@ -38,6 +41,24 @@ There is no cancellation and no queue; the placeholder's change from
 `Loading…` to content or `(unreadable)` is the only completion signal,
 and only then does the next `r` start a new load. In a one-stop index —
 where `n`/`p` are strict no-ops — `r` is the only retry route.
+
+Issue #42 (`Notes/tasks/042-dropped-reload-no-intent-mutation.md`) pins
+the admission boundary itself as atomic: the in-flight check inside
+`reload()` is the single decision point, evaluated *before* the reread
+mark, the buffer drop, the prior-failure overlay, and the identity
+mint — so a dropped `r` commits no intermediate state at all. The
+in-flight startup or navigation load keeps its request identity,
+content revision, pending intent, and presentation exactly as they
+were, and its completion is classified by what it actually is — a
+first load's or entry's reveal — never re-labelled a reload's
+anchor-keeping `intentAnchor` with an extra revision bump. The
+boundary applies only to the explicit reread: navigation re-entry is
+deliberately ungated, so crossing back to a still-loading path still
+switches the selection, shows the placeholder, and re-pends
+`intentReveal` even though its own load request is the one dropped.
+(PRD: *File loading, cache, reload, and selection consistency* — the
+one-load-per-path bullet — and *Navigation, viewport, and logical
+anchors* — the reveal rules — in `Notes/PRD-vrg.md`.)
 
 ## Content revisions and the anchor intent
 
@@ -148,6 +169,22 @@ refresh are explicitly out of scope.
   new-revision layouts completing out of order — the new revision's
   install commits the anchor or the reveal, and the late old-revision
   layout consumes nothing).
+- `internal/app/admission_test.go` — the Issue #42 admission
+  contracts, driven through held load commands:
+  `TestDroppedReloadDuringStartupLoadKeepsRevealIntent` and
+  `TestDroppedReloadDuringNavigationLoadKeepsRevealIntent` (a dropped
+  `r` leaves the in-flight request's identity, the revision, the
+  pending reveal, and the frame untouched — the load then completes
+  under its own classification, the one-third destination reveal
+  rather than anchor preservation);
+  `TestAcceptedReloadAppliesReloadStateOnce` (an admitted `r` lands
+  the request, the mark, and `Loading…` together — one worker, one
+  revision increment, the anchor intent at completion);
+  `TestRepeatedReloadKeepsSingleInFlightLoad` (rapid repeats keep one
+  reread in flight, the placeholder settling to content or to
+  `(unreadable)`); `TestNavigationReentryDuringInFlightLoadIsUngated`
+  (re-entry updates the selection, placeholder, and `intentReveal`
+  while its duplicate load drops).
 
 See [unit-tests.md](unit-tests.md) § `internal/app`.
 
@@ -158,7 +195,8 @@ See [unit-tests.md](unit-tests.md) § `internal/app`.
   per-path in-flight reread mark), and the `loadDoneMsg` success
   branch's `SetRows(nil)` plus anchor-intent recording.
 - `internal/app/browse.go` — `pendingIntent` (`intentNone`,
-  `intentReveal`, `intentAnchor`), `reload()` (drop the buffer,
+  `intentReveal`, `intentAnchor`), `reload()` (the Issue #42 single
+  decision point: the in-flight check first, then drop the buffer,
   re-open the prior-failure overlay, mint, mark), `reveal()` carrying
   `intentReveal`, and `commitIntent` committing whichever intent
   survives to install time.

@@ -80,8 +80,11 @@ cross-file, including away-and-back sequences that return the cursor
 to the stop it started on — leaves `intentReveal` outstanding, and the
 completion keeps it: **navigation intent, not cursor equality, decides
 the commit.** An undisturbed reload preserves the prior logical
-anchor; a navigated one commits the entry reveal. See
-[explicit-reload.md](explicit-reload.md).
+anchor; a navigated one commits the entry reveal. The reread mark can
+only ever sit on an admitted request — Issue #42's atomic admission
+checks `loading[path]` before any reload state moves, so a dropped `r`
+cannot lend an in-flight first or navigation load the reload
+classification (see [explicit-reload.md](explicit-reload.md)).
 
 ## Starting viewports
 

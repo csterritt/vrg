@@ -69,8 +69,14 @@ layout installs (Issue #28's two-stage contract; see
   no installed row model matches the current parameters. Issue #27's
   `r` is the single intentional exception: `reload()` drops the cached
   buffer and mints a fresh identity through the same bookkeeping, and
-  a duplicate `r` against the in-flight load is dropped not queued —
-  see [explicit-reload.md](explicit-reload.md).
+  a duplicate `r` against the in-flight load is dropped not queued.
+  Issue #42 pins the drop as atomic — the in-flight check precedes
+  every mutation, so a duplicate `r` commits nothing (no mark, no
+  buffer drop, no mint) and the in-flight load completes under its
+  original classification — while navigation re-entry is deliberately
+  ungated: its selection, placeholder, and reveal-intent updates stand
+  even when its own load request drops — see
+  [explicit-reload.md](explicit-reload.md).
 
 ## Separately gated decode/map
 

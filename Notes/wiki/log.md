@@ -1703,3 +1703,35 @@ Sources: `Notes/tasks/041-overlay-full-scroll-no-head-tail-compression.md`,
 `Notes/PRD-vrg.md` (*Colours, overlays, and key precedence*),
 `internal/app/overlay.go`, `internal/app/overlay_test.go`,
 `internal/app/outcome_test.go`, `cmd/vrg/pty_test.go`.
+## [2026-09-24] ingest | Issue #42 atomic reload admission — a dropped `r` commits nothing
+
+Issue #42 (`Notes/tasks/042-dropped-reload-no-intent-mutation.md`)
+pinned the load-admission boundary: `reload()`'s in-flight check was
+already the single decision point — evaluated before the reread mark,
+the buffer drop, the prior-failure overlay, and the identity mint — so
+the work was contractual rather than a restructure. New tests in
+`internal/app/admission_test.go` assert a dropped `r` during a startup
+or navigation load leaves the in-flight request's identity, the
+content revision, the pending `intentReveal`, and the frame untouched,
+with the load then completing under its own classification (the
+one-third destination reveal, never `intentAnchor`); that an admitted
+`r` lands the request, mark, and `Loading…` together with exactly one
+revision increment and the anchor intent at completion; that rapid
+repeats keep one reread in flight with the placeholder → content /
+`(unreadable)` settlement; and that navigation re-entry is
+deliberately ungated — selection, placeholder, and reveal intent all
+update while its duplicate load drops. `reload()`'s doc comment now
+records the Issue #42 atomicity.
+Updated [explicit-reload](explicit-reload.md) (the atomic-admission
+contract and the new tests),
+[load-completion-reveal](load-completion-reveal.md) (the reread mark
+exists only on an admitted request),
+[async-load-isolation](async-load-isolation.md) (the atomic drop and
+the ungated re-entry), [unit-tests](unit-tests.md) (the
+`admission_test.go` catalog), and the index.
+New files: `internal/app/admission_test.go`;
+`Notes/walkthroughs/042-04/` holds the walkthrough.
+Sources: `Notes/tasks/042-dropped-reload-no-intent-mutation.md`,
+`Notes/PRD-vrg.md` (*File loading, cache, reload, and selection
+consistency*; *Navigation, viewport, and logical anchors*),
+`internal/app/browse.go`, `internal/app/admission_test.go`.

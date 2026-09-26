@@ -208,7 +208,9 @@ Catalog of all wiki pages for the vrg project.
   failures landing as `(unreadable)` plus overlay, per-path content
   revisions discarding superseded prepared layouts, and the
   `pendingIntent` seam committing a reveal for the newest stop or an
-  anchor-preserving no-reveal — generalized by Issue #28
+  anchor-preserving no-reveal — generalized by Issue #28; Issue #42's
+  atomic admission (a dropped `r` commits nothing; navigation re-entry
+  deliberately ungated)
 - [load-completion-reveal.md](load-completion-reveal.md) — Issue #28:
   the two-stage load-completion contract — stage 1 installs the buffer,
   bumps the revision, and requests the layout keyed to the post-load

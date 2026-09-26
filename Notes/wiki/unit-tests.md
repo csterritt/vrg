@@ -845,6 +845,40 @@ layout worker is held by retaining the command `pump` would run:
   revision's install commits the anchor or the reveal, and the late
   old-revision layout rewinds nothing.
 
+`admission_test.go` (same package, Issue #42) pins the atomic
+load-admission boundary, driving the model with held load commands so
+the in-flight state is exact:
+
+- `TestDroppedReloadDuringStartupLoadKeepsRevealIntent` — `r` while
+  the startup load is in flight returns no command and commits
+  nothing: the in-flight request identity, `loadSeq`, the absent
+  `reloading` mark, `intentReveal`, the zero revision, and the frame
+  all unchanged; the load then completes under its own classification
+  — the line-200 target revealing at one-third placement rather than
+  anchor-preserving at top 0.
+- `TestDroppedReloadDuringNavigationLoadKeepsRevealIntent` — the same
+  invariants for `r` during a navigation-issued load (the file-change
+  pop-up dismissed first by a placeholder no-op scroll so the frame
+  comparison measures the panel alone); b.txt's completion reveals
+  its hidden target rather than keeping the first-visit anchor's
+  top-of-file.
+- `TestAcceptedReloadAppliesReloadStateOnce` — an admitted `r` lands
+  the minted request, the `reloading` mark, and the dropped buffer's
+  `Loading…` panel together, issues exactly one worker, and its
+  completion records `intentAnchor` behind exactly one revision
+  increment, the install preserving the anchor with no reveal.
+- `TestRepeatedReloadKeepsSingleInFlightLoad` — rapid repeat presses
+  while a reread is in flight all drop (identity, `loadSeq`, and mark
+  untouched), and the placeholder's change to content — or to
+  `(unreadable)` on a failing reread — remains the only completion
+  signal.
+- `TestNavigationReentryDuringInFlightLoadIsUngated` — crossing away
+  and back while a.txt's load is in flight mints nothing for the
+  duplicate, but the selection returns, the `Loading…` placeholder
+  shows, and `intentReveal` re-pends so the original request's
+  completion reveals the newest target: admission gates only the
+  explicit reread.
+
 `completion_test.go` (same package, Issue #28) pins the two-stage
 load-completion contract, driving each stage separately — the load
 command's message through `Update`, the layout command held and
