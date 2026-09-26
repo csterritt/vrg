@@ -174,3 +174,35 @@ Design), `internal/present/doc.go`, `internal/present/present.go`,
 `internal/present/line_test.go`, `internal/app/sinksafety_test.go`,
 `internal/app/browse.go`, `internal/filebuffer/filebuffer.go`,
 `internal/cli/cli.go`, `cmd/vrg/main.go`.
+
+## [2026-09-23] ingest | Issue #7 theme module and colour toggle
+
+Ingested the completed Issue #7 implementation: `internal/theme` is now
+the real Theme module — the `dark`/`light` scheme pairs (`37;40` white
+on black, `30;47` black on white, dark initially active), `Toggle`/`Light`
+(in-memory only, no persistence), and the full named style set: `Base`
+(frame wrap), `Gutter`, `FileList`, `FilenameRule`, `Match` and
+`Indicator` (the scheme's true inverse pair via `scheme.inverse`),
+`CurrentMatch` (inverse + underline), `CurrentFile` (underline), and
+`Overlay` (base colours, plain single-line border). Styles emit explicit
+colour pairs rather than bare SGR 7 and restore the base pair so nested
+runs compose inside a `Base` frame; `Plain` remains the identity
+no-style path for the sink-safety table. `internal/app` handles `c` in
+`phaseBrowse` (`m.theme.Toggle()`), wraps each `View` frame in `Base`,
+pads each browse row to the frame edge, and routes the file list,
+filename rule, gutter, and match spans through the new styles with a
+`current`-line flag selecting `CurrentMatch`. The Issue #5 `\x1b[7m`
+assertions moved to explicit-pair codes; new tests cover the toggle
+round trip, both schemes' pairs, true-inverse matches/indicators, the
+current-match and current-file underlines, the overlay style, `c`
+flipping the frame's base pair, and the current-line underline
+distinction. Created
+[theme-and-colour-toggle](theme-and-colour-toggle.md); updated
+[source-code](source-code.md), [unit-tests](unit-tests.md),
+[browse-tracer](browse-tracer.md), and the index. Sources:
+`Notes/issues/007-theme-colour-toggle-and-match-styles.md`,
+`Notes/tasks/007-theme-colour-toggle-and-match-styles.md`,
+`Notes/PRD-vrg.md` (Colours, overlays, and key precedence; Module
+Design → Theme), `internal/theme/theme.go`,
+`internal/theme/theme_test.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/app/browse_test.go`.

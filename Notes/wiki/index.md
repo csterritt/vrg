@@ -40,6 +40,12 @@ Catalog of all wiki pages for the vrg project.
   canonical per-sink-class escaping contracts, the `cli.Escape`
   replacement, the shared sink-safety table with its fixtures and
   no-style composition method, and later-sink row ownership
+- [theme-and-colour-toggle.md](theme-and-colour-toggle.md) — Issue #7:
+  the dark/light schemes (white-on-black / black-on-white), the
+  in-memory `c` toggle, the named style set (base, gutter, true-inverse
+  match, underlined current match, inverse indicator, single-line-
+  bordered overlay, filename rule, file list, current-file underline),
+  and how browse rendering consumes it
 
 ## Catalogs
 

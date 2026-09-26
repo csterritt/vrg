@@ -114,6 +114,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			return m.cancelled(), tea.Quit
+		case "c":
+			// The colour toggle is a browse key; during searching
+			// ordinary keys are inert.
+			if m.phase == phaseBrowse {
+				m.theme = m.theme.Toggle()
+			}
 		case "q":
 			if m.phase == phaseSearching {
 				return m.cancelled(), tea.Quit
@@ -139,13 +145,14 @@ func (m Model) cancelled() Model {
 // exit Bubble Tea emits the display-restoration sequence (leave alt
 // screen, cursor visible). During the whole collection and post-exit
 // preparation span the screen is "Searching…"; afterwards it is the
-// two-pane browse view.
+// two-pane browse view. The theme's base style wraps each frame so the
+// active scheme's colours cover the screen.
 func (m Model) View() tea.View {
 	var v tea.View
 	if m.phase == phaseBrowse {
-		v = tea.NewView(m.renderBrowse())
+		v = tea.NewView(m.theme.Base(m.renderBrowse()))
 	} else {
-		v = tea.NewView("Searching…\n")
+		v = tea.NewView(m.theme.Base("Searching…\n"))
 	}
 	v.AltScreen = true
 	return v

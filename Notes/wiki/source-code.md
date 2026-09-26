@@ -42,23 +42,28 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   preparation), `phaseBrowse` renders the two-pane browse view and `q`
   quits with `ExitCode` 0; `ctrl+c` in any state or `q` while searching
   cancels (kills the child context, `ExitCode` 130), `Esc` is a no-op,
-  and once `quit` is set `Update` discards all messages so a late
-  completion cannot revive a cancelled UI; every view sets `AltScreen`
-  for the exit restoration sequence; resize handled in any state.
+  `c` in browse toggles the theme between its dark and light schemes
+  (Issue #7), and once `quit` is set `Update` discards all messages so a
+  late completion cannot revive a cancelled UI; every view wraps the
+  frame in `theme.Base` and sets `AltScreen` for the exit restoration
+  sequence; resize handled in any state.
   Issue #5 state: `stops`/`files`/`cursor`, the `bufs`/`loading`/
   `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam.
 - `internal/app/browse.go` — the Issue #5 browse composition:
   `loadDoneMsg` (the worker's prepared-buffer completion keyed by raw
   path), `ensureLoad`/`loadCmd` (one async load per file; read, split,
   escape, and map all off the update path, behind `loadGate` in tests),
-  `renderBrowse` (raw-path-ordered file list with underlined current
-  entry scrolled into view, filename rule, `Loading…`/`(unreadable)`
-  placeholders — path sinks via `present.Path`), `filenameRule`,
-  `contentRow` (right-justified gutter + two spaces), and `renderCells`
-  (inverse-video spans over escaped `present.Cell`s, marker spans,
-  clip-edge wide clusters). See
-  [browse-tracer.md](browse-tracer.md) and
-  [safe-presentation.md](safe-presentation.md).
+  `renderBrowse` (raw-path-ordered file list — `FileList` entries with
+  `CurrentFile` underline on the current one — scrolled into view,
+  `FilenameRule`, `Loading…`/`(unreadable)` placeholders — path sinks
+  via `present.Path`; each row padded to the frame edge so `Base`'s
+  background covers it), `filenameRule`, `contentRow` (`Gutter`-styled
+  right-justified number + two spaces), and `renderCells` (inverse-video
+  spans over escaped `present.Cell`s via `Match`/`CurrentMatch`,
+  marker spans, clip-edge wide clusters). See
+  [browse-tracer.md](browse-tracer.md),
+  [safe-presentation.md](safe-presentation.md), and
+  [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
 
 ## internal/searchindex
 
@@ -125,7 +130,13 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 
 ## internal/theme
 
-- `internal/theme/theme.go` — the minimal Issue #5 seam: `Dark` emits
-  real SGR (inverse `\x1b[7m`, underline `\x1b[4m`); `Plain` is the
-  no-style composition path whose identity styles let sink-safety
-  tests assert no escape bytes may legitimately appear.
+- `internal/theme/theme.go` — the Issue #7 module: the `dark`/`light`
+  schemes (SGR pairs `37;40` / `30;47`, dark initially active),
+  `Toggle`/`Light` (in-memory only), and the style set — `Base` (frame
+  wrap), `Gutter`, `FileList`, `FilenameRule`, `Match` and `Indicator`
+  (the scheme's true inverse pair via `scheme.inverse`),
+  `CurrentMatch` (inverse + underline), `CurrentFile` (underline), and
+  `Overlay` (base colours, plain single-line border). `Plain` remains
+  the no-style composition path whose identity styles let sink-safety
+  tests assert no escape bytes may legitimately appear. See
+  [theme-and-colour-toggle.md](theme-and-colour-toggle.md).

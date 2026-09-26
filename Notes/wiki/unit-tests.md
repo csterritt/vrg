@@ -184,8 +184,10 @@ composition:
   prepared buffer swaps the placeholder for guttered content; the
   completion carries the decoded/mapped buffer so `Update` does no
   full-file work.
-- `TestMatchRendersInverse` — a matched span emits the inverse-video
-  SGR run.
+- `TestMatchRendersInverse` — a matched span emits the dark scheme's
+  true-inverse pair, underlined on the current matched line
+  (Issue #7's explicit-pair codes replaced the Issue #5 bare
+  `\x1b[7m` assertion).
 - `TestGatedLoadKeepsResponsive` — with `loadGate` holding the worker's
   read and decode/map phases, keys and resizes are still processed and
   the placeholder stays until the gate releases.
@@ -197,7 +199,13 @@ composition:
   `(unreadable)` instead of hanging on the placeholder.
 - `TestBrowseRendering` — composed `View()`: raw-path file-list order,
   current-entry underline, `── path ───` filename rule, right-justified
-  gutter with two spaces, no other panel borders.
+  `Gutter`-styled numbers with two spaces, no other panel borders.
+- `TestColourToggleFlipsViewStyling` (Issue #7) — `c` returns no
+  command and flips the frame's first SGR sequence between the base
+  pairs: `37;40` → `30;47` → `37;40`.
+- `TestCurrentLineMatchUnderlined` (Issue #7) — the current matched
+  line's span emits `CurrentMatch` (inverse pair + underline) while a
+  match on another matched line emits plain `Match`.
 
 `sinksafety_test.go` (same package) holds the Issue #6 shared
 sink-safety table:
@@ -234,6 +242,29 @@ sink-safety table:
   `block` fake rg: the child pid disappears (`ESRCH`), `Reaped` closes
   promptly, and `ReapReport` receives the `signal: killed` wait status —
   proving vrg's own `Wait` path ran.
+
+## internal/theme
+
+`theme_test.go` (same package) pins the Issue #7 style contracts at
+exact-SGR granularity:
+
+- `TestDarkSchemeIsInitiallyActive` — `Dark()` is not light and its
+  `Base` emits white on black (`37;40`).
+- `TestSchemeColourPairs` — both schemes' base pairs.
+- `TestToggleRoundTrip` — dark → light → dark.
+- `TestMatchIsTrueInverse` — `Match` emits the swapped pair and
+  restores the base pair, in each scheme.
+- `TestCurrentMatchUnderline` — `CurrentMatch` adds underline to the
+  inverse pair and restores both.
+- `TestCurrentFileUnderline` — `CurrentFile` is underline-only in both
+  schemes.
+- `TestIndicatorInverse` — `Indicator` uses the inverse pair.
+- `TestBaseColourStyles` — `Gutter`/`FileList`/`FilenameRule` emit the
+  base pair in each scheme.
+- `TestOverlayStyle` — `Overlay` frames content in a plain single-line
+  border painted in the base colours.
+- `TestPlainIsIdentity` — every style is the identity under `Plain`
+  and `Overlay` emits no escape byte.
 
 ## cmd/vrg (subprocess boundary)
 

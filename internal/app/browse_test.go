@@ -89,7 +89,10 @@ func TestLoadCompletionRendersContent(t *testing.T) {
 	}
 }
 
-// Matched spans render in inverse video over the escaped display text.
+// Matched spans render in the true inverse of the dark scheme's base
+// colours — black on white — over the escaped display text; the
+// fixture's match sits on the current matched line, so it is
+// additionally underlined.
 func TestMatchRendersInverse(t *testing.T) {
 	dir := t.TempDir()
 	writeWorkFile(t, dir, "a.txt", "a hit\n")
@@ -99,8 +102,8 @@ func TestMatchRendersInverse(t *testing.T) {
 	)
 	m2, _ := update(t, m, cmd())
 	v := m2.View().Content
-	if !strings.Contains(v, "\x1b[7mhit\x1b[27m") {
-		t.Fatalf("match not rendered in inverse video: %q", v)
+	if !strings.Contains(v, "\x1b[30;47;4mhit\x1b[24;37;40m") {
+		t.Fatalf("match not rendered inverse+underlined: %q", v)
 	}
 }
 
@@ -264,15 +267,73 @@ func TestBrowseRendering(t *testing.T) {
 	if !strings.Contains(v, "── a.txt ") {
 		t.Fatalf("filename rule missing or malformed: %q", v)
 	}
-	// Gutter: right-justified numbers followed by two spaces (the
-	// matched line's span sits inside the SGR run).
-	for _, want := range []string{"1  one", "2  \x1b[7mtwo", "3  three"} {
+	// Gutter: right-justified numbers followed by two spaces in the
+	// base colours, then the content cells.
+	for _, want := range []string{
+		"\x1b[37;40m1  \x1b[37;40mone",
+		"\x1b[37;40m2  \x1b[37;40m\x1b[30;47;4mtwo",
+		"\x1b[37;40m3  \x1b[37;40mthree",
+	} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("gutter row %q missing: %q", want, v)
 		}
 	}
-	// The matched line renders its span in inverse video.
-	if !strings.Contains(v, "\x1b[7mtwo\x1b[27m") {
-		t.Fatalf("match not inverse: %q", v)
+	// The matched line renders its span in inverse video, underlined
+	// because it is the current matched line.
+	if !strings.Contains(v, "\x1b[30;47;4mtwo\x1b[24;37;40m") {
+		t.Fatalf("match not inverse+underlined: %q", v)
+	}
+}
+
+// c in the browse view flips the composed frame between the dark scheme
+// (white on black) and the light scheme (black on white) and back. The
+// frame opens with the base pair, so its first SGR sequence identifies
+// the active scheme. c quits nothing and returns no command.
+func TestColourToggleFlipsViewStyling(t *testing.T) {
+	dir := t.TempDir()
+	writeWorkFile(t, dir, "a.txt", "a hit\n")
+	m, cmd := browseModel(t, dir, 80, 24,
+		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"a hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":2,"end":5}]}}`,
+		`{"type":"summary","data":{}}`,
+	)
+	m, _ = update(t, m, cmd())
+
+	if v := m.View().Content; !strings.HasPrefix(v, "\x1b[37;40m") {
+		t.Fatalf("initial view is not dark-scheme base: %q", v)
+	}
+	m2, c := update(t, m, keyPress("c"))
+	if c != nil {
+		t.Fatalf("c produced a command %T, want none", c)
+	}
+	if v := m2.View().Content; !strings.HasPrefix(v, "\x1b[30;47m") {
+		t.Fatalf("view after c is not light-scheme base: %q", v)
+	}
+	m3, c := update(t, m2, keyPress("c"))
+	if c != nil {
+		t.Fatalf("second c produced a command %T, want none", c)
+	}
+	if v := m3.View().Content; !strings.HasPrefix(v, "\x1b[37;40m") {
+		t.Fatalf("view after c c is not dark-scheme base again: %q", v)
+	}
+}
+
+// Matches on the current matched line add underline to the inverse;
+// matches on other matched lines stay plain inverse.
+func TestCurrentLineMatchUnderlined(t *testing.T) {
+	dir := t.TempDir()
+	writeWorkFile(t, dir, "a.txt", "hit one\nplain\nhit two\n")
+	m, cmd := browseModel(t, dir, 80, 24,
+		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"hit one\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"hit two\n"},"line_number":3,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		`{"type":"summary","data":{}}`,
+	)
+	m, _ = update(t, m, cmd())
+	v := m.View().Content
+	// The first stop is the current matched line until Issue #13.
+	if !strings.Contains(v, "\x1b[30;47;4mhit\x1b[24;37;40m") {
+		t.Fatalf("current-line match not inverse+underlined: %q", v)
+	}
+	if !strings.Contains(v, "\x1b[30;47mhit\x1b[37;40m") {
+		t.Fatalf("other-line match not plain inverse: %q", v)
 	}
 }

@@ -16,24 +16,34 @@ safe presentation", and "Module Design" in `Notes/PRD-vrg.md`.
 `Model.renderBrowse` (`internal/app/browse.go`) composes each frame:
 
 - **Left pane — file list.** Distinct raw paths in index order
-  (unsigned raw path bytes, inherited from the Issue #3 stop ordering).
-  The current entry is underlined via the theme, and the list window
+  (unsigned raw path bytes, inherited from the Issue #3 stop ordering),
+  each painted through `theme.FileList` — the current entry through
+  `theme.CurrentFile` (underline) — and the list window
   scrolls just enough to keep it visible. Width is provisional: the
   longest escaped path plus padding, capped at 40% of the terminal and
   by the file panel's minimum — Issue #24 owns the real formula.
 - **Right pane — file panel.** Row 0 is the *filename rule*: `──`, the
-  escaped current path, then dashes to the panel edge; an oversized
+  escaped current path, then dashes to the panel edge, painted through
+  `theme.FilenameRule`; an oversized
   path is left-truncated with a leading `…` so the basename tail stays
   visible. Rows below carry the current file's content. There are **no
   other panel borders** — no box drawing, no separator column between
   the panes beyond the list's own width padding.
 - **Gutter.** Each content row starts with the right-justified line
-  number followed by two spaces. Digit width is the decimal width of
-  the loaded file's largest line number, minimum one slot
+  number followed by two spaces, painted through `theme.Gutter`. Digit
+  width is the decimal width of the
+  loaded file's largest line number, minimum one slot
   (`Buffer.GutterWidth`/`GutterDigits`).
-- **Matches.** Validated highlight spans render in inverse video over
-  the escaped display text, driven by the byte→cell maps (below) so a
+- **Matches.** Validated highlight spans render over the escaped
+  display text through `theme.Match` — or `theme.CurrentMatch` when the
+  row's source line is the current matched line — the true inverse of
+  the active scheme, additionally underlined on the current line (Issue
+  #7; see [theme-and-colour-toggle.md](theme-and-colour-toggle.md)),
+  driven by the byte→cell maps (below) so a
   match covering an ESC byte highlights both cells of its `^[` form.
+- **Frame.** `View` wraps the composed frame in `theme.Base` and each
+  row is padded to the frame edge, so the active scheme's background
+  covers the whole screen; `c` toggles the scheme (Issue #7).
 
 ## Async loading and prepared buffers
 
@@ -117,14 +127,19 @@ follows an unescaped ESC.
   `Cells`, `Spans`.
 - `internal/viewport/viewport.go` — minimal seam: dimensions plus
   `Range` clamped to the loaded line count.
-- `internal/theme/theme.go` — `Dark` (real SGR) and `Plain` (identity
-  styles) implementing `Inverse`/`Underline`.
+- `internal/theme/theme.go` — the Issue #7 module: `Dark`/`Plain`
+  constructors, `Toggle`/`Light`, and the style set (`Base`, `Gutter`,
+  `FileList`, `FilenameRule`, `Match`, `CurrentMatch`, `Indicator`,
+  `CurrentFile`, `Overlay`). See
+  [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
 - `internal/app/browse.go` — `loadDoneMsg`, `ensureLoad`/`loadCmd`,
   `renderBrowse`, `filenameRule`, `contentRow`, `renderCells`.
 - `internal/app/app.go` — `phaseBrowse`, buffer/loading/failed maps,
   cursor/files/stops, `relayout`.
 
-See also: [safe-presentation.md](safe-presentation.md) (the generalized
+See also: [theme-and-colour-toggle.md](theme-and-colour-toggle.md) (the
+scheme toggle and the style set this view consumes),
+[safe-presentation.md](safe-presentation.md) (the generalized
 utility and sink-safety table),
 [searchindex-records-and-stops.md](searchindex-records-and-stops.md)
 (raw path identity and ordering the list inherits),

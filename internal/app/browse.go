@@ -167,17 +167,23 @@ func (m Model) renderBrowse() string {
 			}
 			w := ansi.StringWidth(entry)
 			if fi == curIdx && entry != "" {
-				entry = m.theme.Underline(entry)
+				entry = m.theme.CurrentFile(entry)
+			} else {
+				entry = m.theme.FileList(entry)
 			}
 			sb.WriteString(entry)
 			sb.WriteString(strings.Repeat(" ", max(0, listW-w)))
 		}
 		if r == 0 {
-			sb.WriteString(filenameRule(cur, m.width-listW))
+			sb.WriteString(m.theme.FilenameRule(filenameRule(cur, m.width-listW)))
 		} else {
 			sb.WriteString(m.contentRow(r-1, cur, buf, failed, gutterW-2, textW))
 		}
-		rows[r] = sb.String()
+		row := sb.String()
+		// Pad to the frame edge so the base style's background covers
+		// the whole row.
+		row += strings.Repeat(" ", max(0, m.width-ansi.StringWidth(row)))
+		rows[r] = row
 	}
 	return strings.Join(rows, "\n")
 }
@@ -216,9 +222,10 @@ func filenameRule(path []byte, w int) string {
 // row. Until the buffer arrives the first row carries the placeholder
 // behind a minimal one-digit gutter; loaded rows carry the
 // right-justified line number, two spaces, then the escaped cells with
-// matches in inverse video.
+// matches in inverse video — additionally underlined on the current
+// matched line, which is the first stop until Issue #13.
 func (m Model) contentRow(row int, cur []byte, buf *filebuffer.Buffer, failed bool, digits, textW int) string {
-	gutter := strings.Repeat(" ", digits) + "  "
+	gutter := m.theme.Gutter(strings.Repeat(" ", digits) + "  ")
 	if buf == nil {
 		if row == 0 && cur != nil {
 			if failed {
@@ -233,15 +240,21 @@ func (m Model) contentRow(row int, cur []byte, buf *filebuffer.Buffer, failed bo
 	if row >= n || li >= buf.LineCount() {
 		return ""
 	}
-	return fmt.Sprintf("%*d", digits, li+1) + "  " + renderCells(buf.Cells(li), buf.Spans(li), textW, m.theme)
+	curLine := -1
+	if s, ok := m.currentStop(); ok && bytes.Equal(s.Path, cur) {
+		curLine = int(s.Line) - 1
+	}
+	gutter = m.theme.Gutter(fmt.Sprintf("%*d", digits, li+1) + "  ")
+	return gutter + renderCells(buf.Cells(li), buf.Spans(li), textW, m.theme, li == curLine)
 }
 
 // renderCells emits a line's display cells clipped to textW columns with
-// highlighted spans in inverse video. Marker spans (Start == End) paint
+// highlighted spans in inverse video — inverse plus underline when the
+// line is the current matched line. Marker spans (Start == End) paint
 // one cell at their position without shifting text — replacing the
 // cell's glyph, or extending the line by one inverse space at the end.
 // A wide cluster split by the clip edge renders its visible cell blank.
-func renderCells(cells []present.Cell, spans []present.Span, textW int, th theme.Theme) string {
+func renderCells(cells []present.Cell, spans []present.Span, textW int, th theme.Theme, current bool) string {
 	if textW <= 0 {
 		return ""
 	}
@@ -267,6 +280,10 @@ func renderCells(cells []present.Cell, spans []present.Span, textW int, th theme
 		}
 		return false
 	}
+	match := th.Match
+	if current {
+		match = th.CurrentMatch
+	}
 	var sb strings.Builder
 	var run strings.Builder
 	inv := false
@@ -275,7 +292,7 @@ func renderCells(cells []present.Cell, spans []present.Span, textW int, th theme
 			return
 		}
 		if inv {
-			sb.WriteString(th.Inverse(run.String()))
+			sb.WriteString(match(run.String()))
 		} else {
 			sb.WriteString(run.String())
 		}
@@ -300,7 +317,7 @@ func renderCells(cells []present.Cell, spans []present.Span, textW int, th theme
 	flush()
 	// An end-of-line marker extends the line by one inverse space.
 	if len(cells) < textW && marker(len(cells)) {
-		sb.WriteString(th.Inverse(" "))
+		sb.WriteString(match(" "))
 	}
 	return sb.String()
 }
