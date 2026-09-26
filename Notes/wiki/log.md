@@ -1299,3 +1299,48 @@ Sources: `Notes/issues/032-overlay-precedence-esc-semantics.md`,
 exit-status contract), `internal/app/app.go`, `internal/app/overlay.go`,
 `internal/app/help.go`, `internal/app/popup.go`,
 `internal/app/precedence_test.go`.
+
+## [2026-09-24] ingest | Issue #33 terminal-too-small gate with full state recovery
+
+Ingested the completed Issue #33 implementation: `toosmall.go` adds a
+gate ahead of the whole key-precedence stack — a window under 20
+columns or under 3 rows renders a centred "Terminal too small"
+message (clipped, never overflowing, at pathological sizes) while the
+authoritative model keeps every semantic position. The gate's own
+key map is `ctrl+c` (exit 130) and `q` (the state-applicable outcome
+— 130 with cancellation while searching, the fixed search-derived
+status while browsing, 1 on no-results, 2 under a fatal overlay, and
+past a browse-error overlay with the fixed browse status), which
+takes precedence over Issue #32's dismissal semantics; `Esc` and
+every other key are no-ops that leave a logically open modal
+untouched. `syncLayout` short-circuits while gated, so interior
+too-small resizes install no layout, mutate no anchors or saved
+viewport tops, and issue no preparation requests — recovery replays
+`syncLayout` once against the first viable dimensions. Pop-up timers
+continue under the gate: the instance is never painted, an expiry
+arriving there dismisses it for good, and a live instance reappears
+after recovery. The new `toosmall_test.go` pins the threshold
+(including the exact 20×3 boundary), centred/clipped rendering, the
+per-state `q`/`ctrl+c` table, the no-op keys, browse and modal
+round-trips (scrolled help, scrolled error, error-over-help),
+interior-resize deferral, search completion arriving behind the
+gate, and the pop-up timer cases; `scroll_test.go`'s pathological
+half-page row moved to height 3, the smallest viable size.
+Created [terminal-too-small](terminal-too-small.md); updated
+[overlay-precedence](overlay-precedence.md) (the dedicated-rule
+note), [file-change-popup](file-change-popup.md) (the hidden-but-
+ticking timer note), [help-overlay](help-overlay.md) (the
+below-minimum clause on the clipping paragraph),
+[logical-anchor-and-layout](logical-anchor-and-layout.md) (the
+`syncLayout` guard note), [source-code](source-code.md) (the
+`toosmall.go` catalog and gate routing),
+[unit-tests](unit-tests.md) (the `toosmall_test.go` catalog), and
+the index.
+New files: `internal/app/toosmall.go`, `internal/app/toosmall_test.go`,
+`Notes/wiki/terminal-too-small.md`.
+Sources: `Notes/issues/033-terminal-too-small-with-state-recovery.md`,
+`Notes/tasks/033-terminal-too-small-with-state-recovery.md`,
+`Notes/PRD-vrg.md` (Layout and indicators; Outcome and exit-status
+contract), `internal/app/toosmall.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/app/toosmall_test.go`,
+`internal/app/scroll_test.go`.

@@ -81,7 +81,10 @@ border, capped at the widest line), so long unbroken strings occupy
 several interior rows rather than overflowing; vertical scrolling
 reaches every wrapped row at usable sizes. At tiny sizes above the
 20×3 minimum there is no borderless mode — `composite` clips the box to
-the frame and growth restores the normal layout. The overlay uses
+the frame and growth restores the normal layout; below the minimum the
+Issue #33 too-small gate replaces the whole frame and the overlay's
+scroll position survives the round trip untouched (see
+[terminal-too-small.md](terminal-too-small.md)). The overlay uses
 `theme.Overlay`'s single-line border painted in the base colours (see
 [theme-and-colour-toggle.md](theme-and-colour-toggle.md)).
 

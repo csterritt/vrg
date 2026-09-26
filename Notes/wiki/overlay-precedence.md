@@ -7,9 +7,11 @@ implemented in `internal/app` (`app.go`'s `KeyPressMsg` routing plus
 `Notes/PRD-vrg.md`: *Colours, overlays, and key precedence* (the
 precedence stack, the `Esc` bullet, the error/help bullets, the
 suspension line) and *Outcome and exit-status contract* (the outcome
-table and the `q`/`Esc` dismissal bullet). Issue #33 owns the
-too-small screen's dedicated rule, which takes precedence over this
-stack.
+table and the `q`/`Esc` dismissal bullet).
+[Issue #33](terminal-too-small.md) owns the too-small screen's
+dedicated rule, which takes precedence over this stack: its `q`
+exits past a logically open overlay rather than dismissing it, and
+its `Esc` is a no-op that leaves the hidden modal untouched.
 
 ## The key-precedence stack
 

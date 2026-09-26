@@ -235,6 +235,15 @@ Catalog of all wiki pages for the vrg project.
   without return, the `Esc`/`q` dismissal-outcome table (fatal
   no-results overlay exiting 2 under either key), and `Esc` never
   exiting from a base state
+- [terminal-too-small.md](terminal-too-small.md) — Issue #33: the
+  20×3 minimum-size gate — centred "Terminal too small" as space
+  permits, only `q`/`ctrl+c` active with `q` exiting the
+  state-applicable status even past a logically open modal, `Esc` and
+  all other keys no-ops, freeze-not-snapshot state preservation
+  (cursor, per-file anchors, list/wrap/colour, horizontal offset, the
+  modal stack and scroll positions), interior resizes deferring
+  recovery to the final dimensions, and the pop-up timer continuing
+  without display
 
 ## Catalogs
 

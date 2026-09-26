@@ -1138,6 +1138,53 @@ overlay-precedence and dismissal semantics:
   with state-specific follow-ups (a second `q` exits the fixed status
   from each still-running base state; a second `Esc` is a no-op).
 
+`toosmall_test.go` (same package, Issue #33) pins the
+"Terminal too small" gate and its full state recovery:
+
+- `TestTooSmallThreshold` — below 20 columns or 3 rows the gate screen
+  replaces the whole view; exactly 20×3 is viable.
+- `TestTooSmallMessageCentredAsSpacePermits` — the message centred on
+  the middle row at 19×10 and 40×2, clipped to "Terminal t" at 10×1.
+- `TestTooSmallQExitByState` — `q` under the gate exits with the
+  state-applicable outcome rather than dismissing a logically open
+  modal: 0 browsing, 2 under a fatal search, 1 on no-results, 2 with
+  the fatal overlay open, and 0 with a browse error overlay, help, or
+  an error-over-help stack logically open.
+- `TestTooSmallQWhileSearchingCancels` — `q` while searching takes the
+  cancellation path: exit 130, child termination signalled.
+- `TestTooSmallCtrlCExits130` — `ctrl+c` exits 130 in searching,
+  browse, no-results, and under the fatal overlay.
+- `TestTooSmallKeysAreNoOps` — `Esc` and every other key produce no
+  command and no state change under an error-over-help stack, and the
+  stack is still open at its scroll positions after recovery.
+- `TestTooSmallRoundTripRestoresBrowseState` — cursor selection,
+  per-file saved anchors, the current anchor and top, horizontal pan
+  offset, list visibility, wrap mode, colour scheme, and the cached
+  list/text widths all survive a shrink-and-grow unchanged.
+- `TestTooSmallRoundTripRestoresModalState` — scrolled help, a
+  scrolled error overlay, and an error-over-help stack each reappear
+  at their prior scroll positions, with the restored stack's dismissal
+  still behaving.
+- `TestTooSmallInteriorResizeDefersRecovery` — the 19×2 → 10×1 → 25×8
+  chain: interior resizes return no command and mint no layout key,
+  move no anchor or saved state, restore no modal — and recovery runs
+  against the final 25×8 dimensions.
+- `TestTooSmallCompletionBehindGate` — a search completing under the
+  gate resolves its outcome and stores the load underneath, presenting
+  the browse screen on recovery.
+- `TestTooSmallPopupTimerContinues` and
+  `TestTooSmallPopupHiddenNotCancelled` — the pop-up timer is not
+  restarted by the resize, the pop-up never paints on the gate, inert
+  keys under the gate do not dismiss the hidden instance, an expiry
+  during too-small dismisses it for good, and a live instance
+  reappears after recovery.
+
+The file also adds the `wideFileWithStops` fixture (long padded lines
+for panning), `assertTooSmallView` (the gate-screen assertion), and
+`shrinkTo`. `scroll_test.go`'s half-page table moved its pathological
+row from height 2 to height 3 — below the minimum, scroll keys are
+no-ops by contract.
+
 `sinksafety_test.go` (same package) holds the Issue #6 shared
 sink-safety table:
 

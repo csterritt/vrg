@@ -403,6 +403,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.popupID = 0
 		}
 	case tea.KeyPressMsg:
+		// Below the fixed minimum the too-small gate owns the
+		// keyboard ahead of every modal and base state: only q and
+		// ctrl+c act, so an invisible overlay can neither swallow nor
+		// trap input. Inert keys are complete no-ops here — they must
+		// not even dismiss the hidden pop-up, which is why the gate
+		// precedes the dismissal below.
+		if m.tooSmall() {
+			return m.tooSmallKey(msg.String())
+		}
 		// Any key press dismisses the pop-up; the key still performs
 		// its normal action in this same update.
 		m.popupID = 0
@@ -534,6 +543,14 @@ func (m Model) ReplayTo(w io.Writer) {
 // theme's base style wraps each frame so the active scheme's colours
 // cover the screen.
 func (m Model) View() tea.View {
+	// Below the fixed minimum the gate replaces the whole frame —
+	// screen, pop-up, and both overlays alike — while their state
+	// survives untouched underneath for recovery.
+	if m.tooSmall() {
+		v := tea.NewView(m.theme.Base(m.renderTooSmall()))
+		v.AltScreen = true
+		return v
+	}
 	var base string
 	switch m.phase {
 	case phaseBrowse:

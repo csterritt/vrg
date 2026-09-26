@@ -1,0 +1,10 @@
+┌─────────────────────────────────────┐─
+│Key bindings                         │
+│                                     │
+│n / p              next / previous   │
+│matched line                         │
+│up / down          scroll one row    │
+│u / d              scroll half a page│
+│pgup / pgdown      scroll one page   │
+│, / .              pan one column    │
+└─────────────────────────────────────┘

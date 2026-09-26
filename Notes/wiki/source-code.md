@@ -77,7 +77,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   discards all messages so a late completion cannot revive a cancelled
   UI; the Issue #32 precedence stack — `ctrl+c`, modal error, help,
   pop-up dismissal, base keys — is this routing order (see
-  [overlay-precedence.md](overlay-precedence.md)); every view wraps
+  [overlay-precedence.md](overlay-precedence.md)), with the Issue #33
+  `tooSmall` gate ahead of the whole stack — below 20×3 `tooSmallKey`
+  owns the keyboard (`q`/`ctrl+c` only) and `View` renders the gate
+  screen alone with nothing composited (see
+  [terminal-too-small.md](terminal-too-small.md)); every view wraps
   the frame in `theme.Base`, composites the
   overlays while open (help beneath the diagnostics overlay), and sets
   `AltScreen` for the exit restoration
@@ -239,7 +243,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   adds `layoutDoneMsg`/`installed` (the keyed prepared-layout
   completion and its cached form) and moves preparation off the
   update path: `syncLayout` recomputes the geometry after any
-  parameter change (list width, text width, viewport resize),
+  parameter change (list width, text width, viewport resize) — and
+  since Issue #33 early-returns while the too-small gate is up, so a
+  below-minimum resize records dimensions without touching the
+  viewport's anchor, the list window, or layout requests, deferring
+  recovery to the resize that returns to a viable size,
   `layoutKey`/`currentRows` express the (path, revision, text width,
   wrap mode) install contract, `ensureLayout`/`layoutCmd` issue the
   worker command, and `renderBrowse` consumes the cached widths and
@@ -319,6 +327,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   frame dimensions on every render, so resize recentres and
   re-truncates without touching the timer). See
   [file-change-popup.md](file-change-popup.md).
+- `internal/app/toosmall.go` — the Issue #33 minimum-size gate:
+  `minTermCols`/`minTermRows` (the fixed 20×3 terminal minimum),
+  `tooSmall` (the below-either-dimension predicate `Update`'s key
+  routing, `View`, and `syncLayout` all consult), `tooSmallKey` (the
+  gate's keyboard — `q` exits with the state-applicable outcome,
+  taking precedence over Issue #32's dismissal semantics so a
+  logically open modal is exited past rather than dismissed; `ctrl+c`
+  exits 130; `Esc` and every other key are no-ops), and
+  `renderTooSmall` (the centred "Terminal too small" middle-row
+  message, clipped to the frame width, every row padded so `Base`
+  covers the screen). See
+  [terminal-too-small.md](terminal-too-small.md).
 
 ## internal/searchindex
 

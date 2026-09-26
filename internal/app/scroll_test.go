@@ -90,7 +90,9 @@ func TestHalfPageScrollUsesContentHeight(t *testing.T) {
 	}{
 		{24, 11}, // content 23 → half 11
 		{22, 10}, // content 21 → half 10
-		{2, 1},   // content 1 → max(1, 0)
+		// 3 is the smallest viable height — below it the Issue #33
+		// too-small gate makes every scroll key a no-op.
+		{3, 1}, // content 2 → half 1
 	} {
 		t.Run(fmt.Sprintf("h%d", tc.height), func(t *testing.T) {
 			m := loadedModel(t, 80, tc.height, 60)

@@ -396,6 +396,16 @@ func (m *Model) scrollList() {
 // installs on completion, resolving the retained logical anchor
 // against the new row model.
 func (m *Model) syncLayout() tea.Cmd {
+	// Under the too-small gate a resize records the dimensions but
+	// does no layout work: no viewport resize (which would re-resolve
+	// and could lose the anchor to the lossy clamp), no list
+	// re-scroll, no layout request minted at pathological widths.
+	// Recovery happens on the resize that returns to a viable size —
+	// resizes wholly within the gate defer everything to the final
+	// dimensions (Issue #33).
+	if m.tooSmall() {
+		return nil
+	}
 	res := m.reservedW()
 	gutterW := m.gutterDigits() + 2
 	m.listW = m.listWidth(gutterW, res)

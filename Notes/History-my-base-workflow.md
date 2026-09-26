@@ -339,3 +339,14 @@ Usage
  Input tokens: 172009 tokens
  Output tokens: 59995 tokens
  Cached input tokens: 8341819 tokens
+
+----
+Task 033-terminal-too-small-with-state-recovery.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 66 messages
+ Input tokens: 79714 tokens
+ Output tokens: 25308 tokens
+ Cached input tokens: 4529560 tokens

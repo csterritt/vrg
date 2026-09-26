@@ -54,6 +54,10 @@ edge). Because centring and truncation derive from the current
 re-truncates the same instance — resize neither dismisses the pop-up
 nor restarts its timer. The pop-up composites under the diagnostics
 overlay in `View`, matching the PRD's error > help > pop-up precedence.
+Under the Issue #33 too-small gate the instance keeps its timer but is
+never painted: an expiry arriving there dismisses it for good, and a
+live instance reappears after recovery — see
+[terminal-too-small.md](terminal-too-small.md).
 
 ## The error-overlay trigger this issue introduces
 

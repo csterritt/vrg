@@ -105,7 +105,10 @@ longer runs inside `Update`. Like file loads, it runs in a worker
   and returns `ensureLayout`'s request when the current
   file's installed layout is missing or stale-keyed. `ensureLayout`
   drops repeat requests for a key already in flight rather than
-  queueing them.
+  queueing them. Issue #33 adds a guard ahead of all of this: while
+  the window is too small `syncLayout` returns nil, no request is
+  issued, and recovery replays it once against the first viable
+  dimensions (see [terminal-too-small.md](terminal-too-small.md)).
 - **Every input stays actionable while a worker is held.** Resize,
   `w`, `n`/`p`, `q`, and `ctrl+c` all complete their update without
   waiting for preparation; the layout tests hold the worker and drive
