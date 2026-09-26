@@ -1,0 +1,47 @@
+[>4m[?1049h[?25l[?2004h[>4;2m[>1u[?u[H[2J┌──────────────────────────────────────────────────────────────────────────────┐
+│Key bindings[66X[80G│
+│[78X[80G│
+│n / p[14X[4;21Hnext / previous matched line[31X[80G│
+│up / down          scroll one row[45X[80G│
+│u / d[14X[6;21Hscroll half a page[41X[80G│
+│pgup / pgdown      scroll one page[44X[80G│
+│, / .[14X[8;21Hpan one column[45X[80G│
+│< / >[14X[9;21Hpan ten columns[44X[80G│
+│[ / ][14X[10;21Hpan half the text width[36X[80G│
+│w[18X[11;21Htoggle line wrapping[39X[80G│
+│c[18X[12;21Htoggle colour scheme[39X[80G│
+│left / tab         hide the file list[41X[80G│
+│right / shift+tab  show the file list[41X[80G│
+│r[18X[15;21Hreload the current file[36X[80G│
+│h / ?[14X[16;21Hopen or close this help[36X[80G│
+│q[18X[17;21Hclose the overlay / quit[35X[80G│
+│esc[16X[18;21Hclose the overlay[42X[80G│
+│ctrl+c             exit immediately[43X[80G│
+│[78X[80G│
+│Scale examples — independent, not simultaneous capacity guarantees:           │
+│approximately 10,000 matched files, 100,000 matched lines, or individual files│
+│around 50 MB.[65X[80G│
+└──────────────────────────────────────────────────────────────────────────────[?7l┘[?7h[Hf.txt  ── f.txt ────────────────────────────────────────────────────────────────
+[7G[1K[C1  hello[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K
+[K[>4m[<1u[?1049l[?25h[?2004l

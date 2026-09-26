@@ -153,7 +153,10 @@ assumed the first command result was the completion. See
   every `Run()` return-shape branch; `diagSnapshot` replacing the
   model-carried write (Issue #46).
 - `cmd/vrg/seams_testhooks.go` — `VRG_TEST_COLLECT_ACK` → `Config.DiagAck`
-  (Issue #45; `vrg_testhooks`-only).
+  (Issue #45; `vrg_testhooks`-only); Issue #48's
+  `VRG_TEST_EVENT_ACK` → `Config.EventAck` emits a `collected` record
+  on the same boundary inside the per-session sequenced event log (see
+  [pty-handshake-harness.md](pty-handshake-harness.md)).
 
 See also: [cancellation-and-cleanup.md](cancellation-and-cleanup.md)
 (the cleanup boundary replay joins),

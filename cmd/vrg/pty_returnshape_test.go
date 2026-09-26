@@ -81,18 +81,26 @@ func TestPTYRunReturnShapes(t *testing.T) {
 			fakeDir, capDir := writeFakeRg(t, fakeRgWarnBlockScript)
 			ack := filepath.Join(capDir, "ack")
 			reap := filepath.Join(capDir, "reap")
+			events := filepath.Join(capDir, "events")
 			env := append([]string{
 				"VRG_TEST_COLLECT_ACK=" + ack,
+				"VRG_TEST_EVENT_ACK=" + events,
 				"VRG_TEST_REAP=" + reap,
 			}, tc.env...)
 			r := startVrgPTY(t, ptyEnv(fakeDir, capDir, env...), "foo")
 			pid := awaitReadyPID(t, capDir)
+			awaitAck(t, events, 1, "phase", "searching")
 			r.waitFor(t, "Searching…")
 			// The application-side acknowledgement proves the
 			// diagnostic reached the session collection before the
 			// keypress ends the real program.
+			awaitAck(t, events, 1, "collected", "")
 			awaitFileContent(t, ack)
 			r.send(t, "q")
+			// The real model's own quit commit lands before the seam
+			// substitutes the Run() tuple — the observed 2 below can
+			// only come from the override.
+			awaitAck(t, events, 1, "quitting", "130")
 			code, out := r.waitExit(t)
 			if code != 2 {
 				t.Fatalf("exit = %d, want 2; output: %q", code, out)

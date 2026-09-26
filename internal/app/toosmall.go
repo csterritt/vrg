@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -38,6 +39,7 @@ func (m Model) tooSmallKey(key string) (Model, tea.Cmd) {
 			return m.cancelled(), tea.Quit
 		}
 		m.quit = true
+		m.emit("quitting", strconv.Itoa(m.code))
 		return m, tea.Quit
 	}
 	return m, nil

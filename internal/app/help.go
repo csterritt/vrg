@@ -88,6 +88,7 @@ func helpLines() []string {
 func (m *Model) openHelp() {
 	m.help = &overlay{lines: helpLines()}
 	m.popupID = 0
+	m.emit("help", "open")
 }
 
 // helpKey handles one key while the help overlay is open: up/down
@@ -100,6 +101,7 @@ func (m Model) helpKey(key string) (Model, tea.Cmd) {
 		return m.cancelled(), tea.Quit
 	case "q", "esc", "h", "?":
 		m.help = nil
+		m.emit("help", "closed")
 	case "up", "down":
 		scrollOverlay(m.help, key, m.width, m.height)
 	}

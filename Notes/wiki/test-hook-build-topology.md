@@ -18,7 +18,8 @@ boundaries, each with an unconditional common call site in `runSearch`:
   returns `context.Background()` and a no-op cleanup.
   `seams_testhooks.go` (`//go:build vrg_testhooks`) reads the
   option-related manifest variables and wires `app.Config`
-  (`ReapReport`, `PrepareGate`, `DiagAck`, `DiagInject`) plus the
+  (`ReapReport`, `PrepareGate`, `DiagAck`, `DiagInject`, and since
+  Issue #48 `EventAck`) plus the
   program context's controlled-failure cancellation.
 - **Program runner** — `runProgram(model, progCtx) (tea.Model, error)`,
   a wrapper around Bubble Tea program construction and `Run()`. The
@@ -33,7 +34,7 @@ boundaries, each with an unconditional common call site in `runSearch`:
 ## The explicit hook manifest
 
 `hookManifest` in `cmd/vrg/testhooks_test.go` is the authoritative list
-of every `VRG_TEST_*` name vrg consumes:
+of every `VRG_TEST_*` name vrg consumes (ten since Issue #48):
 
 - `VRG_TEST_REAP` — file receiving the child's reaped wait status
   (`Config.ReapReport`).
@@ -52,11 +53,15 @@ of every `VRG_TEST_*` name vrg consumes:
 - `VRG_TEST_RUN_FINAL_MODEL` / `VRG_TEST_RUN_ERROR` — the runner
   controls: `nil`/`invalid` final-model substitutions and an
   error-text override.
+- `VRG_TEST_EVENT_ACK` (Issue #48) — file receiving one
+  `<seq> <kind> [<detail>]` record per awaited model transition, with a
+  per-session monotonic sequence (`Config.EventAck`); see
+  [pty-handshake-harness.md](pty-handshake-harness.md).
 
 The probed list derives only from this manifest — never from grepping
 `VRG_TEST_*`: fixture-owned variables such as `VRG_CAPTURE_DIR` belong
 to the fake-rg harness scripts, not to vrg behaviour (Issue #50 renames
-them `FAKE_RG_*`). Issue #48 appends its acknowledgement hooks to this
+them `FAKE_RG_*`). Issue #48 appended its acknowledgement hook to this
 manifest rather than adding separate machinery.
 
 ## Build and verification wiring
@@ -88,11 +93,13 @@ replay, exit 2 on every failing shape). See
 
 ## Extension rule
 
-Issue #48 consumes this seam next: new hooks ride the same
-`vrg_testhooks` mechanism and join the manifest — the production binary
-gains no hooks, no env-var reads beyond legitimate production ones, and
-no watcher code; the only watchers (`fifoReleased`, `diagInjected`) live
-in the tagged file and are event-driven, never spinning.
+Issue #48 followed this rule: `VRG_TEST_EVENT_ACK` rides the same
+`vrg_testhooks` mechanism and joined the manifest — the production
+binary gained no hooks, no env-var reads beyond legitimate production
+ones, and no watcher code; the only watchers (`fifoReleased`,
+`diagInjected`) live in the tagged file and are event-driven, never
+spinning. See [pty-handshake-harness.md](pty-handshake-harness.md) for
+the acknowledgement contract the hook carries.
 
 See also: [cancellation-and-cleanup.md](cancellation-and-cleanup.md)
 (the seams' observable contract),

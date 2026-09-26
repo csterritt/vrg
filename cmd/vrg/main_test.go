@@ -250,17 +250,15 @@ func searchEnv(fakeDir, capDir string) []string {
 // marker has appeared in the captured stdout, then write keys to stdin.
 type tuiStep struct{ marker, keys string }
 
-// runVrgTUI runs the built binary with a controlled stdin pipe: it
-// watches stdout for the browse view's filename marker, sends q once it
-// appears, and returns after the process exits.
-func runVrgTUI(t *testing.T, workdir string, env []string, args ...string) runResult {
+// runVrgTUI runs the hooked binary with a controlled stdin pipe: it
+// waits for the browse-phase acknowledgement record and the browse
+// view's filename marker in the captured stdout, sends q, and returns
+// after the process exits.
+func runVrgTUI(t *testing.T, workdir string, env []string, events string, args ...string) runResult {
 	t.Helper()
-	return runVrgTUISteps(t, workdir, env, []tuiStep{{marker: "f.txt", keys: "q"}}, args...)
-}
-
-func runVrgTUISteps(t *testing.T, workdir string, env []string, steps []tuiStep, args ...string) runResult {
-	t.Helper()
-	return runStepsBin(t, binPath, workdir, env, steps, args...)
+	return runAckSteps(t, binPath, workdir, env, events, []ackStep{
+		{n: 1, kind: "phase", detail: "browse", marker: "f.txt", keys: "q"},
+	}, args...)
 }
 
 // runStepsBin runs the binary at bin driving a sequence of marker/key
@@ -368,7 +366,10 @@ func TestDashFileRootAtProcessBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	fakeDir, capDir := writeFakeRg(t, fakeRgScript)
-	res := runVrgTUI(t, dir, searchEnv(fakeDir, capDir), "foo", "./-")
+	events := filepath.Join(capDir, "events")
+	res := runVrgTUI(t, dir,
+		append(searchEnv(fakeDir, capDir), "VRG_TEST_EVENT_ACK="+events),
+		events, "foo", "./-")
 	if res.code != 0 {
 		t.Fatalf(`vrg foo ./- exited %d, want 0 (stderr %q)`, res.code, res.stderr)
 	}
@@ -427,7 +428,10 @@ func TestSearchLifecycleAtBoundary(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeDir, capDir := writeFakeRg(t, fakeRgScript)
-			res := runVrgTUI(t, work, searchEnv(fakeDir, capDir), tc.args...)
+			events := filepath.Join(capDir, "events")
+			res := runVrgTUI(t, work,
+				append(searchEnv(fakeDir, capDir), "VRG_TEST_EVENT_ACK="+events),
+				events, tc.args...)
 			if res.code != 0 {
 				t.Fatalf("vrg %v exited %d, want 0 (stderr %q)", tc.args, res.code, res.stderr)
 			}
@@ -484,10 +488,16 @@ printf '%s\n' \
 exit 0
 `
 	fakeDir, capDir := writeFakeRg(t, flood)
-	res := runVrgTUISteps(t, t.TempDir(), searchEnv(fakeDir, capDir), []tuiStep{
-		{marker: "^@", keys: "q"},    // the warning overlay over browse
-		{marker: "f.txt", keys: "q"}, // the revealed browse view
-	}, "hit")
+	events := filepath.Join(capDir, "events")
+	res := runAckSteps(t, binPath, t.TempDir(),
+		append(searchEnv(fakeDir, capDir), "VRG_TEST_EVENT_ACK="+events),
+		events, []ackStep{
+			// q once the warning overlay owns the keyboard (the
+			// escaped NUL diagnostics show as ^@), then q once the
+			// dismissal is acknowledged and browse is revealed.
+			{n: 1, kind: "overlay", detail: "open", marker: "^@", keys: "q"},
+			{n: 1, kind: "overlay", detail: "closed", marker: "f.txt", keys: "q"},
+		}, "hit")
 	if res.code != 0 {
 		t.Fatalf("vrg exited %d under stderr flood, want 0 (stderr %q)", res.code, res.stderr)
 	}

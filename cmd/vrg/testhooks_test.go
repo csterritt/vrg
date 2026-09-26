@@ -30,6 +30,7 @@ var hookManifest = []string{
 	"VRG_TEST_DIAGNOSTIC_TRIGGER",
 	"VRG_TEST_DIAGNOSTIC_TEXT",
 	"VRG_TEST_COLLECT_ACK",
+	"VRG_TEST_EVENT_ACK",
 	"VRG_TEST_RUN_FINAL_MODEL",
 	"VRG_TEST_RUN_ERROR",
 }
@@ -149,18 +150,18 @@ func fireFifo(path string) {
 	}()
 }
 
-// holdFifo pairs a fifo writer for holdFor then closes it: a hooked
-// binary's gate stays held until the close, while an unhooked binary
-// never opens the fifo and ignores it entirely.
-func holdFifo(path string, holdFor time.Duration) {
-	go func() {
-		w, err := os.OpenFile(path, os.O_WRONLY, 0)
-		if err != nil {
-			return
-		}
-		time.Sleep(holdFor)
-		_ = w.Close()
-	}()
+// holdFifo holds a fifo paired until the caller closes the returned
+// file: a read-write open never blocks, a hooked binary's reader pairs
+// with it immediately (keeping its gate held while any writer lives),
+// and an unhooked binary never opens the fifo and ignores it entirely.
+// The caller decides when to release — no fixed hold duration.
+func holdFifo(t *testing.T, path string) *os.File {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatalf("hold fifo %s: %v", path, err)
+	}
+	return f
 }
 
 // The production-artifact boundary: an untagged build ignores every
@@ -181,6 +182,7 @@ func TestProductionBinaryHasNoTestHooks(t *testing.T) {
 		return append(base,
 			mkv("VRG_TEST_REAP", filepath.Join(dir, "reap")),
 			mkv("VRG_TEST_COLLECT_ACK", filepath.Join(dir, "ack")),
+			mkv("VRG_TEST_EVENT_ACK", filepath.Join(dir, "events")),
 			mkv("VRG_TEST_GATE", filepath.Join(dir, "gate-fifo")),
 			mkv("VRG_TEST_FAIL_TRIGGER", filepath.Join(dir, "fail-fifo")),
 			mkv("VRG_TEST_FAIL_DIAGNOSTIC", "injected failure diagnostic"),
@@ -202,7 +204,7 @@ func TestProductionBinaryHasNoTestHooks(t *testing.T) {
 	}
 	fireFifo(filepath.Join(dir, "fail-fifo"))
 	fireFifo(filepath.Join(dir, "diag-fifo"))
-	holdFifo(filepath.Join(dir, "gate-fifo"), 2*time.Second)
+	gate := holdFifo(t, filepath.Join(dir, "gate-fifo"))
 
 	// A complete search: every manifest name set, trigger fifos
 	// already fired, the gate held by a paired writer. An unhooked
@@ -214,6 +216,7 @@ func TestProductionBinaryHasNoTestHooks(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgScript)
 	res := runStepsBin(t, bin, work, hookEnv(searchEnv(fakeDir, capDir)),
 		[]tuiStep{{marker: "f.txt", keys: "q"}}, "foo")
+	gate.Close()
 	if res.code != 0 {
 		t.Fatalf("hooked-environment search exited %d, want 0 (stderr %q)", res.code, res.stderr)
 	}
@@ -223,7 +226,7 @@ func TestProductionBinaryHasNoTestHooks(t *testing.T) {
 	if res.stderr != "" {
 		t.Fatalf("hooked environment changed stderr: %q", res.stderr)
 	}
-	for _, f := range []string{"reap", "ack"} {
+	for _, f := range []string{"reap", "ack", "events"} {
 		if _, err := os.Stat(filepath.Join(dir, f)); !os.IsNotExist(err) {
 			t.Fatalf("%s side channel was written by the production binary", f)
 		}
@@ -321,11 +324,17 @@ func TestTaggedRunnerSeamSelectsReturnShape(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeDir, capDir := writeFakeRg(t, fakeRgWarnBlockScript)
 			ack := filepath.Join(capDir, "ack")
+			events := filepath.Join(capDir, "events")
 			env := append(ptyEnv(fakeDir, capDir,
-				"VRG_TEST_COLLECT_ACK="+ack), tc.env...)
+				"VRG_TEST_COLLECT_ACK="+ack,
+				"VRG_TEST_EVENT_ACK="+events), tc.env...)
 			r := startPiped(t, bin, env, "foo")
+			awaitAck(t, events, 1, "phase", "searching")
 			awaitFileContent(t, ack) // the warning is collected
 			r.send(t, "q")           // q while searching cancels
+			// The model's own quit commit is acknowledged before the
+			// seam's return-shape override takes effect.
+			awaitAck(t, events, 1, "quitting", "130")
 			res := r.finish(t, "vrg foo")
 			if res.code != tc.code {
 				t.Fatalf("exit = %d, want %d (stderr %q)", res.code, tc.code, res.stderr)
@@ -358,17 +367,24 @@ func TestTaggedInjectionSeams(t *testing.T) {
 	t.Run("diagnostic trigger", func(t *testing.T) {
 		fakeDir, capDir := writeFakeRg(t, fakeRgBlockScript)
 		ack := filepath.Join(capDir, "ack")
+		events := filepath.Join(capDir, "events")
 		trig := filepath.Join(capDir, "diag-fifo")
 		if err := syscall.Mkfifo(trig, 0o600); err != nil {
 			t.Fatalf("mkfifo: %v", err)
 		}
 		r := startPiped(t, bin, ptyEnv(fakeDir, capDir,
 			"VRG_TEST_COLLECT_ACK="+ack,
+			"VRG_TEST_EVENT_ACK="+events,
 			"VRG_TEST_DIAGNOSTIC_TRIGGER="+trig,
 			"VRG_TEST_DIAGNOSTIC_TEXT=injected line one"), "foo")
+		awaitAck(t, events, 1, "phase", "searching")
 		fireFifo(trig)
-		awaitFileContent(t, ack) // the injected diagnostic was collected
+		// The injected line's collected record is the causal
+		// acknowledgement that the trigger's effect landed.
+		awaitAck(t, events, 1, "collected", "")
+		awaitFileContent(t, ack)
 		r.send(t, "q")
+		awaitAck(t, events, 1, "quitting", "130")
 		res := r.finish(t, "vrg foo")
 		if res.code != 130 {
 			t.Fatalf("exit = %d, want 130 (stderr %q)", res.code, res.stderr)
@@ -384,14 +400,17 @@ func TestTaggedInjectionSeams(t *testing.T) {
 	t.Run("failure trigger", func(t *testing.T) {
 		fakeDir, capDir := writeFakeRg(t, fakeRgBlockScript)
 		reap := filepath.Join(capDir, "reap")
+		events := filepath.Join(capDir, "events")
 		trig := filepath.Join(capDir, "fail-fifo")
 		if err := syscall.Mkfifo(trig, 0o600); err != nil {
 			t.Fatalf("mkfifo: %v", err)
 		}
 		r := startPiped(t, bin, ptyEnv(fakeDir, capDir,
 			"VRG_TEST_REAP="+reap,
+			"VRG_TEST_EVENT_ACK="+events,
 			"VRG_TEST_FAIL_TRIGGER="+trig,
 			"VRG_TEST_FAIL_DIAGNOSTIC=chosen failure"), "foo")
+		awaitAck(t, events, 1, "phase", "searching")
 		fireFifo(trig)
 		res := r.finish(t, "vrg foo")
 		if res.code != 2 {

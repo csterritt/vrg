@@ -43,6 +43,14 @@ const (
 	// application-side evidence replay tests wait on before sending an
 	// exit key.
 	envCollectAck = "VRG_TEST_COLLECT_ACK"
+	// envEventAck names the file receiving the Issue #48
+	// acknowledgement records — one "<seq> <kind> [<detail>]" line per
+	// awaited model transition and key-processing boundary, with a
+	// per-session monotonic sequence. The PTY harness waits on the
+	// n-th matching record, so an earlier same-kind event can never
+	// satisfy a later wait. The seam only observes the real
+	// transitions; it never changes timing or behaviour.
+	envEventAck = "VRG_TEST_EVENT_ACK"
 	// envRunModel selects the final-model half of the program.Run()
 	// result: "nil" returns a nil model and "invalid" a model that is
 	// not app.Model; anything else keeps the real model.
@@ -71,6 +79,12 @@ func wireTestHooks(cfg *app.Config) (context.Context, func()) {
 	if p := os.Getenv(envCollectAck); p != "" {
 		if f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
 			cfg.DiagAck = f
+			closers = append(closers, f)
+		}
+	}
+	if p := os.Getenv(envEventAck); p != "" {
+		if f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+			cfg.EventAck = f
 			closers = append(closers, f)
 		}
 	}

@@ -1939,8 +1939,10 @@ stdout/stderr/status separately:
 - `TestSearchLifecycleAtBoundary` — replaces the Issue #2 stub test. A
   shell-script fake rg captures its argv and cwd, sleeps briefly so the
   harness observes `Searching…`, then emits one match. The
-  `runVrgTUI` helper pipes stdin, watches stdout for the browse
-  filename marker, and sends `q`. Asserts per row: `Searching…` then
+  `runVrgTUI` helper pipes stdin and — since Issue #48 — waits for the
+  browse-phase acknowledgement record (plus the `f.txt` stdout marker)
+  through `runAckSteps` before sending `q`. Asserts per row:
+  `Searching…` then
   the browse view's `f.txt` in the list/rule on stdout, exact child
   argv (combined expansion, mixed aliases, empty/`-`/`--`/`-foo`
   patterns), exact working directory, empty stderr, exit 0. The fixture
@@ -1953,9 +1955,10 @@ stdout/stderr/status separately:
   (the second step's `f.txt` marker), `q` quits at 0, a `writes-done`
   handshake file proves the child finished both pipes, and — since
   Issue #11 — vrg's own stderr carries the collected flood exactly
-  once, sanitized (`^@` forms), as the post-restoration replay.
-  `runVrgTUISteps` drives the
-  marker/key step sequence; `runVrgTUI` is the one-step wrapper.
+  once, sanitized (`^@` forms), as the post-restoration replay. Since
+  Issue #48 `runAckSteps` drives the sequence: the first `q` waits on
+  the `overlay open` record and `^@` marker, the second on `overlay
+  closed` and the revealed `f.txt` marker.
 - `TestStartFailureNoRipgrep` — rg-free PATH: exit 2, empty stdout (no
   TUI), and a sanitized `vrg:` diagnostic naming the failure with no
   raw control bytes.
@@ -1976,7 +1979,11 @@ shell scripts (installed by `writeFakeRg` from `main_test.go`):
 3600`; `fakeRgStreamScript` writes its pid, emits a complete one-match
 record stream, and exits 0. The `VRG_CAPTURE_DIR` env tells the scripts
 where to write `ready`; the `VRG_TEST_*` seams come from the
-`vrg_testhooks`-tagged `cmd/vrg/seams_testhooks.go` (Issue #45):
+`vrg_testhooks`-tagged `cmd/vrg/seams_testhooks.go` (Issue #45). Since
+Issue #48 every test also arms `VRG_TEST_EVENT_ACK` and gates sends on
+the acknowledged transition — `phase searching` before the first key,
+`quitting <code>` after the quit key, `overlay open`/`closed` around
+dismissals — never on frame growth or elapsed time:
 
 - `TestPTYQWhileSearchingExits130` — `q` against a blocked fake rg:
   exit 130, child pid gone (`ESRCH`), the `VRG_TEST_REAP` side
@@ -1985,7 +1992,8 @@ where to write `ready`; the `VRG_TEST_*` seams come from the
   `\x1b[?25h` show-cursor), and `waitExit` asserts the slave's termios
   equals its pre-launch value.
 - `TestPTYCtrlCWhileSearchingExits130` — same assertions driven by the
-  raw `ctrl+c` byte through the PTY.
+  raw `ctrl+c` byte through the PTY, with the `key ctrl+c` record
+  proving the press was consumed.
 - `TestPTYSIGINTWhileSearchingExits130` — a real `SIGINT` signal to the
   process (surfacing as `tea.ErrInterrupted`): exit 130, child reaped,
   termios restored.
@@ -2006,9 +2014,9 @@ where to write `ready`; the `VRG_TEST_*` seams come from the
   still reaped.
 - `TestPTYNonZeroExitBrowseOverlayExits2` (Issue #9) —
   `fakeRgExit3Script` signals `ready`, emits a complete valid stream,
-  and exits 3: the error overlay opens over browse naming `exit status
-  3`, the first `q` dismisses it, the second quits at the fixed status
-  2, and the child is reaped.
+  and exits 3: the `overlay open` record precedes the first `q`, the
+  `overlay closed` record unlocks the second `q` (Issue #48 replaced
+  the frame-growth proxy), and the fixed status 2 quits browse.
 - `TestPTYStderrContentFixture` (Issue #9, revised by Issue #41) —
   `fakeRgFloodScript` interleaves over 1 MiB of stderr (head marker,
   ~525 padded lines, tail marker) with a valid stdout stream; at an
@@ -2019,11 +2027,14 @@ where to write `ready`; the `VRG_TEST_*` seams come from the
   not a failure. Simultaneous head/tail visibility is no longer
   required: tail reachability moved to the model-level complete-row
   and clamp tests (`TestOverlayScrollableSetIsCompleteDiagnostic`,
-  `TestOverlayScrollClampsToCompleteSet`).
+  `TestOverlayScrollClampsToCompleteSet`). Issue #48 gates the two `q`s
+  on the `overlay open`/`closed` records and the quit on `quitting 0`.
 
 `pty_replay_test.go` (same Linux-only harness) is the Issue #11
 process-boundary replay coverage. Every test wires
-`VRG_TEST_COLLECT_ACK` and waits on the acknowledgement — one line
+`VRG_TEST_COLLECT_ACK` — and since Issue #48 `VRG_TEST_EVENT_ACK`,
+gating on the `collected`/`phase`/`overlay`/`quitting` records — and
+waits on the acknowledgement — one line
 per diagnostic processed into the session collection — before sending
 the exit key; `assertReplayedOnce`/`replayTail` assert on the captured
 stream after the `\x1b[?1049l` display-restoration sequence. Fake-rg
@@ -2045,28 +2056,33 @@ whose one match names a file with an embedded newline and ESC):
   undelivered work.
 - `TestPTYQuitAfterCompletedStreamReplaysWarning` — ack, warning
   overlay, `q` dismisses, `q` quits at 0; `warn one` replays once after
-  restoration.
+  restoration. Issue #48 gates the dismissal `q` on the
+  `overlay open` record and the quit `q` on `overlay closed`.
 - `TestPTYControlledFailureReplaysAlongsideEarlierDiagnostics` — ack
   then the `VRG_TEST_FAIL_TRIGGER` handshake: exit 2, `warn one` and the
   `vrg:` diagnostic each exactly once across the whole captured stream
   (both mechanisms counted), in collection order.
 - `TestPTYReplayEscapesEmbeddedFilename` — the absent newline/ESC file
-  fails its load; the replayed `cannot read` diagnostic carries the
+  fails its load (`load fail` + `collected` records prove the
+  failure landed and its overlay owns the keyboard before `q` is sent);
+  the replayed `cannot read` diagnostic carries the
   single-lined `we\nir^[d.txt` form and no raw control byte.
 
 `testhooks_test.go` (Linux-only, Issue #45) proves the build topology
-in both directions. `hookManifest` is the explicit list of the nine
+in both directions. `hookManifest` is the explicit list of the ten
 `VRG_TEST_*` names vrg consumes — the probe derives only from it, never
 from a `VRG_TEST_*` grep, because fixture variables like
-`VRG_CAPTURE_DIR` are fake-rg behaviour (Issue #48 appends its
-acknowledgement hooks here). `buildVrgVariant` compiles `cmd/vrg` into
+`VRG_CAPTURE_DIR` are fake-rg behaviour; Issue #48 appended
+`VRG_TEST_EVENT_ACK`. `buildVrgVariant` compiles `cmd/vrg` into
 a temp dir with or without the tag:
 
 - `TestProductionBinaryHasNoTestHooks` — the untagged build: `--help`
   under the full hook environment is identical to plain help; a full
   search run with every manifest name set, both trigger fifos fired,
-  and the gate held exits 0 with clean stderr and no reap/ack side
-  files; then the artifact bytes are probed and none of the manifest
+  and the gate held exits 0 with clean stderr and no reap/ack/events
+  side files (Issue #48's `holdFifo` keeps the gate paired through an
+  `O_RDWR` open the caller closes — no fixed hold duration); then the
+  artifact bytes are probed and none of the manifest
   names appear — the seams are compiled out, not merely inert.
 - `TestTaggedRunnerSeamSelectsReturnShape` — the tagged build: the
   artifact carries every manifest name, then the
@@ -2090,8 +2106,10 @@ holds `TestPTYRunReturnShapes` — the unified shutdown contract for
 every `program.Run()` return shape, driven through the
 `VRG_TEST_RUN_FINAL_MODEL`/`VRG_TEST_RUN_ERROR` runner seam on a real
 PTY lifecycle (`fakeRgWarnBlockScript`: `warn one` collected and
-acknowledged through `VRG_TEST_COLLECT_ACK`, then `q` ends the real
-program and the seam substitutes the tuple). The matrix covers the
+acknowledged, `q` ends the real program — Issue #48 additionally
+asserts the model's own `quitting 130` record landed before the seam's
+override took effect — and the seam substitutes the tuple). The matrix
+covers the
 three contract shapes — valid model + `Run()` error, nil or invalid
 model + `Run()` error, and nil or invalid model + nil error — each
 asserting exit 2, the post-restoration replay in contract order
@@ -2100,3 +2118,45 @@ runtime error, each exactly once across the whole stream), the
 `killed` reap status and gone pid, and both halves of terminal
 restoration. See
 [runtime-error-shutdown.md](runtime-error-shutdown.md).
+
+`acksteps_test.go` (untagged, Issue #48) is the harness side of the
+acknowledgement seam, shared with the portable boundary tests:
+`readAcks`/`pollAck`/`awaitAck` read and wait on `<seq> <kind>
+[<detail>]` records — a missing file reads as zero records, a
+newline-unterminated tail is an in-flight write, and a timeout names
+the wanted record plus everything observed; `assertAcksMonotonic`
+pins the strictly increasing sequence; `runAckSteps` drives
+`ackStep`s, each writing its keys only once the n-th matching record
+and its optional stdout marker have landed, reporting the pending step
+on the context deadline.
+
+`handshake_test.go` (Linux-only, Issue #48) holds the handshake
+contract. `handshakeMatrix` is the finite helper/action/postcondition/
+acknowledgement/next-action table covering every covered helper's key
+sends and assumed transitions — event-log rows name the awaited record
+kind and detail, the rest name the non-event channels (ready file, reap
+side channel, collect file, fifo pairing, process exit, stdout marker):
+
+- `TestHandshakeMatrixWellFormed` — every row names real helpers and a
+  real acknowledgement channel; every covered helper is governed by a
+  row.
+- `TestEventAckHookInManifest` — `VRG_TEST_EVENT_ACK` is in the
+  explicit `hookManifest` (so the untagged-artifact probe covers it).
+- `TestHandshakeMatrixRowsAcknowledged` — five real sessions (gated
+  browse with help and repeated `w`, cancellation, load-failure
+  overlay, fatal outcome, a `runAckSteps` pipe run) observe every
+  event-log row's acknowledgement and exercise every non-event
+  channel, asserting per-session monotonic sequences.
+- `TestAckRecordsCorrelatePerOccurrence` — a second-`w` wait cannot be
+  satisfied by the first w's record; occurrence n's record follows
+  n−1's.
+- `TestOverlayDismissalAcknowledgedBeforeQuit` — the `overlay closed`
+  record causally follows `open` and precedes the quit key.
+- `TestMissingAcknowledgementFailsBounded` — a wait on a record that
+  never arrives fails on a bounded timeout naming the wanted record and
+  listing the observed ones.
+- `TestHarnessHasNoFixedDelays` — an AST scan of every `cmd/vrg` test
+  function forbids `time.Sleep`/`time.After` outside the bounded
+  condition-poll allowlist, which must loop on a deadline checking an
+  explicit condition per iteration. See
+  [pty-handshake-harness.md](pty-handshake-harness.md).

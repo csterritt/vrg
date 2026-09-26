@@ -33,7 +33,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `app.Config` (`VRG_TEST_REAP` → `ReapReport`, `VRG_TEST_GATE` →
   `PrepareGate`, `VRG_TEST_FAIL_TRIGGER` → program-context
   cancellation, `VRG_TEST_COLLECT_ACK` → `DiagAck`,
-  `VRG_TEST_DIAGNOSTIC_TRIGGER`/`_TEXT` → `DiagInject`) and the
+  `VRG_TEST_DIAGNOSTIC_TRIGGER`/`_TEXT` → `DiagInject`, — Issue #48 —
+  `VRG_TEST_EVENT_ACK` → `EventAck`, the transition-acknowledgement
+  file the PTY harness waits on) and the
   untagged file returns a bare context. `runProgram` wraps
   `tea.NewProgram(...).Run()`: untagged it delegates directly; tagged
   it substitutes the (final model, error) tuple selected by
@@ -48,9 +50,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   executable, protected argv, invocation working directory, `Drained`/
   `PrepareGate`/`ReapReport` test hooks, — Issue #11 — `DiagAck`,
   the collection-acknowledgement side channel, — Issue #45 —
-  `DiagInject`, the session-diagnostic injection channel, and —
+  `DiagInject`, the session-diagnostic injection channel, —
   Issue #46 — `OnCollect`, the callback feeding the process boundary's
-  diagnostic snapshot as the model collects), `Start`
+  diagnostic snapshot as the model collects, and — Issue #48 —
+  `EventAck`, the file receiving the model's `<seq> <kind> [<detail>]`
+  transition-acknowledgement records), `Start`
   (spawns
   `exec.CommandContext` in the working directory with the child leading
   its own process group — `SysProcAttr.Setpgid`, and `cmd.Cancel`
@@ -104,7 +108,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   the frame in `theme.Base`, composites the
   overlays while open (help beneath the diagnostics overlay), and sets
   `AltScreen` for the exit restoration
-  sequence; resize handled in any state.
+  sequence; resize handled in any state. Issue #48's `emit`
+  (`eventAck`/`eventSeq`) appends one `<seq> <kind> [<detail>]`
+  record per awaited transition — phase entry, consumed key, collected
+  diagnostic, overlay/help open and close, load completion, quit
+  commit — with the per-session sequence correlating occurrences (see
+  [pty-handshake-harness.md](pty-handshake-harness.md)).
   Issue #5 state: `stops`/`files`, the `bufs`/`loading`/
   `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam —
   the Issue #5 `cursor` field is gone since Issue #13, the matched-line

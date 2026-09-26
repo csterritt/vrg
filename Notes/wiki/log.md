@@ -1935,3 +1935,45 @@ Sources: `Notes/tasks/047-read-failure-single-line-filenames.md`,
 loading, cache, reload, and selection consistency*),
 `internal/app/app.go`, `internal/app/browse.go`,
 `internal/app/readdiag_test.go`.
+
+## [2026-09-25] ingest | Issue #48 deterministic PTY handshakes
+
+Issue #48 (`Notes/tasks/048-pty-tests-deterministic-handshakes.md`)
+replaced timing-based PTY/subprocess synchronization with causally
+correlated application-side acknowledgements, riding the Issue #45
+`vrg_testhooks` mechanism per `Notes/PRD-vrg.md` *Testing Decisions
+→ Subprocess boundary*. `app.Config` gained `EventAck` — the file the
+tagged binary's `VRG_TEST_EVENT_ACK` names — and `Model.emit`
+(`eventAck`/`eventSeq`) appends one `<seq> <kind> [<detail>]` record per
+awaited transition with a per-session monotonic sequence: `phase`
+entries, every consumed `key`, `collected` diagnostics, `overlay` and
+`help` open/closed, `load ok|fail`, and `quitting <code>` — emitted on
+the event loop so the seam only observes production ordering. The
+manifest grew to ten names and the untagged-artifact probe covers the
+new name. The harness side lives in `cmd/vrg/acksteps_test.go`
+(untagged: `readAcks`/`pollAck`/`awaitAck`, `runAckSteps` gating each
+step's keys on the n-th matching record plus its stdout marker) and
+`cmd/vrg/handshake_test.go` (the finite matrix, row-observation,
+per-occurrence correlation, dismissal-before-quit, bounded-timeout, and
+AST no-fixed-delay tests). Every PTY test's sends now wait on the
+acknowledged transition; `waitForGrowth` and `holdFifo`'s fixed hold
+are gone (`holdFifo` is now an `O_RDWR` pair released by the caller).
+Ten repetitions of `go test ./cmd/vrg`, a `-race` pass, and all ten
+`scripts/verify.sh` gates are green.
+
+Created [pty-handshake-harness](pty-handshake-harness.md); updated
+[test-hook-build-topology](test-hook-build-topology.md) (the tenth
+manifest name and the realized extension rule),
+[stderr-replay](stderr-replay.md) (the `collected` record on the same
+collection boundary), [source-code](source-code.md) (`EventAck`,
+`emit`, the seams entry), [unit-tests](unit-tests.md) (the new harness
+files, ack-gated sends across the PTY/replay/return-shape catalogs),
+and the index.
+Sources: `Notes/tasks/048-pty-tests-deterministic-handshakes.md`,
+`Notes/PRD-vrg.md` (*Testing Decisions*), `internal/app/app.go`,
+`internal/app/search.go`, `internal/app/overlay.go`,
+`internal/app/help.go`, `internal/app/toosmall.go`,
+`cmd/vrg/seams_testhooks.go`, `cmd/vrg/testhooks_test.go`,
+`cmd/vrg/acksteps_test.go`, `cmd/vrg/handshake_test.go`,
+`cmd/vrg/pty_test.go`, `cmd/vrg/pty_replay_test.go`,
+`cmd/vrg/pty_returnshape_test.go`, `cmd/vrg/main_test.go`.

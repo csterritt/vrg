@@ -317,10 +317,19 @@ Catalog of all wiki pages for the vrg project.
 - [test-hook-build-topology.md](test-hook-build-topology.md) — Issue
   #45: the `vrg_testhooks` build variant, the two build-constrained
   seam boundaries (`wireTestHooks` option/process wiring and the
-  `runProgram` program-runner wrapper), the explicit nine-name hook
+  `runProgram` program-runner wrapper), the explicit ten-name hook
   manifest and why fixture variables are excluded, the `TestMain`
   tagged build, the untagged-artifact boundary test, Issue #46's
-  consumption of the runner seam, and the Issue #48 extension rule
+  consumption of the runner seam, and Issue #48's acknowledgement-hook
+  extension
+- [pty-handshake-harness.md](pty-handshake-harness.md) — Issue #48:
+  the `VRG_TEST_EVENT_ACK` seam and its `<seq> <kind> [<detail>]`
+  records, the finite helper/action/postcondition/acknowledgement
+  matrix, per-process and per-occurrence correlation (a stale
+  same-kind record can never satisfy a later wait), the ack-gated
+  `runAckSteps` stepper, the bounded-timeout contract, and the AST
+  check banning fixed settling/inter-key delays outside the
+  condition-poll allowlist
 
 ## Catalogs
 

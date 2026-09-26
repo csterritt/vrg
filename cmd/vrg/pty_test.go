@@ -165,25 +165,6 @@ func (r *ptyRun) send(t *testing.T, keys string) {
 	}
 }
 
-// waitForGrowth blocks until the captured stream has grown past since —
-// evidence the model handled the sent key and emitted a fresh frame,
-// used where dismissal replaces marker text the buffer already holds.
-func (r *ptyRun) waitForGrowth(t *testing.T, since int) {
-	t.Helper()
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		if len(r.output()) > since {
-			return
-		}
-		select {
-		case <-r.readDone:
-			t.Fatalf("session ended before a new frame; output: %q", r.output())
-		case <-time.After(5 * time.Millisecond):
-		}
-	}
-	t.Fatalf("timed out waiting for a new frame; output: %q", r.output())
-}
-
 // waitExit waits for the process to exit and returns its code and the
 // complete captured stream. It asserts the slave termios came back to
 // its pre-launch state — the input-mode half of terminal restoration.
@@ -300,10 +281,15 @@ exit 0
 func TestPTYQWhileSearchingExits130(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgBlockScript)
 	reap := filepath.Join(capDir, "reap")
-	r := startVrgPTY(t, ptyEnv(fakeDir, capDir, "VRG_TEST_REAP="+reap), "foo")
+	events := filepath.Join(capDir, "events")
+	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
+		"VRG_TEST_REAP="+reap,
+		"VRG_TEST_EVENT_ACK="+events), "foo")
 	pid := awaitReadyPID(t, capDir)
+	awaitAck(t, events, 1, "phase", "searching")
 	r.waitFor(t, "Searching…")
 	r.send(t, "q")
+	awaitAck(t, events, 1, "quitting", "130")
 	code, out := r.waitExit(t)
 	if code != 130 {
 		t.Fatalf("exit = %d, want 130; output: %q", code, out)
@@ -320,10 +306,16 @@ func TestPTYQWhileSearchingExits130(t *testing.T) {
 func TestPTYCtrlCWhileSearchingExits130(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgBlockScript)
 	reap := filepath.Join(capDir, "reap")
-	r := startVrgPTY(t, ptyEnv(fakeDir, capDir, "VRG_TEST_REAP="+reap), "foo")
+	events := filepath.Join(capDir, "events")
+	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
+		"VRG_TEST_REAP="+reap,
+		"VRG_TEST_EVENT_ACK="+events), "foo")
 	pid := awaitReadyPID(t, capDir)
+	awaitAck(t, events, 1, "phase", "searching")
 	r.waitFor(t, "Searching…")
 	r.send(t, "\x03")
+	awaitAck(t, events, 1, "key", "ctrl+c")
+	awaitAck(t, events, 1, "quitting", "130")
 	code, out := r.waitExit(t)
 	if code != 130 {
 		t.Fatalf("exit = %d, want 130; output: %q", code, out)
@@ -340,8 +332,12 @@ func TestPTYCtrlCWhileSearchingExits130(t *testing.T) {
 func TestPTYSIGINTWhileSearchingExits130(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgBlockScript)
 	reap := filepath.Join(capDir, "reap")
-	r := startVrgPTY(t, ptyEnv(fakeDir, capDir, "VRG_TEST_REAP="+reap), "foo")
+	events := filepath.Join(capDir, "events")
+	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
+		"VRG_TEST_REAP="+reap,
+		"VRG_TEST_EVENT_ACK="+events), "foo")
 	pid := awaitReadyPID(t, capDir)
+	awaitAck(t, events, 1, "phase", "searching")
 	r.waitFor(t, "Searching…")
 	if err := r.cmd.Process.Signal(syscall.SIGINT); err != nil {
 		t.Fatalf("SIGINT: %v", err)
@@ -369,9 +365,11 @@ func TestPTYQDuringGateHeldPreparationExits130(t *testing.T) {
 	}
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
 		"VRG_TEST_REAP="+reap,
+		"VRG_TEST_EVENT_ACK="+filepath.Join(capDir, "events"),
 		"VRG_TEST_GATE="+gate,
 	), "foo")
 	pid := awaitReadyPID(t, capDir)
+	awaitAck(t, filepath.Join(capDir, "events"), 1, "phase", "searching")
 	r.waitFor(t, "Searching…")
 	// The child exited and vrg already waited on it while preparation is
 	// still gate-held: this is the post-exit preparation window.
@@ -379,6 +377,7 @@ func TestPTYQDuringGateHeldPreparationExits130(t *testing.T) {
 		t.Fatalf("reap side channel = %q, want the child's clean exit", got)
 	}
 	r.send(t, "q")
+	awaitAck(t, filepath.Join(capDir, "events"), 1, "quitting", "130")
 	code, out := r.waitExit(t)
 	if code != 130 {
 		t.Fatalf("exit = %d, want 130; output: %q", code, out)
@@ -396,8 +395,12 @@ func TestPTYQDuringGateHeldPreparationExits130(t *testing.T) {
 func TestPTYOrdinaryExitReapsChild(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgBlockScript)
 	reap := filepath.Join(capDir, "reap")
-	r := startVrgPTY(t, ptyEnv(fakeDir, capDir, "VRG_TEST_REAP="+reap), "foo")
+	events := filepath.Join(capDir, "events")
+	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
+		"VRG_TEST_REAP="+reap,
+		"VRG_TEST_EVENT_ACK="+events), "foo")
 	pid := awaitReadyPID(t, capDir)
+	awaitAck(t, events, 1, "phase", "searching")
 	r.waitFor(t, "Searching…")
 	if err := r.cmd.Process.Signal(syscall.SIGTERM); err != nil {
 		t.Fatalf("SIGTERM: %v", err)
@@ -420,15 +423,18 @@ func TestPTYOrdinaryExitReapsChild(t *testing.T) {
 func TestPTYControlledFailureExits2(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgBlockScript)
 	reap := filepath.Join(capDir, "reap")
+	events := filepath.Join(capDir, "events")
 	fail := filepath.Join(capDir, "fail-fifo")
 	if err := syscall.Mkfifo(fail, 0o600); err != nil {
 		t.Fatalf("mkfifo: %v", err)
 	}
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
 		"VRG_TEST_REAP="+reap,
+		"VRG_TEST_EVENT_ACK="+events,
 		"VRG_TEST_FAIL_TRIGGER="+fail,
 	), "foo")
 	pid := awaitReadyPID(t, capDir)
+	awaitAck(t, events, 1, "phase", "searching")
 	r.waitFor(t, "Searching…")
 	// The fifo handshake: the writer's open pairs with vrg's reader, and
 	// its close delivers EOF — the injected failure fires. It runs off
@@ -541,13 +547,19 @@ exit 3
 // fixed fatal status 2.
 func TestPTYNonZeroExitBrowseOverlayExits2(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgExit3Script)
-	r := startVrgPTY(t, ptyEnv(fakeDir, capDir), "foo")
+	events := filepath.Join(capDir, "events")
+	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
+		"VRG_TEST_EVENT_ACK="+events), "foo")
 	pid := awaitReadyPID(t, capDir) // the handshake: the child ran
-	r.waitFor(t, "exit status 3")   // the generated diagnostic in the overlay
-	before := len(r.output())
-	r.send(t, "q")             // dismiss the overlay, revealing browse
-	r.waitForGrowth(t, before) // the dismissal re-rendered the frame
-	r.send(t, "q")             // quit from browse with the fixed status
+	awaitAck(t, events, 1, "overlay", "open")
+	r.waitFor(t, "exit status 3") // the generated diagnostic in the overlay
+	r.send(t, "q")
+	// The dismissal acknowledgement — not frame growth — unlocks the
+	// quit key: the overlay no longer owns the keyboard.
+	awaitAck(t, events, 1, "overlay", "closed")
+	r.waitFor(t, "f.txt")
+	r.send(t, "q") // quit from browse with the fixed status
+	awaitAck(t, events, 1, "quitting", "2")
 	code, out := r.waitExit(t)
 	if code != 2 {
 		t.Fatalf("exit = %d, want 2; output: %q", code, out)
@@ -591,13 +603,19 @@ exit 0
 // status stays 0.
 func TestPTYStderrContentFixture(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgFloodScript)
-	r := startVrgPTY(t, ptyEnv(fakeDir, capDir), "foo")
+	events := filepath.Join(capDir, "events")
+	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
+		"VRG_TEST_EVENT_ACK="+events), "foo")
 	awaitReadyPID(t, capDir)
+	awaitAck(t, events, 1, "overlay", "open")
 	r.waitFor(t, "ERRHEAD-MARKER") // the captured stderr in the overlay
-	before := len(r.output())
-	r.send(t, "q")             // dismiss the warning overlay
-	r.waitForGrowth(t, before) // the dismissal re-rendered the frame
-	r.send(t, "q")             // quit from browse
+	r.send(t, "q")
+	// The dismissal acknowledgement proves the overlay stopped owning
+	// the keyboard; only then does the next q reach the browse view.
+	awaitAck(t, events, 1, "overlay", "closed")
+	r.waitFor(t, "f0.txt") // the revealed browse frame
+	r.send(t, "q")         // quit from browse
+	awaitAck(t, events, 1, "quitting", "0")
 	code, out := r.waitExit(t)
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0 for a warning over clean results; output: %q", code, out)

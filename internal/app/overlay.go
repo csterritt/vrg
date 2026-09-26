@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -161,8 +162,10 @@ func (m Model) overlayKey(key string) (Model, tea.Cmd) {
 		return m.cancelled(), tea.Quit
 	case "q", "esc":
 		m.overlay = nil
+		m.emit("overlay", "closed")
 		if m.phase == phaseFatal {
 			m.quit = true
+			m.emit("quitting", strconv.Itoa(m.code))
 			return m, tea.Quit
 		}
 	case "up", "down":
@@ -261,6 +264,7 @@ func (m *Model) openOverlay(lines []string) {
 		m.overlay.lines = append(m.overlay.lines, lines...)
 	}
 	m.popupID = 0
+	m.emit("overlay", "open")
 }
 
 // renderOverlay composites the modal box over the base frame: the

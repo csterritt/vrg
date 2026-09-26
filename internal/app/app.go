@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -63,12 +64,18 @@ const (
 // collection order, independent of what any screen displayed. diagCh
 // carries the collector's incremental stderr lines and diagAck is the
 // test-only acknowledgement seam — both nil in plain unit-test models.
+// eventAck is the Issue #48 acknowledgement seam: each awaited
+// transition appends a "<seq> <kind> [<detail>]" record there, with
+// eventSeq minting the per-session monotonic sequence — nil and unused
+// in production binaries and plain unit-test models.
 type Model struct {
 	phase     phase
 	cancel    func()
 	done      <-chan searchDoneMsg
 	diagCh    <-chan string
 	diagAck   io.Writer
+	eventAck  io.Writer
+	eventSeq  int
 	onCollect func(string)
 	diags     []string
 	index     stopIndex
@@ -181,6 +188,37 @@ type Model struct {
 	quit       bool
 }
 
+// ackName is the phase's spelling in acknowledgement records.
+func (p phase) ackName() string {
+	switch p {
+	case phaseBrowse:
+		return "browse"
+	case phaseNoResults:
+		return "noresults"
+	case phaseFatal:
+		return "fatal"
+	default:
+		return "searching"
+	}
+}
+
+// emit appends one acknowledgement record — "<seq> <kind> [<detail>]"
+// — to the eventAck seam. The per-session sequence lets a harness wait
+// for the exact occurrence its action caused; a nil seam (production,
+// unit tests) emits nothing, so the seam only ever observes the real
+// transitions.
+func (m *Model) emit(kind, detail string) {
+	if m.eventAck == nil {
+		return
+	}
+	m.eventSeq++
+	if detail == "" {
+		fmt.Fprintf(m.eventAck, "%d %s\n", m.eventSeq, kind)
+	} else {
+		fmt.Fprintf(m.eventAck, "%d %s %s\n", m.eventSeq, kind, detail)
+	}
+}
+
 // newModel returns a searching model awaiting the collection result on
 // done; cancel terminates the search's child (nil means none).
 func newModel(done <-chan searchDoneMsg, cancel func()) Model {
@@ -282,6 +320,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		o := decideOutcome(in)
 		m.code = o.code
 		m.phase = o.screen
+		m.emit("phase", m.phase.ackName())
 		// The completion's own diagnostics join the collection. Child
 		// stderr is absent here: it was already collected line-by-line
 		// while the search ran, and collecting it again would break
@@ -347,6 +386,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if bytes.Equal(msg.path, m.currentPath()) {
 				m.openOverlay(m.failLines[key])
 			}
+			m.emit("load", "fail "+present.Path(msg.path))
 			return m, nil
 		}
 		m.bufs[key] = msg.buf
@@ -358,6 +398,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A successful load resolves the path's failed state.
 		delete(m.failed, key)
 		delete(m.failLines, key)
+		m.emit("load", "ok "+present.Path(msg.path))
 		// The new revision stale-keys any installed layout and any
 		// request in flight for the old one.
 		delete(m.rows, key)
@@ -425,6 +466,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.popupID = 0
 		}
 	case tea.KeyPressMsg:
+		// The key-processing boundary: every press the event loop
+		// consumes is acknowledged before its transition records.
+		m.emit("key", msg.String())
 		// Below the fixed minimum the too-small gate owns the
 		// keyboard ahead of every modal and base state: only q and
 		// ctrl+c act, so an invisible overlay can neither swallow nor
@@ -483,6 +527,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.cancelled(), tea.Quit
 			}
 			m.quit = true
+			m.emit("quitting", strconv.Itoa(m.code))
 			return m, tea.Quit
 		case "up", "down", "u", "d", "pgup", "pgdown":
 			m.scroll(msg.String())
@@ -519,6 +564,7 @@ func (m Model) cancelled() Model {
 	m.quit = true
 	m.code = 130
 	m.cancel()
+	m.emit("quitting", "130")
 	return m
 }
 
@@ -531,6 +577,7 @@ func (m Model) cancelled() Model {
 // type assertion (Issue #46).
 func (m *Model) collect(d string) {
 	m.diags = append(m.diags, d)
+	m.emit("collected", "")
 	if m.diagAck != nil {
 		fmt.Fprintln(m.diagAck, "collected")
 	}

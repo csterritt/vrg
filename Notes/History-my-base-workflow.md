@@ -504,3 +504,14 @@ Usage
  Input tokens: 49422 tokens
  Output tokens: 20069 tokens
  Cached input tokens: 2172513 tokens
+
+----
+Task 048-pty-tests-deterministic-handshakes.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 15 messages
+ Input tokens: 23207 tokens
+ Output tokens: 5685 tokens
+ Cached input tokens: 1636352 tokens

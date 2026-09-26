@@ -89,15 +89,20 @@ func TestPTYCtrlCAfterDiagnosticReplaysOnce(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgWarnBlockScript)
 	ack := filepath.Join(capDir, "diag-ack")
 	reap := filepath.Join(capDir, "reap")
+	events := filepath.Join(capDir, "events")
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
 		"VRG_TEST_COLLECT_ACK="+ack,
+		"VRG_TEST_EVENT_ACK="+events,
 		"VRG_TEST_REAP="+reap), "foo")
 	pid := awaitReadyPID(t, capDir)
+	awaitAck(t, events, 1, "phase", "searching")
 	r.waitFor(t, "Searching…")
 	// Wait for the application-side acknowledgement — the diagnostic
 	// is in the session collection — before sending the exit key.
+	awaitAck(t, events, 1, "collected", "")
 	awaitFileContent(t, ack)
 	r.send(t, "\x03")
+	awaitAck(t, events, 1, "quitting", "130")
 	code, out := r.waitExit(t)
 	if code != 130 {
 		t.Fatalf("exit = %d, want 130; output: %q", code, out)
@@ -117,13 +122,18 @@ func TestPTYQWhileSearchingReplaysDiagnostic(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgWarnBlockScript)
 	ack := filepath.Join(capDir, "diag-ack")
 	reap := filepath.Join(capDir, "reap")
+	events := filepath.Join(capDir, "events")
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
 		"VRG_TEST_COLLECT_ACK="+ack,
+		"VRG_TEST_EVENT_ACK="+events,
 		"VRG_TEST_REAP="+reap), "foo")
 	pid := awaitReadyPID(t, capDir)
+	awaitAck(t, events, 1, "phase", "searching")
 	r.waitFor(t, "Searching…")
+	awaitAck(t, events, 1, "collected", "")
 	awaitFileContent(t, ack)
 	r.send(t, "q")
+	awaitAck(t, events, 1, "quitting", "130")
 	code, out := r.waitExit(t)
 	if code != 130 {
 		t.Fatalf("exit = %d, want 130; output: %q", code, out)
@@ -149,19 +159,24 @@ func TestPTYQDuringGateHeldPreparationReplaysDiagnostic(t *testing.T) {
 	if err := syscall.Mkfifo(gate, 0o600); err != nil {
 		t.Fatalf("mkfifo: %v", err)
 	}
+	events := filepath.Join(capDir, "events")
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
 		"VRG_TEST_COLLECT_ACK="+ack,
+		"VRG_TEST_EVENT_ACK="+events,
 		"VRG_TEST_REAP="+reap,
 		"VRG_TEST_GATE="+gate), "foo")
 	pid := awaitReadyPID(t, capDir)
+	awaitAck(t, events, 1, "phase", "searching")
 	r.waitFor(t, "Searching…")
 	// The child has exited and been reaped while preparation stays
 	// gate-held; the stderr diagnostic is already collected.
 	if got := awaitFileContent(t, reap); !strings.Contains(got, "exit status 0") {
 		t.Fatalf("reap side channel = %q, want the child's clean exit", got)
 	}
+	awaitAck(t, events, 1, "collected", "")
 	awaitFileContent(t, ack)
 	r.send(t, "q")
+	awaitAck(t, events, 1, "quitting", "130")
 	code, out := r.waitExit(t)
 	if code != 130 {
 		t.Fatalf("exit = %d, want 130; output: %q", code, out)
@@ -182,15 +197,21 @@ func TestPTYQDuringGateHeldPreparationReplaysDiagnostic(t *testing.T) {
 func TestPTYQuitAfterCompletedStreamReplaysWarning(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgWarnStreamScript)
 	ack := filepath.Join(capDir, "diag-ack")
+	events := filepath.Join(capDir, "events")
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
-		"VRG_TEST_COLLECT_ACK="+ack), "foo")
+		"VRG_TEST_COLLECT_ACK="+ack,
+		"VRG_TEST_EVENT_ACK="+events), "foo")
 	awaitReadyPID(t, capDir)
+	awaitAck(t, events, 1, "collected", "")
 	awaitFileContent(t, ack) // collected before the keypress
+	awaitAck(t, events, 1, "overlay", "open")
 	r.waitFor(t, "warn one") // the warning overlay over browse
-	before := len(r.output())
-	r.send(t, "q") // dismiss the overlay
-	r.waitForGrowth(t, before)
+	r.send(t, "q")           // dismiss the overlay
+	// The dismissal acknowledgement — not frame growth — proves the
+	// overlay no longer owns the keyboard, so the next q quits browse.
+	awaitAck(t, events, 1, "overlay", "closed")
 	r.send(t, "q") // quit from browse
+	awaitAck(t, events, 1, "quitting", "0")
 	code, out := r.waitExit(t)
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output: %q", code, out)
@@ -211,12 +232,16 @@ func TestPTYControlledFailureReplaysAlongsideEarlierDiagnostics(t *testing.T) {
 	if err := syscall.Mkfifo(fail, 0o600); err != nil {
 		t.Fatalf("mkfifo: %v", err)
 	}
+	events := filepath.Join(capDir, "events")
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
 		"VRG_TEST_COLLECT_ACK="+ack,
+		"VRG_TEST_EVENT_ACK="+events,
 		"VRG_TEST_REAP="+reap,
 		"VRG_TEST_FAIL_TRIGGER="+fail), "foo")
 	pid := awaitReadyPID(t, capDir)
+	awaitAck(t, events, 1, "phase", "searching")
 	r.waitFor(t, "Searching…")
+	awaitAck(t, events, 1, "collected", "")
 	awaitFileContent(t, ack)
 	// The fifo handshake fires the injected failure: the writer's open
 	// pairs with vrg's reader and its close delivers the EOF.
@@ -267,17 +292,23 @@ exit 0
 func TestPTYReplayEscapesEmbeddedFilename(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgBadPathScript)
 	ack := filepath.Join(capDir, "diag-ack")
+	events := filepath.Join(capDir, "events")
 	r := startVrgPTY(t, ptyEnv(fakeDir, capDir,
-		"VRG_TEST_COLLECT_ACK="+ack), "foo")
+		"VRG_TEST_COLLECT_ACK="+ack,
+		"VRG_TEST_EVENT_ACK="+events), "foo")
 	awaitReadyPID(t, capDir)
+	// The failed load is acknowledged and its diagnostic collected:
+	// the application-side evidence, not rendered output, proves the
+	// current-file failure opened the error overlay.
+	awaitAck(t, events, 1, "load", "fail")
+	awaitAck(t, events, 1, "collected", "")
+	awaitFileContent(t, ack)
+	awaitAck(t, events, 1, "overlay", "open")
 	r.waitFor(t, "(unreadable)") // the failed load's placeholder
-	awaitFileContent(t, ack)     // the failure diagnostic is collected
-	// The current-file failure opened the error overlay: the first q
-	// dismisses it, the second quits the browse view.
-	before := len(r.output())
-	r.send(t, "q")
-	r.waitForGrowth(t, before)
-	r.send(t, "q")
+	r.send(t, "q")               // dismiss the error overlay
+	awaitAck(t, events, 1, "overlay", "closed")
+	r.send(t, "q") // quit the browse view
+	awaitAck(t, events, 1, "quitting", "0")
 	code, out := r.waitExit(t)
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0; output: %q", code, out)

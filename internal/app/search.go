@@ -47,6 +47,16 @@ type Config struct {
 	// application-side processing, where a child-side write handshake
 	// would prove only that bytes reached the pipe.
 	DiagAck io.Writer
+	// EventAck, when non-nil, receives one acknowledgement record per
+	// model transition the PTY harness waits on — "<seq> <kind>
+	// [<detail>]" lines with a per-session monotonic sequence covering
+	// phase entries, consumed key presses, diagnostic collections,
+	// overlay and help open/close, load completions, and quit
+	// commits. A helper waiting on the n-th matching record can never
+	// be satisfied by an earlier same-kind event. The seam only
+	// observes production behaviour; nil in production binaries and
+	// plain unit-test models.
+	EventAck io.Writer
 	// DiagInject, when non-nil, delivers additional diagnostic lines to
 	// the model through the same channel as live child stderr — the
 	// test-only injection seam behind the tagged binary's diagnostic
@@ -155,7 +165,12 @@ func Start(ctx context.Context, cfg Config) (*Session, error) {
 	m := newModel(done, cancel)
 	m.diagCh = diags
 	m.diagAck = cfg.DiagAck
+	m.eventAck = cfg.EventAck
 	m.onCollect = cfg.OnCollect
+	// The session opens in the searching phase; the acknowledgement is
+	// the harness's evidence the state was entered, independent of when
+	// the first frame renders.
+	m.emit("phase", m.phase.ackName())
 	return &Session{model: m, cancel: cancel, reaped: reaped}, nil
 }
 
