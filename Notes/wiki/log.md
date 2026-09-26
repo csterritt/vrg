@@ -1666,3 +1666,40 @@ Sources: `Notes/tasks/040-browse-render-no-whole-index-scan.md`,
 layout*), `internal/app/app.go`, `internal/app/browse.go`,
 `internal/app/rendercost_test.go`, `internal/app/filelist_test.go`,
 `internal/app/browse_test.go`.
+## [2026-09-24] ingest | Issue #41 full-scroll overlays — no head/tail compression
+
+Issue #41 (`Notes/tasks/041-overlay-full-scroll-no-head-tail-compression.md`)
+pinned the complete-scrollable-row contract for non-help overlays. The
+model already kept every wrapped row scrollable — `layout` wraps every
+diagnostic line and `renderOverlay` slices the clamped visible window —
+so the work was contractual rather than a removal: new tests in
+`internal/app/overlay_test.go` assert the scrollable row set is the
+complete wrapped diagnostic (joining `layout`'s rows reproduces every
+line in order for a ≥ 1 MiB stderr shape, first and last markers
+intact, no elision row injected), that `scroll` clamps exactly to
+`[0, max(0, rows − interiorH)]` in both `scrollOverlay` (the key
+handler) and `layout` (the render path), that a bounded row-by-row
+traversal reaches both ends on a slightly-oversized fixture, that an
+appended error extends the set's tail without moving the reader, and
+that `u`/`d`/`pgup`/`pgdown` stay inert while an error overlay is open
+(the `pressKey` helper gained `pgup`/`pgdown` mappings).
+`cmd/vrg/pty_test.go`'s 1 MiB stderr-content fixture was revised to
+`TestPTYStderrContentFixture` at an ordinary 80×24 PTY: it keeps the
+dual-pipe drainage (`writes-done` handshake), complete-stdout
+(`f0.txt` browse), captured-stderr inclusion (`ERRHEAD-MARKER` in the
+overlay), and exit-0 assertions while dropping the simultaneous
+head/tail-in-one-frame requirement — tail reachability now proven by
+the model-level tests. Render-time clipping at tiny sizes
+(`composite`, story 83) and help-overlay scrolling are unchanged.
+Updated [error-overlay-and-fatal-outcomes](error-overlay-and-fatal-outcomes.md)
+(the *Complete scrollable row set (Issue #41)* contract paragraph and
+the tests section), [unit-tests](unit-tests.md) (the four new
+`overlay_test.go` cases, the extended ignored-keys list, and the
+revised PTY fixture entry), and the index.
+New files: none — tests added to `internal/app/overlay_test.go`,
+`internal/app/outcome_test.go` (helper), and `cmd/vrg/pty_test.go`;
+`Notes/walkthroughs/041-04/` holds the walkthrough.
+Sources: `Notes/tasks/041-overlay-full-scroll-no-head-tail-compression.md`,
+`Notes/PRD-vrg.md` (*Colours, overlays, and key precedence*),
+`internal/app/overlay.go`, `internal/app/overlay_test.go`,
+`internal/app/outcome_test.go`, `cmd/vrg/pty_test.go`.

@@ -43,9 +43,9 @@ func openPTY(t *testing.T) *pty {
 	return openPTYSize(t, 80, 24)
 }
 
-// openPTYSize opens a pseudo-terminal pair at the given dimensions: a
-// large terminal lets a test observe a tall diagnostics overlay's head
-// and tail in a single frame without scrolling.
+// openPTYSize opens a pseudo-terminal pair at the given dimensions —
+// the sized variant behind openPTY for tests needing a nonstandard
+// frame.
 func openPTYSize(t *testing.T, cols, rows uint16) *pty {
 	t.Helper()
 	mfd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
@@ -583,23 +583,21 @@ exit 0
 `
 
 // The stderr-content fixture: over 1 MiB of stderr interleaved with a
-// valid stdout stream. On a large terminal the whole warning overlay
-// fits in one frame, so both the head and the tail of the captured
-// stderr are visible at once; dismissal reveals the browse view built
-// from the complete stdout stream, and exit status stays 0.
-func TestPTYStderrContentOverlayHeadAndTail(t *testing.T) {
+// valid stdout stream at an ordinary terminal size. The captured
+// stderr opens the warning overlay with its head in view — the tail's
+// reachability is proven by the model-level complete-row and clamp
+// tests rather than by a simultaneous head/tail frame — and dismissal
+// reveals the browse view built from the complete stdout stream. Exit
+// status stays 0.
+func TestPTYStderrContentFixture(t *testing.T) {
 	fakeDir, capDir := writeFakeRg(t, fakeRgFloodScript)
-	r := startVrgPTYSize(t, ptyEnv(fakeDir, capDir), 2100, 640, "foo")
+	r := startVrgPTY(t, ptyEnv(fakeDir, capDir), "foo")
 	awaitReadyPID(t, capDir)
-	r.waitFor(t, "ERRTAIL-MARKER")
-	out := r.output()
-	if !strings.Contains(out, "ERRHEAD-MARKER") {
-		t.Fatalf("overlay lacks the head of captured stderr: %.2000q", out)
-	}
-	before := len(out)
-	r.send(t, "q") // dismiss the warning overlay
-	r.waitForGrowth(t, before)
-	r.send(t, "q") // quit from browse
+	r.waitFor(t, "ERRHEAD-MARKER") // the captured stderr in the overlay
+	before := len(r.output())
+	r.send(t, "q")             // dismiss the warning overlay
+	r.waitForGrowth(t, before) // the dismissal re-rendered the frame
+	r.send(t, "q")             // quit from browse
 	code, out := r.waitExit(t)
 	if code != 0 {
 		t.Fatalf("exit = %d, want 0 for a warning over clean results; output: %q", code, out)

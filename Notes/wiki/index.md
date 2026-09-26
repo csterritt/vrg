@@ -56,7 +56,10 @@ Catalog of all wiki pages for the vrg project.
   function and the full outcome table, the modal diagnostics overlay
   (scroll, `q`/`Esc` dismissal, fatal-only `Esc` exit, `ctrl+c`
   override), stderr classification with generated code-or-signal
-  diagnostics, and the fixed-status rule
+  diagnostics, and the fixed-status rule; plus Issue #41's complete
+  scrollable row set — every wrapped row scrollable with the clamp
+  `[0, max(0, rows − interiorH)]`, render-time clipping only, the
+  revised ≥ 1 MiB stderr fixture semantics
 - [record-robustness.md](record-robustness.md) — Issue #10: the
   deterministic malformed/oversized/unknown disposition matrix, the
   64 MiB record limit with discard-and-resynchronize and path-recovery

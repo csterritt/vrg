@@ -197,6 +197,31 @@ carries its
 hostile bytes in as captured stderr and asserts the Diagnostic-escaped
 form inside the border.
 
+**Complete scrollable row set (Issue #41)**: the scrollable row set a
+non-help overlay derives is the complete wrapped diagnostic — joining
+`layout`'s rows reproduces every diagnostic line in order, with no
+head-plus-ellipsis-plus-tail compression and no elision row ever
+injected into the model. `scroll` clamps to
+`[0, max(0, rows − interiorH)]` in both places that consume it:
+`scrollOverlay` where the key handler increments it, and `layout`
+where `renderOverlay` derives the visible slice — so every row of an
+arbitrarily long diagnostic is reachable by `up`/`down`, and a stored
+offset outside the range clamps to the same bound. Clipping still
+happens at render time inside `composite` when the box exceeds a tiny
+frame (story 83: clipping at render time is fine, removal from the
+scrollable set is not), and appended diagnostics extend the set's tail
+without moving the reader's position. This contract supersedes Issue
+#9's original simultaneous head/tail rendering requirement for the
+≥ 1 MiB stderr fixture: the fixture's drainage, complete-stdout, and
+captured-stderr assertions are retained, while head-and-tail-in-one-
+frame proof moved to the model-level complete-row and clamp tests.
+Head/tail summarisation is not reintroduced — if ever wanted it must
+be an explicit alternate view. The help overlay's scrolling is
+unchanged, and the modal key contract — `up`/`down` scroll,
+`q`/`Esc` dismiss, `ctrl+c` exits, `u`/`d`/`pgup`/`pgdown` and all
+other keys ignored — is unchanged. See `Notes/PRD-vrg.md` *Colours,
+overlays, and key precedence*.
+
 A `loadDoneMsg` failure for the **current** path also opens the
 overlay — the `cannot read <safe path>: <err>` line through
 `openOverlay`, alongside the `(unreadable)` panel placeholder — and
@@ -238,8 +263,16 @@ current-file failure under fixed 2 still exits 2, and the composed
 row (usable results, fixed 2, every retained file failing) stays 2
 with only presentation and diagnostics affected.
 `internal/app/overlay_test.go` pins scrolling, both dismissal keys,
-`ctrl+c`, ignored keys (including the unreachable `c` toggle),
-unbroken-line wrapping, and generated code-or-signal diagnostics.
+`ctrl+c`, ignored keys (including the unreachable `c` toggle and the
+browse scroll keys `u`/`d`/`pgup`/`pgdown`), unbroken-line wrapping,
+and generated code-or-signal diagnostics. Issue #41 added the
+complete-row contract tests: the scrollable set joined reproduces the
+complete ≥ 1 MiB diagnostic with head and tail markers and no elision
+row, `maxScroll` is exactly rows−interior, the clamp holds in both the
+key handler and the render path with middle-row reachability, a
+bounded row-by-row traversal reaches both ends on a slightly-oversized
+fixture, and an appended error extends the set without moving the
+reader.
 `sinksafety_test.go` gained the `error overlay` row with per-fixture
 `wantDiag` expectations. `diagnostics_test.go` (Issue #36) pins the
 universal composition: exact `composeDiagnostics`/`completionDiagnostics`
@@ -247,8 +280,11 @@ slices, stderr precedence over the generated line, no process line for
 exit 0/1, the post-summary dual representation, uncapped repetition,
 escaped paths, index-derived ordering, and the shared overlay/replay
 text. `cmd/vrg/pty_test.go` gained the non-zero-exit
-handshake test and the 1 MiB stderr-content fixture asserting head and
-tail visibility on a large PTY; `main_test.go`'s flood boundary test
+handshake test and the 1 MiB stderr-content fixture — since Issue #41
+revised to `TestPTYStderrContentFixture` at an ordinary 80×24 PTY,
+asserting drainage, captured-stderr inclusion, complete stdout, and
+exit 0 without simultaneous head/tail visibility; `main_test.go`'s
+flood boundary test
 now steps through the warning overlay (`^@` marker) before the browse
 marker. See [unit-tests.md](unit-tests.md).
 

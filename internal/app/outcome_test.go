@@ -552,6 +552,10 @@ func pressKey(t *testing.T, m Model, key string) (Model, tea.Cmd) {
 		return update(t, m, tea.KeyPressMsg{Code: tea.KeyUp})
 	case "down":
 		return update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
+	case "pgup":
+		return update(t, m, codePress(tea.KeyPgUp))
+	case "pgdown":
+		return update(t, m, codePress(tea.KeyPgDown))
 	default:
 		return update(t, m, keyPress(key))
 	}

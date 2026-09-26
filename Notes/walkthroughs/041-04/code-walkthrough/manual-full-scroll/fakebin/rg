@@ -1,0 +1,9 @@
+#!/bin/sh
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"f1.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"f1.txt"},"lines":{"text":"hit one\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+'{"type":"end","data":{"path":{"text":"f1.txt"},"binary_offset":null}}' \
+'{"type":"summary","data":{}}'
+i=0
+while [ "$i" -lt 40 ]; do printf 'err-%02d\n' "$i" >&2; i=$((i+1)); done
+exit 3

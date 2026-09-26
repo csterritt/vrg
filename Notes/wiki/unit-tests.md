@@ -1283,15 +1283,41 @@ diagnostic-composition coverage:
   a.txt/b.txt details in first-occurrence order across an anonymous
   record.
 
-`overlay_test.go` (same package) pins the Issue #9 modal overlay:
+`overlay_test.go` (same package) pins the Issue #9 modal overlay and
+the Issue #41 complete-scrollable-row contract:
 
 - `TestOverlayScrollsWithUpDown` — head visible first, tail only after
   scrolling, clamped at both ends.
+- `TestOverlayScrollableSetIsCompleteDiagnostic` (Issue #41) — the
+  scrollable row set `layout` derives for a ≥ 1 MiB stderr shape
+  (`floodStderr`: head marker, 525 numbered 1999-cell lines, tail
+  marker) is the complete wrapped diagnostic: joining the rows
+  reproduces every diagnostic line in order, the first and last rows
+  carry the markers, no row is an elision row, and `maxScroll` is
+  exactly `rows − interiorH`.
+- `TestOverlayScrollClampsToCompleteSet` (Issue #41) — the clamp is
+  `[0, max(0, rows − interiorH)]` in both places: `down` at
+  `maxScroll − 1` still moves, one more is a no-op in the key handler;
+  a stored offset past either end renders the clamped tail or head; a
+  middle row renders at its own scroll position — tail and middle
+  reachability for an arbitrarily long diagnostic without thousands of
+  key presses.
+- `TestOverlayTraversalReachesBothEnds` (Issue #41) — a diagnostic
+  whose wrapped rows only slightly exceed the interior height
+  traverses row-by-row: exactly `maxScroll` downs reach the final
+  line, the same number of ups returns to the first.
+- `TestAppendedErrorExtendsScrollableSet` (Issue #41) — an error
+  appended through `openOverlay` while the overlay is open joins the
+  set's tail, stays renderable at the clamped bottom, and leaves the
+  reader's scroll untouched.
 - `TestOverlayDismissKeys` — `q` and `Esc` each dismiss a non-fatal
   overlay to the underlying screen.
 - `TestOverlayCtrlCExits130` — cancellation beats the fixed status.
 - `TestOverlayIgnoresOtherKeys` — `x`, `n`, `c`, digits, arrows, tab,
-  enter all inert; `c` never reaches the colour toggle.
+  enter all inert; `c` never reaches the colour toggle. Issue #41
+  added the browse scroll keys `u`, `d`, `pgup`, `pgdown` to the inert
+  list with the overlay's scroll position asserted unmoved — only
+  `up`/`down` act on the modal.
 - `TestOverlayWrapsUnbrokenDiagnostic` — a 300-cell diagnostic wraps
   inside the border; no frame row exceeds the terminal width.
 - `TestFailedProcessWithoutStderrGetsGeneratedDiagnostic` — a failed
@@ -1878,13 +1904,17 @@ where to write `ready`; the `VRG_TEST_*` seams come from
   and exits 3: the error overlay opens over browse naming `exit status
   3`, the first `q` dismisses it, the second quits at the fixed status
   2, and the child is reaped.
-- `TestPTYStderrContentOverlayHeadAndTail` (Issue #9) —
+- `TestPTYStderrContentFixture` (Issue #9, revised by Issue #41) —
   `fakeRgFloodScript` interleaves over 1 MiB of stderr (head marker,
-  ~525 padded lines, tail marker) with a valid stdout stream; on a
-  2100×640 PTY (`openPTYSize`/`startVrgPTYSize`) the whole warning
-  overlay fits one frame, so both `ERRHEAD-MARKER` and `ERRTAIL-MARKER`
-  are visible at once, dismissal reveals the complete browse view, and
-  the exit status stays 0 — a warning, not a failure.
+  ~525 padded lines, tail marker) with a valid stdout stream; at an
+  ordinary 80×24 PTY the warning overlay opens with `ERRHEAD-MARKER`
+  in view, proving the captured stderr is included, dismissal reveals
+  the complete browse view, the `writes-done` handshake proves the
+  child finished both pipes, and the exit status stays 0 — a warning,
+  not a failure. Simultaneous head/tail visibility is no longer
+  required: tail reachability moved to the model-level complete-row
+  and clamp tests (`TestOverlayScrollableSetIsCompleteDiagnostic`,
+  `TestOverlayScrollClampsToCompleteSet`).
 
 `pty_replay_test.go` (same Linux-only harness) is the Issue #11
 process-boundary replay coverage. Every test wires
