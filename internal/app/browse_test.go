@@ -8,8 +8,6 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"vrg/internal/searchindex"
-	"vrg/internal/theme"
 )
 
 // browseModel returns a model past a completed search: browse phase,
@@ -276,58 +274,5 @@ func TestBrowseRendering(t *testing.T) {
 	// The matched line renders its span in inverse video.
 	if !strings.Contains(v, "\x1b[7mtwo\x1b[27m") {
 		t.Fatalf("match not inverse: %q", v)
-	}
-}
-
-// Sink safety: hostile fixture bytes — OSC, CSI, C0, C1, DEL, a
-// standalone CR, invalid UTF-8 path bytes, and an embedded filename
-// newline — driven through the real composition path with the no-style
-// theme must leave no fixture control byte verbatim in the raw output.
-func TestSinkSafetyRawOutput(t *testing.T) {
-	dir := t.TempDir()
-	// A filename carrying a newline, an ESC byte, and invalid UTF-8.
-	hostile := "bad\nna\x1bme\xff.txt"
-	writeWorkFile(t, dir, hostile, "pre \x1b]0;pwned\x07 mid \x1b[2J \x08 \xc2\x85 \x7f cr\rsuf\n")
-
-	ix := searchindex.New(dir)
-	ix.Add(searchindex.Record{
-		Kind:       searchindex.KindMatch,
-		Path:       []byte(hostile),
-		LineNumber: 1,
-		Line:       []byte("pre \x1b]0;pwned\x07 mid \x1b[2J \x08 \xc2\x85 \x7f cr\rsuf\n"),
-		Submatches: []searchindex.Submatch{{Start: 4, End: 14, Bytes: []byte("\x1b]0;pwned\x07")}},
-	})
-	ix.Prepare()
-
-	m := newModel(nil, nil)
-	m.theme = theme.Plain()
-	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
-	m, cmd := update(t, m, searchDoneMsg{index: ix})
-	m2, _ := update(t, m, cmd())
-	raw := m2.View().Content
-
-	// No fixture control byte survives verbatim in any sink — asserted
-	// on the raw output before any ANSI stripping.
-	for _, bad := range []string{"\x1b", "\x07", "\x08", "\x9b", "\xc2\x85", "\x7f", "\r", "\xff"} {
-		if strings.Contains(raw, bad) {
-			t.Fatalf("raw output contains fixture byte %q: %q", bad, raw)
-		}
-	}
-	// The escaped forms are present instead: the filename newline and
-	// ESC byte in the list and rule, the OSC payload in caret notation
-	// in the content.
-	if !strings.Contains(raw, `bad\nna^[me\xff.txt`) {
-		t.Fatalf("escaped filename missing: %q", raw)
-	}
-	if !strings.Contains(raw, "^[]0;pwned^G") {
-		t.Fatalf("escaped OSC content missing: %q", raw)
-	}
-	if !strings.Contains(raw, "\\u0085") || !strings.Contains(raw, "cr^Msuf") {
-		t.Fatalf("escaped C1/CR forms missing: %q", raw)
-	}
-	// The embedded filename newline did not become a row: the frame is
-	// exactly the terminal's height.
-	if n := strings.Count(raw, "\n"); n != 23 {
-		t.Fatalf("output rows = %d newlines, want 23 for a 24-row frame: %q", n, raw)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 
+	"vrg/internal/present"
 	"vrg/internal/searchindex"
 )
 
@@ -13,9 +14,9 @@ import (
 // matched lines. Callers own scheduling, caching, and notification; a
 // Buffer is immutable after Load returns.
 type Buffer struct {
-	lines  []presented
-	spans  map[int][]Span // 0-based source line → display-cell spans
-	digits int            // gutter digit width, minimum 1
+	lines  []present.Line
+	spans  map[int][]present.Span // 0-based source line → display-cell spans
+	digits int                    // gutter digit width, minimum 1
 }
 
 // Load reads path and prepares its display-ready content and validated
@@ -32,14 +33,14 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 	if err != nil {
 		return nil, err
 	}
-	b := &Buffer{spans: make(map[int][]Span)}
+	b := &Buffer{spans: make(map[int][]present.Span)}
 	for rest := data; len(rest) > 0; {
 		i := bytes.IndexByte(rest, '\n')
 		if i < 0 {
-			b.lines = append(b.lines, presentLine(rest))
+			b.lines = append(b.lines, present.LineOf(rest))
 			break
 		}
-		b.lines = append(b.lines, presentLine(rest[:i+1]))
+		b.lines = append(b.lines, present.LineOf(rest[:i+1]))
 		rest = rest[i+1:]
 	}
 	b.digits = len(strconv.Itoa(max(len(b.lines), 1)))
@@ -50,10 +51,10 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 		}
 		ln := b.lines[li]
 		for _, sm := range st.Submatches {
-			if sm.Start < 0 || sm.End > len(ln.raw) || sm.Start > sm.End {
+			if sm.Start < 0 || sm.End > len(ln.Raw()) || sm.Start > sm.End {
 				continue
 			}
-			if !bytes.Equal(ln.raw[sm.Start:sm.End], sm.Bytes) {
+			if !bytes.Equal(ln.Raw()[sm.Start:sm.End], sm.Bytes) {
 				continue
 			}
 			b.spans[li] = append(b.spans[li], ln.Span(sm.Start, sm.End))
@@ -77,8 +78,8 @@ func (b *Buffer) GutterDigits() int { return b.digits }
 func (b *Buffer) Text(i int) string { return b.lines[i].Text() }
 
 // Cells returns the display cells of 0-based source line i.
-func (b *Buffer) Cells(i int) []Cell { return b.lines[i].cells }
+func (b *Buffer) Cells(i int) []present.Cell { return b.lines[i].Cells() }
 
 // Spans returns the validated highlight spans — display-cell ranges or
 // marker positions — of 0-based source line i.
-func (b *Buffer) Spans(i int) []Span { return b.spans[i] }
+func (b *Buffer) Spans(i int) []present.Span { return b.spans[i] }

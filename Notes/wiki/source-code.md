@@ -16,7 +16,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   terminal restoration and exit 2, otherwise the final model's
   `ExitCode` (0 summary quit, 130 cancellation); rg start failure →
   sanitized diagnostic, exit 2, no TUI; usage error → sanitized
-  diagnostic plus the generated usage block, exit 2.
+  diagnostic plus the generated usage block, exit 2. Boundary error
+  text renders through `present.Diagnostic` since Issue #6.
 - `cmd/vrg/hooks.go` — the env-var test seams applied to `app.Config`:
   `VRG_TEST_REAP_FILE` (reap-evidence side channel → `ReapReport`),
   `VRG_TEST_GATE_FIFO` (boundary `PrepareGate`), `VRG_TEST_FAIL_FIFO`
@@ -52,10 +53,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   escape, and map all off the update path, behind `loadGate` in tests),
   `renderBrowse` (raw-path-ordered file list with underlined current
   entry scrolled into view, filename rule, `Loading…`/`(unreadable)`
-  placeholders), `filenameRule`, `contentRow` (right-justified gutter +
-  two spaces), and `renderCells` (inverse-video spans over escaped
-  cells, marker spans, clip-edge wide clusters). See
-  [browse-tracer.md](browse-tracer.md).
+  placeholders — path sinks via `present.Path`), `filenameRule`,
+  `contentRow` (right-justified gutter + two spaces), and `renderCells`
+  (inverse-video spans over escaped `present.Cell`s, marker spans,
+  clip-edge wide clusters). See
+  [browse-tracer.md](browse-tracer.md) and
+  [safe-presentation.md](safe-presentation.md).
 
 ## internal/searchindex
 
@@ -78,31 +81,40 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   generated help; the search-flag allow-list lives only here), the
   ordered `scanArgs`/`scanOption`/`expandOption` preflight (encounter-
   order flag records, combined-short expansion, cumulative `-u` cap,
-  lexical `=` rejection), `renderHelp`, `checkRoot`, the `Escape`
-  sanitizer, and the `Result`/`Kind`/`ErrorKind`/`Env` contract —
-  `Result.ChildArgv` is the exact rg argument vector. See
+  lexical `=` rejection), `renderHelp`, `checkRoot`, and the
+  `Result`/`Kind`/`ErrorKind`/`Env` contract — `Result.ChildArgv` is
+  the exact rg argument vector. Every hostile substitution (option
+  tokens, excess operand, root) escapes through `present.Path`; the
+  Issue #1 `cli.Escape` is gone since Issue #6. See
   [cli-foundation.md](cli-foundation.md) and
   [cli-flags-and-child-argv.md](cli-flags-and-child-argv.md).
 
+## internal/present
+
+- `internal/present/present.go` — `Path`, the canonical single-line
+  path/filename escaper (`\n`/`\r`/`\t` forms, `\\` doubling, `\xNN`
+  invalid UTF-8, caret notation for C0, `^?` for DEL, `\uXXXX` for C1,
+  printable Unicode preserved), and `Diagnostic`, the
+  line-boundary-preserving diagnostic escaper (LF/CRLF are real
+  boundaries, tabs expand to 8-column stops, other controls escaped,
+  `Path`-escaped filenames embed single-lined).
+- `internal/present/line.go` — `LineOf`/`Line` for content lines
+  (U+FFFD for invalid UTF-8, caret notation, `\uXXXX`, LF/CRLF never
+  displayed, standalone CR → `^M`, provisional single-cell `→` tab
+  pending Issue #16) with per-byte `lo`/`hi` byte→cell maps and `Span`
+  range→cell mapping including zero-width markers; `Cell`. Grapheme-
+  aware via `x/ansi`. See [safe-presentation.md](safe-presentation.md).
+- `internal/present/doc.go` — the shared all-sink utility contract.
+
 ## internal/filebuffer
 
-- `internal/filebuffer/present.go` — the Issue #5 safe-presentation
-  core: `EscapePath` for path bytes (`\n`/`\r`/`\t` forms, `\\`,
-  `\xNN` invalid UTF-8, caret notation for C0/DEL, `\uXXXX` for C1,
-  printable Unicode preserved) and `presentLine`/`presented` for
-  content lines (U+FFFD for invalid UTF-8, caret notation, `\uXXXX`,
-  LF/CRLF never displayed, standalone CR → `^M`, provisional
-  single-cell `→` tab pending Issue #16) with per-byte `lo`/`hi`
-  byte→cell maps and `Span` range→cell mapping including zero-width
-  markers. Grapheme-aware via `x/ansi`. See
-  [browse-tracer.md](browse-tracer.md).
 - `internal/filebuffer/filebuffer.go` — `Buffer`, one file's prepared
   display-ready content: `Load` reads, splits, escapes, and maps the
-  file (all inside the worker command, never on `Update`), validates
-  each stop's submatches against the line's raw bytes, and exposes
-  `LineCount`, `GutterWidth`/`GutterDigits` (largest line number's
-  digit width + two spaces, minimum one slot), `Text`, `Cells`, and
-  `Spans`.
+  file (all inside the worker command, never on `Update`) through
+  `internal/present`, validates each stop's submatches against the
+  line's raw bytes, and exposes `LineCount`,
+  `GutterWidth`/`GutterDigits` (largest line number's digit width +
+  two spaces, minimum one slot), `Text`, `Cells`, and `Spans`.
 
 ## internal/viewport
 

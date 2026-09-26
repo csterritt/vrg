@@ -1,0 +1,116 @@
+# Safe presentation — the shared all-sink utility
+
+Issue #6 (`Notes/issues/006-safe-presentation-utility-for-all-sinks.md`,
+tasks `Notes/tasks/006-safe-presentation-utility-for-all-sinks.md`)
+generalized the Issue #5 escaping core and the minimal Issue #1
+`cli.Escape` escaper into one shared package, `internal/present`, that
+every output sink routes through — so raw control sequences from
+searched data can never reach the terminal as instructions.
+
+PRD cross-references: "Text, graphemes, and safe presentation" (the
+sanitization bullets) and "Module Design" in `Notes/PRD-vrg.md`, which
+assigns the shared utility to a package rather than a top-level module.
+
+## Canonical contracts per sink class
+
+**Paths and filenames** — `present.Path(raw []byte) string` renders raw
+path bytes as a single safe display line. `\n`, `\r`, `\t` become the
+two-character forms `\n`, `\r`, `\t`; a literal backslash doubles to
+`\\`; invalid UTF-8 bytes become `\xNN`; other C0 controls take caret
+notation (`^[` for ESC) and DEL takes `^?`; C1 controls take `\uXXXX`;
+valid printable Unicode passes through. This is the single-line
+filename form embedded anywhere a name is displayed — the file list,
+the filename rule, usage-error diagnostics, and (later) pop-ups,
+overlays, and help substitutions. The raw path bytes — never the
+display form — remain the key for identity, ordering, and file access.
+
+**File content** — `present.LineOf(raw []byte) Line` presents one source
+line, terminator included, as display cells. Invalid UTF-8 renders as
+U+FFFD while its raw-byte mapping is retained; C0 controls and DEL use
+caret notation; C1 controls use `\uXXXX`; LF and CRLF are structural
+line terminators, never displayed (their bytes map to the end-of-line
+position); a standalone CR renders as `^M`; a tab renders as the
+provisional single-cell `→` placeholder pending Issue #16's stop
+expansion. Grapheme clusters go through `x/ansi` width accounting; a
+cluster mixing printable and dangerous forms falls back to per-rune
+rules so no control byte survives verbatim. Every emitted unit records
+per-byte `lo`/`hi` cell maps; `Line.Span(start, end)` maps a raw byte
+range to its display `Span` — interior bytes expand to their whole
+unit, a match covering an ESC byte highlights both `^[` cells, and a
+range covering only removed terminator bytes or a zero-width position
+yields a marker span (`Start == End`).
+
+**Diagnostics** — `present.Diagnostic(s string) string` renders
+diagnostic text while preserving the message's own line structure: LF
+is a real line boundary and CRLF counts as one boundary; a standalone
+CR takes `^M`; tabs expand to the next multiple of eight display
+columns (counting escaped forms and rune widths); other C0 controls and
+DEL take caret notation; C1 takes `\uXXXX`; invalid UTF-8 takes `\xNN`.
+Printable text — including backslash — passes through, so a filename
+embedded via `Path` keeps its single-line escaped form: **escape the
+filename first, then embed it**, and its newline can never become a
+diagnostic paragraph break.
+
+## Sink wiring and the Issue #1 escaper replacement
+
+`cli.Escape` is gone. `internal/cli` now escapes every hostile
+substitution — unsupported option tokens, the excess operand, the root
+operand — through `present.Path`; `cmd/vrg` renders its boundary error
+text (`vrg: <err>`) through `present.Diagnostic`. The browse sinks call
+`present.Path` for list entries and the filename rule and consume
+`present.Line`/`Cell`/`Span` for panel content. Generated command-line
+help on stdout contains only fixed text; its sink-safety row guards
+that property rather than a substitution path.
+
+## The shared sink-safety table
+
+`internal/app/sinksafety_test.go` holds the Issue #5 hostile fixture
+set restructured as a shared, extensible table:
+
+- **Fixtures** (`hostileFixtures`): OSC `\x1b]0;pwned\x07`, CSI
+  `\x1b[2J`, C0 controls (`\x07 \x08 \x1b`), C1 `\xc2\x85`, DEL, a
+  standalone CR, invalid UTF-8 path bytes, and an embedded filename
+  newline. Each carries the bytes to inject, the raw bytes forbidden
+  verbatim in output, the distinctive post-ESC payload, and the
+  independently written escaped forms a path-bearing or content sink
+  must show.
+- **Sink rows** (`sinkSafetySinks`): file-list entry, filename rule,
+  panel content, usage-error stderr (the `cli.Parse` diagnostic plus
+  `cli.HelpText()` composition `run` writes), and CLI-help stdout —
+  the generated command-line help is its own sink, distinct from the
+  Issue #31 TUI help dialog that adds its own row later.
+- **Method**: each fixture × sink renders through the real composition
+  path under `theme.Plain` — the no-style path where no escape byte may
+  legitimately appear — and asserts on the **raw output before any ANSI
+  stripping** that no fixture control byte survives and that none of
+  the universal set (`\x1b`, `\x07`, `\x9b`, `\xc2\x85`, bare `\r`)
+  appears at all; TUI rows also pin the frame at height-1 newlines. A
+  styled pass then asserts the fixture's distinctive payload never
+  appears immediately after an unescaped ESC. (Stripping ANSI and
+  comparing would erase the very evidence being sought.)
+
+**Later-sink ownership**: each issue that introduces a new sink routes
+it through `internal/present` and adds a `sinkSafetySinks` row without
+duplicating fixtures — Issue #9 (error overlay), Issue #11 (stderr
+replay), Issue #15 (file-change pop-up), Issue #31 (TUI help dialog
+substitutions), Issue #34 (any generated README/help text).
+
+## Regression surface
+
+The Issue #5 core cases re-ran unchanged against the generalized
+utility — they moved with it to `internal/present` (`Path`, `LineOf`,
+`Line`, `Cell`, `Span`) with only mechanical renames. The Issue #1 CLI
+output tests — the `TestGeneratedHelpStdout` and `TestCLIOutputSafety`
+named groups in `cmd/vrg/main_test.go` and the `internal/cli` suites —
+pass unmodified against the replacement.
+
+## Files
+
+- `internal/present/present.go` — `Path`, `Diagnostic`.
+- `internal/present/line.go` — `Line` (raw bytes + text + cells +
+  `lo`/`hi` maps), `LineOf`, `Cell`, `Span`.
+- `internal/present/doc.go` — package contract.
+
+See also: [browse-tracer.md](browse-tracer.md) (the first sinks),
+[cli-foundation.md](cli-foundation.md) (the escaper this replaces),
+[unit-tests.md](unit-tests.md) (the table and test catalog).

@@ -35,6 +35,11 @@ Catalog of all wiki pages for the vrg project.
   loading with `Loading…`, the safe-presentation core's path/content
   rules and byte→cell maps, the provisional tab form, the no-style
   sink-safety method, and the provisional list width pending Issue #24
+- [safe-presentation.md](safe-presentation.md) — Issue #6: the shared
+  `internal/present` utility (`Path`/`LineOf`/`Diagnostic`), the
+  canonical per-sink-class escaping contracts, the `cli.Escape`
+  replacement, the shared sink-safety table with its fixtures and
+  no-style composition method, and later-sink row ownership
 
 ## Catalogs
 

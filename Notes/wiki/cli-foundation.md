@@ -101,12 +101,15 @@ only from the scan, never from the library's unordered per-option values.
 
 ## Sanitization
 
-`cli.Escape` is the interim single-line escaper (Issue #6 generalizes):
-`\\` doubles, `\n`/`\r`/`\t` become escape spellings, other C0 controls
-and DEL use caret notation (`ESC` → `^[`), C1 controls use `\u` escapes,
-invalid UTF-8 bytes use `\xNN`. It covers usage diagnostics and, since
-Issue #3, the rg start-failure diagnostic; generated help contains only
-fixed text.
+Since Issue #6 every hostile substitution escapes through
+`present.Path`, the shared single-line path escaper in
+`internal/present` — the interim `cli.Escape` is removed. `\\` doubles,
+`\n`/`\r`/`\t` become escape spellings, other C0 controls and DEL use
+caret notation (`ESC` → `^[`), C1 controls use `\u` escapes, invalid
+UTF-8 bytes use `\xNN`. It covers usage diagnostics and, since Issue
+#3, the rg start-failure diagnostic — which `cmd/vrg` renders through
+`present.Diagnostic`; generated help contains only fixed text. See
+[safe-presentation.md](safe-presentation.md).
 
 ## Tests consumed by later tasks
 

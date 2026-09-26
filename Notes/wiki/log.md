@@ -139,3 +139,38 @@ presentation; Module Design), `internal/filebuffer/present.go`,
 `internal/filebuffer/filebuffer_test.go`, `internal/app/browse_test.go`,
 `internal/app/model_test.go`, `cmd/vrg/main_test.go`,
 `cmd/vrg/pty_test.go`.
+
+## [2026-09-23] ingest | Issue #6 safe-presentation utility for all sinks
+
+Ingested the completed Issue #6 implementation: the Issue #5 escaping
+core moved out of `internal/filebuffer` into the new shared
+`internal/present` package — `Path` (was `EscapePath`), `LineOf`/`Line`
+(was `presentLine`/`presented`), `Cell`, `Span` — and gained
+`Diagnostic` (real LF/CRLF line boundaries preserved, tabs expanded to
+8-column stops, other controls escaped, `Path`-escaped filenames embed
+single-lined). `cli.Escape` is removed: `internal/cli` escapes hostile
+substitutions through `present.Path`, `cmd/vrg` renders boundary error
+text through `present.Diagnostic`, and `internal/app` routes the file
+list, filename rule, and panel content through the package.
+`internal/app/sinksafety_test.go` restructured the Issue #5 hostile
+fixture set into `TestSinkSafetyTable`: shared fixtures × sink rows
+(file-list entry, filename rule, panel content, usage-error stderr,
+CLI-help stdout) rendered through `theme.Plain` with raw-output
+assertions, a styled payload-after-ESC pass, and an extensible
+`sinkSafetySinks` table later issues (#9, #11, #15, #31, #34) extend
+with their own sink rows. The Issue #5 core cases moved with the
+utility unchanged (mechanical renames only); the Issue #1 CLI output
+tests pass unmodified. Created
+[safe-presentation](safe-presentation.md); updated
+[source-code](source-code.md), [unit-tests](unit-tests.md),
+[browse-tracer](browse-tracer.md) (core relocation, table restructure),
+[cli-foundation](cli-foundation.md) (escaper replacement),
+[project-overview](project-overview.md), and the index. Sources:
+`Notes/issues/006-safe-presentation-utility-for-all-sinks.md`,
+`Notes/tasks/006-safe-presentation-utility-for-all-sinks.md`,
+`Notes/PRD-vrg.md` (Text, graphemes, and safe presentation; Module
+Design), `internal/present/doc.go`, `internal/present/present.go`,
+`internal/present/line.go`, `internal/present/present_test.go`,
+`internal/present/line_test.go`, `internal/app/sinksafety_test.go`,
+`internal/app/browse.go`, `internal/filebuffer/filebuffer.go`,
+`internal/cli/cli.go`, `cmd/vrg/main.go`.

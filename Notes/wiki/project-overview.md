@@ -20,16 +20,17 @@ current file's contents with matches highlighted.
 
 ## Layout
 
-Six internal packages mirror the PRD Module Design: `cli`,
-`searchindex`, `filebuffer`, `viewport`, `theme`, `app` — all under
-`internal/`, plus the thin entry point `cmd/vrg`. Issues #1–#5 are
-live: invocation, flag allow-list, the protected child argv, rg spawn
-with dual-pipe drainage, cancellation/cleanup/terminal restoration,
-the `Searching…` state, the `searchindex` record/stop model, and the
-two-pane browse tracer — file list, filename rule, guttered content
-with inverse-video matches, async prepared-buffer loads — built on
-`filebuffer`'s safe-presentation core with byte→cell maps and the
-`viewport`/`theme` seams.
+The internal packages mirror the PRD Module Design: `cli`,
+`searchindex`, `filebuffer`, `viewport`, `theme`, `app`, plus
+`present` — the shared safe-presentation utility every output sink
+routes through — all under `internal/`, plus the thin entry point
+`cmd/vrg`. Issues #1–#6 are live: invocation, flag allow-list, the
+protected child argv, rg spawn with dual-pipe drainage,
+cancellation/cleanup/terminal restoration, the `Searching…` state, the
+`searchindex` record/stop model, the two-pane browse tracer — file
+list, filename rule, guttered content with inverse-video matches,
+async prepared-buffer loads — and the all-sink `present` utility
+(`Path`/`LineOf`/`Diagnostic`) with its extensible sink-safety table.
 
 See [source-code.md](source-code.md) for the file catalog and
 [unit-tests.md](unit-tests.md) for the test catalog.

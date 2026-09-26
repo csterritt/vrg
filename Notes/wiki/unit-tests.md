@@ -97,29 +97,44 @@ and base64 `{"bytes"}` encodings freely:
   working directory with no canonicalization (`./`, `a/../b` survive);
   absolute paths pass through.
 
-## internal/filebuffer
+## internal/present
 
-`present_test.go` (same package) covers the safe-presentation core:
+`present_test.go` (same package) covers the path and diagnostic
+contracts of the shared utility:
 
-- `TestEscapePath` — the full path-rule table: `\n`/`\r`/`\t` to their
+- `TestPath` — the full path-rule table: `\n`/`\r`/`\t` to their
   two-character forms, `\\` doubling, `\xNN` for invalid UTF-8, caret
   notation for C0 and `^?` for DEL, `\uXXXX` for C1, printable Unicode
   preserved.
-- `TestEscapePathNeverEmitsControls` — every C0 byte, DEL, and C1
-  fixture produces no raw control byte in the output.
-- `TestPresentLineText` — content rules: invalid UTF-8 → U+FFFD, C0/DEL
+- `TestPathNeverEmitsControls` — every C0 byte and DEL produces no raw
+  control byte in the output.
+- `TestDiagnostic` — diagnostic rules: LF preserved as a real line
+  boundary, CRLF as one boundary, standalone CR → `^M`, tabs expanded
+  to 8-column stops (column reset per line, escaped forms counted),
+  caret notation, `\uXXXX` C1, `\xNN` invalid UTF-8, backslash and
+  printable text passed through.
+- `TestDiagnosticNeverEmitsControls` — every C0 byte and DEL produces
+  no raw control byte except the message's own `\n`.
+- `TestDiagnosticEmbedsSingleLinedFilename` — a `Path`-escaped filename
+  stays single-lined inside a diagnostic while the message's own
+  newlines still break lines.
+
+`line_test.go` (same package) covers content presentation:
+
+- `TestLineText` — content rules: invalid UTF-8 → U+FFFD, C0/DEL
   caret notation, `\u0085`-style C1 forms, LF/CRLF never displayed,
   standalone CR → `^M`.
-- `TestPresentLineWidth` — cell counts for escape forms and wide
-  clusters.
-- `TestPresentLineSpan` — byte→cell maps for escaped forms, including
+- `TestLineWidth` — cell counts for escape forms and wide clusters.
+- `TestLineSpan` — byte→cell maps for escaped forms, including
   an ESC byte's match covering both `^[` cells and marker positions on
   removed terminator bytes.
-- `TestPresentLineTabForm` — the provisional single `→` cell (no
+- `TestLineTabForm` — the provisional single `→` cell (no
   position assertions, per the Issue #16 deferral).
-- `TestPresentLineRetainsRaw` — raw line bytes survive presentation.
+- `TestLineRetainsRaw` — raw line bytes survive presentation.
 
-`filebuffer_test.go` (external package `filebuffer_test`) covers
+## internal/filebuffer
+
+`filebuffer_test.go` (same package) covers
 `Load` against real fixture files:
 
 - `TestLoadLineCount` — source-line counts including empty and
@@ -183,12 +198,24 @@ composition:
 - `TestBrowseRendering` — composed `View()`: raw-path file-list order,
   current-entry underline, `── path ───` filename rule, right-justified
   gutter with two spaces, no other panel borders.
-- `TestSinkSafetyRawOutput` — the hostile fixture (OSC, CSI, C0, C1,
-  DEL, standalone CR, invalid UTF-8 path bytes, embedded filename
-  newline) through the real composition path under `theme.Plain`,
-  asserting on the raw view string before ANSI stripping that no
-  fixture control byte survives verbatim in the list, rule, or content
-  sinks.
+
+`sinksafety_test.go` (same package) holds the Issue #6 shared
+sink-safety table:
+
+- `TestSinkSafetyTable` — the shared hostile fixture set (OSC, CSI,
+  C0, C1, DEL, standalone CR, invalid UTF-8 path bytes, embedded
+  filename newline) driven through every sink's real composition path:
+  file-list entry, filename rule, panel content, usage-error stderr
+  (`cli.Parse` diagnostic + `cli.HelpText()` composition), and CLI-help
+  stdout. Under `theme.Plain` (the no-style composition path) the raw
+  output — asserted before any ANSI stripping — must contain no fixture
+  control byte verbatim and none of the universal set
+  (`\x1b`, `\x07`, `\x9b`, `\xc2\x85`, bare `\r`); TUI rows pin the
+  frame at height-1 newlines so an embedded filename newline cannot
+  add a row. A styled pass asserts the fixture's distinctive payload
+  never follows an unescaped ESC. The `sinkSafetySinks` table is
+  extensible: later issues add rows for their sinks without
+  duplicating fixtures.
 
 `subprocess_test.go` re-executes the test binary as fake rg via
 `TestMain` (`VRG_FAKE_RG` mode, `VRG_FAKE_DIR` artifacts):

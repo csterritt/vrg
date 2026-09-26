@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"vrg/internal/filebuffer"
+	"vrg/internal/present"
 	"vrg/internal/searchindex"
 	"vrg/internal/theme"
 )
@@ -112,7 +113,7 @@ func (m Model) gutterDigits() int {
 func (m Model) listWidth(gutterW int) int {
 	maxW := 0
 	for _, f := range m.files {
-		if w := ansi.StringWidth(filebuffer.EscapePath(f)); w > maxW {
+		if w := ansi.StringWidth(present.Path(f)); w > maxW {
 			maxW = w
 		}
 	}
@@ -162,7 +163,7 @@ func (m Model) renderBrowse() string {
 			fi := listTop + r
 			entry := ""
 			if fi < len(m.files) {
-				entry = truncateLeft(filebuffer.EscapePath(m.files[fi]), listW)
+				entry = truncateLeft(present.Path(m.files[fi]), listW)
 			}
 			w := ansi.StringWidth(entry)
 			if fi == curIdx && entry != "" {
@@ -203,7 +204,7 @@ func filenameRule(path []byte, w int) string {
 	if w <= 4 || path == nil {
 		return strings.Repeat("─", w)
 	}
-	shown := truncateLeft(filebuffer.EscapePath(path), w-4)
+	shown := truncateLeft(present.Path(path), w-4)
 	rule := "── " + shown + " "
 	if rw := ansi.StringWidth(rule); rw < w {
 		rule += strings.Repeat("─", w-rw)
@@ -240,7 +241,7 @@ func (m Model) contentRow(row int, cur []byte, buf *filebuffer.Buffer, failed bo
 // one cell at their position without shifting text — replacing the
 // cell's glyph, or extending the line by one inverse space at the end.
 // A wide cluster split by the clip edge renders its visible cell blank.
-func renderCells(cells []filebuffer.Cell, spans []filebuffer.Span, textW int, th theme.Theme) string {
+func renderCells(cells []present.Cell, spans []present.Span, textW int, th theme.Theme) string {
 	if textW <= 0 {
 		return ""
 	}

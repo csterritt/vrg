@@ -1,0 +1,23 @@
+vrg: invalid root bad^[dir: does not exist
+
+Usage: vrg [OPTIONS] PATTERN [ROOT]
+
+Search with ripgrep and browse the results in a terminal UI.
+
+Arguments:
+  PATTERN	The ripgrep search pattern.
+  ROOT	Search root: a directory or regular file. (default ".")
+
+Options:
+  -h, --help	Show command-line help and exit.
+  -i, --ignore-case	Case-insensitive search.
+  -S, --smart-case	Case-insensitive unless the pattern contains uppercase.
+  -s, --case-sensitive	Case-sensitive search.
+  -w, --word-regexp	Match whole words only.
+  -x, --line-regexp	Match whole lines only.
+  -F, --fixed-strings	Treat the pattern as a literal string.
+  --hidden	Search hidden files and directories.
+  --no-hidden	Do not search hidden files and directories.
+  --no-ignore	Do not respect ignore files.
+  -u, --unrestricted	Reduce ignore-file and hidden-file filtering; may be given at most twice.
+  -L, --follow	Follow symbolic links.

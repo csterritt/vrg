@@ -1,66 +1,16 @@
-package filebuffer
+package present
 
 import (
 	"strings"
 	"testing"
 )
 
-// Path presentation: newline, carriage return, and tab take the short
-// \n \r \t forms; backslash doubles; invalid UTF-8 bytes take \xNN;
-// remaining C0 controls and DEL use caret notation; C1 controls use
-// \uXXXX; valid printable Unicode passes through untouched.
-func TestEscapePath(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		raw  string
-		want string
-	}{
-		{"plain", "dir/sub/file.go", "dir/sub/file.go"},
-		{"newline", "a\nb", `a\nb`},
-		{"carriage return", "a\rb", `a\rb`},
-		{"tab", "a\tb", `a\tb`},
-		{"backslash", `a\b`, `a\\b`},
-		{"escaped backslash keeps escapes distinct", `a\nb` + "\n", `a\\nb\n`},
-		{"invalid utf-8 byte", "a\xffb", `a\xffb`},
-		{"invalid utf-8 run", "a\xff\xfeb", `a\xff\xfeb`},
-		{"truncated utf-8 tail", "a\xe2\x82", `a\xe2\x82`},
-		{"escape", "a\x1bb", `a^[b`},
-		{"bell", "a\x07b", `a^Gb`},
-		{"nul", "a\x00b", `a^@b`},
-		{"delete", "a\x7fb", `a^?b`},
-		{"c1 nel", "a\xc2\x85b", "a\\u0085b"},
-		{"c1 csi", "a\xc2\x9bb", "a\\u009bb"},
-		{"printable unicode", "héllö→世", "héllö→世"},
-		{"all forms together", "x\ny\tz\\w\xff\x1bv", `x\ny\tz\\w\xff^[v`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := EscapePath([]byte(tc.raw)); got != tc.want {
-				t.Fatalf("EscapePath(%q) = %q, want %q", tc.raw, got, tc.want)
-			}
-		})
-	}
-}
-
-// An escaped path never emits a raw control byte: every byte that could
-// move the terminal is spelled out.
-func TestEscapePathNeverEmitsControls(t *testing.T) {
-	for i := 0; i < 0x20; i++ {
-		raw := []byte{'a', byte(i), 'b'}
-		got := EscapePath(raw)
-		for j := 0; j < len(got); j++ {
-			if c := got[j]; c < 0x20 || c == 0x7f {
-				t.Fatalf("EscapePath(%q) emitted control byte 0x%02x: %q", raw, c, got)
-			}
-		}
-	}
-}
-
 // Content presentation: the display text of one source line. LF and
 // CRLF are line terminators and produce no display; a standalone CR is
 // escaped ^M; other C0 controls and DEL take caret notation; C1 takes
 // \uXXXX; invalid UTF-8 becomes U+FFFD; tab renders as the provisional
 // one-cell → placeholder until Issue 16's stop expansion.
-func TestPresentLineText(t *testing.T) {
+func TestLineText(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		raw  string
@@ -91,9 +41,9 @@ func TestPresentLineText(t *testing.T) {
 		{"printable unicode", "héllö→世\n", "héllö→世"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			p := presentLine([]byte(tc.raw))
-			if p.Text() != tc.want {
-				t.Fatalf("presentLine(%q).Text() = %q, want %q", tc.raw, p.Text(), tc.want)
+			l := LineOf([]byte(tc.raw))
+			if l.Text() != tc.want {
+				t.Fatalf("LineOf(%q).Text() = %q, want %q", tc.raw, l.Text(), tc.want)
 			}
 		})
 	}
@@ -102,7 +52,7 @@ func TestPresentLineText(t *testing.T) {
 // Cell counts for the printable forms: ASCII is one cell per byte, a
 // wide rune two, a combining cluster one, caret escapes two, \uXXXX six,
 // U+FFFD one, and the provisional tab form a single → cell.
-func TestPresentLineWidth(t *testing.T) {
+func TestLineWidth(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		raw  string
@@ -117,8 +67,8 @@ func TestPresentLineWidth(t *testing.T) {
 		{"combining cluster", "e\u0301x\n", 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := presentLine([]byte(tc.raw)).Width(); got != tc.want {
-				t.Fatalf("presentLine(%q).Width() = %d, want %d", tc.raw, got, tc.want)
+			if got := LineOf([]byte(tc.raw)).Width(); got != tc.want {
+				t.Fatalf("LineOf(%q).Width() = %d, want %d", tc.raw, got, tc.want)
 			}
 		})
 	}
@@ -129,7 +79,7 @@ func TestPresentLineWidth(t *testing.T) {
 // both ^ and [, a match inside a multi-byte unit covers the whole unit,
 // removed terminator bytes map to the end-of-line position, and empty
 // ranges yield a zero-width marker position.
-func TestPresentLineSpan(t *testing.T) {
+func TestLineSpan(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		raw        string
@@ -157,8 +107,8 @@ func TestPresentLineSpan(t *testing.T) {
 		{"empty line zero-width", "\n", 0, 0, Span{0, 0}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := presentLine([]byte(tc.raw)).Span(tc.start, tc.end); got != tc.want {
-				t.Fatalf("presentLine(%q).Span(%d,%d) = %+v, want %+v",
+			if got := LineOf([]byte(tc.raw)).Span(tc.start, tc.end); got != tc.want {
+				t.Fatalf("LineOf(%q).Span(%d,%d) = %+v, want %+v",
 					tc.raw, tc.start, tc.end, got, tc.want)
 			}
 		})
@@ -168,25 +118,25 @@ func TestPresentLineSpan(t *testing.T) {
 // A tab is never emitted raw and occupies exactly one provisional →
 // cell; per Issue 5 nothing on a tab-containing line asserts specific
 // cell positions beyond that single-cell form.
-func TestPresentLineTabForm(t *testing.T) {
-	p := presentLine([]byte("a\tb\n"))
-	if p.Text() != "a→b" {
-		t.Fatalf("tab presentation = %q, want %q", p.Text(), "a→b")
+func TestLineTabForm(t *testing.T) {
+	l := LineOf([]byte("a\tb\n"))
+	if l.Text() != "a→b" {
+		t.Fatalf("tab presentation = %q, want %q", l.Text(), "a→b")
 	}
-	if got := p.Span(1, 2); got.Start != 1 || got.End != 2 {
+	if got := l.Span(1, 2); got.Start != 1 || got.End != 2 {
 		t.Fatalf("tab span = %+v, want exactly one cell", got)
 	}
-	if strings.Contains(p.Text(), "\t") {
-		t.Fatalf("raw tab survived presentation: %q", p.Text())
+	if strings.Contains(l.Text(), "\t") {
+		t.Fatalf("raw tab survived presentation: %q", l.Text())
 	}
 }
 
 // Presented lines retain their raw bytes for identity, comparison, and
 // later coordinate mapping.
-func TestPresentLineRetainsRaw(t *testing.T) {
+func TestLineRetainsRaw(t *testing.T) {
 	raw := []byte("a\xff\x1bb\r\n")
-	p := presentLine(raw)
-	if string(p.Raw()) != string(raw) {
-		t.Fatalf("Raw() = %q, want %q", p.Raw(), raw)
+	l := LineOf(raw)
+	if string(l.Raw()) != string(raw) {
+		t.Fatalf("Raw() = %q, want %q", l.Raw(), raw)
 	}
 }

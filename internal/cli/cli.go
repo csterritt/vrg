@@ -17,9 +17,10 @@ import (
 	"io/fs"
 	"os"
 	"strings"
-	"unicode/utf8"
 
 	mowcli "github.com/jawher/mow.cli"
+
+	"vrg/internal/present"
 )
 
 // appName is the fixed executable name used for the mow.cli application so
@@ -187,15 +188,15 @@ func Parse(args []string, out io.Writer, env Env) Result {
 	}
 	if p.errTok != "" {
 		if p.errKind == ErrExcessUnrestricted {
-			return usageErrorf(ErrExcessUnrestricted, "unrestricted option given more than twice: %s", Escape(p.errTok))
+			return usageErrorf(ErrExcessUnrestricted, "unrestricted option given more than twice: %s", present.Path([]byte(p.errTok)))
 		}
-		return usageErrorf(ErrUnsupportedOption, "unsupported option %s", Escape(p.errTok))
+		return usageErrorf(ErrUnsupportedOption, "unsupported option %s", present.Path([]byte(p.errTok)))
 	}
 	switch {
 	case len(p.positionals) == 0:
 		return usageErrorf(ErrMissingPattern, "missing required argument PATTERN")
 	case len(p.positionals) > 2:
-		return usageErrorf(ErrExcessOperand, "unexpected extra operand %s", Escape(p.positionals[2]))
+		return usageErrorf(ErrExcessOperand, "unexpected extra operand %s", present.Path([]byte(p.positionals[2])))
 	}
 
 	// The preflight has resolved every help request and rejected every
@@ -260,10 +261,10 @@ func checkRoot(stat func(string) (fs.FileInfo, error), root string) (Result, boo
 		if errors.Is(err, fs.ErrNotExist) {
 			reason = "does not exist"
 		}
-		return usageErrorf(ErrInvalidRoot, "invalid root %s: %s", Escape(root), reason), true
+		return usageErrorf(ErrInvalidRoot, "invalid root %s: %s", present.Path([]byte(root)), reason), true
 	}
 	if !fi.IsDir() && !fi.Mode().IsRegular() {
-		return usageErrorf(ErrInvalidRoot, "invalid root %s: not a directory or regular file", Escape(root)), true
+		return usageErrorf(ErrInvalidRoot, "invalid root %s: not a directory or regular file", present.Path([]byte(root))), true
 	}
 	return Result{}, false
 }
@@ -465,54 +466,6 @@ func renderHelp() string {
 			names += "--" + d.long
 		}
 		b.WriteString("  " + names + "\t" + d.desc + "\n")
-	}
-	return b.String()
-}
-
-// Escape renders external data safe for a single-line diagnostic or stub
-// substitution. Backslashes double; newline, carriage return, and tab
-// become \n, \r, \t; other C0 controls and DEL use caret notation; C1
-// controls use \u escapes; invalid UTF-8 bytes use \xNN. Printable text
-// passes through. This is the minimal Issue 1 escaper; Issue 6 generalizes
-// safe presentation for every sink.
-func Escape(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); {
-		c := s[i]
-		if c < utf8.RuneSelf {
-			switch {
-			case c == '\\':
-				b.WriteString(`\\`)
-			case c == '\n':
-				b.WriteString(`\n`)
-			case c == '\r':
-				b.WriteString(`\r`)
-			case c == '\t':
-				b.WriteString(`\t`)
-			case c < 0x20:
-				b.WriteByte('^')
-				b.WriteByte(c + '@')
-			case c == 0x7f:
-				b.WriteString(`^?`)
-			default:
-				b.WriteByte(c)
-			}
-			i++
-			continue
-		}
-		r, size := utf8.DecodeRuneInString(s[i:])
-		if r == utf8.RuneError && size == 1 {
-			fmt.Fprintf(&b, `\x%02x`, c)
-			i++
-			continue
-		}
-		if r >= 0x80 && r < 0xa0 {
-			fmt.Fprintf(&b, `\u%04x`, r)
-		} else {
-			b.WriteString(s[i : i+size])
-		}
-		i += size
 	}
 	return b.String()
 }

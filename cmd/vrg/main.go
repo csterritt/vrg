@@ -12,6 +12,7 @@ import (
 
 	"vrg/internal/app"
 	"vrg/internal/cli"
+	"vrg/internal/present"
 )
 
 func main() {
@@ -45,7 +46,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 func runSearch(res cli.Result, stderr io.Writer) int {
 	wd, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(stderr, "vrg: %s\n", cli.Escape(err.Error()))
+		fmt.Fprintf(stderr, "vrg: %s\n", present.Diagnostic(err.Error()))
 		return 2
 	}
 	cfg := app.Config{Rg: "rg", Argv: res.ChildArgv, Workdir: wd}
@@ -53,7 +54,7 @@ func runSearch(res cli.Result, stderr io.Writer) int {
 	defer cleanup()
 	sess, err := app.Start(context.Background(), cfg)
 	if err != nil {
-		fmt.Fprintf(stderr, "vrg: %s\n", cli.Escape(err.Error()))
+		fmt.Fprintf(stderr, "vrg: %s\n", present.Diagnostic(err.Error()))
 		return 2
 	}
 	// WithInput(os.Stdin) keeps the program reading real stdin rather
@@ -82,7 +83,7 @@ func runSearch(res cli.Result, stderr io.Writer) int {
 	default:
 		// A controlled application failure: the single post-restoration
 		// stderr diagnostic.
-		fmt.Fprintf(stderr, "vrg: %s\n", cli.Escape(err.Error()))
+		fmt.Fprintf(stderr, "vrg: %s\n", present.Diagnostic(err.Error()))
 		return 2
 	}
 }

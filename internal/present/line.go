@@ -1,4 +1,4 @@
-package filebuffer
+package present
 
 import (
 	"bytes"
@@ -8,55 +8,6 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 )
-
-// EscapePath renders raw path bytes safe for single-line display.
-// Newline, carriage return, and tab become \n, \r, \t; backslash
-// doubles; invalid UTF-8 bytes become \xNN; other C0 controls and DEL
-// take caret notation; C1 controls take \uXXXX; valid printable Unicode
-// passes through. The raw bytes — never this display form — remain the
-// key for identity, ordering, and file access. Issue #6 unifies this
-// with the Issue #1 cli.Escape escaper as the shared all-sink utility.
-func EscapePath(raw []byte) string {
-	var b strings.Builder
-	b.Grow(len(raw))
-	for i := 0; i < len(raw); {
-		c := raw[i]
-		if c < utf8.RuneSelf {
-			switch {
-			case c == '\\':
-				b.WriteString(`\\`)
-			case c == '\n':
-				b.WriteString(`\n`)
-			case c == '\r':
-				b.WriteString(`\r`)
-			case c == '\t':
-				b.WriteString(`\t`)
-			case c < 0x20:
-				b.WriteByte('^')
-				b.WriteByte(c + '@')
-			case c == 0x7f:
-				b.WriteString(`^?`)
-			default:
-				b.WriteByte(c)
-			}
-			i++
-			continue
-		}
-		r, size := utf8.DecodeRune(raw[i:])
-		if r == utf8.RuneError && size == 1 {
-			fmt.Fprintf(&b, `\x%02x`, c)
-			i++
-			continue
-		}
-		if r >= 0x80 && r < 0xa0 {
-			fmt.Fprintf(&b, `\u%04x`, r)
-		} else {
-			b.Write(raw[i : i+size])
-		}
-		i += size
-	}
-	return b.String()
-}
 
 // Cell is one terminal display cell of a presented source line.
 type Cell struct {
@@ -77,9 +28,9 @@ type Span struct {
 	Start, End int
 }
 
-// presented is one source line's display-ready form: the escaped text,
-// its cells, and the byte→cell map highlight rendering consumes.
-type presented struct {
+// Line is one source line's display-ready form: the escaped text, its
+// cells, and the byte→cell map highlight rendering consumes.
+type Line struct {
 	raw   []byte // original line bytes including any terminator
 	text  string // joined cell texts
 	cells []Cell
@@ -90,13 +41,17 @@ type presented struct {
 }
 
 // Text returns the escaped display text of the line.
-func (p presented) Text() string { return p.text }
+func (l Line) Text() string { return l.text }
 
 // Width returns the line's display width in terminal cells.
-func (p presented) Width() int { return len(p.cells) }
+func (l Line) Width() int { return len(l.cells) }
+
+// Cells returns the line's display cells, sharing the line's storage —
+// callers must not mutate them.
+func (l Line) Cells() []Cell { return l.cells }
 
 // Raw returns the line's original bytes including any terminator.
-func (p presented) Raw() []byte { return p.raw }
+func (l Line) Raw() []byte { return l.raw }
 
 // Span maps a raw byte range within the line to its display cell span.
 // Ranges are clamped to the line; interior bytes expand the span to the
@@ -105,21 +60,21 @@ func (p presented) Raw() []byte { return p.raw }
 // display cells — a zero-width position or a match solely on removed
 // terminator bytes — yields a marker position with Start == End: a
 // zero-width match at byte 4 of "hit\r\n" marks display column 3.
-func (p presented) Span(start, end int) Span {
+func (l Line) Span(start, end int) Span {
 	pos := func(off int) int {
 		if off < 0 {
 			return 0
 		}
-		if off >= len(p.raw) {
-			return len(p.cells)
+		if off >= len(l.raw) {
+			return len(l.cells)
 		}
-		return p.lo[off]
+		return l.lo[off]
 	}
 	if start < 0 {
 		start = 0
 	}
-	if end > len(p.raw) {
-		end = len(p.raw)
+	if end > len(l.raw) {
+		end = len(l.raw)
 	}
 	if end < start {
 		end = start
@@ -127,19 +82,19 @@ func (p presented) Span(start, end int) Span {
 	if start == end {
 		return Span{pos(start), pos(start)}
 	}
-	return Span{pos(start), p.hi[end-1]}
+	return Span{pos(start), l.hi[end-1]}
 }
 
-// presentLine escapes one raw source line — including any trailing LF
-// or CRLF terminator — into display cells with a byte→cell map. Invalid
+// LineOf escapes one raw source line — including any trailing LF or
+// CRLF terminator — into display cells with a byte→cell map. Invalid
 // UTF-8 becomes U+FFFD while retaining its raw-byte mapping; C0
 // controls and DEL take caret notation except that LF and CRLF are
 // never displayed (terminators map to the end-of-line position) and a
 // standalone CR becomes ^M; C1 controls take \uXXXX; tab renders as the
 // provisional single-cell → placeholder pending Issue 16's stop
 // expansion.
-func presentLine(raw []byte) presented {
-	p := presented{raw: bytes.Clone(raw), lo: make([]int, len(raw)), hi: make([]int, len(raw))}
+func LineOf(raw []byte) Line {
+	l := Line{raw: bytes.Clone(raw), lo: make([]int, len(raw)), hi: make([]int, len(raw))}
 	var b strings.Builder
 
 	// emit records one unit covering raw bytes [start,end) as width
@@ -149,25 +104,25 @@ func presentLine(raw []byte) presented {
 	emit := func(start, end int, text string, width int) {
 		b.WriteString(text)
 		if width <= 0 {
-			c := len(p.cells) - 1
+			c := len(l.cells) - 1
 			if c < 0 {
-				p.cells = append(p.cells, Cell{Text: text})
+				l.cells = append(l.cells, Cell{Text: text})
 				c = 0
 			} else {
-				p.cells[c].Text += text
+				l.cells[c].Text += text
 			}
 			for j := start; j < end; j++ {
-				p.lo[j], p.hi[j] = c, c+1
+				l.lo[j], l.hi[j] = c, c+1
 			}
 			return
 		}
-		c := len(p.cells)
-		p.cells = append(p.cells, Cell{Text: text})
+		c := len(l.cells)
+		l.cells = append(l.cells, Cell{Text: text})
 		for k := 1; k < width; k++ {
-			p.cells = append(p.cells, Cell{Cont: true})
+			l.cells = append(l.cells, Cell{Cont: true})
 		}
 		for j := start; j < end; j++ {
-			p.lo[j], p.hi[j] = c, c+width
+			l.lo[j], l.hi[j] = c, c+width
 		}
 	}
 
@@ -233,14 +188,14 @@ func presentLine(raw []byte) presented {
 
 	// Unmapped bytes are removed terminator bytes; they map to the
 	// end-of-line position.
-	eol := len(p.cells)
-	for j := range p.lo {
-		if p.hi[j] == 0 {
-			p.lo[j], p.hi[j] = eol, eol
+	eol := len(l.cells)
+	for j := range l.lo {
+		if l.hi[j] == 0 {
+			l.lo[j], l.hi[j] = eol, eol
 		}
 	}
-	p.text = b.String()
-	return p
+	l.text = b.String()
+	return l
 }
 
 // printableCluster reports whether every rune in cl is valid printable

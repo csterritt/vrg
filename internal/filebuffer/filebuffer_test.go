@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"vrg/internal/present"
 	"vrg/internal/searchindex"
 )
 
@@ -110,7 +111,7 @@ func TestHighlightSpans(t *testing.T) {
 		},
 	})
 	spans := b.Spans(0)
-	want := []Span{{1, 3}, {5, 8}}
+	want := []present.Span{{Start: 1, End: 3}, {Start: 5, End: 8}}
 	if len(spans) != len(want) {
 		t.Fatalf("Spans(0) = %+v, want %+v", spans, want)
 	}

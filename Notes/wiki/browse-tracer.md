@@ -56,24 +56,25 @@ Full-file work never lands on the UI update path:
 
 ## Safe-presentation core
 
-`internal/filebuffer/present.go` is the focused Issue #5 escaper that
-Issue #6 will unify with the Issue #1 `cli.Escape` sanitizer into the
-shared all-sink utility.
+Issue #5 landed the escaping core here; Issue #6 generalized it into
+`internal/present`, the shared all-sink utility — see
+[safe-presentation.md](safe-presentation.md) for the canonical
+contracts. In brief:
 
-**Paths** (`EscapePath`): `\n`, `\r`, `\t` become the two-character
+**Paths** (`present.Path`): `\n`, `\r`, `\t` become the two-character
 forms `\n`, `\r`, `\t`; a literal backslash doubles to `\\`; invalid
 UTF-8 bytes become `\xNN`; other C0 controls take caret notation
 (`^[` for ESC) and DEL takes `^?`; C1 controls take `\uXXXX`; valid
 printable Unicode passes through. The raw path bytes — never the
 display form — remain the key for identity, ordering, and file access.
 
-**Content** (`presentLine`): invalid UTF-8 renders as U+FFFD while its
-raw-byte mapping is retained; C0 controls and DEL use caret notation;
-C1 controls use `\uXXXX`-style escapes; LF and CRLF are structural line
-terminators and are never displayed (their bytes map to the
-end-of-line position); a standalone CR renders as `^M`; a tab renders
-as the provisional single-cell `→` placeholder pending Issue #16's
-stop expansion — no test may assert specific cell positions on
+**Content** (`present.LineOf`): invalid UTF-8 renders as U+FFFD while
+its raw-byte mapping is retained; C0 controls and DEL use caret
+notation; C1 controls use `\uXXXX`-style escapes; LF and CRLF are
+structural line terminators and are never displayed (their bytes map to
+the end-of-line position); a standalone CR renders as `^M`; a tab
+renders as the provisional single-cell `→` placeholder pending Issue
+#16's stop expansion — no test may assert specific cell positions on
 tab-containing lines. Grapheme clusters go through `x/ansi` width
 accounting: a printable cluster is one unit; a cluster mixing
 printable and dangerous forms falls back to per-rune rules so no
@@ -81,7 +82,7 @@ control byte survives verbatim.
 
 **Byte→cell maps.** Every emitted unit records, for each source byte,
 its first display cell (`lo`) and the cell after its last (`hi`).
-`presented.Span` maps a raw byte range to its display span: interior
+`Line.Span` maps a raw byte range to its display span: interior
 bytes expand to their whole unit (a rune's bytes share its cells; an
 escape's source byte covers every cell of the escape). A range covering
 no display cells — a match solely on removed terminator bytes, or a
@@ -91,21 +92,25 @@ rendered as one marked cell without shifting text.
 ## Sink-safety method
 
 The three browse sinks — file list, filename rule, panel content — are
-all rendered through the safe-presentation core. `TestSinkSafetyRawOutput`
-drives the hostile fixture (OSC `\x1b]0;x\x07`, CSI `\x1b[2J`, C0
-controls, a C1 control, DEL, a standalone CR, invalid UTF-8 path bytes,
-an embedded filename newline) through the real composition path with
-`theme.Plain` — the no-style seam in which every style is the identity,
+all rendered through `internal/present`. Issue #6 restructured the
+hostile-fixture test into `TestSinkSafetyTable`
+(`internal/app/sinksafety_test.go`): a shared fixture set (OSC
+`\x1b]0;x\x07`, CSI `\x1b[2J`, C0 controls, a C1 control, DEL, a
+standalone CR, invalid UTF-8 path bytes, an embedded filename newline)
+driven through the real composition path of every sink — the three
+browse sinks plus usage-error stderr and CLI-help stdout — with
+`theme.Plain`, the no-style seam in which every style is the identity,
 so rendered output may legitimately contain no escape bytes at all.
 Assertions inspect the raw `View()` string before any ANSI stripping:
-no fixture control byte survives verbatim, and the escaped forms are
-visible in all three sinks.
+no fixture control byte survives verbatim, the escaped forms are
+visible in each sink, and a styled pass proves no fixture payload
+follows an unescaped ESC.
 
 ## Files
 
-- `internal/filebuffer/present.go` — `EscapePath`, `presentLine`,
-  `presented` (raw bytes + text + cells + `lo`/`hi` maps), `Cell`,
-  `Span`.
+- `internal/present/present.go`, `line.go` — `Path`, `Diagnostic`,
+  `LineOf`, `Line` (raw bytes + text + cells + `lo`/`hi` maps),
+  `Cell`, `Span` — the shared utility moved here by Issue #6.
 - `internal/filebuffer/filebuffer.go` — `Buffer`, `Load` (submatch
   validation against raw line bytes: out-of-bounds and mismatched
   ranges dropped), `LineCount`, `GutterWidth`/`GutterDigits`, `Text`,
@@ -119,7 +124,9 @@ visible in all three sinks.
 - `internal/app/app.go` — `phaseBrowse`, buffer/loading/failed maps,
   cursor/files/stops, `relayout`.
 
-See also: [searchindex-records-and-stops.md](searchindex-records-and-stops.md)
+See also: [safe-presentation.md](safe-presentation.md) (the generalized
+utility and sink-safety table),
+[searchindex-records-and-stops.md](searchindex-records-and-stops.md)
 (raw path identity and ordering the list inherits),
 [cancellation-and-cleanup.md](cancellation-and-cleanup.md) (the exit
 path `q`/`ctrl+c` still run through),
