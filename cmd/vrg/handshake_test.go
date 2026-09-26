@@ -300,7 +300,7 @@ func TestEventAckHookInManifest(t *testing.T) {
 // fakeRgFatalScript signals readiness then dies with exit status 3 and
 // no usable results — a fatal outcome whose overlay stands alone.
 const fakeRgFatalScript = `#!/bin/sh
-echo $$ > "$VRG_CAPTURE_DIR/ready"
+echo $$ > "$FAKE_RG_CAPTURE_DIR/ready"
 exit 3
 `
 

@@ -19,7 +19,7 @@ import (
 // consumes — every one lives behind the vrg_testhooks build tag and
 // reaches the production binary only as an absent string. The probed
 // list comes only from this manifest, never from grepping VRG_TEST_*:
-// fake-rg fixture variables such as VRG_CAPTURE_DIR are harness
+// fake-rg fixture variables such as FAKE_RG_CAPTURE_DIR are harness
 // behaviour, not vrg seams. Issue #48 appends its acknowledgement
 // hooks here.
 var hookManifest = []string{

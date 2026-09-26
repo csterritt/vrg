@@ -195,12 +195,15 @@ func TestDualPipeBackpressure(t *testing.T) {
 }
 
 // awaitReadyPID polls the fake rg's readiness handshake — a file named
-// "ready" carrying the child's pid — and returns that pid.
+// "ready" carrying the child's pid — and returns that pid. The file is
+// only ready once it has content: the child's os.WriteFile creates it
+// before the pid bytes land, so an existent-but-empty read is the
+// in-flight window, not a malformed pid.
 func awaitReadyPID(t *testing.T, dir string) int {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if b, err := os.ReadFile(filepath.Join(dir, "ready")); err == nil {
+		if b, err := os.ReadFile(filepath.Join(dir, "ready")); err == nil && len(b) > 0 {
 			pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
 			if err != nil {
 				t.Fatalf("ready file = %q, want a pid: %v", b, err)
@@ -267,7 +270,7 @@ func awaitPIDFile(t *testing.T, dir, name string) int {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if b, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
+		if b, err := os.ReadFile(filepath.Join(dir, name)); err == nil && len(b) > 0 {
 			pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
 			if err != nil {
 				t.Fatalf("%s file = %q, want a pid: %v", name, b, err)

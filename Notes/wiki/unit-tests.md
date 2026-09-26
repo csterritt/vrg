@@ -1629,7 +1629,11 @@ pumps the command and every follow-up through `Update` until the
 completion arrives (bounded — a missing follow-up or timeout fails).
 
 `subprocess_test.go` re-executes the test binary as fake rg via
-`TestMain` (`VRG_FAKE_RG` mode, `VRG_FAKE_DIR` artifacts):
+`TestMain` (`VRG_FAKE_RG` mode, `VRG_FAKE_DIR` artifacts). Its pid
+handshake polls (`awaitReadyPID`/`awaitPIDFile`) require the
+`ready`/`grandchild` file to carry non-empty content — Issue #50's
+verification pass caught the create-before-write window where an
+existent-but-empty read failed `strconv.Atoi`:
 
 - `TestChildArgvAndWorkingDirectory` — the child receives `Config.Argv`
   verbatim and runs in `Config.Workdir` (argv and `getwd` captured to
@@ -1977,7 +1981,7 @@ for stdin/stdout/stderr while the master captures all bytes. Fake-rg
 shell scripts (installed by `writeFakeRg` from `main_test.go`):
 `fakeRgBlockScript` writes its pid to a `ready` file then `exec sleep
 3600`; `fakeRgStreamScript` writes its pid, emits a complete one-match
-record stream, and exits 0. The `VRG_CAPTURE_DIR` env tells the scripts
+record stream, and exits 0. The `FAKE_RG_CAPTURE_DIR` env tells the scripts
 where to write `ready`; the `VRG_TEST_*` seams come from the
 `vrg_testhooks`-tagged `cmd/vrg/seams_testhooks.go` (Issue #45). Since
 Issue #48 every test also arms `VRG_TEST_EVENT_ACK` and gates sends on
@@ -2072,7 +2076,7 @@ whose one match names a file with an embedded newline and ESC):
 in both directions. `hookManifest` is the explicit list of the ten
 `VRG_TEST_*` names vrg consumes — the probe derives only from it, never
 from a `VRG_TEST_*` grep, because fixture variables like
-`VRG_CAPTURE_DIR` are fake-rg behaviour; Issue #48 appended
+`FAKE_RG_CAPTURE_DIR` are fake-rg behaviour; Issue #48 appended
 `VRG_TEST_EVENT_ACK`. `buildVrgVariant` compiles `cmd/vrg` into
 a temp dir with or without the tag:
 

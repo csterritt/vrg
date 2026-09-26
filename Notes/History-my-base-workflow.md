@@ -526,3 +526,14 @@ Usage
  Input tokens: 48686 tokens
  Output tokens: 14447 tokens
  Cached input tokens: 1532671 tokens
+
+----
+Task 050-post-audit-reverification.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 90 messages
+ Input tokens: 144752 tokens
+ Output tokens: 47668 tokens
+ Cached input tokens: 8866623 tokens

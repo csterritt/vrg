@@ -250,7 +250,7 @@ func pidIsGone(t *testing.T, pid int) {
 func ptyEnv(fakeDir, capDir string, extra ...string) []string {
 	return append([]string{
 		"PATH=" + fakeDir + string(os.PathListSeparator) + os.Getenv("PATH"),
-		"VRG_CAPTURE_DIR=" + capDir,
+		"FAKE_RG_CAPTURE_DIR=" + capDir,
 		"TERM=xterm-256color",
 	}, extra...)
 }
@@ -258,7 +258,7 @@ func ptyEnv(fakeDir, capDir string, extra ...string) []string {
 // fakeRgBlockScript signals readiness with its pid then blocks forever:
 // the run can only end through cancellation, a signal, or failure.
 const fakeRgBlockScript = `#!/bin/sh
-echo $$ > "$VRG_CAPTURE_DIR/ready"
+echo $$ > "$FAKE_RG_CAPTURE_DIR/ready"
 exec sleep 3600
 `
 
@@ -266,7 +266,7 @@ exec sleep 3600
 // stream, and exits 0 — the post-exit preparation window is where the
 // gate test holds the app.
 const fakeRgStreamScript = `#!/bin/sh
-echo $$ > "$VRG_CAPTURE_DIR/ready"
+echo $$ > "$FAKE_RG_CAPTURE_DIR/ready"
 printf '%s\n' \
 '{"type":"begin","data":{"path":{"text":"f.txt"}}}' \
 '{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}' \
@@ -532,7 +532,7 @@ func TestControlledFailureDiagnosticOnStderr(t *testing.T) {
 // fakeRgExit3Script signals readiness, emits one complete valid result
 // stream, then exits 3 — a fatal process outcome over usable results.
 const fakeRgExit3Script = `#!/bin/sh
-echo $$ > "$VRG_CAPTURE_DIR/ready"
+echo $$ > "$FAKE_RG_CAPTURE_DIR/ready"
 printf '%s\n' \
 '{"type":"begin","data":{"path":{"text":"f.txt"}}}' \
 '{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hello\n"},"line_number":1,"submatches":[{"match":{"text":"hello"},"start":0,"end":5}]}}' \
@@ -576,7 +576,7 @@ func TestPTYNonZeroExitBrowseOverlayExits2(t *testing.T) {
 // lines, and a tail marker — then exits 0. The stderr text is a warning
 // diagnostic: vrg shows it in the overlay.
 const fakeRgFloodScript = `#!/bin/sh
-echo $$ > "$VRG_CAPTURE_DIR/ready"
+echo $$ > "$FAKE_RG_CAPTURE_DIR/ready"
 chunk=$(printf '%1999s' '' | tr ' ' 'e')
 echo "ERRHEAD-MARKER" >&2
 printf '%s\n' '{"type":"begin","data":{"path":{"text":"f0.txt"}}}'
@@ -590,7 +590,7 @@ i=0
 while [ "$i" -lt 175 ]; do printf '%s\n' "$chunk" >&2; i=$((i+1)); done
 printf '%s\n' '{"type":"summary","data":{}}'
 echo "ERRTAIL-MARKER" >&2
-: > "$VRG_CAPTURE_DIR/writes-done"
+: > "$FAKE_RG_CAPTURE_DIR/writes-done"
 exit 0
 `
 

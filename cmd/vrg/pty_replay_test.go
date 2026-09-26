@@ -51,7 +51,7 @@ func replayTail(t *testing.T, out string) string {
 // diagnostic, then blocks forever — the run can only end through
 // cancellation, with the diagnostic already collected.
 const fakeRgWarnBlockScript = `#!/bin/sh
-echo $$ > "$VRG_CAPTURE_DIR/ready"
+echo $$ > "$FAKE_RG_CAPTURE_DIR/ready"
 echo "warn one" >&2
 exec sleep 3600
 `
@@ -59,7 +59,7 @@ exec sleep 3600
 // fakeRgWarnStreamScript signals readiness, writes one stderr
 // diagnostic and a complete valid result stream, and exits 0.
 const fakeRgWarnStreamScript = `#!/bin/sh
-echo $$ > "$VRG_CAPTURE_DIR/ready"
+echo $$ > "$FAKE_RG_CAPTURE_DIR/ready"
 echo "warn one" >&2
 printf '%s\n' \
 '{"type":"begin","data":{"path":{"text":"f.txt"}}}' \
@@ -73,7 +73,7 @@ exit 0
 // record: its "missing summary" diagnostic exists only inside the
 // completion message, which the preparation gate can hold back.
 const fakeRgWarnNoSummaryScript = `#!/bin/sh
-echo $$ > "$VRG_CAPTURE_DIR/ready"
+echo $$ > "$FAKE_RG_CAPTURE_DIR/ready"
 echo "warn one" >&2
 printf '%s\n' \
 '{"type":"begin","data":{"path":{"text":"f.txt"}}}' \
@@ -277,7 +277,7 @@ func TestPTYControlledFailureReplaysAlongsideEarlierDiagnostics(t *testing.T) {
 // the empty working directory — then exits 0. The current-file load
 // failure is a collected diagnostic and opens the error overlay.
 const fakeRgBadPathScript = `#!/bin/sh
-echo $$ > "$VRG_CAPTURE_DIR/ready"
+echo $$ > "$FAKE_RG_CAPTURE_DIR/ready"
 printf '%s\n' \
 '{"type":"begin","data":{"path":{"text":"we\nir\u001bd.txt"}}}' \
 '{"type":"match","data":{"path":{"text":"we\nir\u001bd.txt"},"lines":{"text":"x\n"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}' \

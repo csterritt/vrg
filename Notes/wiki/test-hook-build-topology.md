@@ -59,9 +59,11 @@ of every `VRG_TEST_*` name vrg consumes (ten since Issue #48):
   [pty-handshake-harness.md](pty-handshake-harness.md).
 
 The probed list derives only from this manifest — never from grepping
-`VRG_TEST_*`: fixture-owned variables such as `VRG_CAPTURE_DIR` belong
-to the fake-rg harness scripts, not to vrg behaviour (Issue #50 renames
-them `FAKE_RG_*`). Issue #48 appended its acknowledgement hook to this
+`VRG_TEST_*`: fixture-owned variables belong to the fake-rg harness
+scripts, not to vrg behaviour — Issue #50 renamed them off the `VRG_*`
+namespace (`VRG_CAPTURE_DIR` → `FAKE_RG_CAPTURE_DIR`, `VRG_RG_MARKER` →
+`FAKE_RG_MARKER`; `scripts/smoke.py` uses `FAKE_RG_HANDSHAKE_FILE`/
+`READY_FILE`/`PID_FILE`). Issue #48 appended its acknowledgement hook to this
 manifest rather than adding separate machinery.
 
 ## Build and verification wiring

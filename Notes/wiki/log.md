@@ -2003,3 +2003,44 @@ unchanged — they explain the decision rather than state current
 requirements.
 Sources: `Notes/tasks/049-tidy-dependency-manifests.md`,
 `Notes/PRD-vrg.md` (*Further Notes*), `go.mod`, `go.sum`.
+## [2026-09-25] ingest | Issue #50 post-audit re-verification — verify.sh gates, PTY reruns, smoke outcomes
+
+Issue #50 (`Notes/tasks/050-post-audit-reverification.md`) closes the
+audit cycle with a clean-checkout verification pass over the composed
+Issues #36–#49 implementation — no production regressions found (one
+harness-side race repaired, below). The
+fixture-owned fake-rg variables left the `VRG_*` namespace:
+`VRG_CAPTURE_DIR` → `FAKE_RG_CAPTURE_DIR` across the shell fixtures
+and the `cmd/vrg` `searchEnv`/`ptyEnv` lists, and `VRG_RG_MARKER` →
+`FAKE_RG_MARKER` (the task plan's `VRG_TEST_*` five-variable shape had
+already consolidated into those names). `scripts/smoke.py` is the
+canonical condition-driven harness (keys gated on observed rendered
+markers, EOF-driven draining, AST self-check banning `time.sleep`,
+`assert_no_vrg_test_env` keeping `VRG_TEST_*` controls out of the
+untagged runs); the Issue #35 walkthrough artifact stays frozen.
+`scripts/verify.sh` is the permanent ten-gate entry point — build,
+vet, tagged build/vet, uncached suite, race suite, `cmd/vrg`
+`-count=3`, `go mod verify`, pinned `govulncheck@v1.5.0` (network or
+warm caches documented; an unmet prerequisite reports exit 75 as an
+environment failure), and the fail-closed `go mod tidy -diff` Issue
+#49 deferred here. The closing pass exited 0 and surfaced one
+harness-side race — `internal/app`'s `awaitReadyPID`/`awaitPIDFile`
+read the fake child's `ready`/`grandchild` file in the empty
+create-before-write window; both helpers now require non-empty
+content (same semantics as `cmd/vrg`'s `awaitFileContent`), proven by
+a 30-run stress and the re-run post-fix pass; the named PTY contracts
+re-ran uncached and under race under their post-#48 carrier names on
+the `VRG_TEST_EVENT_ACK` handshakes; the five smoke outcomes held
+against the untagged production binary (browse 0, no-results 1, fatal
+2 under `q`/`Esc` with the composed integrity/record-loss
+diagnostics, cancellation 130 with externally observed process-group
+termination, help-only 0 with the sentinel rg never invoked).
+
+Created [post-audit-verification](post-audit-verification.md);
+updated [index](index.md), [unit-tests](unit-tests.md) and
+[test-hook-build-topology](test-hook-build-topology.md) for the
+`FAKE_RG_*` rename. Evidence:
+`Notes/walkthroughs/050-01/code-walkthrough/walkthrough.md`.
+Sources: `Notes/tasks/050-post-audit-reverification.md`,
+`Notes/PRD-vrg.md` (*Testing Decisions*), `scripts/verify.sh`,
+`scripts/smoke.py`, `cmd/vrg/*_test.go`.

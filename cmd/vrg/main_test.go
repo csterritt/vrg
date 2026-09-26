@@ -159,7 +159,7 @@ func TestHelpDoesNotInvokeRipgrep(t *testing.T) {
 	if err := os.WriteFile(fake, []byte("#!/bin/sh\n: > \""+marker+"\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	res := runVrgFull(t, "", []string{"PATH=" + dir, "VRG_RG_MARKER=" + marker}, "--help")
+	res := runVrgFull(t, "", []string{"PATH=" + dir, "FAKE_RG_MARKER=" + marker}, "--help")
 	assertHelpRun(t, res, []string{"--help"})
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatal("help-only invocation executed the fake rg on PATH")
@@ -208,11 +208,11 @@ func TestCLIOutputSafety(t *testing.T) {
 }
 
 // fakeRgScript is an rg stand-in for boundary tests: it records its
-// argv and working directory into $VRG_CAPTURE_DIR, emits one complete
+// argv and working directory into $FAKE_RG_CAPTURE_DIR, emits one complete
 // single-match JSON stream, and exits 0.
 const fakeRgScript = `#!/bin/sh
-printf '%s\n' "$@" > "$VRG_CAPTURE_DIR/argv"
-pwd > "$VRG_CAPTURE_DIR/cwd"
+printf '%s\n' "$@" > "$FAKE_RG_CAPTURE_DIR/argv"
+pwd > "$FAKE_RG_CAPTURE_DIR/cwd"
 # Hold the stream open briefly so the harness observes the searching
 # screen before the browse view replaces it.
 sleep 0.3
@@ -241,7 +241,7 @@ func writeFakeRg(t *testing.T, script string) (fakeDir, capDir string) {
 func searchEnv(fakeDir, capDir string) []string {
 	return []string{
 		"PATH=" + fakeDir + string(os.PathListSeparator) + os.Getenv("PATH"),
-		"VRG_CAPTURE_DIR=" + capDir,
+		"FAKE_RG_CAPTURE_DIR=" + capDir,
 		"TERM=xterm-256color",
 	}
 }
@@ -484,7 +484,7 @@ done
 printf '%s\n' \
 '{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}' \
 '{"type":"summary","data":{}}'
-: > "$VRG_CAPTURE_DIR/writes-done"
+: > "$FAKE_RG_CAPTURE_DIR/writes-done"
 exit 0
 `
 	fakeDir, capDir := writeFakeRg(t, flood)

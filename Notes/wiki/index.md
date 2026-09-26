@@ -290,6 +290,16 @@ Catalog of all wiki pages for the vrg project.
   `-count=1` PTY/subprocess re-runs, the five smoke outcomes through
   `scripts/smoke.py`), and the regression it caught — the process-group
   cancellation kill plus the seeded harness's marker alignment
+- [post-audit-verification.md](post-audit-verification.md) — Issue #50:
+  the closing pass over the composed Issues #36–#49 repairs — the
+  `FAKE_RG_*` fixture rename, the ten-gate `scripts/verify.sh` entry
+  point (tagged build/vet variants, race, repeated `cmd/vrg` runs,
+  `go mod verify`, pinned `govulncheck` with its documented
+  network/cache prerequisite, fail-closed `go mod tidy -diff`), the
+  explicit uncached/race PTY reruns on the Issue #48 handshakes, and
+  the five smoke outcomes against the untagged production binary — no
+  production regressions; one ready-file create/write race in the
+  internal/app pid polls repaired
 - [stream-integrity-fatal-diagnostics.md](stream-integrity-fatal-diagnostics.md) —
   Issue #36: the structured `Cause`/`CauseKind` integrity model
   (`IntegrityCauses`, `Cause.Line()` through `present.Path`), the
