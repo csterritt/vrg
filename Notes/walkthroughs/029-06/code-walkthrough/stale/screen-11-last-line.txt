@@ -1,0 +1,24 @@
+./a.txt     ── ./tail.txt file changed since search ────────────────────────────
+./tail.txt  128  line-000128
+            129  line-000129
+            130  line-000130
+            131  line-000131
+            132  line-000132
+            133  line-000133
+            134  line-000134
+            135  line-000135
+            136  line-000136
+            137  line-000137
+            138  line-000138
+            139  line-000139
+            140  line-000140
+            141  line-000141
+            142  line-000142
+            143  line-000143
+            144  line-000144
+            145  line-000145
+            146  line-000146
+            147  line-000147
+            148  line-000148
+            149  line-000149
+            150  line-000150

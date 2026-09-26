@@ -153,6 +153,12 @@ type outcomeRow struct {
 	absent    []string
 	viewHas   []string
 	replayHas []string
+	// Issue #29 row extension: fileData replaces the f.txt fixture's
+	// bytes so its load can validate stale, and loadCurrent settles
+	// the current file's load before the assertions run so the stale
+	// state exists. Stale state can never move the fixed exit status.
+	fileData    string
+	loadCurrent bool
 }
 
 // The outcome matrix: one table owning every Issue #9 outcome row so
@@ -416,6 +422,16 @@ var outcomeMatrix = []outcomeRow{
 		viewHas:   []string{"(unreadable)"},
 		replayHas: []string{"cannot read f.txt", "cannot read g.txt"},
 	},
+	// Issue #29: every retained stop validating stale changes only the
+	// presentation — the dropped highlights and the filename-row note —
+	// never the fixed search-derived exit status.
+	{
+		name: "every retained stop validating stale keeps the fixed status 0",
+		recs: recsOneMatch, code: 0, fileData: "zzz\n", loadCurrent: true,
+		screen:  phaseBrowse,
+		quitKey: "q", exit: 0,
+		viewHas: []string{"file changed since search"},
+	},
 }
 
 // pressKey delivers one named key through Update: the dismissal and
@@ -472,7 +488,11 @@ func TestOutcomeMatrix(t *testing.T) {
 	for _, row := range outcomeMatrix {
 		t.Run(row.name, func(t *testing.T) {
 			dir := t.TempDir()
-			writeWorkFile(t, dir, "f.txt", "hit\n")
+			data := row.fileData
+			if data == "" {
+				data = "hit\n"
+			}
+			writeWorkFile(t, dir, "f.txt", data)
 
 			var ix *searchindex.Index
 			if row.stream != "" {
@@ -491,13 +511,15 @@ func TestOutcomeMatrix(t *testing.T) {
 				stderr:  []byte(row.stderr),
 				waitErr: waitFixture(t, row),
 			})
+			if row.failAll || row.loadCurrent {
+				m = settle(t, m, load)
+			}
 			if row.failAll {
 				// The current file's own worker fails through the
 				// injected loader; every other retained file's
 				// in-flight request fails by injected completion.
 				// Load failures land after the outcome is fixed and
 				// can never move it.
-				m = settle(t, m, load)
 				for _, f := range m.files {
 					if bytes.Equal(f, m.currentPath()) {
 						continue

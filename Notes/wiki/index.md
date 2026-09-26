@@ -202,6 +202,15 @@ Catalog of all wiki pages for the vrg project.
   install; navigation during the load wins over cursor equality;
   marker and cluster-expanded targets, saved-viewport revisits, and
   non-current/pop-up isolation
+- [stale-match-validation.md](stale-match-validation.md) — Issue #29:
+  per-submatch validation on every load (line existence, range, and
+  byte equality against raw bytes with the UTF-8 BOM shift), invalid
+  submatches dropped individually while survivors keep their
+  highlights, the `stale` buffer mark, the persistent `file changed
+  since search` status note that only a clean reload clears, the
+  three clamped fallback landing rules inventing no highlights or
+  markers, the fallback riding the Issue #28 commit, and the fixed
+  exit status
 
 ## Catalogs
 

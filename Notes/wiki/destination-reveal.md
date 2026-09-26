@@ -20,11 +20,12 @@ The reveal target is a *display location*, not a source-line ordinal:
 display cell of the destination line's **first submatch's start** — the
 marker cell when the submatch is zero-width
 ([zero-width-match-markers.md](zero-width-match-markers.md)). `Model.reveal`
-(`internal/app/browse.go`) computes it from the buffer's validated
-spans: the smallest `Start` among the destination line's spans, so a
+(`internal/app/browse.go`) obtains it from `Buffer.RevealTarget`: the
+smallest `Start` among the destination line's validated spans, so a
 stale-content drop automatically falls through to the first surviving
-submatch (the remaining stale-entry fallbacks — clamped recorded starts
-and gone-line landing — are Issue #29's).
+submatch — and when none survive, Issue #29's stale-entry fallbacks
+supply the clamped recorded start or the last source line's start (see
+[stale-match-validation.md](stale-match-validation.md)).
 
 The viewport never assumes a target's rendered row equals its line:
 `viewport.Rows` gained `RowOf(Target) int`, answered by the prepared

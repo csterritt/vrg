@@ -159,17 +159,17 @@ const (
 )
 
 // reveal applies the destination reveal for the current stop: the
-// display target is the start cell of the first submatch on the
-// destination line — the marker cell for a zero-width match — so the
-// first surviving validated span supplies it (stale-entry fallbacks
-// are Issue #29's). The reveal covers both axes: the vertical
-// one-third placement and, in run-off-edge mode, the minimal
-// horizontal reveal of the target's start cell. A reveal that moves
-// the viewport replaces the file's saved vertical state; a no-scroll
-// reveal — an already-visible target — leaves it. With no installed
-// layout matching the current parameters the reveal cannot run: it is
-// carried as the pending intent and committed when a matching layout
-// installs — always for whichever stop is newest at commit time.
+// buffer's RevealTarget supplies the display location — the start cell
+// of the first surviving validated span ordinarily, a stale entry's
+// clamped fallback when its recorded submatches dropped (Issue #29).
+// The reveal covers both axes: the vertical one-third placement and,
+// in run-off-edge mode, the minimal horizontal reveal of the target's
+// start cell. A reveal that moves the viewport replaces the file's
+// saved vertical state; a no-scroll reveal — an already-visible
+// target — leaves it. With no installed layout matching the current
+// parameters the reveal cannot run: it is carried as the pending
+// intent and committed when a matching layout installs — always for
+// whichever stop is newest at commit time.
 func (m *Model) reveal() {
 	s, ok := m.currentStop()
 	if !ok {
@@ -183,13 +183,8 @@ func (m *Model) reveal() {
 		return
 	}
 	m.pending = intentNone
-	t := viewport.Target{Line: int(s.Line) - 1}
-	for i, sp := range buf.Spans(t.Line) {
-		if i == 0 || sp.Start < t.Cell {
-			t.Cell = sp.Start
-		}
-	}
-	if m.vp.Reveal(t) {
+	line, cell := buf.RevealTarget(s)
+	if m.vp.Reveal(viewport.Target{Line: line, Cell: cell}) {
 		m.saved[key] = m.vp.Anchor()
 	}
 }
@@ -629,12 +624,19 @@ func filenameRule(path []byte, note string, w int) string {
 }
 
 // bufferNote is the real filename-row status provider: the
-// "(unreadable)" note while the path sits in the failed state. The
-// statusNote seam overrides it in tests; Issues #29 and #30 extend the
-// real provider with their own notes.
+// "(unreadable)" note while the path sits in the failed state — a
+// failure outranks staleness — and the "file changed since search"
+// note while its latest completed load validates stale (Issue #29).
+// The stale verdict persists through a reread: it is replaced by the
+// completion's own verdict, so the note disappears only when the new
+// content validates fully. The statusNote seam overrides the provider
+// in tests; Issue #30 extends it with its own note.
 func (m Model) bufferNote(path []byte) string {
 	if m.failed[string(path)] {
 		return "(unreadable)"
+	}
+	if m.stale[string(path)] {
+		return "file changed since search"
 	}
 	return ""
 }

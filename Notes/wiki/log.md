@@ -1112,3 +1112,54 @@ Sources: `Notes/issues/028-load-completion-reveal-latest-target.md`,
 consistency; Navigation, viewport, and logical anchors),
 `internal/app/app.go`, `internal/app/browse.go`,
 `internal/app/completion_test.go`, `internal/app/reload_test.go`.
+## [2026-09-24] ingest | Issue #29 stale-match validation — per-submatch drops, the "file changed since search" note, and fallback landings
+
+Ingested the completed Issue #29 implementation: `filebuffer.Prepare`
+validates every recorded submatch on first load and every reload —
+line existence, range, and byte equality against the line's *raw*
+bytes (terminator included; the leading UTF-8 BOM's three-byte shift
+applies to line one's rg offsets; escaped display text is never
+consulted) — dropping each failing submatch individually and marking
+the buffer `stale` while survivors keep their cluster-expanded
+highlights. `Buffer.Stale()` carries the verdict and
+`Buffer.RevealTarget` answers a stop's reveal location: the first
+surviving span's start cell, else the earliest recorded start
+BOM-shifted and clamped to the line's bytes with end-of-line mappings
+falling back to the last rendered cell, else the last source line's
+start — fallbacks invent no highlights or markers, and an empty file
+stays a zero-line panel. The app's new `stale` map records each
+completed load's verdict, so `bufferNote` shows "file changed since
+search" in the Issue #24 status slot on every display (below
+`(unreadable)` in precedence), persists through a reread's
+placeholder, and clears only on a fully validating completion.
+`reveal()` consults `RevealTarget`, so the stale fallback rides the
+Issue #28 two-stage commit — a navigation landing mid-reload reveals
+the newest stop's survivor-or-fallback computed against the new
+content. Stale state never moves the fixed exit status; the outcome
+matrix gained the all-stale row (new `fileData`/`loadCurrent`
+fields). Created
+[stale-match-validation](stale-match-validation.md); updated
+[destination-reveal](destination-reveal.md) (RevealTarget supplies
+the target, fallbacks delivered),
+[load-completion-reveal](load-completion-reveal.md) (the commit-time
+target can be a stale fallback),
+[explicit-reload](explicit-reload.md) (r recomputes the note),
+[file-list-layout](file-list-layout.md) (Issue #29's real note in the
+status slot),
+[match-navigation](match-navigation.md) (stale stops stay stops),
+[line-terminators-and-bom](line-terminators-and-bom.md) (the BOM
+shift and raw-byte view the validation uses),
+[source-code](source-code.md) (`filebuffer.go`'s verdict/`RevealTarget`,
+`app.go`'s `stale` map, `browse.go`'s `bufferNote` branch and
+`reveal`), [unit-tests](unit-tests.md) (the two new `stale_test.go`
+catalogs and the outcome-matrix row), and the index.
+New test files: `internal/filebuffer/stale_test.go`,
+`internal/app/stale_test.go`.
+Sources: `Notes/issues/029-stale-match-validation-and-file-changed-note.md`,
+`Notes/tasks/029-stale-match-validation-and-file-changed-note.md`,
+`Notes/PRD-vrg.md` (Encodings and stale-content validation;
+Navigation, viewport, and logical anchors; Exit statuses; Testing
+Decisions → FileBuffer), `internal/filebuffer/filebuffer.go`,
+`internal/filebuffer/stale_test.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/app/stale_test.go`,
+`internal/app/outcome_test.go`.

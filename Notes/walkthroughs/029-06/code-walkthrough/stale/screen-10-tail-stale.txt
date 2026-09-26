@@ -1,0 +1,24 @@
+./a.txt     ── ./tail.txt file changed since search ────────────────────────────
+./tail.txt    1  MARK top
+              2  line-000002
+              3  line-000003
+              4  line-000004
+              5  line-000005
+              6  line-000006
+              7  line-000007
+              8  line-000008
+              9  line-000009
+             10  line-000010      ┌──────────┐
+             11  line-000011      │./tail.txt│
+             12  line-000012      └──────────┘
+             13  line-000013
+             14  line-000014
+             15  line-000015
+             16  line-000016
+             17  line-000017
+             18  line-000018
+             19  line-000019
+             20  line-000020
+             21  line-000021
+             22  line-000022
+             23  line-000023

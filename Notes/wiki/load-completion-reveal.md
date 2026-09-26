@@ -59,13 +59,17 @@ current parameters runs `commitIntent`:
 ## Latest selection, never a captured target
 
 The reveal target is computed at *commit* time from `currentStop()`
-and the newest buffer's validated spans — the cluster-expanded
-first-submatch start cell (Issue #21) or the marker cell for a
-zero-width / terminator-only match (Issue #23). Navigation while the
-load or the layout is in flight therefore redirects the reveal: `n`/`p`
-move the cursor immediately, `reveal()` re-pends `intentReveal`, and
-the commit lands on whichever stop is newest. A target captured when
-the load was requested is never stored.
+and the newest buffer — `Buffer.RevealTarget` answering the
+cluster-expanded first-submatch start cell (Issue #21), the marker
+cell for a zero-width / terminator-only match (Issue #23), or Issue
+#29's stale-entry fallback (first survivor, clamped recorded start, or
+last source line — see
+[stale-match-validation.md](stale-match-validation.md)). Navigation
+while the load or the layout is in flight therefore redirects the
+reveal: `n`/`p` move the cursor immediately, `reveal()` re-pends
+`intentReveal`, and the commit lands on whichever stop is newest —
+with the reloaded content's own stale verdict behind its target. A
+target captured when the load was requested is never stored.
 
 ## Reveal-versus-reload arbitration
 
@@ -155,6 +159,8 @@ See also: [logical-anchor-and-layout.md](logical-anchor-and-layout.md)
 navigation-supersedes rule),
 [destination-reveal.md](destination-reveal.md) (the reveal contract
 the commit runs),
+[stale-match-validation.md](stale-match-validation.md) (the fallback
+target the commit can land on),
 [async-load-isolation.md](async-load-isolation.md) (the
 path-and-request keying feeding stage 1),
 [minimal-horizontal-reveal.md](minimal-horizontal-reveal.md) (the

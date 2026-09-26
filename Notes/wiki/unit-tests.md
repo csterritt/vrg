@@ -310,6 +310,39 @@ positions through `Load`:
 - `TestMarkersOnEveryLine` — `^`-style per-line markers accumulate on
   every line of a multi-line file, empty lines included.
 
+`stale_test.go` (same package, Issue #29) pins stale-match validation
+and the fallback reveal targets through `Prepare` — the reload path's
+revalidation is a fresh `Prepare` over newly read bytes, so the
+helpers drive it in memory:
+
+- `TestFullyValidatingBufferIsNotStale` — every recorded submatch
+  validating leaves the buffer clean.
+- `TestDroppedSubmatchesMarkStale` — each failure kind marks the
+  buffer: same-length replacement, out-of-bounds start and end,
+  missing line, and one-of-two partial survival.
+- `TestStalePartialSurvivalKeepsValidHighlights` — the surviving
+  submatch keeps its span and becomes the reveal target.
+- `TestStaleFallbackClampsRecordedStart` — the recorded start clamps
+  to the line's bytes and maps to a cell; terminator and past-EOL
+  starts land on the last rendered cell (no invented marker), an
+  empty line on cell 0.
+- `TestStaleFallbackUsesEarliestRecordedStart` — the earliest
+  recorded start decides, not the submatch's slice position.
+- `TestStaleFallbackMissingLineAndEmptyFile` — a gone line lands at
+  the last source line's start; an empty file stays a zero-line panel
+  with the inert zero target.
+- `TestRevalidationRecomputesStale` — stale → clean → stale across
+  successive prepares.
+- `TestValidationUsesOriginalNotDisplayBytes` — matches on a raw ESC
+  byte and an invalid UTF-8 byte validate against the raw bytes, not
+  the `^[`/U+FFFD display text.
+- `TestCRLFTerminatorMatchValidatesClean` — a recorded submatch
+  covering `\r\n` validates against the retained terminator bytes and
+  becomes the ordinary end-of-line marker.
+- `TestStaleFallbackShiftsPastLeadingBOM` — line one's rg offsets
+  shift by three into the raw view for validation and for the
+  fallback start alike.
+
 ## internal/app
 
 `model_test.go` (same package) drives `Update` directly:
@@ -705,6 +738,35 @@ invoked on the test's schedule:
   keeps its instance through both the destination's load completion
   and the layout install that commits the reveal under it.
 
+`stale_test.go` (same package, Issue #29) pins the stale-state
+integration: the `file changed since search` note, the fallback
+reveal through the two-stage commit, and the fixed exit status:
+
+- `TestStaleBufferShowsFileChangedNote` — the note paints on every
+  display (load, scroll, `n`, resize) with no timer, and no inverse
+  video survives anywhere in the frame.
+- `TestStaleNoteClearsOnlyOnCleanReload` — the note persists through
+  a gate-held reread and clears only when the completion's
+  revalidation is clean, the highlight returning with it.
+- `TestStaleNoteComposedAtAllWidths` — the status slot across
+  80→20-column frames: the note paints whole under a truncating
+  escaped path where it fits and drops where it cannot, no row
+  overflowing and no layout dimension negative.
+- `TestGatedReloadCommitRevealsSurvivingSubmatch` — `n` during the
+  gate-held reload selects the half-stale stop; the matching-layout
+  commit reveals the survivor's highlight while the dropped submatch
+  paints plain.
+- `TestGatedReloadCommitRevealsClampedFallback` — all submatches
+  dropped on a still-present line: the commit lands on the row
+  holding the clamped recorded start (deep inside a wrapping line)
+  with no invented highlight.
+- `TestStaleAllDroppedRevealsClampedStart` — the same fallback on a
+  direct navigation: the destination row reveals with no highlight
+  and no marker.
+- `TestStaleMissingLineLandsOnLastSourceLine` — a vanished stop line
+  lands at the last source line's start, clamped to the frame's
+  bottom.
+
 `pan_test.go` (same package, Issue #18) drives the horizontal-pan
 keys through `Update`; `panRecords` builds a one-stop record set for a
 file whose first line is the match:
@@ -950,7 +1012,12 @@ later issues extend it with rows rather than duplicating the decision:
   the composed frame's `(unreadable)`/path forms, and the exit replay —
   plus three rows: fixed-0 all-fail → still 0, fixed-2 current-file
   failure → still 2, and the composed all-fail-with-fixed-2 row proving
-  the already-fixed fatal outcome is never recomputed.
+  the already-fixed fatal outcome is never recomputed. Issue #29 added
+  the `fileData`/`loadCurrent` row fields — `fileData` replaces the
+  fixture's bytes so the load can validate stale and `loadCurrent`
+  settles the load before the assertions — and the all-stale row
+  proving every retained stop validating stale still exits with the
+  fixed status 0.
 
 `overlay_test.go` (same package) pins the Issue #9 modal overlay:
 

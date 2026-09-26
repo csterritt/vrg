@@ -75,6 +75,13 @@ replaces the boolean `pendingReveal`:
   commits for the newest stop, while the anchor intent's work already
   happened inside `SetRows`' resolve, so it only clears.
 
+The reread also recomputes the stale-match verdict: the completed
+load's `Buffer.Stale()` result replaces the path's `stale` mark, so
+the Issue #29 `file changed since search` note survives the reread's
+placeholder and clears only when the newly loaded content validates
+fully — `r` recomputes, it does not clear (see
+[stale-match-validation.md](stale-match-validation.md)).
+
 This generic pending-intent seam is owned by Issue #27; Issue #28
 completed the reveal-versus-reload arbitration on top of it for all
 load completions — any navigation during the load, including

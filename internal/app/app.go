@@ -49,7 +49,12 @@ const (
 // whose request identity does not match is discarded. failed marks
 // paths whose latest load failed and failLines retains that failure's
 // sanitized diagnostic lines so a cross-file re-entry can re-open the
-// prior-failure overlay before the retry settles (Issue #26). diags is the
+// prior-failure overlay before the retry settles (Issue #26). stale
+// marks paths whose latest completed load failed stale-match
+// validation — the "file changed since search" state (Issue #29):
+// it is not cleared by a reload's start, only by a completion, so the
+// note persists through the reread and disappears only when the newly
+// loaded content validates fully. diags is the
 // session
 // diagnostic collection: every diagnostic the model has processed, in
 // collection order, independent of what any screen displayed. diagCh
@@ -68,6 +73,7 @@ type Model struct {
 	fileIdx   map[string]int // raw path → its files index
 	bufs      map[string]*filebuffer.Buffer
 	failed    map[string]bool
+	stale     map[string]bool     // raw path → latest completed load validated stale (Issue #29)
 	failLines map[string][]string // raw path → latest failure's overlay lines
 	loading   map[string]int      // raw path → in-flight request identity
 	loadSeq   int                 // mints request identities
@@ -167,6 +173,7 @@ func newModel(done <-chan searchDoneMsg, cancel func()) Model {
 		done:      done,
 		bufs:      make(map[string]*filebuffer.Buffer),
 		failed:    make(map[string]bool),
+		stale:     make(map[string]bool),
 		failLines: make(map[string][]string),
 		loading:   make(map[string]int),
 		reloading: make(map[string]bool),
@@ -308,6 +315,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.bufs[key] = msg.buf
 		m.revs[key]++
+		// The completed load's stale-match verdict is the path's new
+		// state: a reload recomputes it, so the filename-row note
+		// clears only when the new content validates fully (Issue #29).
+		m.stale[key] = msg.buf.Stale()
 		// A successful load resolves the path's failed state.
 		delete(m.failed, key)
 		delete(m.failLines, key)

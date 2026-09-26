@@ -120,6 +120,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   decision (geometry recompute plus the keyed layout request only),
   and the pending intent — reveal for the newest stop or the reload
   anchor — commits solely through the `layoutDoneMsg` install guard;
+  Issue #29 adds `stale` (the per-path mark recording each completed
+  load's `Buffer.Stale()` verdict — written only on success, so it
+  persists through a reread's placeholder until the new verdict
+  lands), its `loadDoneMsg` success-branch write, and
+  `bufferNote`'s stale branch;
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
   diagnostics box; Issue #15 adds the pop-up state (`popupID`,
@@ -180,8 +185,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   background covers it), `filenameRule` (Issue #24: the path joined by
   a buffer-status note slot that wins cells over the path, which
   left-truncates to nothing so the note paints whole; a note too wide
-  alone is dropped), `bufferNote` (Issue #26: the real `(unreadable)`
-  note for a read-failed path behind the `statusNote` seam),
+  alone is dropped), `bufferNote` (the real filename-row status
+  provider behind the `statusNote` seam: Issue #26's `(unreadable)`
+  for a read-failed path, outranking Issue #29's `file changed since
+  search` for a stale-validating one),
   `contentRow` (`Gutter`-styled
   right-justified number + two spaces over the viewport's visible-row
   slice; Issue #26 gives the placeholder forms — `Loading…` while a
@@ -216,9 +223,12 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   matching-key rows and saved anchor installed, and `ensureLoad`
   requests the load when uncached) and moves `currentStop`/
   `currentPath` onto `Index.Current()`. Issue #14 adds `reveal` (the
-  target = the destination line's smallest span start cell, reported to
-  `Viewport.Reveal`; the `saved` entry is replaced only when the
-  viewport moved) and calls it at the end of every moved `navigate`;
+  target reported to `Viewport.Reveal`; the `saved` entry is replaced
+  only when the viewport moved) and calls it at the end of every moved
+  `navigate`; Issue #29 hands the target computation to
+  `Buffer.RevealTarget` — the first surviving span's start ordinarily,
+  a stale entry's clamped fallback otherwise — so synchronous and
+  carried reveals land identically;
   since Issue #17 it carries the pending intent when no matching
   layout is installed, committed on install for the newest stop —
   `commitReveal`, renamed `commitIntent` when Issue #27 widened the
@@ -396,11 +406,19 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   before validating. Issue #23's zero-width markers ride the same
   `Spans` channel as `Start == End` positions — empty submatches
   validate against the raw bytes like any other, and `clusterSpan`
-  passes their cell-precise positions through. See
+  passes their cell-precise positions through. Issue #29 makes the
+  validation a verdict: each submatch failing line-existence, range,
+  or byte-equality against `Raw()` drops individually and marks the
+  buffer `stale`, `Stale()` reports the mark, and `RevealTarget`
+  returns a stop's reveal location — the first surviving span's start
+  cell, else the earliest recorded start clamped to the line's bytes
+  (BOM-shifted on line one, end-of-line mappings falling back to the
+  last rendered cell), else the last source line's start. See
   [wrap-mode.md](wrap-mode.md),
   [grapheme-highlight-expansion.md](grapheme-highlight-expansion.md),
-  [line-terminators-and-bom.md](line-terminators-and-bom.md), and
-  [zero-width-match-markers.md](zero-width-match-markers.md).
+  [line-terminators-and-bom.md](line-terminators-and-bom.md),
+  [zero-width-match-markers.md](zero-width-match-markers.md), and
+  [stale-match-validation.md](stale-match-validation.md).
 
 ## internal/viewport
 

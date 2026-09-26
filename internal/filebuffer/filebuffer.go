@@ -17,6 +17,13 @@ type Buffer struct {
 	lines  []present.Line
 	spans  map[int][]present.Span // 0-based source line → display-cell spans
 	digits int                    // gutter digit width, minimum 1
+	// bom is the leading UTF-8 BOM's byte length — 3 when present —
+	// the shift rg-line offsets on the first line take into the raw
+	// view for validation and the stale fallback's recorded start.
+	bom int
+	// stale marks a buffer whose recorded submatches did not all
+	// validate — the "file changed since search" state (Issue #29).
+	stale bool
 }
 
 // utf8BOM is the UTF-8 byte order mark: invisible at the start of a
@@ -45,24 +52,27 @@ func Load(path []byte, stops []searchindex.Stop) (*Buffer, error) {
 // Prepare turns previously read file bytes into a display-ready
 // Buffer: the split, escape, and map work of a load.
 //
-// Each stop's submatches are checked against the line's raw bytes:
-// out-of-bounds ranges and text mismatches are dropped. A leading
-// UTF-8 BOM splits the first line's coordinate views: its raw bytes
-// retain the BOM while rg's first-line data omits it, so rg offsets on
-// that line shift by its length into the raw view before validating
-// and mapping. Stale marking is Issue #29's; UTF-16/32 classification
-// is Issue #30's.
+// Each stop's submatches are checked against the line's raw bytes —
+// never the escaped display text — for line existence, range validity,
+// and byte equality with the recorded match; every failure drops that
+// submatch and marks the buffer stale while the line's valid
+// submatches keep their highlights (Issue #29). A leading UTF-8 BOM
+// splits the first line's coordinate views: its raw bytes retain the
+// BOM while rg's first-line data omits it, so rg offsets on that line
+// shift by its length into the raw view before validating and mapping.
+// UTF-16/32 classification is Issue #30's; until it lands every loaded
+// file runs this validation, which is correct for the raw-byte
+// comparison it performs.
 func Prepare(data []byte, stops []searchindex.Stop) *Buffer {
 	b := &Buffer{spans: make(map[int][]present.Span)}
-	bom := 0
 	if bytes.HasPrefix(data, utf8BOM) {
-		bom = len(utf8BOM)
+		b.bom = len(utf8BOM)
 	}
 	for rest := data; len(rest) > 0; {
 		// Only the file's first line can carry the BOM: LineOfBOM
 		// keeps its bytes in the raw view while painting nothing.
 		escape := present.LineOf
-		if bom > 0 && len(b.lines) == 0 {
+		if b.bom > 0 && len(b.lines) == 0 {
 			escape = present.LineOfBOM
 		}
 		i := bytes.IndexByte(rest, '\n')
@@ -77,19 +87,24 @@ func Prepare(data []byte, stops []searchindex.Stop) *Buffer {
 	for _, st := range stops {
 		li := int(st.Line) - 1
 		if li < 0 || li >= len(b.lines) {
+			// The stop's line is gone: every recorded submatch fails
+			// its line-existence check, so the stop drops whole and
+			// the buffer is stale.
+			if len(st.Submatches) > 0 {
+				b.stale = true
+			}
 			continue
 		}
 		ln := b.lines[li]
 		adj := 0
 		if li == 0 {
-			adj = bom
+			adj = b.bom
 		}
 		for _, sm := range st.Submatches {
 			start, end := sm.Start+adj, sm.End+adj
-			if start < 0 || end > len(ln.Raw()) || start > end {
-				continue
-			}
-			if !bytes.Equal(ln.Raw()[start:end], sm.Bytes) {
+			if start < 0 || end > len(ln.Raw()) || start > end ||
+				!bytes.Equal(ln.Raw()[start:end], sm.Bytes) {
+				b.stale = true
 				continue
 			}
 			b.spans[li] = append(b.spans[li],
@@ -121,6 +136,57 @@ func (b *Buffer) Cells(i int) []present.Cell { return b.lines[i].Cells() }
 // cluster-expanded: they are the single span source for highlighting,
 // reveal, and the hidden-match indicators downstream.
 func (b *Buffer) Spans(i int) []present.Span { return b.spans[i] }
+
+// Stale reports whether any recorded submatch failed validation —
+// the "file changed since search" state. It is computed at Prepare
+// time, so a reload's fresh buffer carries its own verdict: the mark
+// clears only when the newly loaded content validates fully. The
+// check is best-effort correspondence, not a snapshot — same-text
+// moves and edits outside matched spans go undetected.
+func (b *Buffer) Stale() bool { return b.stale }
+
+// RevealTarget returns the display location — the zero-based source
+// line and display cell — that stop s's navigation reveal must show
+// (Issue #29). Ordinarily it is the start cell of the line's first
+// surviving validated span, the marker cell for a zero-width match
+// included. When the stop validated stale the fallbacks keep the entry
+// landable while inventing no highlights or markers: with no survivors
+// but the line still present, the earliest recorded submatch start —
+// shifted past the leading BOM's bytes on the first line — clamped to
+// the line's raw bytes and mapped to a display cell, an end-of-line
+// mapping falling back to the last rendered cell since no marker
+// paints there; with the line gone, the last source line's start. An
+// empty file yields the zero value: a zero-line panel has nowhere to
+// land, and the viewport's empty reveal is a no-op.
+func (b *Buffer) RevealTarget(s searchindex.Stop) (line, cell int) {
+	li := int(s.Line) - 1
+	if li < 0 || li >= len(b.lines) {
+		return max(0, len(b.lines)-1), 0
+	}
+	if sp := b.spans[li]; len(sp) > 0 {
+		cell = sp[0].Start
+		for _, x := range sp[1:] {
+			cell = min(cell, x.Start)
+		}
+		return li, cell
+	}
+	start := 0
+	for i, sm := range s.Submatches {
+		if i == 0 || sm.Start < start {
+			start = sm.Start
+		}
+	}
+	if li == 0 {
+		start += b.bom
+	}
+	ln := b.lines[li]
+	start = min(max(start, 0), len(ln.Raw()))
+	cell = ln.Span(start, start).Start
+	if n := len(ln.Cells()); cell >= n {
+		cell = max(0, n-1)
+	}
+	return li, cell
+}
 
 // clusterSpan expands a nonempty span's endpoints outward to the
 // grapheme-cluster boundaries the cells' Lead marks carry, so a

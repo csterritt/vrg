@@ -26,7 +26,8 @@ bullet) in `Notes/PRD-vrg.md`, plus "Testing Decisions → FileBuffer".
 bytes is what makes the raw view a byte-coordinate map: a recorded
 submatch can name terminator bytes and still validate
 (`raw[3:5] == "\r\n"` on `hit\r\n`), which is also the view Issue
-#29's stale-content revalidation will compare against. The splitting
+#29's stale-content revalidation compares against (see
+[stale-match-validation.md](stale-match-validation.md)). The splitting
 rules are the ones rg's line data already follows:
 
 - A missing final newline still yields the final line; a trailing
@@ -82,7 +83,9 @@ The same `bytes`-vs-`text` JSON encodings feed the same path — the
 recorded `Submatch.Bytes` are compared against the shifted raw range.
 The end-of-line *marker* for terminator-only matches is Issue #23's
 ([zero-width-match-markers.md](zero-width-match-markers.md)), and the
-stale-note consumption of the retained raw bytes is Issue #29's.
+stale-note consumption of the retained raw bytes is Issue #29's
+([stale-match-validation.md](stale-match-validation.md)) — the BOM
+shift applying to validation and the clamped fallback start alike.
 
 ## Tests
 

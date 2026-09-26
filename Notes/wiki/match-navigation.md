@@ -77,7 +77,11 @@ actual transition ends in `reveal()` — see
   newest selected stop — see
   [logical-anchor-and-layout.md](logical-anchor-and-layout.md).
   `ensureLoad` requests the destination's load when it is neither
-  cached nor in flight, so an uncached destination shows `Loading…`
+  cached nor in flight, so an uncached destination shows `Loading…`.
+  Stale stops stay stops: Issue #29's per-submatch validation never
+  removes an entry — the destination reveal lands on the first
+  surviving submatch or a clamped fallback instead (see
+  [stale-match-validation.md](stale-match-validation.md)).
   until its `loadDoneMsg` arrives — whose completion issues the
   layout request that completes the same sequence. Issue #25 keys that
   completion by request identity and keeps navigation itself live

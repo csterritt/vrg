@@ -89,8 +89,10 @@ widths fall back to dashes. `Model.statusNote` is the provider seam;
 tests drive it with a synthetic string while the production value
 comes from `bufferNote` — Issue #26 delivered the first real note,
 `(unreadable)` for a read-failed path (see
-[read-failures.md](read-failures.md)), and Issues #29 (file-changed)
-and #30 (unsupported encoding) own the rest.
+[read-failures.md](read-failures.md)), Issue #29 added `file changed
+since search` for a stale-validating buffer (see
+[stale-match-validation.md](stale-match-validation.md)), and Issue #30
+owns the remaining unsupported-encoding note.
 
 ## Minimal-movement list scrolling
 
