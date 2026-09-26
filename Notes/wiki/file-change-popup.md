@@ -35,9 +35,10 @@ anchors" (the one-stop no-op that issues no pop-up) in
   dismissal. The pop-up never delays or swallows input.
 - **Cancellation without return.** `openOverlay` — the single route
   every error overlay now takes — clears `popupID`; nothing restores
-  it, so a dismissed overlay never reveals the pop-up again. The help
-  overlay's equivalent cancellation is Issue #31's; Issue #32 owns the
-  combined precedence matrix.
+  it, so a dismissed overlay never reveals the pop-up again. Since
+  Issue #31 `openHelp` does the same for the help overlay (see
+  [help-overlay.md](help-overlay.md)); Issue #32 owns the combined
+  precedence matrix.
 
 ## Rendering
 

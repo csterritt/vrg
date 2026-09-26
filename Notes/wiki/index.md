@@ -220,6 +220,14 @@ Catalog of all wiki pages for the vrg project.
   split with re-entry re-open, retained stops and `r` reloadability,
   the exclusion of encoded bytes from stale validation, and the fixed
   exit status
+- [help-overlay.md](help-overlay.md) — Issue #31: `h`/`?` modal help
+  over browse and no-results (close keys `q`/`Esc`/`h`/`?`, `up`/`down`
+  scrolling, `ctrl+c`, all other keys ignored), the shared
+  wrapped-scrollable overlay component it now shares with the error
+  overlay, the single `helpBindings` binding table with the Issue #34
+  footer slot, pop-up cancellation on open, error-suspension retention,
+  wrapped unbroken text, tiny-size clipping, and the `help overlay`
+  sink-safety row
 
 ## Catalogs
 

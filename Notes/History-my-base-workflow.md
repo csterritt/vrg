@@ -317,3 +317,14 @@ Usage
  Input tokens: 189971 tokens
  Output tokens: 60348 tokens
  Cached input tokens: 10187153 tokens
+
+----
+Task 031-help-overlay.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 30 messages
+ Input tokens: 41816 tokens
+ Output tokens: 13761 tokens
+ Cached input tokens: 1683109 tokens

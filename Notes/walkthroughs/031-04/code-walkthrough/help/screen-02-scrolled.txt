@@ -1,0 +1,16 @@
+./a.txt  ── ./a.t┌───────────────────────────────────────────┐──────────────────
+./b.txt  1  hit a│u / d              scroll half a page      │
+         2  plain│pgup / pgdown      scroll one page         │
+         3  hit o│, / .              pan one column          │
+                 │< / >              pan ten columns         │
+                 │[ / ]              pan half the text width │
+                 │w                  toggle line wrapping    │
+                 │c                  toggle colour scheme    │
+                 │left / tab         hide the file list      │
+                 │right / shift+tab  show the file list      │
+                 │r                  reload the current file │
+                 │h / ?              open or close this help │
+                 │q                  close the overlay / quit│
+                 │esc                close the overlay       │
+                 │ctrl+c             exit immediately        │
+                 └───────────────────────────────────────────┘

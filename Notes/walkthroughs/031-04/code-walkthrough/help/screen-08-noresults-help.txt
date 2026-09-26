@@ -1,0 +1,24 @@
+
+
+               ┌───────────────────────────────────────────────┐
+               │Key bindings                                   │
+               │                                               │
+               │n / p              next / previous matched line│
+               │up / down          scroll one row              │
+               │u / d              scroll half a page          │
+               │pgup / pgdown      scroll one page             │
+               │, / .              pan one column              │
+               │< / >              pan ten columns             │
+               │[ / ]              pan half the text width     │
+               │w                  toggle line wrapping        │
+               │c                  toggle colour scheme        │
+               │left / tab         hide the file list          │
+               │right / shift+tab  show the file list          │
+               │r                  reload the current file     │
+               │h / ?              open or close this help     │
+               │q                  close the overlay / quit    │
+               │esc                close the overlay           │
+               │ctrl+c             exit immediately            │
+               └───────────────────────────────────────────────┘
+
+

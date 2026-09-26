@@ -141,6 +141,12 @@ type Model struct {
 	// overlay is the open diagnostics overlay, nil when none is up. It
 	// owns the keyboard while open.
 	overlay *overlay
+	// help is the open help overlay, nil when none is up — the same
+	// shared component as overlay, holding the binding-table lines.
+	// An error overlay arriving while help is open suspends it:
+	// overlay takes precedence and help returns at its retained
+	// scroll position when the error is dismissed.
+	help *overlay
 	// popupID is the active file-change pop-up's instance — zero when
 	// none is up. popupSeq mints the instance IDs; popupPath is the raw
 	// destination path the pop-up displays, captured at selection.
@@ -231,14 +237,16 @@ func (m Model) awaitEvent() tea.Msg {
 // diagnostics — and starts the current file's load when browse is the
 // underlying screen; a load-done message stores the prepared buffer
 // without any full-file work here; n/p step the matched-line cursor in
-// the browse view; q quits a completed state with its fixed exit
-// status. An open overlay owns the keyboard: up/down scroll,
-// q and Esc dismiss (quitting outright when nothing underlies it),
-// other keys are ignored. ctrl+c in any state — and q while searching,
-// which covers the post-exit preparation window — cancel the search and
-// exit 130. Esc is a base-state no-op. Once the model has committed to
-// quitting, late messages (including completions racing cancellation)
-// are discarded.
+// the browse view; h/? open the modal help overlay over browse and the
+// no-results screen; q quits a completed state with its fixed exit
+// status. An open overlay owns the keyboard — the diagnostics overlay
+// first, then help: up/down scroll, q and Esc dismiss (h and ? also
+// close help, and the diagnostics overlay quits outright when nothing
+// underlies it), other keys are ignored. ctrl+c in any state — and q
+// while searching, which covers the post-exit preparation window —
+// cancel the search and exit 130. Esc is a base-state no-op. Once the
+// model has committed to quitting, late messages (including
+// completions racing cancellation) are discarded.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.quit {
 		return m, nil
@@ -401,6 +409,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.overlay != nil {
 			return m.overlayKey(msg.String())
 		}
+		if m.help != nil {
+			return m.helpKey(msg.String())
+		}
 		switch msg.String() {
 		case "ctrl+c":
 			return m.cancelled(), tea.Quit
@@ -459,6 +470,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.phase == phaseBrowse {
 				return m, m.reload()
 			}
+		case "h", "?":
+			// Modal help opens over browse and the no-results
+			// screen; during searching ordinary keys stay inert.
+			if m.phase == phaseBrowse || m.phase == phaseNoResults {
+				m.openHelp()
+			}
 		}
 	}
 	return m, nil
@@ -512,9 +529,10 @@ func (m Model) ReplayTo(w io.Writer) {
 // preparation span the screen is "Searching…"; afterwards it is the
 // two-pane browse view or, with no usable results, the centred
 // no-results screen — or a blank frame when a fatal outcome left no
-// underlying screen — with the diagnostics overlay composited on top
-// while open. The theme's base style wraps each frame so the active
-// scheme's colours cover the screen.
+// underlying screen — with the help overlay composited over it and the
+// diagnostics overlay composited on top while either is open. The
+// theme's base style wraps each frame so the active scheme's colours
+// cover the screen.
 func (m Model) View() tea.View {
 	var base string
 	switch m.phase {
@@ -531,8 +549,11 @@ func (m Model) View() tea.View {
 	if m.popupID != 0 {
 		base = m.renderPopup(base)
 	}
+	if m.help != nil {
+		base = m.renderOverlay(base, *m.help)
+	}
 	if m.overlay != nil {
-		base = m.renderOverlay(base)
+		base = m.renderOverlay(base, *m.overlay)
 	}
 	v := tea.NewView(m.theme.Base(base))
 	v.AltScreen = true

@@ -12,10 +12,13 @@ import (
 	"vrg/internal/present"
 )
 
-// overlay is the modal diagnostics box: sanitized diagnostic lines and
-// the scroll offset in wrapped rows. It opens over the underlying
-// screen — or alone over a blank frame in the fatal no-results case —
-// and owns the keyboard while open.
+// overlay is the shared wrapped-scrollable modal component: sanitized
+// text lines and the scroll offset in wrapped rows. The Issue #9
+// diagnostics overlay and the Issue #31 help overlay are both
+// instances — they differ only in content, key contract, and what a
+// dismissal means. It opens over the underlying screen — or alone over
+// a blank frame in the fatal no-results case — and owns the keyboard
+// while open.
 type overlay struct {
 	lines  []string
 	scroll int
@@ -124,10 +127,10 @@ func streamDiagnostics(failures, recordDiags []string) []string {
 	return diags
 }
 
-// overlayKey handles one key while the overlay is open: up/down scroll,
-// q and Esc dismiss — quitting outright when the fatal no-results
-// overlay has no underlying state — ctrl+c takes the cancellation path,
-// and every other key is ignored.
+// overlayKey handles one key while the diagnostics overlay is open:
+// up/down scroll, q and Esc dismiss — quitting outright when the fatal
+// no-results overlay has no underlying state — ctrl+c takes the
+// cancellation path, and every other key is ignored.
 func (m Model) overlayKey(key string) (Model, tea.Cmd) {
 	switch key {
 	case "ctrl+c":
@@ -138,51 +141,61 @@ func (m Model) overlayKey(key string) (Model, tea.Cmd) {
 			m.quit = true
 			return m, tea.Quit
 		}
-	case "up":
-		if m.overlay.scroll > 0 {
-			m.overlay.scroll--
-		}
-	case "down":
-		if m.overlay.scroll < m.overlayMaxScroll() {
-			m.overlay.scroll++
-		}
+	case "up", "down":
+		scrollOverlay(m.overlay, key, m.width, m.height)
 	}
 	return m, nil
 }
 
-// overlayLayout resolves the overlay's geometry for the current frame:
-// the diagnostic lines hard-wrapped to the interior width, the interior
-// height, and the scroll offset clamped into range.
-func (m Model) overlayLayout() (lines []string, interiorH, scroll int) {
-	w := m.width - 2
-	if w < 1 {
-		w = 1
+// scrollOverlay applies the shared overlay scroll keys to o: up/down
+// move the rendered-row offset, clamped at both ends. Any other key is
+// a no-op — each modal's own key handler decides dismissal.
+func scrollOverlay(o *overlay, key string, w, h int) {
+	switch key {
+	case "up":
+		if o.scroll > 0 {
+			o.scroll--
+		}
+	case "down":
+		if o.scroll < o.maxScroll(w, h) {
+			o.scroll++
+		}
+	}
+}
+
+// layout resolves the overlay's geometry for a frame of w×h cells: the
+// lines hard-wrapped to the interior width, the interior height, and
+// the scroll offset clamped into range.
+func (o overlay) layout(w, h int) (lines []string, interiorH, scroll int) {
+	iw := w - 2
+	if iw < 1 {
+		iw = 1
 	}
 	maxLine := 0
-	for _, l := range m.overlay.lines {
+	for _, l := range o.lines {
 		if n := ansi.StringWidth(l); n > maxLine {
 			maxLine = n
 		}
 	}
-	if maxLine < w {
-		w = maxLine
+	if maxLine < iw {
+		iw = maxLine
 	}
-	if w < 1 {
-		w = 1
+	if iw < 1 {
+		iw = 1
 	}
-	for _, l := range m.overlay.lines {
-		for _, wl := range strings.Split(ansi.Wrap(l, w, ""), "\n") {
+	for _, l := range o.lines {
+		for _, wl := range strings.Split(ansi.Wrap(l, iw, ""), "\n") {
 			lines = append(lines, wl)
 		}
 	}
-	interiorH = m.height - 2
+	interiorH = h - 2
 	if interiorH < 1 {
 		interiorH = 1
 	}
 	if len(lines) < interiorH {
 		interiorH = len(lines)
 	}
-	scroll = m.overlay.scroll
+	scroll = o.scroll
 	if max := len(lines) - interiorH; scroll > max {
 		scroll = max
 	}
@@ -192,10 +205,10 @@ func (m Model) overlayLayout() (lines []string, interiorH, scroll int) {
 	return lines, interiorH, scroll
 }
 
-// overlayMaxScroll is the largest scroll offset that still shows
-// content — the down key's clamp.
-func (m Model) overlayMaxScroll() int {
-	lines, interiorH, _ := m.overlayLayout()
+// maxScroll is the largest scroll offset that still shows content —
+// the down key's clamp.
+func (o overlay) maxScroll(w, h int) int {
+	lines, interiorH, _ := o.layout(w, h)
 	return max(0, len(lines)-interiorH)
 }
 
@@ -227,10 +240,10 @@ func (m *Model) openOverlay(lines []string) {
 }
 
 // renderOverlay composites the modal box over the base frame: the
-// visible slice of wrapped lines inside a single-line border painted in
-// the base colours, centred on the frame.
-func (m Model) renderOverlay(base string) string {
-	lines, interiorH, scroll := m.overlayLayout()
+// visible slice of o's wrapped lines inside a single-line border
+// painted in the base colours, centred on the frame.
+func (m Model) renderOverlay(base string, o overlay) string {
+	lines, interiorH, scroll := o.layout(m.width, m.height)
 	visible := lines[scroll : scroll+interiorH]
 	return m.composite(base, m.theme.Overlay(visible))
 }

@@ -107,7 +107,11 @@ set restructured as a shared, extensible table:
   `wantPath` (embedded filename) forms in the replayed output — and,
   since Issue #15, the **file-change pop-up**: `renderPopupSink` names
   the navigation destination with the fixture bytes and the check
-  asserts the `Path`-escaped `wantPath` form inside the box.
+  asserts the `Path`-escaped `wantPath` form inside the box — and,
+  since Issue #31, the **help overlay**: `renderHelpSink` injects the
+  fixture bytes through the help overlay's footer substitution slot
+  and the check asserts the `Diagnostic`-escaped `wantDiag` forms
+  inside the border.
 - **Method**: each fixture × sink renders through the real composition
   path under `theme.Plain` — the no-style path where no escape byte may
   legitimately appear — and asserts on the **raw output before any ANSI
@@ -126,7 +130,8 @@ Issue #11 (stderr replay — delivered; see
 [stderr-replay.md](stderr-replay.md)), Issue #15 (file-change pop-up —
 delivered; see
 [file-change-popup.md](file-change-popup.md)),
-Issue #31 (TUI help dialog substitutions), Issue #34 (any generated
+Issue #31 (TUI help dialog substitutions — delivered; see
+[help-overlay.md](help-overlay.md)), Issue #34 (any generated
 README/help text).
 
 ## Regression surface

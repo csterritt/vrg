@@ -62,7 +62,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `overlay` whenever the completion carries diagnostics; an open
   overlay owns the keyboard via `overlayKey` (`up`/`down` scroll,
   `q`/`Esc` dismiss — quitting outright under `phaseFatal` — `ctrl+c`
-  cancels, other keys ignored); `ctrl+c` in any state or `q` while
+  cancels, other keys ignored), then `helpKey` for an open help
+  overlay (the error > help precedence — `q`/`Esc`/`h`/`?` close);
+  `ctrl+c` in any state or `q` while
   searching cancels (kills the child context, `ExitCode` 130), `Esc` is
   a base-state no-op, `c` in browse toggles the theme between its dark
   and light schemes (Issue #7), `n`/`p` in browse step the matched-line
@@ -74,7 +76,8 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `quit` is set `Update`
   discards all messages so a late completion cannot revive a cancelled
   UI; every view wraps the frame in `theme.Base`, composites the
-  overlay while open, and sets `AltScreen` for the exit restoration
+  overlays while open (help beneath the diagnostics overlay), and sets
+  `AltScreen` for the exit restoration
   sequence; resize handled in any state.
   Issue #5 state: `stops`/`files`, the `bufs`/`loading`/
   `failed` buffer maps, `theme`, `vp`, and the `loadGate` test seam —
@@ -133,7 +136,11 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   current;
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
-  diagnostics box; Issue #15 adds the pop-up state (`popupID`,
+  diagnostics box; Issue #31 adds `help`, the open help overlay — the
+  same shared `overlay` component, suspended (state retained) while an
+  error overlay takes precedence — the `h`/`?` open case gated to
+  browse and no-results, and `helpKey` routing; Issue #15 adds the
+  pop-up state (`popupID`,
   `popupSeq`, `popupPath`, the `popupTimer` test seam), the
   `popupExpiredMsg` case with instance-keyed dismissal, the any-key
   dismissal ahead of normal key routing, the current-file
@@ -159,8 +166,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `completionDiagnostics`/`processDiagnostic`/`streamDiagnostics` (the
   collection subset, child stderr excluded because the session
   collection already took it incrementally); the
-  modal `overlay` state, `overlayKey`, `overlayLayout` (hard-wrapped
-  interior sized from the frame), `renderOverlay` (the centred
+  modal `overlay` state, `overlayKey`, `layout`/`maxScroll` (the
+  hard-wrapped interior geometry sized from the frame — value methods
+  since Issue #31), `scrollOverlay` (the shared clamped up/down
+  handler), `renderOverlay` (the centred
   `theme.Overlay` box composited over the base frame by cell-exact
   `ansi.Truncate`/`ansi.Cut` splicing), and `renderBlank` (the frame
   under a fatal-only overlay). Issue #15 adds `openOverlay` (the single
@@ -170,6 +179,18 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `renderPopup` both consume). See
   [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md)
   and [file-change-popup.md](file-change-popup.md).
+- `internal/app/help.go` — the Issue #31 modal help overlay:
+  `helpBinding`/`helpBindings` (the single binding table — key spelling
+  → description — covering navigation, scrolling, panning, wrap,
+  colour, list toggle, reload, help, and quit/cancel; the help renderer
+  consumes it and Issue #34's documentation test iterates it),
+  `helpFooter` (the footer slot reserved for Issue #34's
+  scale-and-limits note — the substitution point routed through
+  `present.Diagnostic`), `helpLines` (title, binding rows, footer),
+  `openHelp` (opens the shared `overlay` component and cancels any
+  pop-up), and `helpKey` (`up`/`down` scroll, `q`/`Esc`/`h`/`?` close,
+  `ctrl+c` exits 130, all other keys ignored). See
+  [help-overlay.md](help-overlay.md).
 - `internal/app/noresults.go` — `renderNoResults` (Issue #8): the
   centred "No results found" message on the frame's middle row, with
   "(N binary files skipped)" appended when exclusion emptied the list,

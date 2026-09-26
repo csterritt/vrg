@@ -128,9 +128,9 @@ type sinkRow struct {
 
 // sinkSafetySinks is the table of every output sink existing at this
 // point: the three browse sinks, the Issue #15 file-change pop-up, the
-// usage-error stderr composition, and the generated command-line help
-// on stdout (distinct from the Issue #31 TUI help dialog, which adds
-// its own row later).
+// Issue #31 help overlay's substitution slot, the usage-error stderr
+// composition, and the generated command-line help on stdout (distinct
+// from that TUI help dialog).
 var sinkSafetySinks = []sinkRow{
 	{
 		name:   "file-list entry",
@@ -209,6 +209,24 @@ var sinkSafetySinks = []sinkRow{
 			for _, w := range fx.wantDiag {
 				if !strings.Contains(raw, w) {
 					t.Fatalf("overlay diagnostic lacks escaped form %q: %q", w, raw)
+				}
+			}
+		},
+	},
+	{
+		name:   "help overlay",
+		tui:    true,
+		styled: true,
+		render: func(t *testing.T, fx hostileFixture, styled bool) string {
+			return renderHelpSink(t, fx, styled)
+		},
+		check: func(t *testing.T, fx hostileFixture, raw string) {
+			// The hostile bytes ride in through the footer
+			// substitution slot; the overlay shows their
+			// Diagnostic-escaped form inside the border.
+			for _, w := range fx.wantDiag {
+				if !strings.Contains(raw, w) {
+					t.Fatalf("help overlay lacks escaped form %q: %q", w, raw)
 				}
 			}
 		},
@@ -424,6 +442,28 @@ func renderOverlaySink(t *testing.T, fx hostileFixture, styled bool) string {
 		stderr:  []byte("pre" + fx.inject + "post\n"),
 		waitErr: exitErr(t, 3),
 	})
+	return m.View().Content
+}
+
+// renderHelpSink drives the fixture through the help overlay's real
+// composition path at 80x24: the hostile bytes arrive through the
+// footer substitution slot, ? opens the overlay over browse, and the
+// raw View() content is returned. styled selects real styling; false
+// renders through theme.Plain.
+func renderHelpSink(t *testing.T, fx hostileFixture, styled bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	writeWorkFile(t, dir, "f.txt", "hit\n")
+	helpFooter = []string{"pre" + fx.inject + "post"}
+	defer func() { helpFooter = nil }()
+
+	m := newModel(nil, nil)
+	if !styled {
+		m.theme = theme.Plain()
+	}
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = update(t, m, searchDoneMsg{index: fixtureIndex(t, dir, recsOneMatch...)})
+	m, _ = update(t, m, keyPress("?"))
 	return m.View().Content
 }
 

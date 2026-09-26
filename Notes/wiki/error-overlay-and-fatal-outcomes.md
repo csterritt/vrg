@@ -132,9 +132,15 @@ through `openOverlay`: it appends the new lines when an overlay is
 already open (preserving the reader's scroll) and cancels any live
 file-change pop-up — an arriving error overlay removes the pop-up and
 it cannot return when the overlay is dismissed (see
-[file-change-popup.md](file-change-popup.md)). While `m.overlay` is
+[file-change-popup.md](file-change-popup.md)). Since Issue #31 the
+type is the shared wrapped-scrollable component the help overlay also
+instantiates: the geometry helpers are value methods `layout(w, h)`
+and `maxScroll(w, h)`, `scrollOverlay` is the shared clamped up/down
+handler, and `renderOverlay(base, o)` composites whichever instance is
+passed (see [help-overlay.md](help-overlay.md)). While `m.overlay` is
 non-nil it owns the
-keyboard — `overlayKey` runs before the base-state switch:
+keyboard — `overlayKey` runs before the base-state switch (and before
+help's `helpKey`, the error-over-help precedence):
 
 - `up`/`down` scroll one row, clamped at both ends.
 - `q` and `Esc` dismiss to the underlying screen — or quit with the
@@ -144,11 +150,11 @@ keyboard — `overlayKey` runs before the base-state switch:
 - Every other key is ignored — `c` cannot reach the colour toggle
   beneath an open overlay.
 
-`overlayLayout` resolves geometry from the frame: interior width is the
-smaller of the frame minus the border and the widest diagnostic line;
-each line hard-wraps with `ansi.Wrap` so an unbroken diagnostic never
-overflows the border; interior height is the smaller of frame minus
-border and the wrapped count. `renderOverlay` composites
+`layout(w, h)` resolves geometry from the frame: interior width is the
+smaller of the frame minus the border and the widest line; each line
+hard-wraps with `ansi.Wrap` so an unbroken diagnostic never overflows
+the border; interior height is the smaller of frame minus border and
+the wrapped count. `renderOverlay` composites
 `theme.Overlay`'s single-line bordered box — base colours, see
 [theme-and-colour-toggle.md](theme-and-colour-toggle.md) — centred over
 the underlying frame's rows via `composite`, the cell-exact
@@ -210,11 +216,14 @@ marker. See [unit-tests.md](unit-tests.md).
 - `internal/searchindex/index.go` — `Feed`, the `open`/`incomplete`
   lifecycle state, `IntegrityFailures`, `Stop.Incomplete`, `seal`.
 - `internal/app/overlay.go` — `decideOutcome`, `collectDiagnostics`,
-  `processFatal`, the `overlay` type, `overlayKey`, `overlayLayout`,
-  `renderOverlay`, `renderBlank`; Issue #11 split the collection side
+  `processFatal`, the `overlay` type, `overlayKey`, `layout`,
+  `maxScroll`, `renderOverlay`, `renderBlank`; Issue #11 split the
+  collection side
   out as `completionDiagnostics`/`processDiagnostic`/`streamDiagnostics`;
   Issue #15 added `openOverlay` (open-or-append plus pop-up
-  cancellation) and `composite` (the shared centred splice).
+  cancellation) and `composite` (the shared centred splice);
+  Issue #31 generalized the component into value methods and the
+  shared `scrollOverlay` handler the help overlay reuses.
 - `internal/app/app.go` — `phaseFatal`, the `overlay` field, the
   `decideOutcome` branch in `Update`, overlay-first key routing, and
   `View` compositing.
@@ -224,4 +233,6 @@ marker. See [unit-tests.md](unit-tests.md).
 See also:
 [unsupported-encodings.md](unsupported-encodings.md) — Issue #30's
 detection overlay rides the same open-or-append route and the
-all-unsupported outcome-matrix row keeps the fixed status at 0.
+all-unsupported outcome-matrix row keeps the fixed status at 0;
+[help-overlay.md](help-overlay.md) — Issue #31's modal help, the
+second instance of the shared overlay component.

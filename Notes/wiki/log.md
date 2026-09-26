@@ -1216,3 +1216,47 @@ and child process; Exit statuses; Testing Decisions → FileBuffer),
 `internal/filebuffer/encoding_test.go`, `internal/app/app.go`,
 `internal/app/browse.go`, `internal/app/encoding_test.go`,
 `internal/app/outcome_test.go`.
+
+## [2026-09-24] ingest | Issue #31 help overlay — `h`/`?` modal key bindings on the shared overlay component
+
+Ingested the completed Issue #31 implementation: `h` and `?` open the
+modal help overlay over ordinary browsing and the no-results screen
+(inert during searching like every other ordinary key), closing with
+`q`/`Esc`/`h`/`?` back to the underlying base state — a subsequent `q`
+on no-results still exits 1. While open, `up`/`down` scroll the
+rendered rows clamped at both ends, `ctrl+c` exits 130, and every
+other key — including `n`/`p`/`w`/`c`/`r` — is ignored with the state
+behind unchanged. The Issue #9 `overlay` struct is now the shared
+wrapped-scrollable component both modals instantiate: its geometry
+helpers became value methods `layout(w, h)` and `maxScroll(w, h)`,
+`scrollOverlay` is the shared clamped scroll handler, and
+`renderOverlay(base, o)` composites whichever instance is passed —
+`View` paints pop-up, then help, then the diagnostics overlay, so an
+error arriving over help suspends it at its retained scroll position
+(Issue #32 owns the combined precedence matrix). The binding list is
+the single `helpBindings` table (key spelling → description) covering
+navigation, scrolling, panning, wrap, colour, list toggle, reload,
+help, and quit/cancel, rendered by `helpLines` behind the `Key
+bindings` title with the `helpFooter` slot reserved for Issue #34 —
+the substitution point routed through `present.Diagnostic`. Opening
+help cancels a live file-change pop-up with no return. Text hard-wraps
+to the interior width including unbroken strings, scrolling reaches
+every row at usable sizes, and at tiny sizes above the 20×3 minimum
+the box is clipped to the terminal without a borderless mode and
+restored on growth. Created [help-overlay](help-overlay.md); updated
+[error-overlay-and-fatal-outcomes](error-overlay-and-fatal-outcomes.md)
+(the shared component and renamed methods),
+[file-change-popup](file-change-popup.md) (`openHelp` cancellation),
+[no-results-and-binary-exclusion](no-results-and-binary-exclusion.md)
+(help over the no-results screen),
+[safe-presentation](safe-presentation.md) (the delivered `help
+overlay` sink row), [source-code](source-code.md) (`help.go`, the
+`app.go` help field/routing, the `overlay.go` refactor),
+[unit-tests](unit-tests.md) (the `help_test.go` catalog and the new
+sink row), and the index.
+New files: `internal/app/help.go`, `internal/app/help_test.go`.
+Sources: `Notes/issues/031-help-overlay.md`,
+`Notes/tasks/031-help-overlay.md`, `Notes/PRD-vrg.md` (Colours,
+overlays, and key precedence), `internal/app/help.go`,
+`internal/app/help_test.go`, `internal/app/overlay.go`,
+`internal/app/app.go`, `internal/app/sinksafety_test.go`.

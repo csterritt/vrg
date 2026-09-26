@@ -57,8 +57,10 @@ screen — the same full-width padding as
 Keys on this screen: `q` quits through the ordinary path with the fixed
 status 1 (the process boundary's terminate-and-reap cleanup from
 [cancellation-and-cleanup.md](cancellation-and-cleanup.md) still runs),
-`Esc` is a no-op, and `ctrl+c` overrides the fixed status with 130 via
-`cancelled()`. Since Issue #9 the screen can sit beneath a warning
+`Esc` is a no-op, `ctrl+c` overrides the fixed status with 130 via
+`cancelled()`, and — since Issue #31 — `h`/`?` open the modal help
+overlay over it, closing back to this screen (see
+[help-overlay.md](help-overlay.md)). Since Issue #9 the screen can sit beneath a warning
 overlay — captured stderr under a benign exit opens the modal overlay
 first, and `q`/`Esc` dismiss it to reveal this screen — and a fatal
 outcome with zero usable results replaces it entirely with the

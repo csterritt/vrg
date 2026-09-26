@@ -1089,6 +1089,33 @@ later issues extend it with rows rather than duplicating the decision:
   child with empty stderr still yields a diagnostic naming its exit
   status or signal.
 
+`help_test.go` (same package, Issue #31) pins the modal help overlay —
+the second instance of the shared wrapped-scrollable `overlay`
+component:
+
+- `TestHelpOpensFromBrowse` / `TestHelpOpensFromNoResults` — `h` and `?`
+  each open the bordered binding list over both base states; over
+  no-results, `Esc` closes back to the screen and a subsequent `q`
+  still exits 1.
+- `TestHelpCloseKeys` — `q`, `Esc`, `h`, and `?` each close to browsing.
+- `TestHelpIgnoresOtherKeys` — `n`/`p`/`w`/`c`/`r` and more are inert:
+  cursor, wrap flag, theme, and phase unchanged, no commands.
+- `TestHelpCtrlCExits130` — cancellation beats the fixed status.
+- `TestHelpKeysInertWhileSearching` — `h`/`?` during collection open
+  nothing.
+- `TestHelpScrollsWithUpDown` — at a reduced height the binding list
+  scrolls, clamps at both ends, and reaches head and tail.
+- `TestHelpWrapsUnbrokenSubstitution` — a 300-cell unbroken footer
+  string wraps inside the border; no frame row exceeds the width.
+- `TestHelpClippedAtTinySize` — at 25×8 the box is clipped to the
+  terminal without a borderless mode and renders without panic; growth
+  restores the normal layout.
+- `TestHelpRendersBindingTable` / `TestHelpRendersFooterSlot` — every
+  `helpBindings` row's key spelling and description, plus the footer
+  slot's text, appear in the render.
+- `TestHelpCancelsPopup` — an active file-change pop-up is cancelled on
+  open, does not return on close, and its stale expiry stays inert.
+
 `sinksafety_test.go` (same package) holds the Issue #6 shared
 sink-safety table:
 
@@ -1102,7 +1129,11 @@ sink-safety table:
   check asserts the `Diagnostic`-escaped `wantDiag` forms inside the
   border, and — since Issue #15 — the `file-change pop-up` row, where
   `renderPopupSink` names the destination file with the fixture bytes
-  and asserts the `Path`-escaped `wantPath` form inside the box. Under
+  and asserts the `Path`-escaped `wantPath` form inside the box, and —
+  since Issue #31 — the `help overlay` row, where `renderHelpSink`
+  injects the fixture bytes through the footer substitution slot and
+  asserts the `Diagnostic`-escaped `wantDiag` forms inside the border.
+  Under
   `theme.Plain` (the no-style composition path) the raw
   output — asserted before any ANSI stripping — must contain no fixture
   control byte verbatim and none of the universal set
