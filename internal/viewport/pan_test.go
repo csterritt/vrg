@@ -313,7 +313,9 @@ func TestReclampOnVisibleSetChanges(t *testing.T) {
 	})
 	t.Run("moving reveal", func(t *testing.T) {
 		v := newVp(t)
-		if !v.Reveal(Target{Line: 5}) {
+		// The target cell 9 lands painted at the new offset 9, so the
+		// Issue #19 horizontal reveal leaves the clamped value alone.
+		if !v.Reveal(Target{Line: 5, Cell: 9}) {
 			t.Fatal("reveal of a hidden line reported no move")
 		}
 		if v.Offset() != 9 {

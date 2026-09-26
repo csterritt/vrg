@@ -70,7 +70,9 @@ type Rows interface {
 // state: under a run-off-edge model it is clamped to the visible-lines
 // extent — recomputed from the visible rows on every pan and every
 // visible-set change — while under a wrap model it is dormant, kept
-// for the next re-entry. Horizontal reveal arrives with Issue 19.
+// for the next re-entry. Reveal additionally moves the offset by the
+// minimum columns that paint the target's start cell — the Issue #19
+// horizontal reveal.
 type Viewport struct {
 	width  int // text columns available to content
 	height int // content rows
@@ -176,27 +178,84 @@ func (v *Viewport) HalfRight() { v.pan(v.halfW()) }
 func (v *Viewport) halfW() int { return max(1, v.width/2) }
 
 // Reveal makes the rendered row containing the target visible and
-// reports whether the viewport moved — the caller replaces the file's
-// saved vertical state only on a move. A target row already inside the
-// window leaves the top unchanged; otherwise the top moves so the row
-// sits at zero-based row floor(height/3), clamped to valid tops — at
-// BOF/EOF the available content takes precedence over the one-third
-// placement. With no prepared rows the reveal is a no-op.
+// reports whether the viewport's top moved — the caller replaces the
+// file's saved vertical state only on a move. A target row already
+// inside the window leaves the top unchanged; otherwise the top moves
+// so the row sits at zero-based row floor(height/3), clamped to valid
+// tops — at BOF/EOF the available content takes precedence over the
+// one-third placement. In run-off-edge mode it then applies the
+// minimal horizontal reveal: a target whose start cell is not painted
+// moves the offset by the minimum columns that paint it. With no
+// prepared rows the reveal is a no-op.
 func (v *Viewport) Reveal(t Target) bool {
 	if v.count() == 0 {
 		return false
 	}
 	row := min(max(v.rows.RowOf(t), 0), v.count()-1)
-	if row >= v.top && row < v.top+v.height {
-		return false
+	moved := false
+	if row < v.top || row >= v.top+v.height {
+		before := v.top
+		v.top = row - v.height/3
+		v.clamp()
+		if moved = v.top != before; moved {
+			v.anchor = v.loc(v.top)
+		}
 	}
-	before := v.top
-	v.top = row - v.height/3
-	v.clamp()
-	if v.top != before {
-		v.anchor = v.loc(v.top)
+	v.revealCell(t, row)
+	return moved
+}
+
+// revealCell applies the minimal horizontal reveal to a target on
+// rendered row row — run-off-edge mode only; under a wrap model the
+// offset is dormant and every cell paints. The target's painted unit
+// is the grapheme cluster containing its cell — found through the
+// Lead/Cont marks — except a marker target, which is one painted cell
+// wherever it sits (an inverse space, even on a clipped cluster's
+// lead). A unit is visible only when actually painted inside the
+// window: a position geometrically inside but split-blanked by a clip
+// edge counts as hidden. A hidden unit moves the offset the minimum
+// columns — to its start column when hidden left, to start + width −
+// text width when hidden right so the whole unit paints flush with the
+// right edge. A unit wider than the whole text area can never paint:
+// the offset still goes to its start column — the closest achievable
+// position, deliberately past the paintable-boundary pan maximum —
+// and the target counts as geometrically revealed, so repeated reveals
+// do not loop even though its in-window cells render as blanks.
+func (v *Viewport) revealCell(t Target, row int) {
+	if v.rows.Wrap() {
+		return
 	}
-	return v.top != before
+	r := v.rows.Row(row)
+	s := max(t.Cell, 0)
+	e := s + 1
+	if s < len(r.Cells) && !markedAt(r.Spans, s) {
+		for s > 0 && r.Cells[s].Cont {
+			s--
+		}
+		for e < len(r.Cells) && r.Cells[e].Cont {
+			e++
+		}
+	}
+	switch cw := e - s; {
+	case cw > v.width:
+		v.off = s
+	case s < v.off:
+		v.off = s
+	case s+cw > v.off+v.width:
+		v.off = s + cw - v.width
+	}
+}
+
+// markedAt reports whether cell c carries a marker span — a zero-width
+// match's single painted cell, revealed by position rather than by its
+// cluster's width.
+func markedAt(spans []present.Span, c int) bool {
+	for _, sp := range spans {
+		if sp.Start == sp.End && sp.Start == c {
+			return true
+		}
+	}
+	return false
 }
 
 func (v *Viewport) half() int { return max(1, v.height/2) }

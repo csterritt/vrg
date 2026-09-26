@@ -335,10 +335,19 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   under wrap); and `Visible` runs each run-off-edge row through
   `clipRow`, which drops out-of-window cells, translates spans into
   window cells, and blanks a cluster split by either clip edge.
-  Horizontal reveal remains Issue #19.
+  Issue #19 extends `Reveal` with `revealCell`: after vertical
+  placement it resolves the target's unit on its rendered row — the
+  grapheme cluster holding the start cell via `Lead`/`Cont`, or a
+  one-cell marker for a zero-width span (`markedAt`) — and, when that
+  unit is not painted in the clipped window, moves `off` minimally
+  (`s` hidden left, `s + cw − width` hidden right or clipped, `s` for
+  a cluster wider than the text area); the unpaintable case counts as
+  geometrically revealed so repeats cannot loop, and the write
+  deliberately bypasses the paintable-boundary clamp.
   See [viewport-scrolling.md](viewport-scrolling.md),
   [horizontal-panning.md](horizontal-panning.md),
   [destination-reveal.md](destination-reveal.md),
+  [minimal-horizontal-reveal.md](minimal-horizontal-reveal.md),
   [logical-anchor-and-layout.md](logical-anchor-and-layout.md), and
   [wrap-mode.md](wrap-mode.md).
 - `internal/viewport/rows.go` — Issue #16's prepared row model:

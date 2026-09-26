@@ -501,6 +501,26 @@ leading `hit`:
   shows `Loading…` at top 0, then the load's top-of-file start plus
   reveal lands the target a third down.
 
+`hreveal_test.go` (same package, Issue #19) drives the horizontal
+reveal triggers through `Update` in run-off-edge mode, on fixtures
+whose matches sit far right of the text area:
+
+- `TestHRevealSameFileNScrollsRightMinimal` — `n` to a hidden-right
+  match sets `m.vp.Offset()` to `start − (text width − 1)` and the
+  frame paints the match start on the last text column.
+- `TestHRevealPBackScrollsLeftToTarget` — `p` back to a hidden-left
+  match lands the offset on the target column.
+- `TestHRevealVisibleMatchKeepsOffset` — `n` to an already-painted
+  match moves nothing.
+- `TestHRevealAppliesAtStartup` — run-off-edge selected before the
+  startup completion reveals the first stop's far match horizontally
+  when the layout installs.
+- `TestHRevealAfterFileChangeReset` — a file crossing resets the
+  departed offset to 0, then reveals the destination's match.
+- `TestHRevealWideClusterMatchPaintsBothCells` — a match starting on
+  a two-cell CJK glyph reveals to `start + 2 − text width` so both
+  cells of the first glyph paint at the right edge.
+
 `popup_test.go` (same package) covers the Issue #15 file-change
 pop-up; `popupModel` lands a two-file browse with `instantPopupTimer`
 (an injected `popupTimer` seam resolving to `popupExpiredMsg{id}`
@@ -821,6 +841,37 @@ models:
 - `TestExtentQueriesOnlyVisibleRows` — the render-cost guard: a pan
   queries only the visible rows' lines; a scroll touches only the new
   window — never a whole-buffer scan.
+
+`hreveal_test.go` (same package, Issue #19) pins the horizontal half
+of `Reveal` against `lineSource`-backed prepared models in
+run-off-edge mode:
+
+- `TestHRevealRightOfViewPaintsStartCell` — a single-cell target right
+  of view moves the offset to `T − (text width − 1)` and paints.
+- `TestHRevealRightOfViewWideClusterPaintsWhole` — a two-cell target
+  moves to `T + cluster width − text width`, both cells painted.
+- `TestHRevealLeftOfViewLandsOnTargetColumn` — a hidden-left target
+  (including one split by the left clip edge) moves the offset to its
+  start column.
+- `TestHRevealPaintedTargetKeepsOffset` — painted targets, including a
+  cluster flush with the right edge, move nothing.
+- `TestHRevealClippedBlankCountsAsHidden` — a geometrically inside
+  position blanked by a two-cell glyph at the right edge counts as
+  hidden and reveals.
+- `TestHRevealOversizedSpanShowsStartCell` — a match wider than the
+  text area reveals its start cell alone (clipped span `{9, 10}` at
+  the window edge).
+- `TestHRevealUnpaintableClusterUsesStartColumn` — a cluster wider
+  than the text area takes `off = start` beyond the paintable
+  boundary, renders in-window clipping blanks, and a repeat reveal
+  does not move (no loop).
+- `TestHRevealMarkerCells` — marker targets: an end-of-line marker
+  reveals as one cell; a marker on a clipped cluster's lead stays
+  painted.
+- `TestHRevealMovesBothAxes` — a vertically and horizontally hidden
+  target reveals on both axes in one call.
+- `TestHRevealNoOpInWrapMode` — wrap-mode reveal leaves the dormant
+  offset untouched.
 
 ## internal/theme
 

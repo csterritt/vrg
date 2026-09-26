@@ -1,0 +1,24 @@
+a.txt  ── a.txt ────────────────────────────────────────────────────────────────
+        1  hit
+        2  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+        3  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+        4  xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+        5  0005
+        6  0006
+        7  0007
+        8  0008
+        9  0009
+       10  0010
+       11  0011
+       12  0012
+
+
+
+
+
+
+
+
+
+
+

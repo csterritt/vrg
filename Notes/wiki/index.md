@@ -121,6 +121,13 @@ Catalog of all wiki pages for the vrg project.
   change with no restoration, wrap-mode dormancy and re-entry
   clamping, the file-change offset reset, and grapheme-safe clipping
   with split-cluster blanking and span translation
+- [minimal-horizontal-reveal.md](minimal-horizontal-reveal.md) —
+  Issue #19: painted-cell visibility as the reveal criterion, minimum
+  offset arithmetic using cluster widths (left hidden → start; right
+  hidden/clipped → `start + cluster width − text width`), the
+  oversized-match start-cell rule, the unpaintable-cluster geometric
+  fallback with its no-loop guarantee, and the startup and
+  per-navigation triggers after the file-change offset reset
 
 ## Catalogs
 

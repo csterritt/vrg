@@ -44,9 +44,10 @@ outside browse is a strict no-op.
 - **Reset on file change.** `navigate`'s `FileChanged` branch calls
   `SetOffset(0)` ahead of the destination reveal, and the
   `loadDoneMsg` current-file path does the same for the
-  load-completion entry sequence — the horizontal half of the PRD's
-  file-change rule, with the Issue #19 horizontal reveal still to
-  come. A revisit never restores a departed file's old offset.
+  load-completion entry sequence — the reset half of the PRD's
+  file-change rule, on which Issue #19's horizontal reveal then runs
+  (see [minimal-horizontal-reveal.md](minimal-horizontal-reveal.md)).
+  A revisit never restores a departed file's old offset.
 
 ## Visible-lines extent policy
 
@@ -79,8 +80,9 @@ the viewport), a row-model swap, and wrap-toggle re-entry all
 re-clamp — and every pan recomputes the maximum from the current
 visible rows rather than a cached value. The loss is permanent:
 scrolling back to the wide line does not restore the clamped-away
-offset, and Issue #19's saved-state and horizontal reveal will operate
-on the clamped value.
+offset, and Issue #19's horizontal reveal operates on the clamped
+value (its own offset writes deliberately bypass the boundary — see
+[minimal-horizontal-reveal.md](minimal-horizontal-reveal.md)).
 
 **Visible rows only.** `maxOffset` iterates `Row(i)` over
 `[top, top+height)` — the counting-fake guard

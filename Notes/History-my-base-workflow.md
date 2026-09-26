@@ -185,3 +185,14 @@ Usage
  Input tokens: 175118 tokens
  Output tokens: 59498 tokens
  Cached input tokens: 8477829 tokens
+
+----
+Task 019-minimal-horizontal-reveal.md
+
+Agent SWE-2
+
+Usage
+ Agent messages: 54 messages
+ Input tokens: 103925 tokens
+ Output tokens: 31234 tokens
+ Cached input tokens: 4406470 tokens

@@ -119,7 +119,7 @@ func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 		m.vp.SetRows(m.currentRows())
 		m.vp.SetAnchor(m.saved[string(step.Stop.Path)])
 		// The horizontal offset resets to zero on file change, ahead
-		// of the Issue #19 horizontal reveal.
+		// of the reveal's horizontal half.
 		m.vp.SetOffset(0)
 		pop = m.openPopup(step.Stop.Path)
 	}
@@ -133,12 +133,14 @@ func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 // display target is the start cell of the first submatch on the
 // destination line — the marker cell for a zero-width match — so the
 // first surviving validated span supplies it (stale-entry fallbacks
-// are Issue #29's). A reveal that moves the viewport replaces the
-// file's saved vertical state; a no-scroll reveal — an already-visible
-// target — leaves it. With no installed layout matching the current
-// parameters the reveal cannot run: it is carried as the pending
-// intent and committed when a matching layout installs — always for
-// whichever stop is newest at commit time.
+// are Issue #29's). The reveal covers both axes: the vertical
+// one-third placement and, in run-off-edge mode, the minimal
+// horizontal reveal of the target's start cell. A reveal that moves
+// the viewport replaces the file's saved vertical state; a no-scroll
+// reveal — an already-visible target — leaves it. With no installed
+// layout matching the current parameters the reveal cannot run: it is
+// carried as the pending intent and committed when a matching layout
+// installs — always for whichever stop is newest at commit time.
 func (m *Model) reveal() {
 	s, ok := m.currentStop()
 	if !ok {

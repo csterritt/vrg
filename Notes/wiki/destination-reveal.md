@@ -93,10 +93,13 @@ stop — the behavior Issue #28 formalizes. A same-file step keeps the
 current viewport and simply reveals the new stop against it — pending
 likewise when a rewrap is still in flight.
 
-Horizontal *reveal* of the target cell is Issue #19's; the reset half
-landed with Issue #18's panning (see
-[horizontal-panning.md](horizontal-panning.md)) — nothing here pans
-the target itself yet.
+Horizontal *reveal* of the target cell landed with Issue #19 on this
+same `Reveal` seam: after the vertical placement — including its
+visible-set re-clamp of the offset — `revealCell` moves the offset by
+the minimum columns that paint the target's start cell (see
+[minimal-horizontal-reveal.md](minimal-horizontal-reveal.md)). The
+file-change offset reset ahead of it remains Issue #18's (see
+[horizontal-panning.md](horizontal-panning.md)).
 
 ## Tests
 

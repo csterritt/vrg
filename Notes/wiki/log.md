@@ -690,3 +690,47 @@ and indicators), `internal/viewport/viewport.go`,
 `internal/viewport/rows.go`, `internal/app/app.go`,
 `internal/app/browse.go`, `internal/viewport/pan_test.go`,
 `internal/app/pan_test.go`.
+
+## [2026-09-24] ingest | Issue #19 minimal horizontal reveal
+
+Ingested the completed Issue #19 implementation: `Viewport.Reveal`
+gained a horizontal half via `revealCell`, which runs after vertical
+placement (including its visible-set re-clamp of `off`) in run-off-edge
+models only. Visibility means *painted cells* — a target start cell
+geometrically inside `[off, off+width)` but blanked by a clip edge
+counts as hidden and is revealed. The target unit is its grapheme
+cluster (`Lead`/`Cont` scan from the start cell, forward through
+continuation cells) or a one-cell marker for a zero-width span
+(`markedAt`); the offset moves minimally — `s` when hidden left,
+`s + cw − width` when hidden right or clipped — or stays put when the
+unit already paints. A match wider than the text area reveals its
+start cell alone; a cluster wider than the whole text area takes
+`off = s` (the closest achievable position, deliberately beyond the
+paintable-boundary maximum `revealCell` bypasses), renders in-window
+clipping blanks, and counts as geometrically revealed so repeated
+navigation cannot loop — Issue #20's indicators still treat it as not
+visible. The triggers ride the existing reveal seam: startup (the
+pending intent commits on the startup layout's install), every `n`/`p`
+including same-file steps, and file crossings where the Issue #18
+`SetOffset(0)` reset runs first. Created
+[minimal-horizontal-reveal](minimal-horizontal-reveal.md); updated
+[destination-reveal](destination-reveal.md) (the horizontal half on
+the same `Reveal` seam), [horizontal-panning](horizontal-panning.md)
+(reveal operates on the clamped offset; its writes bypass the
+boundary), [source-code](source-code.md) (`revealCell`/`markedAt`),
+[unit-tests](unit-tests.md), and the index. New test files:
+`internal/viewport/hreveal_test.go` (right/left reveal arithmetic,
+wide-cluster whole painting, painted-target no-ops, clipped-blank
+hidden, oversized-span start-cell rule, unpaintable-cluster fallback
+with no loop, marker cells, both-axes move, wrap-mode dormancy) and
+`internal/app/hreveal_test.go` (same-file `n`/`p` minimal scrolls,
+visible-target no-op, startup reveal, file-change reset-then-reveal,
+CJK two-cell painting). `internal/viewport/pan_test.go`'s
+`moving_reveal` subtest retargeted to cell 9 so it stays painted at
+the clamped offset.
+Sources: `Notes/issues/019-minimal-horizontal-reveal.md`,
+`Notes/tasks/019-minimal-horizontal-reveal.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors; Layout
+and indicators), `internal/viewport/viewport.go`,
+`internal/app/browse.go`, `internal/viewport/hreveal_test.go`,
+`internal/app/hreveal_test.go`, `internal/viewport/pan_test.go`.
