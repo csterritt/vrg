@@ -1,0 +1,24 @@
+┌──────────────────────────────────────────────────────────────────────────────┐
+│[ / ]              pan half the text width                                    │
+│w                  toggle line wrapping                                       │
+│c                  toggle colour scheme                                       │
+│left / tab         hide the file list                                         │
+│right / shift+tab  show the file list                                         │
+│r                  reload the current file                                    │
+│h / ?              open or close this help                                    │
+│q                  close the overlay / quit                                   │
+│esc                close the overlay                                          │
+│ctrl+c             exit immediately                                           │
+│                                                                              │
+│Scale examples — independent, not simultaneous capacity guarantees:           │
+│approximately 10,000 matched files, 100,000 matched lines, or individual files│
+│around 50 MB.                                                                 │
+│The ~50 MB file example assumes UTF-8 content with ordinary line lengths; a   │
+│line ripgrep must emit as base64 bytes expands by roughly a third, so a single│
+│match record can exceed the 64 MiB record limit — oversized records are       │
+│skipped and reported, naming the file's path when recoverable.                │
+│Loaded file buffers are retained for the whole session: no eviction, no       │
+│aggregate memory bound, and no reliable OOM recovery — large searches or many │
+│visited files can exhaust memory, and forced termination cannot guarantee     │
+│terminal cleanup.                                                             │
+└──────────────────────────────────────────────────────────────────────────────┘

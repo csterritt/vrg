@@ -199,12 +199,21 @@ func TestHelpScrollsWithUpDown(t *testing.T) {
 		t.Fatal("up at the top scrolled past the head")
 	}
 
-	// Enough downs reach the tail; extra downs clamp at the bottom.
+	// Enough downs reach the tail — the Issue #34 footer note — passing
+	// the binding table's last row on the way; extra downs clamp at the
+	// bottom.
+	sawBindingsTail := false
 	for i := 0; i < 40; i++ {
 		m, _ = pressKey(t, m, "down")
+		if strings.Contains(m.View().Content, "ctrl+c") {
+			sawBindingsTail = true
+		}
 	}
 	v = m.View().Content
-	if !strings.Contains(v, "ctrl+c") {
+	if !sawBindingsTail {
+		t.Fatalf("the ctrl+c binding row never scrolled into view")
+	}
+	if !strings.Contains(v, "terminal cleanup") {
 		t.Fatalf("help tail not visible after scrolling: %q", v)
 	}
 	if strings.Contains(v, "Key bindings") {
@@ -225,8 +234,9 @@ func TestHelpScrollsWithUpDown(t *testing.T) {
 // occupies several interior rows and no frame row overflows the
 // terminal.
 func TestHelpWrapsUnbrokenSubstitution(t *testing.T) {
+	saved := helpFooter
 	helpFooter = []string{strings.Repeat("x", 300)}
-	defer func() { helpFooter = nil }()
+	defer func() { helpFooter = saved }()
 
 	m := helpModel(t)
 	m, _ = pressKey(t, m, "?")
@@ -311,8 +321,9 @@ func TestHelpRendersBindingTable(t *testing.T) {
 // The footer slot is part of the rendered content: installed footer
 // text appears inside the overlay.
 func TestHelpRendersFooterSlot(t *testing.T) {
+	saved := helpFooter
 	helpFooter = []string{"scale note placeholder"}
-	defer func() { helpFooter = nil }()
+	defer func() { helpFooter = saved }()
 
 	m := helpModel(t)
 	m, _ = pressKey(t, m, "h")

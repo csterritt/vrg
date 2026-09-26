@@ -60,6 +60,20 @@ externally observable behavior only.
 prove generated help and the ordered scan share the one declaration
 table (every forwarded spelling accepted verbatim).
 
+`readme_test.go` (same package, Issue #34) synchronizes the
+repository-root `README.md` with the shared declarations:
+
+- `TestREADMEDocumentsEveryDeclaredOption` — iterating `optionDecls`,
+  every declared spelling (allow-listed search flags and the local
+  `-h`/`--help` options) in its exact no-argument form, its
+  description, and its generated option line must appear in the
+  README.
+- `TestREADMECarriesGeneratedHelp` — the complete `HelpText()` output
+  appears verbatim in the README.
+- `TestREADMEInvocationContract` — the `vrg [flags] pattern [root]`
+  synopsis, `--`, and the `--ignore-case=false` assignment-rejection
+  statement are documented.
+
 ## internal/searchindex
 
 `searchindex_test.go` (external package `searchindex_test`) builds
@@ -1115,6 +1129,42 @@ component:
   slot's text, appear in the render.
 - `TestHelpCancelsPopup` — an active file-change pop-up is cancelled on
   open, does not return on close, and its stale expiry stays inert.
+- `TestHelpScrollsWithUpDown` now ends on the Issue #34 footer note at
+  the tail (having passed the `ctrl+c` binding row), and the
+  footer-slot tests save and restore `helpFooter` now that it carries
+  `limitNotes`.
+
+`readme_test.go` (same package, Issue #34) synchronizes `README.md`
+with the app-level contracts:
+
+- `TestREADMEDocumentsEveryKeyBinding` — every `helpBindings` row's
+  key spelling and description appears in the README.
+- `TestREADMEExitStatusDocumentation` — the README's exit-status table
+  has the `0`, `1`, `2`, and `130` rows; representative completed
+  searches driven through the real `decideOutcome` produce only
+  documented statuses; and the trigger tokens are stated (both exit-0
+  reasons, the `vrg -i` flags-only usage error, `q`-while-searching
+  and `ctrl+c` cancellation).
+- `TestREADMEDocumentsHelpOnlyPath` — bare `vrg` and `-h`/`--help`
+  print command-line help to stdout at exit 0 with no search and no
+  TUI, documented as distinct from the TUI's `h`/`?` dialog, plus the
+  `vrg -i` → exit 2 flags-only usage error.
+- `TestREADMERipgrepReference` — the ripgrep 15.x reference family and
+  the VRG-supplied `--no-config` statements.
+- `TestREADMEScaleExamples` — the three independent scale examples
+  (10,000 matched files, 100,000 matched lines, ~50 MB files) with the
+  not-simultaneous qualification.
+- `TestREADMERecordLimit` — the 64 MiB record limit, the base64
+  `bytes` expansion caveat, and the path-naming-when-recoverable
+  oversized diagnostic.
+- `TestREADMEMemoryLimits` — session-long retention, no eviction, no
+  aggregate memory bound, no reliable OOM recovery, no guaranteed
+  terminal cleanup under forced termination.
+- `TestHelpFooterMatchesREADME` — every installed `helpFooter` entry
+  appears verbatim in both the composed help text and the README, the
+  required scale/record-limit/memory tokens live in both sinks, and
+  the rendered overlay at a tall frame carries the note — so deleting
+  a statement from either side fails.
 
 `precedence_test.go` (same package, Issue #32) pins the combined
 overlay-precedence and dismissal semantics:
@@ -1201,7 +1251,13 @@ sink-safety table:
   and asserts the `Path`-escaped `wantPath` form inside the box, and —
   since Issue #31 — the `help overlay` row, where `renderHelpSink`
   injects the fixture bytes through the footer substitution slot and
-  asserts the `Diagnostic`-escaped `wantDiag` forms inside the border.
+  asserts the `Diagnostic`-escaped `wantDiag` forms inside the border,
+  and — since Issue #34 — the `help footer note` row, where
+  `renderHelpFooterSink` substitutes the fixture at every
+  runtime-substitution point of the rendered footer (each installed
+  `limitNotes` entry plus a dedicated injection) with the view
+  scrolled to the footer's rows, asserting the escaped `wantDiag`
+  forms and the real note's `64 MiB` text.
   Under
   `theme.Plain` (the no-style composition path) the raw
   output — asserted before any ANSI stripping — must contain no fixture

@@ -40,11 +40,24 @@ var helpBindings = []helpBinding{
 	{"ctrl+c", "exit immediately"},
 }
 
-// helpFooter is the help overlay's footer slot, reserved for Issue
-// #34's scale-and-limits note. Entries are substitutions: helpLines
-// routes each through the Issue #6 diagnostic utility, so runtime text
-// can never emit control bytes into the overlay.
-var helpFooter []string
+// limitNotes is the Issue #34 scale, record-limit, and memory note —
+// the single structured source for the statements both user-facing
+// texts must carry. Each entry is rendered verbatim into the help
+// overlay's footer and asserted verbatim against README.md by the
+// Issue #34 documentation tests, so neither sink can drift from the
+// other.
+var limitNotes = []string{
+	"Scale examples — independent, not simultaneous capacity guarantees: approximately 10,000 matched files, 100,000 matched lines, or individual files around 50 MB.",
+	"The ~50 MB file example assumes UTF-8 content with ordinary line lengths; a line ripgrep must emit as base64 bytes expands by roughly a third, so a single match record can exceed the 64 MiB record limit — oversized records are skipped and reported, naming the file's path when recoverable.",
+	"Loaded file buffers are retained for the whole session: no eviction, no aggregate memory bound, and no reliable OOM recovery — large searches or many visited files can exhaust memory, and forced termination cannot guarantee terminal cleanup.",
+}
+
+// helpFooter is the help overlay's footer slot, filled by Issue #34
+// with the limitNotes scale-and-limits note. Entries are
+// substitutions: helpLines routes each through the Issue #6
+// diagnostic utility, so runtime text can never emit control bytes
+// into the overlay.
+var helpFooter = limitNotes
 
 // helpLines composes the help overlay's text: the title, one row per
 // helpBindings entry, and the footer slot's lines when it is filled.

@@ -111,7 +111,13 @@ set restructured as a shared, extensible table:
   since Issue #31, the **help overlay**: `renderHelpSink` injects the
   fixture bytes through the help overlay's footer substitution slot
   and the check asserts the `Diagnostic`-escaped `wantDiag` forms
-  inside the border.
+  inside the border — and, since Issue #34, the **help footer note**:
+  `renderHelpFooterSink` substitutes the fixture at every
+  runtime-substitution point of the rendered footer (each installed
+  `limitNotes` entry plus a dedicated injection), scrolls the overlay
+  to the footer's rows, and the check asserts the escaped `wantDiag`
+  forms and the real note's `64 MiB` text inside the border (see
+  [documentation.md](documentation.md)).
 - **Method**: each fixture × sink renders through the real composition
   path under `theme.Plain` — the no-style path where no escape byte may
   legitimately appear — and asserts on the **raw output before any ANSI
@@ -131,8 +137,9 @@ Issue #11 (stderr replay — delivered; see
 delivered; see
 [file-change-popup.md](file-change-popup.md)),
 Issue #31 (TUI help dialog substitutions — delivered; see
-[help-overlay.md](help-overlay.md)), Issue #34 (any generated
-README/help text).
+[help-overlay.md](help-overlay.md)), Issue #34 (the rendered help
+footer note — delivered; see
+[documentation.md](documentation.md)).
 
 ## Regression surface
 

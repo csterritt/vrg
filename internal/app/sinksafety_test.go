@@ -127,10 +127,12 @@ type sinkRow struct {
 }
 
 // sinkSafetySinks is the table of every output sink existing at this
-// point: the three browse sinks, the Issue #15 file-change pop-up, the
-// Issue #31 help overlay's substitution slot, the usage-error stderr
-// composition, and the generated command-line help on stdout (distinct
-// from that TUI help dialog).
+// point: the three browse sinks, the Issue #9 error overlay, the
+// Issue #11 stderr replay, the Issue #15 file-change pop-up, the
+// Issue #31 help overlay's substitution slot, the Issue #34 rendered
+// help footer note (the generated text path that accepts runtime
+// strings), the usage-error stderr composition, and the generated
+// command-line help on stdout (distinct from that TUI help dialog).
 var sinkSafetySinks = []sinkRow{
 	{
 		name:   "file-list entry",
@@ -228,6 +230,31 @@ var sinkSafetySinks = []sinkRow{
 				if !strings.Contains(raw, w) {
 					t.Fatalf("help overlay lacks escaped form %q: %q", w, raw)
 				}
+			}
+		},
+	},
+	{
+		// Issue #34's row: the rendered help footer — the generated
+		// scale-and-limits note — is the help text's only runtime-
+		// substitution path, and the fixture is substituted at every
+		// substitution point in it.
+		name:   "help footer note",
+		tui:    true,
+		styled: true,
+		render: func(t *testing.T, fx hostileFixture, styled bool) string {
+			return renderHelpFooterSink(t, fx, styled)
+		},
+		check: func(t *testing.T, fx hostileFixture, raw string) {
+			// The dedicated substitution shows the Diagnostic-escaped
+			// form, and the real note's record-limit statement still
+			// renders alongside it.
+			for _, w := range fx.wantDiag {
+				if !strings.Contains(raw, w) {
+					t.Fatalf("help footer note lacks escaped form %q: %q", w, raw)
+				}
+			}
+			if !strings.Contains(raw, "64 MiB") {
+				t.Fatalf("help footer note lacks the real note text: %q", raw)
 			}
 		},
 	},
@@ -454,8 +481,9 @@ func renderHelpSink(t *testing.T, fx hostileFixture, styled bool) string {
 	t.Helper()
 	dir := t.TempDir()
 	writeWorkFile(t, dir, "f.txt", "hit\n")
+	saved := helpFooter
 	helpFooter = []string{"pre" + fx.inject + "post"}
-	defer func() { helpFooter = nil }()
+	defer func() { helpFooter = saved }()
 
 	m := newModel(nil, nil)
 	if !styled {
@@ -464,6 +492,38 @@ func renderHelpSink(t *testing.T, fx hostileFixture, styled bool) string {
 	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	m, _ = update(t, m, searchDoneMsg{index: fixtureIndex(t, dir, recsOneMatch...)})
 	m, _ = update(t, m, keyPress("?"))
+	return m.View().Content
+}
+
+// renderHelpFooterSink drives the fixture through the Issue #34 footer
+// note's real composition path: the hostile bytes are substituted at
+// every runtime-substitution point — appended to each installed footer
+// entry plus one dedicated injection line — ? opens the overlay over
+// browse, the view scrolls to the footer's rows, and the raw View()
+// content is returned. styled selects real styling; false renders
+// through theme.Plain.
+func renderHelpFooterSink(t *testing.T, fx hostileFixture, styled bool) string {
+	t.Helper()
+	dir := t.TempDir()
+	writeWorkFile(t, dir, "f.txt", "hit\n")
+	saved := helpFooter
+	helpFooter = make([]string, 0, len(saved)+1)
+	for _, line := range saved {
+		helpFooter = append(helpFooter, line+" "+fx.inject)
+	}
+	helpFooter = append(helpFooter, "pre"+fx.inject+"post")
+	defer func() { helpFooter = saved }()
+
+	m := newModel(nil, nil)
+	if !styled {
+		m.theme = theme.Plain()
+	}
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = update(t, m, searchDoneMsg{index: fixtureIndex(t, dir, recsOneMatch...)})
+	m, _ = update(t, m, keyPress("?"))
+	for i := 0; i < 40; i++ {
+		m, _ = update(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
+	}
 	return m.View().Content
 }
 

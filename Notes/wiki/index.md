@@ -244,6 +244,15 @@ Catalog of all wiki pages for the vrg project.
   modal stack and scroll positions), interior resizes deferring
   recovery to the final dimensions, and the pop-up timer continuing
   without display
+- [documentation.md](documentation.md) — Issue #34: the root
+  `README.md` as the single user-facing artifact (invocation, embedded
+  generated help, binding table, four-status exit table, independent
+  scale examples, 64 MiB record limit with the base64 caveat, memory
+  limits, ripgrep 15.x/`--no-config`), the `limitNotes` footer note
+  shared verbatim between README and help overlay, the README
+  synchronization tests asserting against `helpBindings`,
+  `optionDecls`, and `decideOutcome`, and the `help footer note`
+  sink-safety row
 
 ## Catalogs
 

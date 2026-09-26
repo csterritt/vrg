@@ -1344,3 +1344,53 @@ Sources: `Notes/issues/033-terminal-too-small-with-state-recovery.md`,
 contract), `internal/app/toosmall.go`, `internal/app/app.go`,
 `internal/app/browse.go`, `internal/app/toosmall_test.go`,
 `internal/app/scroll_test.go`.
+
+## [2026-09-24] ingest | Issue #34 documentation — README, footer note, synchronization tests
+
+Ingested the completed Issue #34 implementation: `README.md` at the
+repository root is now the single user-facing documentation artifact —
+invocation syntax and option-placement rules, the embedded verbatim
+generated help (the shared `optionDecls` declarations' own output,
+keeping the allow-listed flags' exact no-argument spellings and the
+local `-h`/`--help` options incapable of drifting from parsing), the
+full `helpBindings` table, the four-row exit-status table covering
+both exit-0 reasons and the `vrg -i` flags-only usage error, the three
+independent scale examples with their not-simultaneous qualification,
+the 64 MiB record limit with the base64 `bytes` expansion caveat and
+the path-naming oversized diagnostic, the session-long
+retention/no-eviction/no-aggregate-bound/no-OOM-recovery/no-cleanup
+statements, and the ripgrep 15.x reference family with VRG's supplied
+`--no-config`. `internal/app/help.go` gained `limitNotes` — the
+structured source for the three scale/record-limit/memory statements —
+and `helpFooter` is filled with it, each entry still routed through
+`present.Diagnostic`; the README carries the same entries verbatim and
+`TestHelpFooterMatchesREADME` pins the equivalence. New tests:
+`internal/app/readme_test.go` (binding-table iteration, the
+exit-status table's agreement with `decideOutcome`, the help-only
+path's distinction from the `h`/`?` dialog, ripgrep/scale/record/
+memory statements, footer↔README equivalence including the rendered
+overlay) and `internal/cli/readme_test.go` (per-declaration spellings
+and option lines, verbatim `HelpText()`, the invocation contract);
+`sinksafety_test.go` gained Issue #34's `help footer note` row —
+`renderHelpFooterSink` substitutes each hostile fixture at every
+runtime-substitution point of the rendered footer and asserts the
+escaped forms plus the real note text inside the border.
+`TestHelpScrollsWithUpDown` now ends on the footer at the tail, and
+the footer-slot tests save/restore `helpFooter`.
+Created [documentation](documentation.md); updated
+[help-overlay](help-overlay.md) (filled footer slot, second sink row,
+tests/files),
+[safe-presentation](safe-presentation.md) (the new row and the Issue
+#34 later-sink ownership delivered),
+[source-code](source-code.md) (the `help.go` entry's `limitNotes`/
+filled `helpFooter`),
+[unit-tests](unit-tests.md) (both `readme_test.go` catalogs, the new
+sink row, the scroll-test tail), and the index.
+New files: `README.md`, `internal/app/readme_test.go`,
+`internal/cli/readme_test.go`, `Notes/wiki/documentation.md`.
+Sources: `Notes/issues/034-documentation-scale-and-memory-limits.md`,
+`Notes/tasks/034-documentation-scale-and-memory-limits.md`,
+`Notes/PRD-vrg.md` (Resources and responsiveness; Out of Scope;
+Further Notes), `README.md`, `internal/app/help.go`,
+`internal/app/readme_test.go`, `internal/cli/readme_test.go`,
+`internal/app/sinksafety_test.go`, `internal/app/help_test.go`.

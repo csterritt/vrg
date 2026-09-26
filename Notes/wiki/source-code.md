@@ -191,13 +191,16 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   → description — covering navigation, scrolling, panning, wrap,
   colour, list toggle, reload, help, and quit/cancel; the help renderer
   consumes it and Issue #34's documentation test iterates it),
-  `helpFooter` (the footer slot reserved for Issue #34's
-  scale-and-limits note — the substitution point routed through
+  `limitNotes` (the Issue #34 structured source for the scale,
+  record-limit, and memory statements rendered verbatim into both the
+  footer and `README.md`), `helpFooter` (the footer slot filled with
+  `limitNotes` — the substitution point routed through
   `present.Diagnostic`), `helpLines` (title, binding rows, footer),
   `openHelp` (opens the shared `overlay` component and cancels any
   pop-up), and `helpKey` (`up`/`down` scroll, `q`/`Esc`/`h`/`?` close,
   `ctrl+c` exits 130, all other keys ignored). See
-  [help-overlay.md](help-overlay.md).
+  [help-overlay.md](help-overlay.md) and
+  [documentation.md](documentation.md).
 - `internal/app/noresults.go` — `renderNoResults` (Issue #8): the
   centred "No results found" message on the frame's middle row, with
   "(N binary files skipped)" appended when exclusion emptied the list,
