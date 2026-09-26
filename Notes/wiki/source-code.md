@@ -78,7 +78,9 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   Issue #12 adds `rows` (per-path prepared `viewport.Rows`, built on
   load completion) and `saved` (per-path top row for revisits), the
   `up`/`down`/`u`/`d`/`pgup`/`pgdown` key case, and the saved-state
-  `SetTop` restore when a load completes for the current path;
+  `SetTop` restore when a load completes for the current path —
+  Issue #14 runs `reveal` immediately after that restore, covering the
+  startup-after-load trigger;
   Issue #8 adds `binarySkipped`, the distinct excluded-file count shown
   on the no-results screen; Issue #9 adds `overlay`, the open
   diagnostics box; Issue #11 adds `diags` (the session diagnostic
@@ -129,16 +131,22 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   (the six scroll keys routed to `Viewport` units, then saving the top
   row per path — a no-op on placeholders and outside browse) and
   `bufferRows` (the prepared `viewport.Rows` adapter over
-  `*filebuffer.Buffer`: unwrapped row i = source line i), with
+  `*filebuffer.Buffer`: unwrapped row i = source line i — Issue #14
+  adds its `RowOf`, which returns `Target.Line` until wrap arrives),
+  with
   `relayout` reinstalling the current file's prepared rows on every
   layout change. Issue #13 adds `navigate` (the `n`/`p` cursor step:
-  strict no-op on zero/one stops, styling-only within a file, and on a
+  strict no-op on zero/one stops, restyle within a file, and on a
   file crossing the departing top row is saved, the destination's
   prepared rows and saved-or-top state installed, and `ensureLoad`
   requests the load when uncached) and moves `currentStop`/
-  `currentPath` onto `Index.Current()`. See
+  `currentPath` onto `Index.Current()`. Issue #14 adds `reveal` (the
+  target = the destination line's smallest span start cell, reported to
+  `Viewport.Reveal`; the `saved` entry is replaced only when the
+  viewport moved) and calls it at the end of every moved `navigate`. See
   [browse-tracer.md](browse-tracer.md),
   [match-navigation.md](match-navigation.md),
+  [destination-reveal.md](destination-reveal.md),
   [viewport-scrolling.md](viewport-scrolling.md),
   [safe-presentation.md](safe-presentation.md), and
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
@@ -236,14 +244,19 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
 
 - `internal/viewport/viewport.go` — Issue #12's reading position:
   `Row` (source line + cells + spans of one rendered row), the `Rows`
-  prepared-row provider interface built at load or layout time, and
-  `Viewport` — content dimensions, the clamped top rendered row
+  prepared-row provider interface built at load or layout time —
+  Issue #14 adds `RowOf(Target)` so the provider resolves a display
+  target to its rendered row — and `Viewport` — content dimensions, the
+  clamped top rendered row
   (`[0, max(0, count − height)]`, lossy on EOF), the scroll units
   (`Up`/`Down` one row, `HalfUp`/`HalfDown` `max(1, floor(h/2))`,
   `PageUp`/`PageDown` the content height), `SetTop` for saved-state
-  restore, and `Visible`, which queries the provider only for the
-  shown range. Wrap, anchors, panning, and reveal remain Issues 14–21.
-  See [viewport-scrolling.md](viewport-scrolling.md).
+  restore, Issue #14's `Reveal` (visible target → no scroll; hidden
+  target → `row − floor(height/3)` top, clamped; reports whether the
+  top moved), and `Visible`, which queries the provider only for the
+  shown range. Wrap, anchors, and panning remain Issues 16–21.
+  See [viewport-scrolling.md](viewport-scrolling.md) and
+  [destination-reveal.md](destination-reveal.md).
 
 ## internal/theme
 

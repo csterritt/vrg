@@ -48,10 +48,22 @@ terminal width minus the file list and the gutter.
 
 A file with no prepared rows — the `Loading…` placeholder, the
 `(unreadable)` placeholder, or an empty buffer — gives the viewport a
-zero row count: every scroll clamps to top 0 and `Visible()` returns
-nothing. The app additionally gates `Model.scroll` on a loaded buffer
-for the current path, so scroll keys outside browse or on a
-placeholder change nothing — not even the saved-state map.
+zero row count: every scroll clamps to top 0, `Reveal` is inert, and
+`Visible()` returns nothing. The app additionally gates `Model.scroll`
+on a loaded buffer for the current path, so scroll keys outside browse
+or on a placeholder change nothing — not even the saved-state map.
+
+## Destination reveal
+
+Issue #14 added `Viewport.Reveal(Target)` — the vertical reveal of the
+navigation destination: the target is a `(line, cell)` display location
+(the first submatch's start cell), resolved to its rendered row through
+the `Rows.RowOf` provider method so wrap mode's many-to-one mapping is
+honored; an already-visible row never scrolls, a hidden row lands at
+`floor(height / 3)` clamped to `[0, maxTop]` (BOF/EOF content wins),
+and the bool report tells the app whether to replace the file's saved
+state. The full contract and its triggers live in
+[destination-reveal.md](destination-reveal.md).
 
 ## Per-file saved vertical state
 
@@ -63,9 +75,11 @@ after `relayout` installs the prepared rows: a first visit (no saved
 entry) starts at top-of-file, and a revisit resumes its position.
 Since Issue #13 `n`/`p` file crossings drive the same restore on entry
 — `navigate` saves the departing file's top and `SetTop`s the
-destination's saved state — and Issue #14's destination reveal then
-takes precedence over it. Manual scrolling never moves the matched-line
-cursor, which now lives in `Index` itself (see
+destination's saved state — and since Issue #14 the destination reveal
+then runs over that starting point: a moving reveal replaces the saved
+top with the new one, while a no-scroll reveal leaves it (see
+[destination-reveal.md](destination-reveal.md)). Manual scrolling never
+moves the matched-line cursor, which lives in `Index` itself (see
 [match-navigation.md](match-navigation.md)).
 
 ## Prepared-row rendering
@@ -90,17 +104,20 @@ Rendering no longer scans the buffer per frame:
 
 ## Files
 
-- `internal/viewport/viewport.go` — `Row`, the `Rows` provider
-  interface, and `Viewport` (`Resize`, `SetRows`, `SetTop`/`Top`,
-  `Height`, the six scroll methods, `Visible`).
-- `internal/app/browse.go` — `bufferRows`, `Model.scroll`,
-  `relayout`'s prepared-row reinstall, `contentRow` over the visible
-  slice.
+- `internal/viewport/viewport.go` — `Row`, `Target`, the `Rows`
+  provider interface (now with `RowOf`), and `Viewport` (`Resize`,
+  `SetRows`, `SetTop`/`Top`, `Height`, the six scroll methods,
+  `Reveal`, `Visible`).
+- `internal/app/browse.go` — `bufferRows` (including its `RowOf`),
+  `Model.scroll`, `Model.reveal`, `relayout`'s prepared-row reinstall,
+  `contentRow` over the visible slice.
 - `internal/app/app.go` — the `rows`/`saved` maps, the scroll-key case
-  in `Update`, and the saved-state restore on current-path load
-  completion.
+  in `Update`, and the saved-state restore plus reveal on current-path
+  load completion.
 
-See also: [browse-tracer.md](browse-tracer.md) (the two-pane view this
+See also: [destination-reveal.md](destination-reveal.md) (the Issue #14
+reveal contract built on this position),
+[browse-tracer.md](browse-tracer.md) (the two-pane view this
 scrolls), [searchindex-records-and-stops.md](searchindex-records-and-stops.md)
 (the raw path keying `saved` inherits),
 [cancellation-and-cleanup.md](cancellation-and-cleanup.md) (the exit

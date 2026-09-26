@@ -323,7 +323,8 @@ contracts; `codePress` synthesizes the special-key messages and
   `saved[raw path]`; since Issue #13 an `n` keypress crosses to the
   other file and its load completing for the current path starts at
   its seeded saved top (`SetTop`) while the departed file's saved state
-  is untouched.
+  is untouched — the seeded position keeps the destination match on
+  screen, so Issue #14's no-scroll reveal leaves it alone.
 - `TestRenderQueriesOnlyVisibleRows` — the render-cost guard: a
   `countingRows` fake installed through `m.rows` + relayout records
   exactly the visible `Row` indices per `View()`, before and after a
@@ -342,13 +343,14 @@ uncached:
   renders `CurrentMatch` (inverse + underline) while line 3's stays
   plain `Match`.
 - `TestNextWithinFileMovesCurrentLine` — `n` moves the underline to
-  the line-3 match with no command and no viewport movement
-  (destination reveal is Issue #14's).
+  the line-3 match with no command and no viewport movement: the
+  target is already on screen, so Issue #14's reveal is a no-scroll.
 - `TestNextAcrossFileSwitchesPanelAndLoads` — `n` into b.txt returns
   the uncached file's load command, moves the list underline and
   filename rule immediately, shows `Loading…` until the buffer lands,
   starts the new file at top 0, and saves the departing file's
-  viewport.
+  viewport — a same-file `n` first pulled the scrolled top back to 0
+  via the reveal, so 0 is what `saved` holds.
 - `TestNavigationWrapsBothEnds` — `n` on the last stop wraps to the
   first and `p` on the first wraps to the last, both cached-file
   crossings returning no command.
@@ -356,11 +358,40 @@ uncached:
   command and leave a byte-identical frame.
 - `TestManualScrollThenNContinuesFromStop` — scrolling deep into the
   file then `n` still advances from the last selected stop, and the
-  viewport stays where the user put it.
+  Issue #14 reveal scrolls back to the now-hidden target, BOF-clamped
+  to top 0.
 - `TestDepartingViewportSavedAndRestoredOnRevisit` — `p` back into
-  cached a.txt restores its saved top.
+  cached a.txt restores its saved top as the reveal's starting point;
+  the already-visible target makes the reveal a no-scroll.
 - `TestFileListHasNoDirectSelection` — non-navigation keys move neither
   the cursor nor the view: the file list is passive.
+
+`reveal_test.go` (same package) covers the Issue #14 destination-reveal
+triggers through `Update`; `fileWithStops` writes a lines-line fixture
+whose stopped lines read `hitNNNNN` with the submatch covering the
+leading `hit`:
+
+- `TestStartupRevealPlacesHiddenTargetOneThirdDown` — the startup load
+  lands the line-200 match on content row `floor(23/3)` = 7 (top 192)
+  and the moving reveal replaces `saved`.
+- `TestStartupRevealVisibleTargetDoesNotScroll` — an on-screen startup
+  target keeps top 0 and writes no saved entry.
+- `TestStartupRevealAppliesOnLoadCompletion` — a `loadGate`-held load
+  shows `Loading…` at top 0; the reveal lands when the `loadDoneMsg`
+  arrives.
+- `TestNPRevealHiddenTargets` — `n` to a hidden target places it a
+  third down and replaces `saved`; `p` back to a near-BOF target
+  clamps to top 0.
+- `TestNToVisibleTargetDoesNotScroll` — `n` between two on-screen
+  matches moves only the underline: no scroll, no saved write.
+- `TestRevisitStartsFromSavedViewport` — a cached revisit resumes the
+  saved top when the target is inside it.
+- `TestRevisitRevealOverridesHiddenSavedViewport` — a seeded saved top
+  that hides the destination is overridden by the reveal, which writes
+  the new top.
+- `TestFirstVisitStartsAtTopThenReveals` — an uncached destination
+  shows `Loading…` at top 0, then the load's top-of-file start plus
+  reveal lands the target a third down.
 
 `noresults_test.go` (same package) covers the Issue #8 no-results
 outcome; `exitErr` builds a real `*exec.ExitError` child wait error and
@@ -519,6 +550,29 @@ contracts against the `countingRows` provider fake:
   clamp); width-only resizes don't move it.
 - `TestSetRowsClampsToNewContent` — swapped rows preserve the top
   clamped to the new count; the clamp loss is permanent.
+
+`reveal_test.go` (same package) pins the Issue #14 `Reveal` contract
+against `countingRows` plus `mappingRows` — a provider fake whose
+`RowOf` mapping is programmable and records every target it sees,
+proving the reveal consumes a rendered row, not a source-line ordinal:
+
+- `TestRevealVisibleTargetDoesNotScroll` — a target on the first,
+  middle, or last visible row never scrolls and reports no move.
+- `TestRevealHiddenTargetLandsOneThirdDown` — a hidden target above or
+  below lands on row `floor(height/3)`, including the just-past-edge
+  case.
+- `TestRevealTargetNearBOFClampsToTop` / `TestRevealTargetNearEOFClampsToLastPage`
+  — the 0/`maxTop` clamps beat exact one-third placement.
+- `TestRevealUsesRenderedRowContainingTarget` — a wrap-like many-to-one
+  `RowOf` lands the containing row; the provider sees the exact
+  `(line, cell)` target.
+- `TestRevealAfterSavedAndTopStartingPoints` — the entry sequence:
+  saved top + visible target survives, saved top + hidden target moves,
+  first visit starts at 0 then reveals.
+- `TestRevealClampsOutOfRangeTarget` — an out-of-range target resolves
+  to the nearest real row, then the EOF clamp still applies.
+- `TestRevealWithoutContentIsNoOp` — nil and zero-row providers are
+  inert.
 
 ## internal/theme
 

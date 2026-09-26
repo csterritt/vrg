@@ -64,8 +64,10 @@ Full-file work never lands on the UI update path:
   channel before its read and decode/map phases, letting tests prove
   keys and resizes are still processed mid-load.
 - The current file opens at top-of-file — or at its saved vertical
-  state on a revisit — with no destination reveal (that is Issue
-  #14's). Issue #12 turned the `viewport.Viewport` seam into the real
+  state on a revisit — then the Issue #14 destination reveal scrolls a
+  hidden navigation target to the one-third row (see
+  [destination-reveal.md](destination-reveal.md)). Issue #12 turned the
+  `viewport.Viewport` seam into the real
   reading position: prepared rows, the six scroll units, clamped top,
   and the visible-range slice — see
   [viewport-scrolling.md](viewport-scrolling.md).
@@ -140,8 +142,9 @@ follows an unescaped ESC.
   `CurrentFile`, `Overlay`). See
   [theme-and-colour-toggle.md](theme-and-colour-toggle.md).
 - `internal/app/browse.go` — `loadDoneMsg`, `ensureLoad`/`loadCmd`,
-  `bufferRows` (Issue #12 prepared rows), `scroll`, `navigate` (Issue
-  #13 cursor steps and the file-crossing viewport handoff),
+  `bufferRows` (Issue #12 prepared rows, Issue #14 `RowOf`), `scroll`,
+  `navigate` (Issue #13 cursor steps and the file-crossing viewport
+  handoff), `reveal` (Issue #14),
   `renderBrowse`, `filenameRule`, `contentRow`, `renderCells`.
 - `internal/app/app.go` — `phaseBrowse`, buffer/loading/failed maps,
   the Issue #12 `rows`/`saved` maps, files/stops, `relayout`; the

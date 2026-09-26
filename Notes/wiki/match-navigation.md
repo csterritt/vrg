@@ -51,25 +51,30 @@ set is rebuilt.
 
 `Update` routes `n`/`p` to `Model.navigate` (`internal/app/browse.go`)
 only in `phaseBrowse`; during searching they stay inert, and an open
-overlay still owns the keyboard ahead of them.
+overlay still owns the keyboard ahead of them. Since Issue #14 every
+actual transition ends in `reveal()` — see
+[destination-reveal.md](destination-reveal.md).
 
 - **Current file derives from the cursor.** `currentStop`/`currentPath`
   read `m.index.Current()` — the model no longer keeps its own cursor
   field — so the panel, the filename rule, the gutter, the
   current-matched-line underline (Issue #7's `CurrentMatch` style), and
   the file list's underlined entry all follow the cursor automatically.
-- **Same-file steps** change only the current-line styling; the
-  viewport does not move — destination reveal is Issue #14's.
+- **Same-file steps** change the current-line styling and run the
+  destination reveal: an on-screen target leaves the viewport put, a
+  hidden one scrolls it to the one-third row (Issue #14; see
+  [destination-reveal.md](destination-reveal.md)).
 - **File-crossing steps** (`step.FileChanged`) save the departing
   file's top row into `m.saved`, relayout the panel (installing the new
   file's prepared rows or none), and `SetTop` to the new file's saved
-  vertical state — top of file on a first visit. `ensureLoad` then
-  requests the destination's load when it is neither cached nor in
-  flight, so an uncached destination shows `Loading…` until its
-  `loadDoneMsg` arrives — whose existing completion path applies the
-  same saved-state restore. Issue #17 owns the stale-layout request
-  path and Issue #14 the reveal; this issue's handoff is the immediate
-  switch plus the saved-viewport restore.
+  vertical state — top of file on a first visit — then reveal the
+  destination target over that starting point when the file is cached.
+  `ensureLoad` then requests the destination's load when it is neither
+  cached nor in flight, so an uncached destination shows `Loading…`
+  until its `loadDoneMsg` arrives — whose completion path applies the
+  same saved-state restore plus reveal. Issue #17 owns the
+  stale-layout request path; this issue's handoff is the immediate
+  switch plus the saved-viewport restore the reveal overrides.
 - **Manual scrolling** never touches the cursor: `n`/`p` continue from
   the last selected stop, not from the scrolled position.
 - **The file list is passive**: there is no direct selection route —
@@ -80,7 +85,8 @@ overlay still owns the keyboard ahead of them.
 
 `internal/searchindex/cursor_test.go` pins the index-level contract
 against a two-file fixture whose records arrive out of order; the app
-side lives in `internal/app/nav_test.go`. See
+side lives in `internal/app/nav_test.go`, with the reveal assertions
+Issue #14 added in `internal/app/reveal_test.go`. See
 [unit-tests.md](unit-tests.md) § `internal/searchindex` and
 `internal/app`.
 
@@ -90,12 +96,14 @@ side lives in `internal/app/nav_test.go`. See
   `Prev`, `step`.
 - `internal/searchindex/index.go` — the `cursor` field, its clamp in
   `Prepare`, and the shared `export` helper.
-- `internal/app/browse.go` — `navigate`, `currentStop` reading the
-  index cursor.
+- `internal/app/browse.go` — `navigate`, `reveal` (Issue #14), and
+  `currentStop` reading the index cursor.
 - `internal/app/app.go` — the `n`/`p` key case; the model's own cursor
   field is gone.
 
-See also: [viewport-scrolling.md](viewport-scrolling.md) (the per-file
+See also: [destination-reveal.md](destination-reveal.md) (the reveal
+every actual transition now triggers),
+[viewport-scrolling.md](viewport-scrolling.md) (the per-file
 saved state this handoff consumes),
 [searchindex-records-and-stops.md](searchindex-records-and-stops.md)
 (the stop ordering the cursor walks),

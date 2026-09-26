@@ -60,11 +60,12 @@ func (m Model) currentStop() (searchindex.Stop, bool) {
 // navigate applies one matched-line cursor step: n advances and p
 // retreats, both circularly. The zero- and one-stop indexes are strict
 // no-ops — no command, no state change. A step within the same file
-// changes only the current-line styling; destination reveal is Issue
-// #14's. A step into another file switches the panel: the departing
-// file's top row joins its saved state, the viewport reinstalls the
-// new file's prepared rows at its own saved top — top of file on a
-// first visit — and its load is requested when the file is neither
+// keeps the viewport and reveals the destination target. A step into
+// another file switches the panel: the departing file's top row joins
+// its saved state, the viewport reinstalls the new file's prepared
+// rows at its own saved top — top of file on a first visit — the
+// destination reveal runs over that starting point when content is
+// already cached, and its load is requested when the file is neither
 // cached nor in flight nor already failed. The file list needs no
 // wiring: its underlined entry derives from the cursor.
 func (m Model) navigate(forward bool) (Model, tea.Cmd) {
@@ -85,11 +86,40 @@ func (m Model) navigate(forward bool) (Model, tea.Cmd) {
 		m.relayout()
 		// The new file starts at its saved vertical state — absent
 		// means a first visit, which starts at the top. A load
-		// completing for it later applies the same restore, and
-		// Issue #14's destination reveal overrides both.
+		// completing for it later applies the same restore before the
+		// reveal; the reveal then overrides either starting point.
 		m.vp.SetTop(m.saved[string(step.Stop.Path)])
 	}
+	m.reveal()
 	return m, m.ensureLoad()
+}
+
+// reveal applies the destination reveal for the current stop: the
+// display target is the start cell of the first submatch on the
+// destination line — the marker cell for a zero-width match — so the
+// first surviving validated span supplies it (stale-entry fallbacks
+// are Issue #29's). A reveal that moves the viewport replaces the
+// file's saved vertical state; a no-scroll reveal — an already-visible
+// target or unloaded content — leaves it.
+func (m *Model) reveal() {
+	s, ok := m.currentStop()
+	if !ok {
+		return
+	}
+	key := string(s.Path)
+	buf := m.bufs[key]
+	if buf == nil {
+		return
+	}
+	t := viewport.Target{Line: int(s.Line) - 1}
+	for i, sp := range buf.Spans(t.Line) {
+		if i == 0 || sp.Start < t.Cell {
+			t.Cell = sp.Start
+		}
+	}
+	if m.vp.Reveal(t) {
+		m.saved[key] = m.vp.Top()
+	}
 }
 
 // currentPath returns the raw path of the current file, or nil.
@@ -211,6 +241,11 @@ func (r bufferRows) Len() int { return r.buf.LineCount() }
 func (r bufferRows) Row(i int) viewport.Row {
 	return viewport.Row{Line: i, Cells: r.buf.Cells(i), Spans: r.buf.Spans(i)}
 }
+
+// RowOf is the unwrapped display-target mapping: the rendered row
+// containing the target is its source line. Issue #16's wrap mode
+// makes the mapping many-to-one.
+func (r bufferRows) RowOf(t viewport.Target) int { return t.Line }
 
 // renderBrowse composes the two-pane frame: the file list on the left
 // in raw-path order with the current entry underlined and kept visible,

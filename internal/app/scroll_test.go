@@ -50,6 +50,10 @@ func (r *countingRows) Row(i int) viewport.Row {
 	return viewport.Row{Line: i}
 }
 
+// RowOf is the unwrapped target mapping: a display target's rendered
+// row is its source line.
+func (r *countingRows) RowOf(t viewport.Target) int { return t.Line }
+
 // down and up move the viewport's top row by one rendered row; the
 // rendered frame tracks it and the matched-line cursor does not move.
 func TestDownUpMoveOneRenderedRow(t *testing.T) {
@@ -211,7 +215,7 @@ func TestPerFileSavedViewportState(t *testing.T) {
 		`{"type":"match","data":{"path":{"text":"a.txt"},"lines":{"text":"a001\n"},"line_number":1,"submatches":[{"match":{"text":"a001"},"start":0,"end":4}]}}`,
 		`{"type":"end","data":{"path":{"text":"a.txt"},"binary_offset":null}}`,
 		`{"type":"begin","data":{"path":{"text":"b.txt"}}}`,
-		`{"type":"match","data":{"path":{"text":"b.txt"},"lines":{"text":"b001\n"},"line_number":1,"submatches":[{"match":{"text":"b001"},"start":0,"end":4}]}}`,
+		`{"type":"match","data":{"path":{"text":"b.txt"},"lines":{"text":"b002\n"},"line_number":2,"submatches":[{"match":{"text":"b002"},"start":0,"end":4}]}}`,
 		`{"type":"end","data":{"path":{"text":"b.txt"},"binary_offset":null}}`,
 		`{"type":"summary","data":{}}`,
 	)
@@ -226,19 +230,24 @@ func TestPerFileSavedViewportState(t *testing.T) {
 	// n moves the cursor to b.txt's stop — Issue #13's real
 	// mechanism — and returns its load command; seed b.txt's saved
 	// state before the load completes: the panel starts at the saved
-	// top while a.txt's state is untouched.
+	// top while a.txt's state is untouched. The saved 1 keeps the
+	// line-2 target row on screen, so the destination reveal leaves
+	// the restored position alone (Issue #14).
 	m, load := update(t, m, keyPress("n"))
 	if load == nil {
 		t.Fatal("no load command for b.txt")
 	}
-	m.saved["b.txt"] = 7
+	m.saved["b.txt"] = 1
 	m, _ = update(t, m, load())
-	if m.vp.Top() != 7 {
-		t.Fatalf("b.txt top after load = %d, want 7", m.vp.Top())
+	if m.vp.Top() != 1 {
+		t.Fatalf("b.txt top after load = %d, want the saved 1", m.vp.Top())
 	}
 	v := m.View().Content
-	if !strings.Contains(v, "b008") || strings.Contains(v, "b007") {
+	if !strings.Contains(v, "b002") || strings.Contains(v, "b001") {
 		t.Fatalf("b.txt view does not start at the saved row: %q", v)
+	}
+	if m.saved["b.txt"] != 1 {
+		t.Fatalf("no-scroll reveal changed b.txt saved to %d, want 1", m.saved["b.txt"])
 	}
 	if m.saved["a.txt"] != 3 {
 		t.Fatalf("a.txt saved state changed to %d", m.saved["a.txt"])

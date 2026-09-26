@@ -12,6 +12,16 @@ type Row struct {
 	Spans []present.Span
 }
 
+// Target is a display location a reveal must show: the zero-based
+// source line and the zero-based display cell within it — the start
+// cell of the destination line's first submatch (the marker cell for
+// a zero-width match). It is a display location from the outset, not
+// a source-line ordinal: once wrap mode lands, the cell selects which
+// of the line's rendered rows contains it.
+type Target struct {
+	Line, Cell int
+}
+
 // Rows is the prepared rendered-row model of one loaded buffer at the
 // current content width and wrap mode, built when a load completes or
 // the layout changes (Issue #17 owns the asynchronous contract). Frame
@@ -21,6 +31,10 @@ type Rows interface {
 	Len() int
 	// Row returns the prepared data of rendered row i.
 	Row(i int) Row
+	// RowOf returns the rendered row containing the display target.
+	// Unwrapped, a target's row is its source line; wrap mode's
+	// many-to-one mapping arrives with Issue #16.
+	RowOf(t Target) int
 }
 
 // Viewport owns the current file's vertical reading position: the
@@ -29,9 +43,9 @@ type Rows interface {
 // last full page, so no avoidable blank rows appear below EOF; content
 // shorter than the viewport pins the top to 0 and leaves its unused
 // rows naturally. With no prepared rows (the loading and unreadable
-// placeholders) every scroll is a no-op and queries stay empty. Wrap
-// toggling, horizontal panning, logical anchors, and destination
-// reveal arrive with Issues 13–19.
+// placeholders) every scroll is a no-op, reveal is inert, and queries
+// stay empty. Wrap toggling, horizontal panning, and logical anchors
+// arrive with Issues 16–19.
 type Viewport struct {
 	width  int // text columns available to content
 	height int // content rows
@@ -85,6 +99,27 @@ func (v *Viewport) PageDown() { v.scroll(v.height) }
 
 // PageUp scrolls a full page — the content height — up.
 func (v *Viewport) PageUp() { v.scroll(-v.height) }
+
+// Reveal makes the rendered row containing the target visible and
+// reports whether the viewport moved — the caller replaces the file's
+// saved vertical state only on a move. A target row already inside the
+// window leaves the top unchanged; otherwise the top moves so the row
+// sits at zero-based row floor(height/3), clamped to valid tops — at
+// BOF/EOF the available content takes precedence over the one-third
+// placement. With no prepared rows the reveal is a no-op.
+func (v *Viewport) Reveal(t Target) bool {
+	if v.count() == 0 {
+		return false
+	}
+	row := min(max(v.rows.RowOf(t), 0), v.count()-1)
+	if row >= v.top && row < v.top+v.height {
+		return false
+	}
+	before := v.top
+	v.top = row - v.height/3
+	v.clamp()
+	return v.top != before
+}
 
 func (v *Viewport) half() int { return max(1, v.height/2) }
 

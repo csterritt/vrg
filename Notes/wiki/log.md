@@ -437,3 +437,49 @@ Design → SearchIndex), `internal/searchindex/cursor.go`,
 `internal/searchindex/cursor_test.go`, `internal/app/app.go`,
 `internal/app/browse.go`, `internal/app/nav_test.go`,
 `internal/app/scroll_test.go`.
+
+## [2026-09-23] ingest | Issue #14 vertical destination reveal
+
+Ingested the completed Issue #14 implementation: `internal/viewport`
+gained `Target` (the zero-based `(line, cell)` display location — the
+destination line's first submatch start, the marker cell for zero-width
+matches), `Rows.RowOf(Target)` so the prepared-row provider resolves
+the target to its rendered row (the Issue #16 wrap seam;
+`bufferRows.RowOf` returns `Target.Line` unwrapped), and
+`Viewport.Reveal` — inert on empty content, no-scroll on a visible
+target row, `row − floor(height/3)` on a hidden one, both directions
+clamped through the existing `[0, maxTop]` clamp so BOF/EOF content
+wins over exact placement, reporting whether the top moved.
+`internal/app` gained `Model.reveal` (the smallest span `Start` of the
+destination line as the target cell; `saved[path]` replaced only when
+`Reveal` reports a move) and wired the two triggers: `navigate` calls
+it after every actual cursor transition — a file crossing installs the
+destination's saved-or-top start first — and the `loadDoneMsg` path
+runs `SetTop(saved)` + `reveal` for the current path, covering both
+revisits and the startup-after-load reveal (and reading the live
+cursor, so a load landing after further navigation reveals the latest
+stop, Issue #28's seam). Horizontal reveal stays Issue #19's. Created
+[destination-reveal](destination-reveal.md); updated
+[viewport-scrolling](viewport-scrolling.md) (reveal section, inert
+placeholder, saved-state replacement rules),
+[match-navigation](match-navigation.md) (same-file steps now reveal;
+stale "Issue #14's" notes),
+[browse-tracer](browse-tracer.md) (reveal on entry),
+[source-code](source-code.md), [unit-tests](unit-tests.md), and the
+index. New test files: `internal/viewport/reveal_test.go` (`mappingRows`
+programmable-`RowOf` fake, visible-target no-scroll, one-third
+placement both directions, BOF/EOF precedence, out-of-range clamp,
+inert empty content, the saved/first-visit sequence) and
+`internal/app/reveal_test.go` (`fileWithStops` fixture; startup reveal
+including the gate-held completion, `n`/`p` placement and saved-state
+replacement, on-screen `n` no-scroll, saved-viewport revisit, reveal
+overriding a hiding saved top, first-visit top-then-reveal);
+`nav_test.go`/`scroll_test.go` expectations updated for the reveal.
+Sources:
+`Notes/issues/014-vertical-destination-reveal.md`,
+`Notes/tasks/014-vertical-destination-reveal.md`,
+`Notes/PRD-vrg.md` (Navigation, viewport, and logical anchors; Testing
+Decisions → Viewport), `internal/viewport/viewport.go`,
+`internal/viewport/reveal_test.go`, `internal/app/app.go`,
+`internal/app/browse.go`, `internal/app/reveal_test.go`,
+`internal/app/nav_test.go`, `internal/app/scroll_test.go`.

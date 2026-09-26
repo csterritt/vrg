@@ -195,8 +195,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if bytes.Equal(msg.path, m.currentPath()) {
 			// A load completing for the current file starts from its
 			// saved vertical state — absent means a first visit, which
-			// starts at the top. Destination reveal is Issue #14's.
+			// starts at the top — then reveals the latest selected
+			// target over that starting point.
 			m.vp.SetTop(m.saved[key])
+			m.reveal()
 		}
 	case tea.KeyPressMsg:
 		if m.overlay != nil {

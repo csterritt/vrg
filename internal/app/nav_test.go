@@ -93,8 +93,8 @@ func TestStartupSelectsFirstStopInPathOrder(t *testing.T) {
 
 // n advances the cursor within a file: the underline moves from the
 // line-1 match to the line-3 match while the viewport stays put —
-// same-file navigation changes only the current-line styling,
-// destination reveal being Issue #14's — and no load is requested.
+// the line-3 target is already on screen, so Issue #14's reveal is a
+// no-scroll — and no load is requested.
 func TestNextWithinFileMovesCurrentLine(t *testing.T) {
 	m := twoFileModel(t, t.TempDir(), 80, 24, 8, 4)
 	top := m.vp.Top()
@@ -129,6 +129,8 @@ func TestNextAcrossFileSwitchesPanelAndLoads(t *testing.T) {
 		m, _ = update(t, m, codePress(tea.KeyDown))
 	}
 	m, _ = update(t, m, keyPress("n")) // a.txt:1 → a.txt:3, same file
+	// Line 3's row is above the scrolled window, so the reveal pulls
+	// the top back to 0 — a moving reveal replaces the saved state.
 	m, cmd := update(t, m, keyPress("n"))
 	if cmd == nil {
 		t.Fatal("crossing to uncached b.txt returned no load command")
@@ -151,8 +153,8 @@ func TestNextAcrossFileSwitchesPanelAndLoads(t *testing.T) {
 	if m.vp.Top() != 0 {
 		t.Fatalf("first visit to b.txt started at top %d, want 0", m.vp.Top())
 	}
-	if m.saved["a.txt"] != 3 {
-		t.Fatalf("departing a.txt viewport saved as %d, want 3", m.saved["a.txt"])
+	if m.saved["a.txt"] != 0 {
+		t.Fatalf("departing a.txt viewport saved as %d, want 0 — the reveal moved it", m.saved["a.txt"])
 	}
 }
 
@@ -218,14 +220,16 @@ func TestOneStopIndexIgnoresNP(t *testing.T) {
 
 // Manual scrolling leaves the cursor on its last selected stop: after
 // scrolling deep into the file, n advances from that stop to a.txt:3 —
-// not from the scrolled position — and the viewport stays where the
-// user put it.
+// not from the scrolled position — and the destination reveal then
+// scrolls back to show the now-hidden target, BOF-clamped to the top.
 func TestManualScrollThenNContinuesFromStop(t *testing.T) {
 	m := twoFileModel(t, t.TempDir(), 80, 24, 60, 4)
 	for i := 0; i < 10; i++ {
 		m, _ = update(t, m, codePress(tea.KeyDown))
 	}
-	top := m.vp.Top()
+	if m.vp.Top() != 10 {
+		t.Fatalf("top after ten downs = %d, want 10", m.vp.Top())
+	}
 	m, cmd := update(t, m, keyPress("n"))
 	if cmd != nil {
 		t.Fatalf("n after manual scroll returned a command %T", cmd)
@@ -233,20 +237,23 @@ func TestManualScrollThenNContinuesFromStop(t *testing.T) {
 	if s, _ := m.currentStop(); s.Line != 3 || string(s.Path) != "a.txt" {
 		t.Fatalf("n after manual scroll selected %+v, want a.txt:3", s)
 	}
-	if m.vp.Top() != top {
-		t.Fatalf("n scrolled the viewport: top=%d, want %d", m.vp.Top(), top)
+	// Line 3's row is hidden above the window; the reveal lands it
+	// near the top (row 2 − 7 clamps to 0).
+	if m.vp.Top() != 0 {
+		t.Fatalf("n after manual scroll left top=%d, want the revealed 0", m.vp.Top())
 	}
 }
 
 // A departing file's viewport is saved on the way out and restored on
-// the way back: scrolling a.txt then crossing to b.txt and returning
-// with p lands a.txt at its saved top.
+// the way back as the reveal's starting point: the n to a.txt:3 reveals
+// the hidden target and replaces a.txt's saved top with 0, so the
+// revisit resumes at 0 and the already-visible target does not scroll.
 func TestDepartingViewportSavedAndRestoredOnRevisit(t *testing.T) {
 	m := twoFileModel(t, t.TempDir(), 80, 24, 60, 30)
 	for i := 0; i < 5; i++ {
 		m, _ = update(t, m, codePress(tea.KeyDown))
 	}
-	m, _ = update(t, m, keyPress("n"))    // a.txt:1 → a.txt:3
+	m, _ = update(t, m, keyPress("n"))    // a.txt:1 → a.txt:3, reveal → top 0
 	m, cmd := update(t, m, keyPress("n")) // a.txt:3 → b.txt:2
 	if cmd == nil {
 		t.Fatal("crossing to uncached b.txt returned no load command")
@@ -259,8 +266,10 @@ func TestDepartingViewportSavedAndRestoredOnRevisit(t *testing.T) {
 	if s, _ := m.currentStop(); string(s.Path) != "a.txt" || s.Line != 3 {
 		t.Fatalf("stop after p = %+v, want a.txt:3", s)
 	}
-	if m.vp.Top() != 5 {
-		t.Fatalf("revisit top = %d, want the saved 5", m.vp.Top())
+	// The earlier moving reveal replaced the saved 5 with 0; row 2 is
+	// on screen from there, so the revisit's reveal does not scroll.
+	if m.vp.Top() != 0 {
+		t.Fatalf("revisit top = %d, want the saved 0", m.vp.Top())
 	}
 }
 

@@ -84,6 +84,13 @@ Catalog of all wiki pages for the vrg project.
   zero- and one-stop strict no-ops, the cursor-derived current file
   with load requests and the saved-viewport handoff, manual scrolling
   leaving the cursor unchanged, and the passive file list
+- [destination-reveal.md](destination-reveal.md) — Issue #14: the
+  display target (first submatch's start cell, marker cell for
+  zero-width), `Rows.RowOf` resolving it to a rendered row, the
+  visible-target no-scroll and `floor(height/3)` placement with
+  BOF/EOF precedence, the saved-or-top starting sequence on entry
+  including the startup-after-load trigger, and the move-driven
+  saved-state replacement rule
 
 ## Catalogs
 

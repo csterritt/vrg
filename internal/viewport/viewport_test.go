@@ -19,6 +19,10 @@ func (r *countingRows) Row(i int) Row {
 	return Row{Line: i}
 }
 
+// RowOf is the unwrapped target mapping: a display target's rendered
+// row is its source line.
+func (r *countingRows) RowOf(t Target) int { return t.Line }
+
 func rowsN(n int) *countingRows { return &countingRows{n: n} }
 
 // Each scroll unit moves the top row by its contracted amount over a
