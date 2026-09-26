@@ -83,9 +83,13 @@ type Index struct {
 	malformed int
 	// oversized counts records discarded for exceeding the 64 MiB
 	// payload limit; oversizedPaths holds the sanitized path of each
-	// one whose type and data.path were recovered from its prefix.
+	// distinct raw path recovered from a record's prefix — deduplicated
+	// by raw path through oversizedSeen so two oversized records naming
+	// one file produce one detail line, in first-occurrence order
+	// (Issue #37).
 	oversized      int
 	oversizedPaths []string
+	oversizedSeen  map[string]bool
 	// unknown counts records whose string type is outside the five
 	// known events — a warning tally, never record loss.
 	unknown int
@@ -110,11 +114,12 @@ type stop struct {
 // canonicalization — so raw path identity is preserved.
 func New(dir string) *Index {
 	return &Index{
-		dir:        dir,
-		stops:      make(map[stopKey]*stop),
-		excluded:   make(map[string]bool),
-		open:       make(map[string]bool),
-		incomplete: make(map[string]bool),
+		dir:           dir,
+		stops:         make(map[stopKey]*stop),
+		excluded:      make(map[string]bool),
+		open:          make(map[string]bool),
+		incomplete:    make(map[string]bool),
+		oversizedSeen: make(map[string]bool),
 	}
 }
 
@@ -194,11 +199,16 @@ func (ix *Index) skipOversized(prefix []byte) {
 // countOversized records one oversized record and its best-effort path
 // diagnostic: prefix is the record's first maxRecordPayload bytes, from
 // which recoverRecordPath lifts the emitted path when it arrived intact
-// before the limit.
+// before the limit. The detail line is per distinct raw path — a file
+// losing several oversized records is named once, at its first
+// occurrence — while the count itself never deduplicates.
 func (ix *Index) countOversized(prefix []byte) {
 	ix.oversized++
 	if path := recoverRecordPath(prefix); path != nil {
-		ix.oversizedPaths = append(ix.oversizedPaths, present.Path(path))
+		if key := string(path); !ix.oversizedSeen[key] {
+			ix.oversizedSeen[key] = true
+			ix.oversizedPaths = append(ix.oversizedPaths, present.Path(path))
+		}
 	}
 }
 
@@ -416,11 +426,11 @@ func (ix *Index) Unknown() int {
 }
 
 // OversizedDiagnostics returns one "oversized record skipped for
-// <escaped path>" line per oversized record whose type and data.path
-// were recovered from the consumed prefix, in stream order — the
-// per-path detail lines of the record-loss component, whose aggregate
-// the app composes separately. The slice does not share the index's
-// storage.
+// <escaped path>" line per distinct raw path recovered from an
+// oversized record's consumed prefix, in first-occurrence stream
+// order — the per-path detail lines of the record-loss component,
+// whose per-record aggregate the app composes separately. The slice
+// does not share the index's storage.
 func (ix *Index) OversizedDiagnostics() []string {
 	diags := make([]string, len(ix.oversizedPaths))
 	for i, p := range ix.oversizedPaths {
@@ -431,8 +441,8 @@ func (ix *Index) OversizedDiagnostics() []string {
 
 // RecordDiagnostics returns the nonfatal record-skip diagnostics in a
 // fixed order: one "oversized record skipped for <path>" line per
-// oversized record whose path was recovered, then the malformed,
-// oversized, and unrecognised-type tally lines for each nonzero count.
+// distinct recovered raw path, then the malformed, oversized, and
+// unrecognised-type tally lines for each nonzero count.
 // Unlike IntegrityFailures these describe recoverable record loss;
 // whether their presence makes the outcome fatal is the app's outcome
 // decision. The slice does not share the index's storage.

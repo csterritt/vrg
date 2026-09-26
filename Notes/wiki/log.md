@@ -1480,3 +1480,51 @@ Sources: `Notes/tasks/036-stream-integrity-fatal-diagnostics.md`,
 *Outcome and exit-status contract*), `internal/searchindex/index.go`,
 `internal/searchindex/cause.go`, `internal/app/overlay.go`,
 `internal/app/app.go`, the new and corrected test files.
+## [2026-09-25] ingest | Issue #37 oversized-record aggregate and anonymous diagnostics
+
+Ingested the completed Issue #37 implementation. `internal/searchindex`
+gained the `oversizedSeen` raw-path set: `countOversized` still counts
+every oversized record in `Oversized()` but appends a recovered path to
+`oversizedPaths` only on its first occurrence, so
+`OversizedDiagnostics()` — and the `RecordDiagnostics()` view sharing
+the same storage — emits one `oversized record skipped for <escaped
+path>` line per **distinct raw path** in first-occurrence stream order
+(the `text` and `bytes` encodings of one path agree). `internal/app`'s
+composition was already the Issue #36 universal order — malformed
+aggregate, oversized aggregate, per-path oversized details, unknown
+warnings — so the oversized component now leads with the always-emitted
+pluralized aggregate (`1 oversized record skipped` / `N oversized
+records skipped`) whenever the count is positive, even when no detail
+exists: an anonymous oversized record (the limit cut before
+`type`/`data.path` were parsed) produces a fatal overlay containing
+exactly the aggregate and exit 2 with zero usable results, or the
+warning overlay plus stderr replay with usable results — never silent,
+never an empty overlay. `internal/searchindex/oversized_test.go`
+gained the dedup tests (repeated path, `text`/`bytes` raw-path
+agreement, mixed recoverability in first-occurrence order) plus the
+`matchSizedPath` helper; `internal/app/diagnostics_test.go` gained the
+post-summary exact slice (`record after summary`,
+`1 oversized record skipped`, the recovered detail), the anonymous and
+plural composition rows, and the real-64 MiB model-level tests
+(anonymous fatal/non-fatal, dedup and mixed-recoverability overlays);
+`internal/app/outcome_test.go` gained the `recordLimit`/
+`oversizedMatch`/`oversizedAnonMatch` fixtures and three oversized
+outcome-matrix rows.
+Updated
+[record-robustness](record-robustness.md) (aggregate rule and exact
+strings, raw-path dedup and first-occurrence ordering, anonymous-record
+fatal/non-fatal guarantees, component position),
+[stream-integrity-fatal-diagnostics](stream-integrity-fatal-diagnostics.md)
+(the oversized component inside the universal order),
+[error-overlay-and-fatal-outcomes](error-overlay-and-fatal-outcomes.md)
+(the composition sentence and never-empty-fatal guarantee),
+[source-code](source-code.md) (`oversizedSeen`/`countOversized`),
+[unit-tests](unit-tests.md) (the new searchindex and app coverage),
+and the index.
+New files: none — `internal/searchindex/index.go` gained one field and
+a guarded append; `Notes/walkthroughs/037-04/` holds the walkthrough.
+Sources: `Notes/tasks/037-oversized-record-aggregate-anonymous-diagnostics.md`,
+`Notes/PRD-vrg.md` (*Result index, records, and stream integrity*
+oversized bullets, *Resources and responsiveness* 64 MiB bullets),
+`internal/searchindex/index.go`, `internal/app/overlay.go`,
+`internal/app/app.go`, the new and updated test files.

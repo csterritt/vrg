@@ -16,9 +16,9 @@ import (
 // same composition minus the child stderr the live collection already
 // took.
 type diagCase struct {
-	name       string
-	in         outcomeInput
-	want       []string
+	name        string
+	in          outcomeInput
+	want        []string
 	wantCollect []string
 }
 
@@ -66,15 +66,15 @@ func TestComposedDiagnostics(t *testing.T) {
 			// Without explanatory stderr the generated line names
 			// the exit code — the only process-status line the
 			// composition can produce.
-			name: "fatal code without stderr generates the exit line",
-			in:   outcomeInput{waitErr: exitErr(t, 3)},
-			want: []string{"rg failed: exit status 3"},
+			name:        "fatal code without stderr generates the exit line",
+			in:          outcomeInput{waitErr: exitErr(t, 3)},
+			want:        []string{"rg failed: exit status 3"},
 			wantCollect: []string{"rg failed: exit status 3"},
 		},
 		{
-			name: "signal death without stderr generates the signal line",
-			in:   outcomeInput{waitErr: sigErr(t)},
-			want: []string{"rg failed: signal: killed"},
+			name:        "signal death without stderr generates the signal line",
+			in:          outcomeInput{waitErr: sigErr(t)},
+			want:        []string{"rg failed: signal: killed"},
 			wantCollect: []string{"rg failed: signal: killed"},
 		},
 		{
@@ -179,6 +179,72 @@ func TestComposedDiagnostics(t *testing.T) {
 			},
 		},
 		{
+			// The Issue #37 form of Issue #36's post-summary oversized
+			// fixture: the sole record-after-summary cause, then the
+			// always-emitted aggregate, then the recovered-path detail
+			// — exactly [record after summary, 1 oversized record
+			// skipped, oversized record skipped for <escaped Q>].
+			name: "post-summary oversized keeps cause, aggregate, and detail",
+			in: outcomeInput{
+				causes: []searchindex.Cause{
+					{Kind: searchindex.CauseRecordAfterSummary},
+				},
+				oversized:      1,
+				oversizedDiags: []string{"oversized record skipped for big.txt"},
+			},
+			want: []string{
+				"record after summary",
+				"1 oversized record skipped",
+				"oversized record skipped for big.txt",
+			},
+			wantCollect: []string{
+				"record after summary",
+				"1 oversized record skipped",
+				"oversized record skipped for big.txt",
+			},
+		},
+		{
+			// No recoverable path at all: the aggregate still leads
+			// and stands alone — a positive count always composes it,
+			// so an anonymous oversized record is never silent.
+			name:        "anonymous oversized record composes the aggregate only",
+			in:          outcomeInput{oversized: 1},
+			want:        []string{"1 oversized record skipped"},
+			wantCollect: []string{"1 oversized record skipped"},
+		},
+		{
+			// Plural without any detail: path recovery is irrelevant
+			// to the aggregate's emission.
+			name:        "oversized records with no recoverable paths",
+			in:          outcomeInput{oversized: 3},
+			want:        []string{"3 oversized records skipped"},
+			wantCollect: []string{"3 oversized records skipped"},
+		},
+		{
+			// The aggregate counts every oversized record — repeated
+			// and anonymous included — while the detail lines the
+			// index supplies name only the distinct recoverable paths,
+			// once each.
+			name: "mixed recoverability counts all and names distinct paths",
+			in: outcomeInput{
+				oversized: 4,
+				oversizedDiags: []string{
+					"oversized record skipped for a.txt",
+					"oversized record skipped for b.txt",
+				},
+			},
+			want: []string{
+				"4 oversized records skipped",
+				"oversized record skipped for a.txt",
+				"oversized record skipped for b.txt",
+			},
+			wantCollect: []string{
+				"4 oversized records skipped",
+				"oversized record skipped for a.txt",
+				"oversized record skipped for b.txt",
+			},
+		},
+		{
 			// One cause per offending record — repeated identical
 			// violations are neither aggregated nor capped.
 			name: "repeated violations compose one line each",
@@ -214,9 +280,9 @@ func TestComposedDiagnostics(t *testing.T) {
 			wantCollect: []string{`missing end for a\nb.txt`},
 		},
 		{
-			name: "unknown-type warnings alone",
-			in:   outcomeInput{unknown: 2},
-			want: []string{"2 unrecognised record types skipped"},
+			name:        "unknown-type warnings alone",
+			in:          outcomeInput{unknown: 2},
+			want:        []string{"2 unrecognised record types skipped"},
 			wantCollect: []string{"2 unrecognised record types skipped"},
 		},
 	}
@@ -251,34 +317,34 @@ func TestOutcomeCodesFromInput(t *testing.T) {
 		overlay bool
 	}{
 		{
-			name:   "clean stream with usable results",
-			in:     outcomeInput{usable: 3},
-			code:   0, screen: phaseBrowse,
+			name: "clean stream with usable results",
+			in:   outcomeInput{usable: 3},
+			code: 0, screen: phaseBrowse,
 		},
 		{
-			name:   "anomalous rg 1 with usable results",
-			in:     outcomeInput{waitErr: exitErr(t, 1), usable: 1},
-			code:   0, screen: phaseBrowse,
+			name: "anomalous rg 1 with usable results",
+			in:   outcomeInput{waitErr: exitErr(t, 1), usable: 1},
+			code: 0, screen: phaseBrowse,
 		},
 		{
-			name:   "complete stream with no usable results",
-			in:     outcomeInput{},
-			code:   1, screen: phaseNoResults,
+			name: "complete stream with no usable results",
+			in:   outcomeInput{},
+			code: 1, screen: phaseNoResults,
 		},
 		{
-			name:   "stderr warning alone is not fatal",
-			in:     outcomeInput{stderr: []byte("rg: warn\n")},
-			code:   1, screen: phaseNoResults, overlay: true,
+			name: "stderr warning alone is not fatal",
+			in:   outcomeInput{stderr: []byte("rg: warn\n")},
+			code: 1, screen: phaseNoResults, overlay: true,
 		},
 		{
-			name:   "fatal code with usable results",
-			in:     outcomeInput{waitErr: exitErr(t, 3), usable: 2},
-			code:   2, screen: phaseBrowse, overlay: true,
+			name: "fatal code with usable results",
+			in:   outcomeInput{waitErr: exitErr(t, 3), usable: 2},
+			code: 2, screen: phaseBrowse, overlay: true,
 		},
 		{
-			name:   "fatal code without usable results",
-			in:     outcomeInput{waitErr: exitErr(t, 3)},
-			code:   2, screen: phaseFatal, overlay: true,
+			name: "fatal code without usable results",
+			in:   outcomeInput{waitErr: exitErr(t, 3)},
+			code: 2, screen: phaseFatal, overlay: true,
 		},
 		{
 			name: "integrity cause with usable results",
@@ -294,19 +360,19 @@ func TestOutcomeCodesFromInput(t *testing.T) {
 			code: 0, screen: phaseBrowse, overlay: true,
 		},
 		{
-			name:   "malformed loss leaving no usable results is fatal",
-			in:     outcomeInput{malformed: 1},
-			code:   2, screen: phaseFatal, overlay: true,
+			name: "malformed loss leaving no usable results is fatal",
+			in:   outcomeInput{malformed: 1},
+			code: 2, screen: phaseFatal, overlay: true,
 		},
 		{
-			name:   "oversized loss leaving no usable results is fatal",
-			in:     outcomeInput{oversized: 1},
-			code:   2, screen: phaseFatal, overlay: true,
+			name: "oversized loss leaving no usable results is fatal",
+			in:   outcomeInput{oversized: 1},
+			code: 2, screen: phaseFatal, overlay: true,
 		},
 		{
-			name:   "unknown types alone never turn fatal",
-			in:     outcomeInput{unknown: 2},
-			code:   1, screen: phaseNoResults, overlay: true,
+			name: "unknown types alone never turn fatal",
+			in:   outcomeInput{unknown: 2},
+			code: 1, screen: phaseNoResults, overlay: true,
 		},
 	}
 	for _, tc := range cases {
@@ -426,5 +492,138 @@ func TestFatalOverlayKeepsStderrCausesAndRecordLoss(t *testing.T) {
 		if line == "rg failed: exit status 3" {
 			t.Fatalf("generated process line appeared alongside stderr: %q", m.overlay.lines)
 		}
+	}
+}
+
+// An anonymous oversized record — the limit hit before its type or
+// data.path was parsed — is never silent: with zero usable results the
+// fatal overlay carries exactly the aggregate, never an empty overlay,
+// and dismissing it exits 2 with the aggregate replayed (Issue #37).
+func TestAnonymousOversizedFatalOverlayIsNeverEmpty(t *testing.T) {
+	dir := t.TempDir()
+	writeWorkFile(t, dir, "f.txt", "hit\n")
+	m := newModel(nil, nil)
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = update(t, m, searchDoneMsg{
+		index: fixtureStream(t, dir, streamOversizedAnonymousNoResults),
+	})
+	want := []string{"1 oversized record skipped"}
+	if m.overlay == nil {
+		t.Fatal("the anonymous oversized record produced no overlay")
+	}
+	if !slices.Equal(m.overlay.lines, want) {
+		t.Fatalf("overlay lines = %q, want exactly %q", m.overlay.lines, want)
+	}
+	if m.phase != phaseFatal {
+		t.Fatalf("phase = %d, want the standalone fatal overlay", m.phase)
+	}
+	if m.code != 2 {
+		t.Fatalf("code = %d, want 2", m.code)
+	}
+	m, cmd := pressKey(t, m, "q")
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("q on the fatal overlay command = %T, want tea.QuitMsg", cmd())
+	}
+	if got := replayed(t, m); !slices.Equal(got, want) {
+		t.Fatalf("replayed diagnostics = %q, want %q", got, want)
+	}
+}
+
+// The same anonymous record with usable results warns rather than
+// passing silently: the overlay opens over browse carrying the
+// aggregate and the exit replay repeats it.
+func TestAnonymousOversizedWithResultsOverlayAndReplay(t *testing.T) {
+	dir := t.TempDir()
+	writeWorkFile(t, dir, "f.txt", "hit\n")
+	m := newModel(nil, nil)
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = update(t, m, searchDoneMsg{
+		index: fixtureStream(t, dir, streamOversizedAnonymousWithResults),
+	})
+	want := []string{"1 oversized record skipped"}
+	if m.overlay == nil {
+		t.Fatal("the anonymous oversized record produced no overlay")
+	}
+	if !slices.Equal(m.overlay.lines, want) {
+		t.Fatalf("overlay lines = %q, want exactly %q", m.overlay.lines, want)
+	}
+	if m.phase != phaseBrowse {
+		t.Fatalf("phase = %d, want browse beneath the warning overlay", m.phase)
+	}
+	m, _ = pressKey(t, m, "q") // dismiss over browse
+	m, cmd := pressKey(t, m, "q")
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("q on browse command = %T, want tea.QuitMsg", cmd())
+	}
+	if got := replayed(t, m); !slices.Equal(got, want) {
+		t.Fatalf("replayed diagnostics = %q, want %q", got, want)
+	}
+}
+
+// Two oversized records naming the same recoverable path compose the
+// aggregate counting both followed by exactly one detail line — the
+// per-path details deduplicate by raw path through the real index
+// (Issue #37).
+func TestOversizedDetailsDeduplicateByPath(t *testing.T) {
+	dir := t.TempDir()
+	writeWorkFile(t, dir, "f.txt", "hit\n")
+	stream := streamLines(
+		`{"type":"begin","data":{"path":{"text":"f.txt"}}}`,
+		`{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		oversizedMatch("big.txt", recordLimit+1),
+		oversizedMatch("big.txt", recordLimit+1),
+		`{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}`,
+		recSummary,
+	)
+	m := newModel(nil, nil)
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = update(t, m, searchDoneMsg{
+		index: fixtureStream(t, dir, stream),
+	})
+	want := []string{
+		"2 oversized records skipped",
+		"oversized record skipped for big.txt",
+	}
+	if m.overlay == nil {
+		t.Fatal("the oversized records produced no overlay")
+	}
+	if !slices.Equal(m.overlay.lines, want) {
+		t.Fatalf("overlay lines = %q, want %q — one detail line for the "+
+			"repeated path", m.overlay.lines, want)
+	}
+}
+
+// Recoverable, anonymous, and repeated-path oversized records in one
+// stream: the aggregate reflects the total and only the distinct
+// recoverable paths appear, in first-occurrence order (Issue #37).
+func TestOversizedMixedRecoverabilityComposition(t *testing.T) {
+	dir := t.TempDir()
+	writeWorkFile(t, dir, "f.txt", "hit\n")
+	stream := streamLines(
+		`{"type":"begin","data":{"path":{"text":"f.txt"}}}`,
+		`{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		oversizedMatch("a.txt", recordLimit+1),
+		oversizedAnonMatch(recordLimit+200), // path never parsed
+		oversizedMatch("b.txt", recordLimit+1),
+		oversizedMatch("a.txt", recordLimit+1), // repeat of a.txt
+		`{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}`,
+		recSummary,
+	)
+	m := newModel(nil, nil)
+	m, _ = update(t, m, tea.WindowSizeMsg{Width: 80, Height: 24})
+	m, _ = update(t, m, searchDoneMsg{
+		index: fixtureStream(t, dir, stream),
+	})
+	want := []string{
+		"4 oversized records skipped",
+		"oversized record skipped for a.txt",
+		"oversized record skipped for b.txt",
+	}
+	if m.overlay == nil {
+		t.Fatal("the oversized records produced no overlay")
+	}
+	if !slices.Equal(m.overlay.lines, want) {
+		t.Fatalf("overlay lines = %q, want %q — aggregate counts all four, "+
+			"details name each distinct path once", m.overlay.lines, want)
 	}
 }

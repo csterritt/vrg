@@ -1,0 +1,12 @@
+#!/bin/sh
+printf '%s\n' \
+'{"type":"begin","data":{"path":{"text":"f.txt"}}}' \
+'{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}' \
+'{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}'
+# Oversized match record for big.txt — path member precedes the giant
+# lines value, so the 64 MiB cut leaves a recoverable path.
+printf '%s' '{"type":"match","data":{"path":{"text":"big.txt"},"lines":{"text":"'
+head -c 67108865 /dev/zero | tr '\0' 'x'
+printf '%s\n' '"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}'
+printf '%s\n' '{"type":"summary","data":{}}'
+exit 0

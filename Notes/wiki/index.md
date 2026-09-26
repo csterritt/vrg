@@ -58,7 +58,9 @@ Catalog of all wiki pages for the vrg project.
   64 MiB record limit with discard-and-resynchronize and path-recovery
   diagnostics, the triple-disposition unterminated oversized final
   record, unknown-type counting and its after-`summary` interaction,
-  and the record-loss outcome rows
+  and the record-loss outcome rows; Issue #37's always-emitted
+  pluralized oversized aggregate, per-distinct-raw-path detail dedup,
+  and never-silent anonymous records
 - [theme-and-colour-toggle.md](theme-and-colour-toggle.md) — Issue #7:
   the dark/light schemes (white-on-black / black-on-white), the
   in-memory `c` toggle, the named style set (base, gutter, true-inverse

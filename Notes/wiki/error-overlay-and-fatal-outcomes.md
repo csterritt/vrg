@@ -130,11 +130,16 @@ process-status line — a damaged stream under a clean exit names its
 causes, never `ripgrep exited with code 0`.
 Since Issue #36 diagnostics assemble in the universal order
 `composeDiagnostics` produces — process component, integrity causes,
-record-loss components (malformed aggregate, oversized aggregate, then
-the per-path `oversized record skipped for <escaped path>` details),
+record-loss components (malformed aggregate, oversized aggregate —
+always emitted for any positive count since Issue #37 — then the
+per-path `oversized record skipped for <escaped path>` details,
+deduplicated by raw path in first-occurrence order),
 then the unrecognised-type warnings — and fatal branches drop none of
 them: a fatal stream with real stderr shows stderr, causes, and
-tallies together.
+tallies together. Issue #37 also pinned the anonymous oversized
+guarantee: a record whose limit cut before its path was parsed still
+surfaces the aggregate — a fatal overlay is never empty when records
+were lost.
 Everything
 passes through `present.Diagnostic` — the Issue #6 utility — before it
 can reach the screen; embedded paths were already escaped through

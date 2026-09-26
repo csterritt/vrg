@@ -1,6 +1,7 @@
 package searchindex_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,7 +17,14 @@ const recordLimit = 64 << 20
 // exactly size bytes: a run of 'x' inside the lines text pads it out
 // while the (0,1) submatch stays within the decoded line.
 func matchSized(size int) string {
-	pre := `{"type":"match","data":{"path":{"text":"big.txt"},"lines":{"text":"`
+	return matchSizedPath(jText("big.txt"), size)
+}
+
+// matchSizedPath returns a match record carrying the given path member —
+// either encoding — whose payload is exactly size bytes, padded by the
+// same lines-text run matchSized uses.
+func matchSizedPath(pathJSON string, size int) string {
+	pre := `{"type":"match","data":{"path":` + pathJSON + `,"lines":{"text":"`
 	suf := `"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}`
 	return pre + strings.Repeat("x", size-len(pre)-len(suf)) + suf
 }
@@ -242,6 +250,85 @@ func TestOversizedUnterminatedFinalRecord(t *testing.T) {
 		if !strings.Contains(joined, w) {
 			t.Fatalf("RecordDiagnostics = %v, want it to contain %q", diags, w)
 		}
+	}
+}
+
+// Two oversized records naming the same recoverable path produce one
+// detail line, not one per record: the per-path details deduplicate by
+// raw path while the aggregate's count keeps every record (Issue #37).
+func TestOversizedDiagnosticsDeduplicateByPath(t *testing.T) {
+	ix := searchindex.New("/work")
+	ix.Feed([]byte(streamOf(
+		beginRec(jText("big.txt")),
+		matchSized(recordLimit+1),
+		matchSized(recordLimit+1),
+		endRec(jText("big.txt"), "null"),
+		`{"type":"summary","data":{}}`,
+	)))
+	ix.Prepare()
+
+	if n := ix.Oversized(); n != 2 {
+		t.Fatalf("Oversized = %d, want 2 — every oversized record counts", n)
+	}
+	want := []string{"oversized record skipped for big.txt"}
+	if diags := ix.OversizedDiagnostics(); !slices.Equal(diags, want) {
+		t.Fatalf("OversizedDiagnostics = %v, want %v — one line per distinct path",
+			diags, want)
+	}
+}
+
+// Dedup keys on the decoded raw path bytes, not the record's JSON
+// spelling: the same file emitted under the text and bytes
+// representations still yields one detail line.
+func TestOversizedDiagnosticsDeduplicateByRawPath(t *testing.T) {
+	ix := searchindex.New("/work")
+	ix.Feed([]byte(streamOf(
+		beginRec(jText("a.txt")),
+		matchSizedPath(jText("a.txt"), recordLimit+1),
+		matchSizedPath(jBytes([]byte("a.txt")), recordLimit+1),
+		endRec(jText("a.txt"), "null"),
+		`{"type":"summary","data":{}}`,
+	)))
+	ix.Prepare()
+
+	if n := ix.Oversized(); n != 2 {
+		t.Fatalf("Oversized = %d, want 2", n)
+	}
+	want := []string{"oversized record skipped for a.txt"}
+	if diags := ix.OversizedDiagnostics(); !slices.Equal(diags, want) {
+		t.Fatalf("OversizedDiagnostics = %v, want %v — dedup is by raw path, "+
+			"not JSON encoding", diags, want)
+	}
+}
+
+// Recoverable and anonymous oversized records interleave: the count
+// reflects every record while each distinct recoverable path appears
+// exactly once, in first-occurrence stream order — anonymous records
+// contribute no detail line at all.
+func TestOversizedDiagnosticsMixedRecoverability(t *testing.T) {
+	ix := searchindex.New("/work")
+	ix.Feed([]byte(streamOf(
+		beginRec(jText("a.txt")),
+		matchSizedPath(jText("a.txt"), recordLimit+1),
+		matchLatePath(recordLimit+200), // path never parsed: anonymous
+		matchSizedPath(jText("b.txt"), recordLimit+1),
+		matchSizedPath(jText("a.txt"), recordLimit+1), // repeat of a.txt
+		endRec(jText("a.txt"), "null"),
+		`{"type":"summary","data":{}}`,
+	)))
+	ix.Prepare()
+
+	if n := ix.Oversized(); n != 4 {
+		t.Fatalf("Oversized = %d, want 4 — recoverable, anonymous, and "+
+			"repeated records all count", n)
+	}
+	want := []string{
+		"oversized record skipped for a.txt",
+		"oversized record skipped for b.txt",
+	}
+	if diags := ix.OversizedDiagnostics(); !slices.Equal(diags, want) {
+		t.Fatalf("OversizedDiagnostics = %v, want %v — distinct paths in "+
+			"first-occurrence order", diags, want)
 	}
 }
 

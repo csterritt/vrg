@@ -186,6 +186,16 @@ limit and unknown types:
 - `TestOversizedUnterminatedFinalRecord` — the post-summary triple
   disposition: oversized + malformed + the sole `record after summary`
   cause.
+- `TestOversizedDiagnosticsDeduplicateByPath` /
+  `TestOversizedDiagnosticsDeduplicateByRawPath` /
+  `TestOversizedDiagnosticsMixedRecoverability` (Issue #37) — the
+  per-path detail lines deduplicate by **raw path**: two oversized
+  records naming one file yield one `oversized record skipped for
+  <path>` line while `Oversized()` keeps the per-record count, the
+  `text` and `bytes` encodings of one path deduplicate together, and a
+  recoverable/anonymous/repeated mix emits each distinct path once in
+  first-occurrence order. `matchSized` now delegates to the
+  path-parameterized `matchSizedPath` helper.
 - `TestUnknownTypeDispositions` — the separate `Unknown()` tally, the
   `N unrecognised record types skipped` diagnostic, no lifecycle
   effect, no substitution for `summary`, and unknown-after-`summary`
@@ -1122,7 +1132,14 @@ later issues extend it with rows rather than duplicating the decision:
   fixed status 0. Issue #30 reuses those fields for the
   all-unsupported row: every retained file detecting a UTF-16 BOM
   still exits with the fixed status 0, the overlay and the exit
-  replay carrying the `unsupported encoding` diagnostic.
+  replay carrying the `unsupported encoding` diagnostic. Issue #37
+  added the oversized rows fed through `fixtureStream` with real
+  64 MiB fixtures (`recordLimit`, `oversizedMatch`, and the
+  lines-before-path `oversizedAnonMatch` builders): the anonymous
+  oversized record with zero usable results is record-loss fatal —
+  overlay, `q` exit 2 — the same anonymous record with usable results
+  warns over browse at exit 0, and the named oversized record adds its
+  `oversized record skipped for big.txt` detail.
 
 `diagnostics_test.go` (same package) is the Issue #36 universal
 diagnostic-composition coverage:
@@ -1150,6 +1167,26 @@ diagnostic-composition coverage:
   completion through `searchDoneMsg` carrying real stderr, the
   after-summary cause, and the malformed/unknown tallies together,
   with no generated process line.
+- Issue #37 rows in `TestComposedDiagnostics` — the post-summary
+  oversized slice in its final form (`record after summary`,
+  `1 oversized record skipped`, the recovered `big.txt` detail), the
+  anonymous aggregate-only case, the plural aggregate with no
+  recoverable paths, and the mixed-recoverability case where the
+  aggregate counts all four records while only the distinct recovered
+  paths appear.
+- `TestAnonymousOversizedFatalOverlayIsNeverEmpty` /
+  `TestAnonymousOversizedWithResultsOverlayAndReplay` (Issue #37) —
+  real oversized streams through `fixtureStream`: the fatal overlay
+  carrying exactly `1 oversized record skipped` (never empty) with `q`
+  exiting 2 and the aggregate replayed, and the browse warning plus
+  replay for the same anonymous record with usable results.
+- `TestOversizedDetailsDeduplicateByPath` /
+  `TestOversizedMixedRecoverabilityComposition` (Issue #37) — the
+  dedup contract end-to-end through the real index: `2 oversized
+  records skipped` followed by one `big.txt` detail for a repeated
+  path, and `4 oversized records skipped` with only the distinct
+  a.txt/b.txt details in first-occurrence order across an anonymous
+  record.
 
 `overlay_test.go` (same package) pins the Issue #9 modal overlay:
 

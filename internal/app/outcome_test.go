@@ -120,6 +120,60 @@ var (
 	)
 )
 
+// recordLimit is the PRD's maximum JSON record payload: 64 MiB
+// excluding its newline delimiter. Written out so the oversized
+// fixtures pin the contract itself.
+const recordLimit = 64 << 20
+
+// oversizedMatch builds a match record for path whose payload is
+// exactly size bytes: a run of 'x' inside the lines text pads it out
+// while the (0,1) submatch stays within the decoded line.
+func oversizedMatch(path string, size int) string {
+	pre := `{"type":"match","data":{"path":{"text":"` + path + `"},"lines":{"text":"`
+	suf := `"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}`
+	return pre + strings.Repeat("x", size-len(pre)-len(suf)) + suf
+}
+
+// oversizedAnonMatch builds a match record whose giant lines member
+// precedes data.path: the 64 MiB cut lands inside the lines value, so
+// the record's path is never parsed — the anonymous oversized case.
+func oversizedAnonMatch(size int) string {
+	pre := `{"type":"match","data":{"lines":{"text":"`
+	suf := `"},"path":{"text":"late.txt"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}`
+	return pre + strings.Repeat("x", size-len(pre)-len(suf)) + suf
+}
+
+// Issue #37 stream fixtures: oversized records inside a valid file
+// lifecycle, named and anonymous.
+var (
+	// An anonymous oversized record — the limit hit before its path
+	// was parsed — with no usable results: the aggregate alone must
+	// carry the record-loss fatal row.
+	streamOversizedAnonymousNoResults = streamLines(
+		`{"type":"begin","data":{"path":{"text":"f.txt"}}}`,
+		oversizedAnonMatch(recordLimit+200),
+		`{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}`,
+		recSummary,
+	)
+	// A valid match plus an anonymous oversized record: usable
+	// results remain, so the aggregate is a warning, not fatal.
+	streamOversizedAnonymousWithResults = streamLines(
+		`{"type":"begin","data":{"path":{"text":"f.txt"}}}`,
+		`{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		oversizedAnonMatch(recordLimit+200),
+		`{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}`,
+		recSummary,
+	)
+	// A named oversized record beside a retained match.
+	streamOversizedNamedWithResults = streamLines(
+		`{"type":"begin","data":{"path":{"text":"f.txt"}}}`,
+		`{"type":"match","data":{"path":{"text":"f.txt"},"lines":{"text":"hit\n"},"line_number":1,"submatches":[{"match":{"text":"hit"},"start":0,"end":3}]}}`,
+		oversizedMatch("big.txt", recordLimit+1),
+		`{"type":"end","data":{"path":{"text":"f.txt"},"binary_offset":null}}`,
+		recSummary,
+	)
+)
+
 // outcomeRow is one row of the Issue #9 outcome-transition matrix: the
 // inputs a completed search presents — stream records, the child's wait
 // status, and its stderr — and the full contract that follows: the
@@ -350,6 +404,40 @@ var outcomeMatrix = []outcomeRow{
 		overlay: true, screen: phaseFatal,
 		dismiss: "q", afterQuit: true, exit: 2,
 		diags: []string{"1 malformed record skipped"},
+	},
+	// Issue #37 rows: the oversized aggregate is emitted whenever the
+	// count is positive, regardless of path recovery — an anonymous
+	// oversized record is never silent.
+	{
+		// No usable results and no recoverable path: the aggregate
+		// alone fills the fatal overlay — never an empty one.
+		name:    "anonymous oversized skip with zero usable results is record-loss fatal, exit 2",
+		code:    0,
+		stream:  streamOversizedAnonymousNoResults,
+		overlay: true, screen: phaseFatal,
+		dismiss: "q", afterQuit: true, exit: 2,
+		diags: []string{"1 oversized record skipped"},
+	},
+	{
+		// Usable results demote the same anonymous record to a
+		// warning: the overlay opens over browse and the run exits 0.
+		name:    "anonymous oversized skip with usable results overlays browse, exit 0",
+		code:    0,
+		stream:  streamOversizedAnonymousWithResults,
+		overlay: true, screen: phaseBrowse,
+		dismiss: "esc", after: phaseBrowse,
+		quitKey: "q", exit: 0,
+		diags: []string{"1 oversized record skipped"},
+	},
+	{
+		// A recovered path earns its detail line after the aggregate.
+		name:    "named oversized skip with usable results overlays browse, exit 0",
+		code:    0,
+		stream:  streamOversizedNamedWithResults,
+		overlay: true, screen: phaseBrowse,
+		dismiss: "q", after: phaseBrowse,
+		quitKey: "q", exit: 0,
+		diags: []string{"1 oversized record skipped", "oversized record skipped for big.txt"},
 	},
 	{
 		// Missing end with retained matches is covered by the

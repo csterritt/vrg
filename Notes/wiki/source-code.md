@@ -395,6 +395,10 @@ Catalog of Go source under `cmd/` and `internal/`. Module path: `vrg`.
   `seal` emits after the unsigned-raw-path-sorted missing ends and the
   missing summary, and `OversizedDiagnostics()` (the per-path
   oversized detail lines the app composes after the aggregates).
+  Issue #37 adds `oversizedSeen`: `countOversized` deduplicates the
+  recovered-path details by raw path — first-occurrence order, `text`
+  and `bytes` encodings agreeing — while `Oversized()` keeps the
+  per-record count the always-emitted aggregate is built from.
   See
   [no-results-and-binary-exclusion.md](no-results-and-binary-exclusion.md),
   [error-overlay-and-fatal-outcomes.md](error-overlay-and-fatal-outcomes.md),

@@ -3,7 +3,10 @@
 The damaged-stream contract delivered by
 [Issue #10](../issues/010-record-robustness-malformed-oversized-unknown.md),
 implemented in `internal/searchindex` (`index.go`, `record.go`) and
-`internal/app` (`overlay.go`, `app.go`). Relevant PRD sections in
+`internal/app` (`overlay.go`, `app.go`), with the oversized-record
+diagnostics completed by
+[Issue #37](../tasks/037-oversized-record-aggregate-anonymous-diagnostics.md).
+Relevant PRD sections in
 `Notes/PRD-vrg.md`: *Result index, records, and stream integrity*
 (malformed/oversized/unknown bullets), *Outcome and exit-status
 contract* (the record-loss and warning rows), and *Resources and
@@ -62,6 +65,30 @@ descends into `data` member by member so `path` counts only when it
 decoded whole through `decodeValue`. When the limit cut before the path
 arrived, the record is counted anonymously: the tally line only.
 
+**Aggregate first, always (Issue #37).** The oversized component leads
+with the pluralized per-record aggregate built from `Oversized()` —
+exactly `1 oversized record skipped` for one record, `N oversized
+records skipped` for every other count — emitted whenever the count is
+positive, even when no per-path detail exists. The
+`oversized record skipped for <sanitized path>` details follow the
+aggregate, one per **distinct raw path** recovered: `countOversized`
+deduplicates through `oversizedSeen` keyed on the decoded raw bytes —
+so the `text` and `bytes` encodings of one path agree — keeping
+deterministic first-occurrence stream order. Two oversized records
+naming the same file therefore produce `2 oversized records skipped`
+plus a single detail line; only the detail lines deduplicate, never the
+per-record count. Inside Issue #36's universal order the oversized
+component sits after the malformed aggregate and before the
+unrecognised-type warnings — see
+[stream-integrity-fatal-diagnostics.md](stream-integrity-fatal-diagnostics.md).
+
+**Anonymous records are never silent.** A record whose limit cut before
+`type`/`data.path` were parsed contributes only the aggregate: with
+zero usable results the fatal overlay contains exactly
+`1 oversized record skipped` — never an empty overlay — and exits 2;
+with usable results the same aggregate opens the warning overlay over
+browse and lands in the exit replay.
+
 **Unterminated oversized final record.** The trailing-unterminated rule
 carries no oversized exception: a final record over the limit without
 its newline is counted oversized **and** malformed **and** fails
@@ -84,13 +111,15 @@ independently (Issue #36's dual representation), mirroring the
 malformed-after-summary composite.
 
 `Index.RecordDiagnostics()` assembles the nonfatal record-skip lines in
-a fixed order — each recovered `oversized record skipped for <path>`
-line in stream order, then the `N malformed record(s) skipped`,
+a fixed order — each distinct recovered path's
+`oversized record skipped for <path>` line in first-occurrence order,
+then the `N malformed record(s) skipped`,
 `N oversized record(s) skipped`, and `N unrecognised record types
 skipped` tallies for each nonzero count. Since Issue #36 the app
 composes the components itself in the universal order — malformed
 aggregate, oversized aggregate, the per-path oversized details from
-`Index.OversizedDiagnostics()` (the Issue #37 stream order), then the
+`Index.OversizedDiagnostics()` (one line per distinct raw path since
+Issue #37), then the
 unknown warnings — so the unknown warning can never sit between the
 malformed and oversized components.
 
@@ -139,12 +168,22 @@ recoverable and unrecoverable oversized diagnostics, the
 oversized-only-file absence, the post-summary triple-disposition
 unterminated oversized final record (oversized + malformed + the sole
 `record after summary` cause, Issue #36), and the unknown-type counting
-rules. `causes_test.go` (Issue #36) pins the dual representations
+rules. Issue #37 added the dedup rows —
+`TestOversizedDiagnosticsDeduplicateByPath`,
+`TestOversizedDiagnosticsDeduplicateByRawPath` (the `text`/`bytes`
+encodings of one raw path), and
+`TestOversizedDiagnosticsMixedRecoverability` (recoverable, anonymous,
+and repeated paths in first-occurrence order).
+`causes_test.go` (Issue #36) pins the dual representations
 exactly — sole causes plus independent tallies — including the
 recovered-path oversized row.
 `internal/app/outcome_test.go` extends the single outcome matrix with
 the record-loss and unknown-warning rows (rows feeding malformed bytes
-use the new `stream` field through `fixtureStream`). See
+use the `stream` field through `fixtureStream`; Issue #37 feeds real
+64 MiB fixtures through it for the anonymous-fatal, anonymous-warning,
+and named-oversized rows), and `internal/app/diagnostics_test.go` pins
+the always-emitted aggregate, the post-summary oversized slice, the
+mixed-recoverability composition, and the dedup end-to-end. See
 [unit-tests.md](unit-tests.md).
 
 ## Files
@@ -155,7 +194,10 @@ use the new `stream` field through `fixtureStream`). See
   `Unknown()`/`RecordDiagnostics()`; Issue #36 added
   `OversizedDiagnostics()` (the per-path detail lines alone) and the
   `Cause`-based integrity model described in
-  [stream-integrity-fatal-diagnostics.md](stream-integrity-fatal-diagnostics.md).
+  [stream-integrity-fatal-diagnostics.md](stream-integrity-fatal-diagnostics.md);
+  Issue #37 added `oversizedSeen`, deduplicating the detail lines by
+  raw path in first-occurrence order while `Oversized()` keeps the
+  per-record count.
 - `internal/searchindex/record.go` — `recoverRecordPath`/
   `recoverDataPath` token-streamed path recovery over the consumed
   prefix.

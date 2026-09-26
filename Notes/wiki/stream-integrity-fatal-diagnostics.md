@@ -110,9 +110,18 @@ session collection `cmd/vrg` replays verbatim at exit. The order:
 2. **Integrity causes** — one `Cause.Line()` per cause, in cause
    order.
 3. **Record-loss components** — the malformed aggregate
-   (`N malformed record(s) skipped`), the oversized aggregate, then
-   the per-path oversized details (`oversized record skipped for
-   <escaped path>` in Issue #37's stream order).
+   (`N malformed record(s) skipped`), then the oversized component
+   completed by Issue #37: the pluralized per-record aggregate —
+   exactly `1 oversized record skipped` or `N oversized records
+   skipped`, emitted whenever the count is positive even with no
+   detail — followed by the per-path oversized details
+   (`oversized record skipped for <escaped path>`), one line per
+   **distinct raw path** deduplicated in first-occurrence stream order
+   (the `text` and `bytes` encodings of one path agree). An oversized
+   record whose limit cut before `type`/`data.path` were parsed is
+   anonymous: it contributes only the aggregate — never an empty
+   overlay — so record loss can never pass silently. See
+   [record-robustness.md](record-robustness.md).
 4. **Unknown-type warnings** — `N unrecognised record types skipped`.
 
 `outcomeInput` carries the structured inputs — wait error, stderr,
@@ -146,14 +155,20 @@ correction).
 both `composeDiagnostics` and `completionDiagnostics` — stderr
 precedence, the generated line only for fatal-without-stderr, no
 process line for 0/1, the full universal order, the post-summary dual
-representation, uncapped repetition, and the escaped newline path —
+representation (Issue #37's exact post-summary oversized slice:
+`record after summary`, `1 oversized record skipped`, the recovered
+`big.txt` detail), uncapped repetition, and the escaped newline path —
 `TestOutcomeCodesFromInput` the fixed statuses from the structured
 input, `TestComposedDiagnosticsFromIndexOrdering` the index-derived
 missing-end ordering across 20 repeated builds, and
 `TestOverlayAndReplayShareComposedDiagnostics` /
 `TestFatalOverlayKeepsStderrCausesAndRecordLoss` the shared
 overlay/replay text and the unsuppressed fatal composition through the
-real `searchDoneMsg` path. `readme_test.go`'s exit-status agreement
+real `searchDoneMsg` path. Issue #37 added the anonymous and
+mixed-recoverability model-level tests through `fixtureStream`'s real
+64 MiB records: the fatal overlay carrying exactly the aggregate, the
+browse warning plus replay, and the deduplicated detail lines.
+`readme_test.go`'s exit-status agreement
 drove `decideOutcome` onto the `outcomeInput` signature. See
 [unit-tests.md](unit-tests.md).
 

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Oversized match record with path AFTER the giant lines value: the
+# 64 MiB limit cuts the lines text, so `data.path` is never parsed.
+printf '%s' '{"type":"match","data":{"lines":{"text":"'
+head -c 67108865 /dev/zero | tr '\0' 'x'
+printf '%s\n' '"},"path":{"text":"late.txt"},"line_number":1,"submatches":[{"match":{"text":"x"},"start":0,"end":1}]}}'
+printf '%s\n' '{"type":"summary","data":{}}'
+exit 0
