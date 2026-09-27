@@ -1,6 +1,6 @@
 ---
 name: production-code-and-build-constraints
-description: Rules for keeping test and development behavior out of Sqloid production binaries.
+description: Rules for keeping test and development behavior out of vrg production binaries.
 ---
 
 ## Production boundaries
@@ -10,8 +10,8 @@ description: Rules for keeping test and development behavior out of Sqloid produ
 - Prefer dependency injection at narrow boundaries over runtime development switches in production packages.
 - Use Go build constraints only when behavior genuinely depends on platform, architecture, cgo availability, or an intentionally separate build variant. Build tags are not a substitute for ordinary configuration or test seams.
 - When a build constraint is necessary, use the `//go:build` form at the top of the file, provide the complementary implementation where needed, and test every supported variant.
-- Do not include permissive authentication, database seeding routes, hidden debug commands, or bypasses in the Sqloid binary. This is a local CLI/TUI, not a web server.
-- Keep `cmd/sqloid` as a thin process boundary. Put behavior in testable internal packages and make production wiring explicit.
+- Do not include permissive authentication, database seeding routes, hidden debug commands, or bypasses in the vrg binary. This is a local CLI/TUI, not a web server.
+- Keep `cmd/vrg` as a thin process boundary. Put behavior in testable internal packages and make production wiring explicit.
 - Verify release code with `go test ./...`, `go vet ./...`, and `go build ./...`; run capability and platform-specific suites required by the PRD before release.
 
 ## References

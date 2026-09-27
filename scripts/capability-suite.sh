@@ -1,5 +1,5 @@
 #!/bin/sh
-# Canonical Sqloid release-capability suite gate (Issue #56 Task 1).
+# Canonical vrg release-capability suite gate (Issue #56 Task 1).
 #
 # This is the ONE command that selects all and only the integrated
 # release-blocking capability tests, from internal/connection,

@@ -40,7 +40,7 @@ Label each task with exactly one of these types and satisfy its verification obl
 - **REFACTOR**: improve code without changing behavior. Begin from an already-green behavioral safety net, run it unchanged after the edit, and use lint/build/source checks only as supplemental evidence for structural cleanup.
 - **MIGRATE**: apply a schema or data migration and verify both migration correctness and the supported upgrade/rollback contract.
 - **CONFIG**: change environment, tooling, or infrastructure; validate syntax/configuration, execute the affected gate where possible, and include a fail-closed negative check when the configuration enforces a release requirement.
-- **DOCUMENT**: update docs, READMEs, the wiki in `Notes/wiki` (see `Notes/wiki/wiki-rules.md`), or other non-code artifacts; verify links, terminology, and claimed commands against the implementation.
+- **DOCUMENT**: update docs, READMEs, the memoryfield using the `memoryfield-tool` program, or other non-code artifacts; verify links, terminology, and claimed commands against the implementation.
 - **CODE WALKTHROUGH**: use showboat (run `uvx showboat --help` for details) to create evidence under `Notes/walkthroughs/{{TASK-ID}}/code-walkthrough`, with the main file named `walkthrough.md`. Demonstrate the acceptance contracts and retain verification output. For a documentation-only or mechanical no-behavior-change issue, a lightweight walkthrough containing the changed artifact plus focused verification output is sufficient; do not require a full interactive product demonstration.
 - **REVIEW**: require a recorded human decision before proceeding; use only for HITL issues.
 

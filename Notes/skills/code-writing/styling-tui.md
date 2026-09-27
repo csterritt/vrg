@@ -1,6 +1,6 @@
 ---
 name: styling-tui
-description: Rules for terminal layout and Lip Gloss styling in Sqloid.
+description: Rules for terminal layout and Lip Gloss styling in vrg.
 ---
 
 ## Terminal styling

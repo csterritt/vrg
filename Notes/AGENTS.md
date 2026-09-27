@@ -6,7 +6,6 @@ description: As an agent, how to navigate the project.
 
 This is where project documentation and notes live.
 
-- `wiki/AGENTS.md` — all about the wiki documentation system
 - `issues/` — project issues
 - `History/` — project history and changelog
 - `skills/AGENTS.md` — project skills and knowledge base

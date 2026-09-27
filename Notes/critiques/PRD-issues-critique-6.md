@@ -56,7 +56,7 @@ This is not merely incomplete acceptance wording. Executing Task 001 exactly as 
 5. the selected complete native-output prevention/containment strategy;
 6. distinct help-only, parsed-search, and usage-error results;
 7. hostile-substitution and subprocess tests for exactly one stdout help copy, empty stderr, no child, and no TUI;
-8. updated wiki and walkthrough coverage.
+8. updated memoryfield and walkthrough coverage.
 
 **Ready when:** every Issue 1 acceptance criterion has a named RED/GREEN owner, Task 001 builds a runnable `mow.cli`-using binary, and its executable-boundary tests cover bare, first-token, later-token, combined, missing-pattern, excess-operand, unsupported-option, invalid-root, and after-`--` help cases.
 

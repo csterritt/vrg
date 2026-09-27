@@ -1,6 +1,6 @@
 ---
 name: always-do-red-green
-description: Follow the Red/Green/Refactor cycle when changing Sqloid's Go code.
+description: Follow the Red/Green/Refactor cycle when changing vrg's Go code.
 ---
 
 ## Red

@@ -1,6 +1,6 @@
 ---
 name: running-tests
-description: How to run and diagnose Sqloid's Go tests and verification tools.
+description: How to run and diagnose vrg's Go tests and verification tools.
 ---
 
 Run commands from the repository root.

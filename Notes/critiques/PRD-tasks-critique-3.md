@@ -107,7 +107,7 @@ The RED, GREEN, and walkthrough tasks now correctly distinguish the first `--` o
 
 **Recommended correction:** add the literal-`--` positional rule and examples `vrg -- --` / `vrg -- -- .` to Task 002-3's documentation requirements.
 
-**Ready when:** implementation tests, walkthrough, and wiki-ingest instructions all preserve the distinction between the first terminator and a later identically spelled positional.
+**Ready when:** implementation tests, walkthrough, and memoryfield instructions all preserve the distinction between the first terminator and a later identically spelled positional.
 
 ## Coverage and readiness assessment
 

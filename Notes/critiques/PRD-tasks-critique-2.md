@@ -75,7 +75,7 @@ The internal implementation distinction—`Esc` dismisses, then a terminal post-
 
 **Recommended correction:** make the PRD explicit: “`Esc` never exits from a base state; dismissing a fatal no-results overlay with `Esc` terminates with status 2 because there is no underlying state.” Use that same wording in Issues 9 and 32 and in Task 032's output. Avoid the unqualified “never exits” claim.
 
-**Ready when:** the PRD, issue acceptance criteria, RED rows, GREEN output, walkthrough, and wiki instructions state one observable rule without relying on an internal-event semantic distinction.
+**Ready when:** the PRD, issue acceptance criteria, RED rows, GREEN output, walkthrough, and memoryfield instructions state one observable rule without relying on an internal-event semantic distinction.
 
 ### F3 — Medium: Task 017 maps AC6 to its RED/GREEN pair but omits two required gated inputs
 

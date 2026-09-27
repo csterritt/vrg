@@ -1,6 +1,6 @@
 ---
 name: tui-behavior
-description: Rules for implementing Sqloid's Bubble Tea event handling and asynchronous terminal behavior.
+description: Rules for implementing vrg's Bubble Tea event handling and asynchronous terminal behavior.
 ---
 
 ## Bubble Tea behavior
