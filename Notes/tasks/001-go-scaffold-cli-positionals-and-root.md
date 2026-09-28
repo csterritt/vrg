@@ -63,13 +63,13 @@ Apply the Task 1 output architecture completely rather than relying on `Continue
 
 ---
 
-### 5. Document the CLI foundation in the wiki
+### 5. Document the CLI foundation in the memoryfield
 
 **Type**: DOCUMENT
-**Output**: Wiki pages record the approved architecture, `mow.cli` adapter and output strategy, shared declarations/preflight, help and result contracts, positionals/root validation, tests, and scaffold layout.
+**Output**: The memoryfield records the approved architecture, `mow.cli` adapter and output strategy, shared declarations/preflight, help and result contracts, positionals/root validation, tests, and scaffold layout.
 **Depends on**: 4
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #1 implementation and tests into the appropriate pages under `Notes/wiki`. Document the approved module/dependency choices including `mow.cli v1.2.0`; the adapter boundary, `ContinueOnError`, entry-point exit ownership, selected native-output strategy, shared declarations, ordered preflight, and explicit result kinds; bare and local help precedence and exact stdout/stderr/no-side-effect behavior; generated help content and distinction from TUI help; positional, `--`, root, sanitization, and stub contracts; and the named CLI-help/output and subprocess suites that later tasks consume. Cross-reference Issue #1 and the relevant PRD sections, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #1 implementation and tests into the memoryfield. Document the approved module/dependency choices including `mow.cli v1.2.0`; the adapter boundary, `ContinueOnError`, entry-point exit ownership, selected native-output strategy, shared declarations, ordered preflight, and explicit result kinds; bare and local help precedence and exact stdout/stderr/no-side-effect behavior; generated help content and distinction from TUI help; positional, `--`, root, sanitization, and stub contracts; and the named CLI-help/output and subprocess suites that later tasks consume. Cross-reference Issue #1 and the relevant PRD sections.
 
 ---
 
@@ -86,7 +86,7 @@ Use showboat, consulting `uvx showboat --help`, to create the walkthrough at exa
 ### 7. Review implementation against the recorded decision
 
 **Type**: REVIEW
-**Output**: Human approval confirms the implementation, tests, wiki, and walkthrough satisfy Issue #1 and the architecture recorded in Task 1 before Issue #2 starts.
+**Output**: Human approval confirms the implementation, tests, memoryfield, and walkthrough satisfy Issue #1 and the architecture recorded in Task 1 before Issue #2 starts.
 **Depends on**: 6
 
 Review the completed scaffold and CLI slice against every Issue #1 acceptance criterion and the Task 1 record. Confirm the module path, six-package layout, Go version, all exact dependency pins including `mow.cli v1.2.0`, actual use of the adapter, `ContinueOnError`, shared declaration/preflight extension seam, explicit result kinds, and the complete native-output strategy with any serialization, drainage, restoration, or emission-prevention proof it requires. Confirm the named generated-help/CLI-output tests and subprocess sentinels exist for downstream Tasks #6, #34, and #35. Record approval or require corrections before the pipeline proceeds to Issue #2.

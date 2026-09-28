@@ -59,10 +59,10 @@ Implement the stale note in the Issue #24 status slot with its reload recomputat
 ### 5. Document stale validation
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the validation rules, fallback targets, the note, and the fixed-status guarantee.  
+**Output**: The memoryfield records the validation rules, fallback targets, the note, and the fixed-status guarantee.  
 **Depends on**: 4
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #29 implementation and tests into the appropriate pages under `Notes/wiki`. Document the best-effort validation checks and their undetectable cases, per-submatch drops with stale marking, surviving highlights, the three fallback landing rules with no invented highlights, the persistent filename-row note and its reload recomputation through the status slot, the two-stage fallback reveal, and the fixed-status guarantee. Cross-reference Issue #29 and the Encodings and stale-content validation section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #29 implementation and tests into the memoryfield. Document the best-effort validation checks and their undetectable cases, per-submatch drops with stale marking, surviving highlights, the three fallback landing rules with no invented highlights, the persistent filename-row note and its reload recomputation through the status slot, the two-stage fallback reveal, and the fixed-status guarantee. Cross-reference Issue #29 and the Encodings and stale-content validation section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

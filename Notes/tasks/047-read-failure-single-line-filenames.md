@@ -35,10 +35,10 @@ Change the file-load diagnostic construction so `internal/app`'s `FileLoadComple
 ### 3. Document single-line read-failure diagnostics
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the escaped-path-plus-reason construction and its single-line guarantee at every load site.  
+**Output**: The memoryfield records the escaped-path-plus-reason construction and its single-line guarantee at every load site.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #47 fix into the appropriate pages under `Notes/wiki`. Document that read-failure diagnostics are composed from an `EscapePath`-escaped path and a sanitized reason that never repeats the raw path, that one failed read always yields exactly one diagnostic line in both the overlay and the replay, and that the construction is uniform across initial load, reload, and retry. Cross-reference Issue #47 and the *Text, graphemes, and safe presentation* and *File loading, cache, reload, and selection consistency* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #47 fix into the memoryfield. Document that read-failure diagnostics are composed from an `EscapePath`-escaped path and a sanitized reason that never repeats the raw path, that one failed read always yields exactly one diagnostic line in both the overlay and the replay, and that the construction is uniform across initial load, reload, and retry. Cross-reference Issue #47 and the *Text, graphemes, and safe presentation* and *File loading, cache, reload, and selection consistency* sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

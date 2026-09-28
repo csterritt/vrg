@@ -35,10 +35,10 @@ Implement the pan units, the visible-lines extent clamp computed from the prepar
 ### 3. Document horizontal panning and the extent policy
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records pan units, the visible-lines extent policy, the paintable-boundary maximum, and re-clamping consequences.  
+**Output**: The memoryfield records pan units, the visible-lines extent policy, the paintable-boundary maximum, and re-clamping consequences.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #18 implementation and tests into the appropriate pages under `Notes/wiki`. Document the pan units and clamping, the product-confirmed visible-lines extent policy with its three kept-distinct definitions (content extent, extent policy, maximum valid offset), the paintable-boundary maximum guaranteeing one fully painted cluster or marker cell, re-clamping on every visible-set change with no restoration, offset retention through wrap toggles with re-entry clamping, file-change reset, and split-cluster blank rendering. Cross-reference Issue #18 and the Navigation, viewport, and logical anchors and Layout and indicators sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #18 implementation and tests into the memoryfield. Document the pan units and clamping, the product-confirmed visible-lines extent policy with its three kept-distinct definitions (content extent, extent policy, maximum valid offset), the paintable-boundary maximum guaranteeing one fully painted cluster or marker cell, re-clamping on every visible-set change with no restoration, offset retention through wrap toggles with re-entry clamping, file-change reset, and split-cluster blank rendering. Cross-reference Issue #18 and the Navigation, viewport, and logical anchors and Layout and indicators sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

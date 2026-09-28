@@ -59,10 +59,10 @@ Implement the deterministic re-entry sequence in `internal/app` to satisfy Task 
 ### 5. Document read failures and retries
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records failure notification, retry rules, the re-entry sequence, and the fixed-status guarantee.  
+**Output**: The memoryfield records failure notification, retry rules, the re-entry sequence, and the fixed-status guarantee.  
 **Depends on**: 4
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #26 implementation and tests into the appropriate pages under `Notes/wiki`. Document the current-file overlay and placeholder, the non-current diagnostic-only policy and its mid-session visibility limits, the same-file-step versus cross-file retry distinction, the five-step re-entry sequence with its exactly-one retry and append rules, composed-view robustness, and load failures never changing the fixed exit status including the all-fail, fixed-2, and composed all-fail-with-fixed-2 cases. Cross-reference Issue #26 and the File loading, cache, reload, and selection consistency section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #26 implementation and tests into the memoryfield. Document the current-file overlay and placeholder, the non-current diagnostic-only policy and its mid-session visibility limits, the same-file-step versus cross-file retry distinction, the five-step re-entry sequence with its exactly-one retry and append rules, composed-view robustness, and load failures never changing the fixed exit status including the all-fail, fixed-2, and composed all-fail-with-fixed-2 cases. Cross-reference Issue #26 and the File loading, cache, reload, and selection consistency section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

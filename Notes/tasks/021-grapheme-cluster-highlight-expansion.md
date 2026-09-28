@@ -35,10 +35,10 @@ Implement cluster expansion in `internal/filebuffer` to satisfy Task 1: outward 
 ### 3. Document grapheme highlight expansion
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the expansion rules, fallback cells, and the expanded-span contract for reveal and indicators.  
+**Output**: The memoryfield records the expansion rules, fallback cells, and the expanded-span contract for reveal and indicators.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #21 implementation and tests into the appropriate pages under `Notes/wiki`. Document outward cluster expansion, combining-only matches, standalone-cluster fallback cells, wide glyphs never split with blanks never painted as match cells, and the contract that the expanded span is the single source for highlights, reveal, and indicator visibility. Cross-reference Issue #21 and the Text, graphemes, and safe presentation section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #21 implementation and tests into the memoryfield. Document outward cluster expansion, combining-only matches, standalone-cluster fallback cells, wide glyphs never split with blanks never painted as match cells, and the contract that the expanded span is the single source for highlights, reveal, and indicator visibility. Cross-reference Issue #21 and the Text, graphemes, and safe presentation section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

@@ -59,10 +59,10 @@ Implement the spawn and collection path in `internal/app` and its narrow process
 ### 5. Document the search collection path
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the spawn contract, dual-pipe drainage, searching state, interim summary, start failure, and SearchIndex record rules.  
+**Output**: The memoryfield records the spawn contract, dual-pipe drainage, searching state, interim summary, start failure, and SearchIndex record rules.  
 **Depends on**: 4
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #3 `internal/searchindex` and `internal/app` implementation and tests into the appropriate pages under `Notes/wiki`. Document the child argv and working-directory contract, concurrent dual-pipe drainage for the whole child lifetime, the searching state spanning collection and post-exit processing, the test-gate hold on index preparation, the interim summary screen and its `q` exit 0, start failure's sanitized diagnostic and exit 2, and the SearchIndex record encodings, stop merging, ordering, and path resolution. Cross-reference Issue #3 and the Result index, records, and stream integrity and Module Design sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #3 `internal/searchindex` and `internal/app` implementation and tests into the memoryfield. Document the child argv and working-directory contract, concurrent dual-pipe drainage for the whole child lifetime, the searching state spanning collection and post-exit processing, the test-gate hold on index preparation, the interim summary screen and its `q` exit 0, start failure's sanitized diagnostic and exit 2, and the SearchIndex record encodings, stop merging, ordering, and path resolution. Cross-reference Issue #3 and the Result index, records, and stream integrity and Module Design sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

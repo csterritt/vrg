@@ -35,10 +35,10 @@ Implement the structural line handling in `internal/filebuffer` to satisfy Task 
 ### 3. Document structural line handling
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records terminator rules, final-line and empty-file handling, coordinate separation, and the BOM adjustment.  
+**Output**: The memoryfield records terminator rules, final-line and empty-file handling, coordinate separation, and the BOM adjustment.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #22 implementation and tests into the appropriate pages under `Notes/wiki`. Document LF and CRLF as undisplayed terminators with retained bytes, the standalone-CR escape, the unterminated final line, no phantom trailing line, the empty file's zero lines and three-cell gutter, terminator-to-EOL mapping for zero-width positions, the visible-text-only highlight for spans crossing terminators, and the leading UTF-8 BOM's three-byte coordinate adjustment with non-leading U+FEFF as content. Cross-reference Issue #22 and the Text, graphemes, and safe presentation and Encodings sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #22 implementation and tests into the memoryfield. Document LF and CRLF as undisplayed terminators with retained bytes, the standalone-CR escape, the unterminated final line, no phantom trailing line, the empty file's zero lines and three-cell gutter, terminator-to-EOL mapping for zero-width positions, the visible-text-only highlight for spans crossing terminators, and the leading UTF-8 BOM's three-byte coordinate adjustment with non-leading U+FEFF as content. Cross-reference Issue #22 and the Text, graphemes, and safe presentation and Encodings sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

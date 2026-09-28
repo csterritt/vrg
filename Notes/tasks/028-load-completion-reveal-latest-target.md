@@ -59,10 +59,10 @@ Implement the reload-intent transitions in `internal/app` to satisfy Task 3: int
 ### 5. Document the two-stage completion contract
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records both stages, the intent model, the commit rules, and the reload transitions.  
+**Output**: The memoryfield records both stages, the intent model, the commit rules, and the reload transitions.  
 **Depends on**: 4
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #28 implementation and tests into the appropriate pages under `Notes/wiki`. Document stage one's limited responsibilities, the latest-selection reveal intent with its marker and cluster-expanded target geometry, obsolete-layout discards that never consume intents, the installation-guarded commit with its starting viewports, the startup visible-versus-hidden rules, and the reload transitions where navigation intent rather than cursor equality decides. Cross-reference Issue #28 and the File loading and Navigation sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #28 implementation and tests into the memoryfield. Document stage one's limited responsibilities, the latest-selection reveal intent with its marker and cluster-expanded target geometry, obsolete-layout discards that never consume intents, the installation-guarded commit with its starting viewports, the startup visible-versus-hidden rules, and the reload transitions where navigation intent rather than cursor equality decides. Cross-reference Issue #28 and the File loading and Navigation sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

@@ -35,10 +35,10 @@ Write the user-facing `README.md` at the repository root and the help overlay fo
 ### 3. Document the release-facing documentation
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the README's scope, its synchronization tests, and the footer note.  
+**Output**: The memoryfield records the README's scope, its synchronization tests, and the footer note.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #34 README, footer note, and synchronization tests into the appropriate pages under `Notes/wiki`. Document the README as the single user-facing documentation artifact, the binding-table and allow-list synchronization tests that keep it honest, the scale examples and their independence, the 64 MiB record limit and base64 caveat, the memory and termination limits, the exit-status table's agreement with the outcome function, and the Issue #6 sink-safety row covering the rendered help footer and any generated text path that accepts runtime strings. Cross-reference Issue #34 and the Resources and responsiveness and Out of Scope sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #34 README, footer note, and synchronization tests into the memoryfield. Document the README as the single user-facing documentation artifact, the binding-table and allow-list synchronization tests that keep it honest, the scale examples and their independence, the 64 MiB record limit and base64 caveat, the memory and termination limits, the exit-status table's agreement with the outcome function, and the Issue #6 sink-safety row covering the rendered help footer and any generated text path that accepts runtime strings. Cross-reference Issue #34 and the Resources and responsiveness and Out of Scope sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

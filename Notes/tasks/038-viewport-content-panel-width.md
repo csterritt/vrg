@@ -35,10 +35,10 @@ Fix every site in `internal/app/app.go` that recomputes `viewport.TextWidth(m.wi
 ### 3. Document the viewport-width fix
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the three width definitions and that the layout key's text width governs the viewport.  
+**Output**: The memoryfield records the three width definitions and that the layout key's text width governs the viewport.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #38 fix into the appropriate pages under `Notes/wiki`. Document the terminal/panel/text width chain — terminal width; panel width as terminal minus list width minus separator; text width as panel minus gutter minus reserved right-indicator width — and that `LayoutKey`'s `TextWidth` is installed at every viewport install site, including resize and file-list hide/show. Cross-reference Issue #38 and the *File list and layout*, *Layout and indicators*, and *Navigation, viewport, and logical anchors* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #38 fix into the memoryfield. Document the terminal/panel/text width chain — terminal width; panel width as terminal minus list width minus separator; text width as panel minus gutter minus reserved right-indicator width — and that `LayoutKey`'s `TextWidth` is installed at every viewport install site, including resize and file-list hide/show. Cross-reference Issue #38 and the *File list and layout*, *Layout and indicators*, and *Navigation, viewport, and logical anchors* sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

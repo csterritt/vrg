@@ -35,10 +35,10 @@ Implement the file-change pop-up in `internal/app` to satisfy Task 1: instance-k
 ### 3. Document the file-change pop-up
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the pop-up lifecycle, instance-keyed timers, and cancellation rules.  
+**Output**: The memoryfield records the pop-up lifecycle, instance-keyed timers, and cancellation rules.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #15 implementation and tests into the appropriate pages under `Notes/wiki`. Document the selection-time start independent of load completion, the one-second-or-keypress lifetime with the key performing its normal action, instance-keyed timers with stale-instance rejection, render-time centring and truncation on resize without timer restart, error-overlay cancellation with no return, and the sanitized single-line path. Cross-reference Issue #15 and the Colours, overlays, and key precedence section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #15 implementation and tests into the memoryfield. Document the selection-time start independent of load completion, the one-second-or-keypress lifetime with the key performing its normal action, instance-keyed timers with stale-instance rejection, render-time centring and truncation on resize without timer restart, error-overlay cancellation with no return, and the sanitized single-line path. Cross-reference Issue #15 and the Colours, overlays, and key precedence section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

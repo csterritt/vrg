@@ -36,10 +36,10 @@ Implement `r` in `internal/app` to satisfy Task 1: the reload request with its d
 ### 3. Document explicit reload
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the reload contract, dropped duplicates, content revisions, and the reload-anchor intent.  
+**Output**: The memoryfield records the reload contract, dropped duplicates, content revisions, and the reload-anchor intent.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #27 implementation and tests into the appropriate pages under `Notes/wiki`. Document `r` rereading without rerunning the search or changing stops, the dropped-not-queued duplicate rule with the placeholder as the completion signal, anchor preservation clamped to new content and asserted through the matching layout, failure replacement with "(unreadable)", the one-stop retry route, intentional cache stability until `r`, content revisions and the superseded-layout discard, and the reload-anchor pending intent recorded on load completion and committed when the new revision's matching layout installs — the seam Issue #28 later generalizes. Cross-reference Issue #27 and the File loading, cache, reload, and selection consistency section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #27 implementation and tests into the memoryfield. Document `r` rereading without rerunning the search or changing stops, the dropped-not-queued duplicate rule with the placeholder as the completion signal, anchor preservation clamped to new content and asserted through the matching layout, failure replacement with "(unreadable)", the one-stop retry route, intentional cache stability until `r`, content revisions and the superseded-layout discard, and the reload-anchor pending intent recorded on load completion and committed when the new revision's matching layout installs — the seam Issue #28 later generalizes. Cross-reference Issue #27 and the File loading, cache, reload, and selection consistency section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

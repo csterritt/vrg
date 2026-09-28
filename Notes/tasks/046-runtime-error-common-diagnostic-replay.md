@@ -35,10 +35,10 @@ Introduce a shutdown result / diagnostic snapshot in `cmd/vrg/main.go` and `inte
 ### 3. Document the unified runtime-error path
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the diagnostic snapshot, the single shutdown sequence, and the three return-shape outcomes.  
+**Output**: The memoryfield records the diagnostic snapshot, the single shutdown sequence, and the three return-shape outcomes.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #46 implementation into the appropriate pages under `Notes/wiki`. Document the collector that decouples session diagnostics from the final-model assertion, the ordered shutdown sequence (terminal restoration → child termination/reap → replay of session diagnostics → invalid-final-model diagnostic → the runtime error exactly once), the exit-2 controlled-failure convention extended to runtime errors, and the tagged-runner injection used by the tests. Cross-reference Issue #46 and the *Outcome and exit-status contract* section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #46 implementation into the memoryfield. Document the collector that decouples session diagnostics from the final-model assertion, the ordered shutdown sequence (terminal restoration → child termination/reap → replay of session diagnostics → invalid-final-model diagnostic → the runtime error exactly once), the exit-2 controlled-failure convention extended to runtime errors, and the tagged-runner injection used by the tests. Cross-reference Issue #46 and the *Outcome and exit-status contract* section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

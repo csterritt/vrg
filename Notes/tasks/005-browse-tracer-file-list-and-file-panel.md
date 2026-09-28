@@ -59,10 +59,10 @@ Implement the first FileBuffer path, a minimal Viewport and Theme seam, and the 
 ### 5. Document the browse tracer
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the browse composition, FileBuffer first path, safe-presentation core rules, and the sink-safety method.  
+**Output**: The memoryfield records the browse composition, FileBuffer first path, safe-presentation core rules, and the sink-safety method.  
 **Depends on**: 4
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #5 `internal/filebuffer`, `internal/viewport`, `internal/theme`, and `internal/app` implementation and tests into the appropriate pages under `Notes/wiki`. Document the two-pane browse layout with its filename rule, gutter, and border rules; async loading with prepared buffers and the "Loading…" placeholder; the safe-presentation core's path and content rules with their byte→cell mappings including the provisional tab form; the hostile-fixture raw-output sink-safety method with its no-style composition path; and the fixed-width file list pending Issue #24. Cross-reference Issue #5 and the File list and layout, Text, graphemes, and safe presentation, and Module Design sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #5 `internal/filebuffer`, `internal/viewport`, `internal/theme`, and `internal/app` implementation and tests into the memoryfield. Document the two-pane browse layout with its filename rule, gutter, and border rules; async loading with prepared buffers and the "Loading…" placeholder; the safe-presentation core's path and content rules with their byte→cell mappings including the provisional tab form; the hostile-fixture raw-output sink-safety method with its no-style composition path; and the fixed-width file list pending Issue #24. Cross-reference Issue #5 and the File list and layout, Text, graphemes, and safe presentation, and Module Design sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

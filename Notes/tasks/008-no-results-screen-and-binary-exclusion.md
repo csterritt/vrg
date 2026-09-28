@@ -35,10 +35,10 @@ Implement only enough in `internal/searchindex` and `internal/app` to satisfy Ta
 ### 3. Document the no-results outcome
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records binary exclusion, usable-results accounting, and the no-results screen contract.  
+**Output**: The memoryfield records binary exclusion, usable-results accounting, and the no-results screen contract.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #8 implementation and tests into the appropriate pages under `Notes/wiki`. Document binary exclusion via non-null `binary_offset` with its distinct-file count, usable results as retained stops after filtering, the "No results found" screen with its binary-skip suffix for both rg-1 and rg-0 all-filtered streams, and the exit-1 dismissal with `Esc` and `ctrl+c` behavior. Cross-reference Issue #8 and the Result index and Outcome and exit-status contract sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #8 implementation and tests into the memoryfield. Document binary exclusion via non-null `binary_offset` with its distinct-file count, usable results as retained stops after filtering, the "No results found" screen with its binary-skip suffix for both rg-1 and rg-0 all-filtered streams, and the exit-1 dismissal with `Esc` and `ctrl+c` behavior. Cross-reference Issue #8 and the Result index and Outcome and exit-status contract sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

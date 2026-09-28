@@ -35,10 +35,10 @@ Extend the record-loss composition reworked by Issue #36 in `internal/app/app.go
 ### 3. Document oversized-record diagnostics
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the always-emitted aggregate, the per-path details, and the anonymous-record guarantees.  
+**Output**: The memoryfield records the always-emitted aggregate, the per-path details, and the anonymous-record guarantees.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #37 implementation and tests into the appropriate pages under `Notes/wiki`. Document the pluralized per-record aggregate rule and its exact strings, the one-detail-line-per-distinct-raw-path deduplication rule and deterministic first-occurrence ordering, the per-path details' position after the aggregate, the anonymous-record behaviour in both fatal and non-fatal outcomes, and where the component sits in Issue #36's universal order. Cross-reference Issue #37 and the oversized bullets of *Result index, records, and stream integrity* plus the 64 MiB limit in *Resources and responsiveness* of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #37 implementation and tests into the memoryfield. Document the pluralized per-record aggregate rule and its exact strings, the one-detail-line-per-distinct-raw-path deduplication rule and deterministic first-occurrence ordering, the per-path details' position after the aggregate, the anonymous-record behaviour in both fatal and non-fatal outcomes, and where the component sits in Issue #36's universal order. Cross-reference Issue #37 and the oversized bullets of *Result index, records, and stream integrity* plus the 64 MiB limit in *Resources and responsiveness* of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

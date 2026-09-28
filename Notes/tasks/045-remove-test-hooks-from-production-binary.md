@@ -35,10 +35,10 @@ Split `cmd/vrg/main.go`'s test seams behind two narrow build-constrained boundar
 ### 3. Document the test-hook build topology
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the `vrg_testhooks` variant, the two seam boundaries, the explicit hook manifest, and the clean-artifact boundary test.  
+**Output**: The memoryfield records the `vrg_testhooks` variant, the two seam boundaries, the explicit hook manifest, and the clean-artifact boundary test.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #45 implementation into the appropriate pages under `Notes/wiki`. Document the two build-constrained boundaries (option/process wiring and the program-runner wrapper), the explicit vrg-consumed hook manifest and why fixture-owned variables are excluded, the `TestMain` tagged build, the untagged-artifact boundary test, and the rule that Issues #46 and #48 extend the same mechanism rather than adding production hooks. Cross-reference Issue #45 and the *Outcome and exit-status contract* and *Testing Decisions* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #45 implementation into the memoryfield. Document the two build-constrained boundaries (option/process wiring and the program-runner wrapper), the explicit vrg-consumed hook manifest and why fixture-owned variables are excluded, the `TestMain` tagged build, the untagged-artifact boundary test, and the rule that Issues #46 and #48 extend the same mechanism rather than adding production hooks. Cross-reference Issue #45 and the *Outcome and exit-status contract* and *Testing Decisions* sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

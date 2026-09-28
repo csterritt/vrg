@@ -35,10 +35,10 @@ Implement the indicators in the rendering path to satisfy Task 1, deriving all v
 ### 3. Document the indicators
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the gutter and right-column indicators, their scopes, and the visibility rule.  
+**Output**: The memoryfield records the gutter and right-column indicators, their scopes, and the visibility rule.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #20 implementation and tests into the appropriate pages under `Notes/wiki`. Document the per-line left `_`/`*` gutter indicator, the current-matched-line-only right `*` with its off-screen absence and no-overwrite guarantee, partial visibility counting as visible, the rendered-cells-after-clipping visibility basis excluding the reserved column, split-glyph blanks not counting as visible, and wrap mode's absence of indicators. Cross-reference Issue #20 and the Layout and indicators section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #20 implementation and tests into the memoryfield. Document the per-line left `_`/`*` gutter indicator, the current-matched-line-only right `*` with its off-screen absence and no-overwrite guarantee, partial visibility counting as visible, the rendered-cells-after-clipping visibility basis excluding the reserved column, split-glyph blanks not counting as visible, and wrap mode's absence of indicators. Cross-reference Issue #20 and the Layout and indicators section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

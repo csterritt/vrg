@@ -35,10 +35,10 @@ Implement the keyed load machinery in `internal/app` to satisfy Task 1: path and
 ### 3. Document asynchronous load isolation
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records keyed completions, the one-load rule, session caching, and the responsiveness contract.  
+**Output**: The memoryfield records keyed completions, the one-load rule, session caching, and the responsiveness contract.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #25 implementation and tests into the appropriate pages under `Notes/wiki`. Document navigation during loads, path-and-request-identity keying with panel isolation, the one-load-in-flight-per-path rule with dropped re-entry, session-long buffer retention with no eviction, post-cancellation rejection, and the separately gated decode/map phase with its actionable-input list. Cross-reference Issue #25 and the File loading, cache, reload, and selection consistency section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #25 implementation and tests into the memoryfield. Document navigation during loads, path-and-request-identity keying with panel isolation, the one-load-in-flight-per-path rule with dropped re-entry, session-long buffer retention with no eviction, post-cancellation rejection, and the separately gated decode/map phase with its actionable-input list. Cross-reference Issue #25 and the File loading, cache, reload, and selection consistency section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

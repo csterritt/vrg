@@ -35,10 +35,10 @@ Remove the head-plus-ellipsis-plus-tail compression in `renderOverlay` (`interna
 ### 3. Document full-scroll overlays
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the complete-row scrolling contract and the revised large-stderr fixture semantics.  
+**Output**: The memoryfield records the complete-row scrolling contract and the revised large-stderr fixture semantics.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #41 implementation into the appropriate pages under `Notes/wiki`. Document that non-help overlays keep every wrapped row in the scrollable set with `overlayScroll` clamped to `[0, max(0, rows−height)]`, that render-time clipping at tiny sizes is preserved while model-level elision is forbidden, that this contract supersedes Issue #9's original simultaneous head/tail rendering requirement for the ≥ 1 MiB stderr fixture (drainage and completeness retained), and the unchanged modal key contract. Cross-reference Issue #41 and the *Colours, overlays, and key precedence* section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #41 implementation into the memoryfield. Document that non-help overlays keep every wrapped row in the scrollable set with `overlayScroll` clamped to `[0, max(0, rows−height)]`, that render-time clipping at tiny sizes is preserved while model-level elision is forbidden, that this contract supersedes Issue #9's original simultaneous head/tail rendering requirement for the ≥ 1 MiB stderr fixture (drainage and completeness retained), and the unchanged modal key contract. Cross-reference Issue #41 and the *Colours, overlays, and key precedence* section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

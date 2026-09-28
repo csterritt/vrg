@@ -35,10 +35,10 @@ Implement the reveal rules in `internal/viewport` and their App triggers to sati
 ### 3. Document destination reveal
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the target definition, no-scroll rule, one-third placement, and starting-viewport sequence.  
+**Output**: The memoryfield records the target definition, no-scroll rule, one-third placement, and starting-viewport sequence.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #14 implementation and tests into the appropriate pages under `Notes/wiki`. Document the display target as the first submatch's start cell, the rendered-row reveal requirement, visible-target no-scroll, one-third placement with BOF/EOF precedence, the saved-viewport and top-of-file starting points, and the saved-state replacement rules for moving versus no-scroll reveals. Cross-reference Issue #14 and the Navigation, viewport, and logical anchors and Testing Decisions sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #14 implementation and tests into the memoryfield. Document the display target as the first submatch's start cell, the rendered-row reveal requirement, visible-target no-scroll, one-third placement with BOF/EOF precedence, the saved-viewport and top-of-file starting points, and the saved-state replacement rules for moving versus no-scroll reveals. Cross-reference Issue #14 and the Navigation, viewport, and logical anchors and Testing Decisions sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

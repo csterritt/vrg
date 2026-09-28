@@ -35,10 +35,10 @@ Implement the minimal horizontal reveal in `internal/viewport` and its App trigg
 ### 3. Document minimal horizontal reveal
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the painted-cell visibility rule, the reveal arithmetic, and the geometric fallback.  
+**Output**: The memoryfield records the painted-cell visibility rule, the reveal arithmetic, and the geometric fallback.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #19 implementation and tests into the appropriate pages under `Notes/wiki`. Document painted-cell visibility as the reveal criterion, the right-edge and left-edge offset rules with cluster widths, the oversized-match start-cell rule, the geometric fallback for a cluster wider than the text area with its no-loop guarantee and indicator interplay, and the startup and per-navigation triggers after the file-change reset. Cross-reference Issue #19 and the Navigation, viewport, and logical anchors and Layout and indicators sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #19 implementation and tests into the memoryfield. Document painted-cell visibility as the reveal criterion, the right-edge and left-edge offset rules with cluster widths, the oversized-match start-cell rule, the geometric fallback for a cluster wider than the text area with its no-loop guarantee and indicator interplay, and the startup and per-navigation triggers after the file-change reset. Cross-reference Issue #19 and the Navigation, viewport, and logical anchors and Layout and indicators sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

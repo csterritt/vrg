@@ -35,10 +35,10 @@ Implement the help overlay in `internal/app` on the wrapped, scrollable overlay 
 ### 3. Document the help overlay
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records help keys, the shared overlay component, the binding table, and tiny-size clipping.  
+**Output**: The memoryfield records help keys, the shared overlay component, the binding table, and tiny-size clipping.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #31 implementation and tests into the appropriate pages under `Notes/wiki`. Document the `h`/`?` open behavior from browse and no-results, the close and ignored keys with `ctrl+c`, wrapped scrollable text including unbroken strings, tiny-size clipping without a borderless mode, the shared overlay component with the error overlay, pop-up cancellation, the binding table as the single source for rendering and documentation tests, and the footer slot reserved for Issue #34. Cross-reference Issue #31 and the Colours, overlays, and key precedence section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #31 implementation and tests into the memoryfield. Document the `h`/`?` open behavior from browse and no-results, the close and ignored keys with `ctrl+c`, wrapped scrollable text including unbroken strings, tiny-size clipping without a borderless mode, the shared overlay component with the error overlay, pop-up cancellation, the binding table as the single source for rendering and documentation tests, and the footer slot reserved for Issue #34. Cross-reference Issue #31 and the Colours, overlays, and key precedence section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

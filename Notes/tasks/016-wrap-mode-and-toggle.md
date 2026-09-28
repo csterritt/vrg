@@ -35,10 +35,10 @@ Implement the shared grapheme policy in `internal/filebuffer` with its cluster b
 ### 3. Document wrap mode and the grapheme policy
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records wrap and run-off-edge modes, the grapheme policy, tab stops, the row model, and the reserved indicator width.  
+**Output**: The memoryfield records wrap and run-off-edge modes, the grapheme policy, tab stops, the row model, and the reserved indicator width.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #16 implementation and tests into the appropriate pages under `Notes/wiki`. Document wrapping on by default with the `w` toggle, grapheme-boundary wrapping with the blank-cell rule for unclusterable wide glyphs, the single shared segmentation and cell-width policy with FileBuffer as its source, eight-column tab stops independent of gutter and pan, continuation-row gutters, the reserved right-indicator width of zero or one, and the prepared row model keyed by path, content revision, text width, and wrap mode. Cross-reference Issue #16 and the Text, graphemes, and safe presentation and Layout and indicators sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #16 implementation and tests into the memoryfield. Document wrapping on by default with the `w` toggle, grapheme-boundary wrapping with the blank-cell rule for unclusterable wide glyphs, the single shared segmentation and cell-width policy with FileBuffer as its source, eight-column tab stops independent of gutter and pan, continuation-row gutters, the reserved right-indicator width of zero or one, and the prepared row model keyed by path, content revision, text width, and wrap mode. Cross-reference Issue #16 and the Text, graphemes, and safe presentation and Layout and indicators sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

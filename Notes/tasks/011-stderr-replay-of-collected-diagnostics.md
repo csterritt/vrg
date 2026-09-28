@@ -59,10 +59,10 @@ Implement the application-side acknowledgement side channel gated for tests only
 ### 5. Document the stderr replay contract
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the session collection, shutdown boundary, replay ordering, and exactly-once rules.  
+**Output**: The memoryfield records the session collection, shutdown boundary, replay ordering, and exactly-once rules.  
 **Depends on**: 4
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #11 implementation and tests into the appropriate pages under `Notes/wiki`. Document the session diagnostic collection independent of display, the shutdown boundary for processed versus in-flight diagnostics, replay after terminal restoration in collection order and exactly once per occurrence, the controlled-failure unification with the Issue #4 writer, filename escaping in replayed text, and the acknowledgement side channel. Cross-reference Issue #11 and the Colours, overlays, and key precedence and Outcome and exit-status contract sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #11 implementation and tests into the memoryfield. Document the session diagnostic collection independent of display, the shutdown boundary for processed versus in-flight diagnostics, replay after terminal restoration in collection order and exactly once per occurrence, the controlled-failure unification with the Issue #4 writer, filename escaping in replayed text, and the acknowledgement side channel. Cross-reference Issue #11 and the Colours, overlays, and key precedence and Outcome and exit-status contract sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

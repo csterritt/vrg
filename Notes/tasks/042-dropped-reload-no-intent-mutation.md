@@ -35,10 +35,10 @@ Restructure `handleReload` and `startLoad` in `internal/app/app.go` so the one-l
 ### 3. Document atomic reload admission
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the atomic admission check and the intent-preservation contract for dropped reloads.  
+**Output**: The memoryfield records the atomic admission check and the intent-preservation contract for dropped reloads.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #42 fix into the appropriate pages under `Notes/wiki`. Document that reload flags, presentation, and `IntentReloadAnchor` are applied only when a new load is actually accepted — atomically with the admission check — that a dropped `r` preserves the in-flight load's original intent, revision, and presentation, and that navigation re-entry is deliberately ungated. Cross-reference Issue #42 and the *File loading, cache, reload, and selection consistency* and *Navigation, viewport, and logical anchors* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #42 fix into the memoryfield. Document that reload flags, presentation, and `IntentReloadAnchor` are applied only when a new load is actually accepted — atomically with the admission check — that a dropped `r` preserves the in-flight load's original intent, revision, and presentation, and that navigation re-entry is deliberately ungated. Cross-reference Issue #42 and the *File loading, cache, reload, and selection consistency* and *Navigation, viewport, and logical anchors* sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

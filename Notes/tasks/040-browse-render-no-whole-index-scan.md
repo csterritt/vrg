@@ -35,10 +35,10 @@ Restructure `internal/app/app.go` so immutable per-file groups, current-file ind
 ### 3. Document the bounded render path
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the precomputed groups/path metadata and the O(visible rows) render bound.  
+**Output**: The memoryfield records the precomputed groups/path metadata and the O(visible rows) render bound.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #40 implementation into the appropriate pages under `Notes/wiki`. Document what is prepared once at search completion (per-file groups, current-file indexes, escaped path text, cluster boundaries, full cell width), what remains per-frame (visible-range rendering and current-width truncation), the strengthened cost guard spanning navigation `Update()` plus the resulting `View()` without resetting its access counter, and the roughly 100,000-matched-line responsiveness rationale. Cross-reference Issue #40 and the *Resources and responsiveness* and *File list and layout* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #40 implementation into the memoryfield. Document what is prepared once at search completion (per-file groups, current-file indexes, escaped path text, cluster boundaries, full cell width), what remains per-frame (visible-range rendering and current-width truncation), the strengthened cost guard spanning navigation `Update()` plus the resulting `View()` without resetting its access counter, and the roughly 100,000-matched-line responsiveness rationale. Cross-reference Issue #40 and the *Resources and responsiveness* and *File list and layout* sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

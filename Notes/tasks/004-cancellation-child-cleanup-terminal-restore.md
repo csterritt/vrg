@@ -35,10 +35,10 @@ Implement the cancellation and cleanup paths in `internal/app` and the process b
 ### 3. Document cancellation and cleanup
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records cancellation rules, the cleanup sequence, terminal restoration, the failure hook, and the PTY harness.  
+**Output**: The memoryfield records cancellation rules, the cleanup sequence, terminal restoration, the failure hook, and the PTY harness.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #4 implementation and tests into the appropriate pages under `Notes/wiki`. Document the `q`-while-searching and `ctrl+c` cancellation rules including the post-exit preparation window, the exit-130 contract, child termination and reaping with its evidence side channel, display and PTY input-mode restoration on every controlled exit, the injected controlled-failure hook and the single post-restoration stderr writer with its exactly-once rule, and the reusable fake-rg/PTY harness later issues build on. Cross-reference Issue #4 and the Outcome and exit-status contract and Subprocess boundary sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #4 implementation and tests into the memoryfield. Document the `q`-while-searching and `ctrl+c` cancellation rules including the post-exit preparation window, the exit-130 contract, child termination and reaping with its evidence side channel, display and PTY input-mode restoration on every controlled exit, the injected controlled-failure hook and the single post-restoration stderr writer with its exactly-once rule, and the reusable fake-rg/PTY harness later issues build on. Cross-reference Issue #4 and the Outcome and exit-status contract and Subprocess boundary sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

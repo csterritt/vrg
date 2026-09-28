@@ -35,10 +35,10 @@ Implement `internal/theme` and its wiring to satisfy Task 1: the toggle with no 
 ### 3. Document the theme module
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records both schemes, the style set, the toggle, and the inverse/underline rules.  
+**Output**: The memoryfield records both schemes, the style set, the toggle, and the inverse/underline rules.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #7 `internal/theme` implementation and tests into the appropriate pages under `Notes/wiki`. Document the initially dark scheme, the `c` toggle without persistence, the true-inverse match rule, the current-matched-line and current-file underlines, the indicator and overlay styles, and how rendering consumes the theme. Cross-reference Issue #7 and the Colours, overlays, and key precedence and Module Design sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #7 `internal/theme` implementation and tests into the memoryfield. Document the initially dark scheme, the `c` toggle without persistence, the true-inverse match rule, the current-matched-line and current-file underlines, the indicator and overlay styles, and how rendering consumes the theme. Cross-reference Issue #7 and the Colours, overlays, and key precedence and Module Design sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

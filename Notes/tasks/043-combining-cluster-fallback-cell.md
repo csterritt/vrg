@@ -45,10 +45,10 @@ Implement the recorded fallback in `internal/filebuffer` so a standalone zero-wi
 ### 4. Document the fallback cell
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the chosen representation, its one-cell propagation, and the byte-mapping contract.  
+**Output**: The memoryfield records the chosen representation, its one-cell propagation, and the byte-mapping contract.  
 **Depends on**: 3
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #43 implementation into the appropriate pages under `Notes/wiki`. Document the recorded fallback representation and its display bytes, the one-cell propagation through clusters/ByteCells/wrapping/clipping/highlight expansion, the normalization rule for unexpected width results, and the preserved source-byte mapping. Cross-reference Issue #43 and the *Text, graphemes, and safe presentation* section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #43 implementation into the memoryfield. Document the recorded fallback representation and its display bytes, the one-cell propagation through clusters/ByteCells/wrapping/clipping/highlight expansion, the normalization rule for unexpected width results, and the preserved source-byte mapping. Cross-reference Issue #43 and the *Text, graphemes, and safe presentation* section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

@@ -59,10 +59,10 @@ Implement prepared-layout jobs completing via messages like file loads, keyed in
 ### 5. Document the logical anchor and layout preparation
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the anchor model, the lossy EOF rule, prepared layouts, installation guards, and pending intents.  
+**Output**: The memoryfield records the anchor model, the lossy EOF rule, prepared layouts, installation guards, and pending intents.  
 **Depends on**: 4
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #17 implementation and tests into the appropriate pages under `Notes/wiki`. Document the width-independent logical anchor with its replacement rules, the intentionally lossy EOF clamp, off-UI layout preparation keyed by path, content revision, text width, and wrap mode, installation-only-on-match guards with out-of-order discards, the model-carried pending reveal intent and its commit, cached-file stale-layout navigation with its fast path, and the render-cost guarantees. Cross-reference Issue #17 and the Navigation, viewport, and logical anchors and Resources and responsiveness sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #17 implementation and tests into the memoryfield. Document the width-independent logical anchor with its replacement rules, the intentionally lossy EOF clamp, off-UI layout preparation keyed by path, content revision, text width, and wrap mode, installation-only-on-match guards with out-of-order discards, the model-carried pending reveal intent and its commit, cached-file stale-layout navigation with its fast path, and the render-cost guarantees. Cross-reference Issue #17 and the Navigation, viewport, and logical anchors and Resources and responsiveness sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

@@ -35,10 +35,10 @@ Implement the precedence stack in `internal/app` to satisfy Task 1: `ctrl+c` ove
 ### 3. Document overlay precedence
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the precedence stack, suspension and append rules, and the `Esc`/`q` dismissal table.  
+**Output**: The memoryfield records the precedence stack, suspension and append rules, and the `Esc`/`q` dismissal table.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #32 implementation and tests into the appropriate pages under `Notes/wiki`. Document the key-precedence stack, error-suspends-help with position restoration, appended errors preserving the reader's scroll, pop-up cancellation without return, and the full dismissal-outcome table for `q` and `Esc` including the fatal-overlay exit-2 route — `Esc` never exits from a base state; dismissing a fatal no-results overlay with `Esc` terminates with status 2 because there is no underlying state — and the no-overlay `Esc` no-op. Cross-reference Issue #32 and the Colours, overlays, and key precedence and Outcome and exit-status contract sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #32 implementation and tests into the memoryfield. Document the key-precedence stack, error-suspends-help with position restoration, appended errors preserving the reader's scroll, pop-up cancellation without return, and the full dismissal-outcome table for `q` and `Esc` including the fatal-overlay exit-2 route — `Esc` never exits from a base state; dismissing a fatal no-results overlay with `Esc` terminates with status 2 because there is no underlying state — and the no-overlay `Esc` no-op. Cross-reference Issue #32 and the Colours, overlays, and key precedence and Outcome and exit-status contract sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

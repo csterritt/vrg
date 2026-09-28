@@ -15,7 +15,7 @@ Parent PRD: PRD-vrg.md
 **Output**: The issue and task plan record the product owner's removal decision and reject token imports whose sole purpose would be retaining Bubbles or Lip Gloss.
 **Depends on**: none
 
-Record the selected outcome: remove `charm.land/bubbles/v2` and `charm.land/lipgloss/v2` because the implementation imports neither library. The remaining TUI dependency is `charm.land/bubbletea/v2`; VRG's existing theme and rendering primitives continue to own presentation. Record every current stated-stack or prescriptive reference that must be aligned: `Notes/PRD-vrg.md` *Further Notes*, `Notes/wiki/project-overview.md`, the Scope paragraph in `Notes/wiki/AGENTS.md`, `Notes/skills/code-writing/styling-tui.md`, and the corresponding entry in `Notes/skills/AGENTS.md`. No adoption issues are created, and no token import may be added to retain a manifest entry.
+Record the selected outcome: remove `charm.land/bubbles/v2` and `charm.land/lipgloss/v2` because the implementation imports neither library. The remaining TUI dependency is `charm.land/bubbletea/v2`; VRG's existing theme and rendering primitives continue to own presentation. Record every current stated-stack or prescriptive reference that must be aligned: `Notes/PRD-vrg.md` *Further Notes*, the memoryfield, `Notes/skills/code-writing/styling-tui.md`, and the corresponding entry in `Notes/skills/AGENTS.md`. No adoption issues are created, and no token import may be added to retain a manifest entry.
 
 ---
 
@@ -32,10 +32,10 @@ Run `go mod tidy` and commit its complete manifest result. Confirm `charm.land/b
 ### 3. Align the stated-stack documentation and coding instructions
 
 **Type**: DOCUMENT  
-**Output**: Every current stack claim and prescriptive styling instruction states that VRG uses Bubble Tea without Bubbles or Lip Gloss; the wiki log records the removal decision.
+**Output**: Every current stack claim and prescriptive styling instruction states that VRG uses Bubble Tea without Bubbles or Lip Gloss; the memoryfield records the removal decision.
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`. Update the PRD *Further Notes* stack line, `Notes/wiki/project-overview.md`, the Scope paragraph in `Notes/wiki/AGENTS.md`, `Notes/skills/code-writing/styling-tui.md`, and the `code-writing/styling-tui` entry in `Notes/skills/AGENTS.md` so none directs implementation agents to use the removed libraries. Preserve historical audit/issue/critique references that explain the decision; only current requirements, project descriptions, and instructions must describe the selected stack. Update `Notes/wiki/index.md` only if page membership or its project-overview description changes, and append the required dated removal-decision ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`. Update the PRD *Further Notes* stack line, the memoryfield, `Notes/skills/code-writing/styling-tui.md`, and the `code-writing/styling-tui` entry in `Notes/skills/AGENTS.md` so none directs implementation agents to use the removed libraries. Preserve historical audit/issue/critique references that explain the decision; only current requirements, project descriptions, and instructions must describe the selected stack. Update the memoryfield only if page membership or its project-overview description changes.
 
 ---
 

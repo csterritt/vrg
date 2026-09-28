@@ -23,10 +23,10 @@ Begin only after Issue #36 is complete. Issue #36 owns removing the `context` ex
 ### 2. Document the summary-is-final contract
 
 **Type**: DOCUMENT
-**Output**: Wiki documentation records that `context` is lifecycle-exempt only before `summary`, that Issue #36 owns the parser/matrix correction, and that Issue #44 supplies dedicated regression coverage.
+**Output**: The memoryfield records that `context` is lifecycle-exempt only before `summary`, that Issue #36 owns the parser/matrix correction, and that Issue #44 supplies dedicated regression coverage.
 **Depends on**: 1
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #44 verification into the appropriate pages under `Notes/wiki`. Document that *any* record after `summary` — including `context` — is a stream-integrity failure per the summary-is-final contract, that pre-`summary` context records remain ignored for match/lifecycle purposes, that Issue #9's former "context in any position" row is amended to cover only pre-`summary` positions, and that Issue #36 removed the exemption and corrected the lifecycle row before Issue #44 added focused coverage. Cross-reference Issues #36 and #44 and the *Result index, records, and stream integrity* section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #44 verification into the memoryfield. Document that *any* record after `summary` — including `context` — is a stream-integrity failure per the summary-is-final contract, that pre-`summary` context records remain ignored for match/lifecycle purposes, that Issue #9's former "context in any position" row is amended to cover only pre-`summary` positions, and that Issue #36 removed the exemption and corrected the lifecycle row before Issue #44 added focused coverage. Cross-reference Issues #36 and #44 and the *Result index, records, and stream integrity* section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

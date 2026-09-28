@@ -35,10 +35,10 @@ Implement the BOM detection with its overlap ordering in `internal/filebuffer`, 
 ### 3. Document unsupported encodings
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the BOM detection order, the placeholder, notification rules, and the no-validation exclusion.  
+**Output**: The memoryfield records the BOM detection order, the placeholder, notification rules, and the no-validation exclusion.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #30 implementation and tests into the appropriate pages under `Notes/wiki`. Document the four BOMs with the longer-before-shorter overlap ordering and the UTF-8 non-misclassification, the placeholder with its diagnostic, retained indexing and reloadability, the current/non-current notification distinction, the exclusion of stale validation on these bytes, and the fixed-status guarantee. Cross-reference Issue #30 and the Encodings and stale-content validation and Invocation sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #30 implementation and tests into the memoryfield. Document the four BOMs with the longer-before-shorter overlap ordering and the UTF-8 non-misclassification, the placeholder with its diagnostic, retained indexing and reloadability, the current/non-current notification distinction, the exclusion of stale validation on these bytes, and the fixed-status guarantee. Cross-reference Issue #30 and the Encodings and stale-content validation and Invocation sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

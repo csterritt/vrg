@@ -35,10 +35,10 @@ Generalize the Issue #5 core into the single shared utility, unify the minimal I
 ### 3. Document the safe-presentation utility
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the canonical escaping contracts per sink class, the shared utility, the sink-safety table, and later-sink ownership.  
+**Output**: The memoryfield records the canonical escaping contracts per sink class, the shared utility, the sink-safety table, and later-sink ownership.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #6 utility implementation and tests into the appropriate pages under `Notes/wiki`. Document the canonical path and content escaping contracts, the diagnostic rules with single-lined embedded filenames, the replacement of the Issue #1 escaper, the shared sink-safety table with its fixtures and no-style composition method, and the rule that each later issue routes its new sinks through the utility and extends the table. Cross-reference Issue #6 and the Text, graphemes, and safe presentation section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #6 utility implementation and tests into the memoryfield. Document the canonical path and content escaping contracts, the diagnostic rules with single-lined embedded filenames, the replacement of the Issue #1 escaper, the shared sink-safety table with its fixtures and no-style composition method, and the rule that each later issue routes its new sinks through the utility and extends the table. Cross-reference Issue #6 and the Text, graphemes, and safe presentation section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

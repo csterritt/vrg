@@ -35,10 +35,10 @@ Implement every row of the Task 1 handshake matrix with application-side acknowl
 ### 3. Document the handshake harness
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the acknowledgement seams, the helper contract, and the bounded-poll allowance.  
+**Output**: The memoryfield records the acknowledgement seams, the helper contract, and the bounded-poll allowance.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #48 implementation into the appropriate pages under `Notes/wiki`. Document the finite helper/action/postcondition/acknowledgement matrix, per-process/per-occurrence correlation that prevents stale-event consumption, the named acknowledgement hooks and their membership in Issue #45's explicit hook manifest and untagged artifact probe, the rewritten helpers' wait-on-handshake contract with bounded timeouts, the permitted bounded condition-poll sleeps (each iteration checking an explicit condition), and the confirmation that handshakes only observe production timing and are absent or inert in the production binary. Cross-reference Issue #48 and the *Testing Decisions* section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #48 implementation into the memoryfield. Document the finite helper/action/postcondition/acknowledgement matrix, per-process/per-occurrence correlation that prevents stale-event consumption, the named acknowledgement hooks and their membership in Issue #45's explicit hook manifest and untagged artifact probe, the rewritten helpers' wait-on-handshake contract with bounded timeouts, the permitted bounded condition-poll sleeps (each iteration checking an explicit condition), and the confirmation that handshakes only observe production timing and are absent or inert in the production binary. Cross-reference Issue #48 and the *Testing Decisions* section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

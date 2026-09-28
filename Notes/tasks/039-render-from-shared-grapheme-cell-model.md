@@ -35,10 +35,10 @@ Introduce one shared ANSI-aware cell-width helper implementing the existing `riv
 ### 3. Document the unified rendering model
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the single shared grapheme/cell helper and every consumer routed through it.  
+**Output**: The memoryfield records the single shared grapheme/cell helper and every consumer routed through it.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #39 implementation into the appropriate pages under `Notes/wiki`. Document the shared ANSI-aware cell-width helper and its grapheme policy, the cluster-driven file-panel renderer, the full consumer list (line rendering, highlight styling, `visibleWidth`, list-entry padding, indicator sizing, filename-row fitting, pop-up truncation/centering, and Theme overlay sizing), the `truncateLeftCells` replacement, and the exact mechanical predicate: across every non-test production `.go` file under `internal/` and `cmd/`, `utf8.DecodeRuneInString` is permitted only in `internal/safepresentation/cellwidth.go`. Cross-reference Issue #39 and the *Text, graphemes, and safe presentation* and *Navigation, viewport, and logical anchors* sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #39 implementation into the memoryfield. Document the shared ANSI-aware cell-width helper and its grapheme policy, the cluster-driven file-panel renderer, the full consumer list (line rendering, highlight styling, `visibleWidth`, list-entry padding, indicator sizing, filename-row fitting, pop-up truncation/centering, and Theme overlay sizing), the `truncateLeftCells` replacement, and the exact mechanical predicate: across every non-test production `.go` file under `internal/` and `cmd/`, `utf8.DecodeRuneInString` is permitted only in `internal/safepresentation/cellwidth.go`. Cross-reference Issue #39 and the *Text, graphemes, and safe presentation* and *Navigation, viewport, and logical anchors* sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

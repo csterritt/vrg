@@ -59,10 +59,10 @@ Implement the 64 MiB payload limit with an explicit bounded reader rather than a
 ### 5. Document record robustness
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the malformed, oversized, and unknown-type rules with their dispositions and the record-loss outcome rows.  
+**Output**: The memoryfield records the malformed, oversized, and unknown-type rules with their dispositions and the record-loss outcome rows.  
 **Depends on**: 4
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #10 implementation and tests into the appropriate pages under `Notes/wiki`. Document the per-record and lifecycle disposition matrices as deterministic categories, the 64 MiB limit with its discard-and-resynchronize behavior and path-recovery diagnostics, the unterminated oversized final record rule, unknown-type counting and its after-`summary` interaction, missing-`end` retention with incomplete metadata, and the record-loss outcome rows including the after-filtering usable-results assessment. Cross-reference Issue #10 and the Result index, records, and stream integrity and Resources and responsiveness sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #10 implementation and tests into the memoryfield. Document the per-record and lifecycle disposition matrices as deterministic categories, the 64 MiB limit with its discard-and-resynchronize behavior and path-recovery diagnostics, the unterminated oversized final record rule, unknown-type counting and its after-`summary` interaction, missing-`end` retention with incomplete metadata, and the record-loss outcome rows including the after-filtering usable-results assessment. Cross-reference Issue #10 and the Result index, records, and stream integrity and Resources and responsiveness sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

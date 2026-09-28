@@ -35,10 +35,10 @@ Implement the width formula with its recomputation triggers, grapheme-safe left 
 ### 3. Document the file-list layout
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the width formula, truncation, toggles, the status slot, and anchor preservation through relayout.  
+**Output**: The memoryfield records the width formula, truncation, toggles, the status slot, and anchor preservation through relayout.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #24 implementation and tests into the appropriate pages under `Notes/wiki`. Document the three-term width formula with its floor rounding and recomputation triggers, zero-width allocation with preference retention, grapheme-safe `…` truncation, the hide/show toggles, list auto-scroll, the filename-row status slot with its synthetic testing basis and the issues that will fill it, and anchor preservation through every relayout cause. Cross-reference Issue #24 and the Layout and indicators and File list and layout sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #24 implementation and tests into the memoryfield. Document the three-term width formula with its floor rounding and recomputation triggers, zero-width allocation with preference retention, grapheme-safe `…` truncation, the hide/show toggles, list auto-scroll, the filename-row status slot with its synthetic testing basis and the issues that will fill it, and anchor preservation through every relayout cause. Cross-reference Issue #24 and the Layout and indicators and File list and layout sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

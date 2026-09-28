@@ -35,10 +35,10 @@ Implement the zero-width marker in `internal/filebuffer` and `internal/viewport`
 ### 3. Document zero-width markers
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records marker rendering, extent participation, and the ordinary-rule treatment of terminator-only markers.  
+**Output**: The memoryfield records marker rendering, extent participation, and the ordinary-rule treatment of terminator-only markers.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #23 implementation and tests into the appropriate pages under `Notes/wiki`. Document the one-cell inverse marker with its current-line underline, no text shifting, effective-width extension for end-of-line and empty lines, cluster-start mapping, wrap-row occupation, marker extents in the paintable-boundary maximum, markers as reveal targets, and the terminator-only `$` marker as an ordinary marker following every shared rule. Cross-reference Issue #23 and the Text, graphemes, and safe presentation section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #23 implementation and tests into the memoryfield. Document the one-cell inverse marker with its current-line underline, no text shifting, effective-width extension for end-of-line and empty lines, cluster-start mapping, wrap-row occupation, marker extents in the paintable-boundary maximum, markers as reveal targets, and the terminator-only `$` marker as an ordinary marker following every shared rule. Cross-reference Issue #23 and the Text, graphemes, and safe presentation section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

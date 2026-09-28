@@ -59,10 +59,10 @@ Implement the pure outcome function of process result, integrity, usable-result 
 ### 5. Document the outcome contract
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the outcome table, lifecycle validation, the error overlay, and stderr classification.  
+**Output**: The memoryfield records the outcome table, lifecycle validation, the error overlay, and stderr classification.  
 **Depends on**: 4
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #9 implementation and tests into the appropriate pages under `Notes/wiki`. Document the full lifecycle transition matrix with its dispositions and binary-exclusion precedence, stream integrity assessed separately from process success, the pure outcome function and every outcome-table row, the modal error overlay's keys, wrapping, and sanitization, stderr classification with generated code-or-signal diagnostics, and the fixed-status rule with the `ctrl+c` override. Cross-reference Issue #9 and the Outcome and exit-status contract and Colours, overlays, and key precedence sections of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #9 implementation and tests into the memoryfield. Document the full lifecycle transition matrix with its dispositions and binary-exclusion precedence, stream integrity assessed separately from process success, the pure outcome function and every outcome-table row, the modal error overlay's keys, wrapping, and sanitization, stderr classification with generated code-or-signal diagnostics, and the fixed-status rule with the `ctrl+c` override. Cross-reference Issue #9 and the Outcome and exit-status contract and Colours, overlays, and key precedence sections of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

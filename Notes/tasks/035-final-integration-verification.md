@@ -23,10 +23,10 @@ Begin only after Issues #30, #33, and #34 are complete — they are the dependen
 ### 2. Document the final verification pass
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the clean-checkout gate results, the explicitly executed PTY/subprocess suites, the five smoke outcomes including the help-only invocation, and any regressions found and repaired.  
+**Output**: The memoryfield records the clean-checkout gate results, the explicitly executed PTY/subprocess suites, the five smoke outcomes including the help-only invocation, and any regressions found and repaired.  
 **Depends on**: 1
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #35 verification pass into the appropriate pages under `Notes/wiki`. Document the clean-checkout `go build ./...`, `go vet ./...`, and `go test ./...` results, the explicit no-cache rerun of the PTY/subprocess suites, the five final-binary smoke outcomes with their exit statuses, terminal restoration, and stderr replay — including the help-only invocation run with ripgrep unavailable and a sentinel fake rg present but never started — and any regressions the pass uncovered together with the owning issue whose contract was restored. Cross-reference Issue #35 and the Testing Decisions section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #35 verification pass into the memoryfield. Document the clean-checkout `go build ./...`, `go vet ./...`, and `go test ./...` results, the explicit no-cache rerun of the PTY/subprocess suites, the five final-binary smoke outcomes with their exit statuses, terminal restoration, and stderr replay — including the help-only invocation run with ripgrep unavailable and a sentinel fake rg present but never started — and any regressions the pass uncovered together with the owning issue whose contract was restored. Cross-reference Issue #35 and the Testing Decisions section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 

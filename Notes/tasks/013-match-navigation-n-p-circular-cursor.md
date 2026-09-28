@@ -35,10 +35,10 @@ Implement the circular cursor in `internal/searchindex` and its App wiring to sa
 ### 3. Document the navigation cursor
 
 **Type**: DOCUMENT  
-**Output**: Wiki documentation records the cursor model, stop ordering, no-op rules, and the passive file list.  
+**Output**: The memoryfield records the cursor model, stop ordering, no-op rules, and the passive file list.  
 **Depends on**: 2
 
-Read and follow `Notes/wiki/wiki-rules.md` and the schema in `Notes/wiki/AGENTS.md`, then ingest the completed Issue #13 implementation and tests into the appropriate pages under `Notes/wiki`. Document the single global matched-line cursor, path-then-line stop order, circular `n`/`p` with the zero- and one-entry no-ops, the cursor-derived current file with load requests and viewport handoff, the list underline following selection, manual scrolling leaving the cursor unchanged, and the passive file list with no direct selection route. Cross-reference Issue #13 and the Navigation, viewport, and logical anchors section of `Notes/PRD-vrg.md`, update `Notes/wiki/index.md`, and append the required dated ingest record to `Notes/wiki/log.md` without rewriting previous entries.
+Read `Notes/skills/memoryfield-tool/SKILL.md`, then ingest the completed Issue #13 implementation and tests into the memoryfield. Document the single global matched-line cursor, path-then-line stop order, circular `n`/`p` with the zero- and one-entry no-ops, the cursor-derived current file with load requests and viewport handoff, the list underline following selection, manual scrolling leaving the cursor unchanged, and the passive file list with no direct selection route. Cross-reference Issue #13 and the Navigation, viewport, and logical anchors section of `Notes/PRD-vrg.md`, update the memoryfield.
 
 ---
 
