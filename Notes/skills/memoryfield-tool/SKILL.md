@@ -22,6 +22,10 @@ The `memoryfield-tool` CLI reads, writes, searches, validates, and exports
 memoryfields. This skill explains how to use it. The complete format
 specification lives in `references/SPEC.md`.
 
+## Project Memoryfield
+
+Whenever a command can take a '--field' argument, supply '--field vrg-info'.
+
 ## Prerequisite
 
 `memoryfield-tool` must be installed and on PATH. Verify with:
